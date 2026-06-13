@@ -172,7 +172,7 @@
           <li>1 mes para verlo en acción</li>
           <li class="gift">Bonus: te listamos gratis en Encuéntralo</li>
         </ul>
-        <a class="cta" href="/crecer/intake.php">Quiero mi logo</a>
+        <a class="cta" href="/crecer/registro.php">Quiero mi logo</a>
       </div>
 
       <!-- CRECER · mensual (el motor) -->
@@ -189,7 +189,7 @@
           <li>La IA responde tus DMs</li>
           <li>Agendamiento de órdenes</li>
         </ul>
-        <a class="cta" href="/crecer/intake.php">Empezar</a>
+        <a class="cta" href="/crecer/registro.php">Empezar</a>
       </div>
 
       <!-- DESPEGAR · mensual (con data) -->
@@ -204,7 +204,7 @@
           <li>Análisis de ventas</li>
           <li>Cuentas: ingresos, gastos, ganancia</li>
         </ul>
-        <a class="cta" href="/crecer/intake.php">Empezar</a>
+        <a class="cta" href="/crecer/registro.php">Empezar</a>
       </div>
     </div>
     <p class="note">💡 El directorio Encuéntralo está creciendo — pronto cada plan incluirá promoción destacada gratis. Precios accesibles a propósito 🇵🇷</p>
@@ -228,7 +228,7 @@
   <!-- CTA FINAL -->
   <section class="final" id="empezar">
     <h2>Empieza a crecer hoy 🌱</h2>
-    <a class="big-cta" href="/crecer/intake.php">Crear mi negocio</a>
+    <a class="big-cta" href="/crecer/registro.php">Crear mi negocio</a>
   </section>
 
   <p class="foot">© Encuéntralo · Crecer — tu departamento de marketing con IA 🇵🇷</p>

@@ -7,9 +7,12 @@
 // ============================================================
 
 require __DIR__ . '/includes/db.php';
+require __DIR__ . '/includes/auth.php';
 require __DIR__ . '/includes/agentes.php';
 
-$USUARIO_ID = 7; // TODO: sesión real de Encuéntralo
+requiere_login();
+$usuario = usuario_actual($pdo);
+$USUARIO_ID = (int)$usuario['id'];
 
 // ── POST: guardar la marca ───────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

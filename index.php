@@ -89,7 +89,7 @@
   <nav class="nav">
     <a href="/crecer/index.php" style="display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit">
       <img class="mark" src="/crecer/assets/brand/encuentralo-pin.svg" alt="Inicio"><span class="brand-name">encuéntralo</span></a>
-    <a class="enter" href="/crecer/panel/index.php?marca=1">Entrar</a>
+    <a class="enter" href="/crecer/login.php">Entrar</a>
   </nav>
 
   <header class="hero">

@@ -4,12 +4,12 @@
 //  panel/index.php  ·  usa el shell compartido
 // ============================================================
 require __DIR__ . '/../includes/db.php';
-
-$marca_id = (int)($_GET['marca'] ?? 1);
-$m = $pdo->prepare("SELECT * FROM crecer_marca WHERE id = ?");
-$m->execute([$marca_id]);
-$marca = $m->fetch();
-if (!$marca) { http_response_code(404); exit('Negocio no encontrado.'); }
+require __DIR__ . '/../includes/auth.php';
+requiere_login();
+$usuario = usuario_actual($pdo);
+$marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (int)$_GET['marca'] : null);
+if (!$marca) { header('Location: /crecer/intake.php'); exit; }
+$marca_id = (int)$marca['id'];
 
 // Métricas del calendario más reciente
 $cal = $pdo->prepare("SELECT id FROM crecer_calendario WHERE marca_id=? ORDER BY anio DESC, mes DESC LIMIT 1");

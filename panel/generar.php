@@ -8,13 +8,20 @@
 // ============================================================
 
 require __DIR__ . '/../includes/db.php';
+require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/agentes.php';
+
+requiere_login();
+$usuario = usuario_actual($pdo);
 
 @set_time_limit(0); // la generación con backoff puede pasar de 30s
 
 $marca_id = (int)($_POST['marca'] ?? $_GET['marca'] ?? 0);
 $n_piezas = (int)($_POST['n'] ?? 6);
-if ($marca_id <= 0) { http_response_code(400); exit('Falta marca.'); }
+// Verificar que el negocio sea del usuario logueado
+$own = $pdo->prepare("SELECT 1 FROM crecer_marca WHERE id = ? AND usuario_id = ?");
+$own->execute([$marca_id, (int)$usuario['id']]);
+if (!$own->fetchColumn()) { http_response_code(403); exit('No autorizado.'); }
 
 // Periodo: el próximo mes.
 $anio = (int)date('Y');

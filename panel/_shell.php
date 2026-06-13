@@ -47,6 +47,7 @@ $nav = [
       <div class="av"><?= $h(mb_strtoupper(mb_substr($marca['nombre_negocio'],0,1))) ?></div>
       <div><div class="nm"><?= $h($marca['nombre_negocio']) ?></div><div class="tag">🌿 Crecer · Intermedio</div></div>
     </div>
+    <a href="/crecer/logout.php" style="display:flex;align-items:center;gap:10px;padding:9px 12px;margin-top:6px;border-radius:12px;text-decoration:none;color:var(--muted);font-weight:600;font-size:13.5px"><span class="ic">🚪</span> Salir</a>
   </aside>
   <div class="backdrop" id="bd"></div>
 
