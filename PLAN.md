@@ -30,14 +30,36 @@
 - B — Google Cloud: Gemini vía Vertex AI; hosting en Hostinger.
 - C — Repo nuevo, BD compartida con Encuéntralo (`encuentralo_db`).
 
+**Pipeline multi-agente VIVO (2026-06-13):**
+- [x] Llamada REAL a Gemini funcionando (`GEMINI_API_KEY` de AI Studio en
+      `config.local.php`). Modelo: **gemini-2.5-flash** (el 2.0-flash no tiene
+      free tier; limit 0).
+- [x] `includes/agentes.php`: agente **PLANIFICADOR** (`planificar_mes`) y agente
+      **CREADOR** (`redactar_pieza`/`redactar_calendario`) + intake `crear_marca`.
+- [x] `ia.php` endurecido: modo JSON, `thinkingBudget` (apagar pensamiento en
+      tareas estructuradas) y **backoff ante 429** (free tier = 5 req/min).
+- [x] Probado end-to-end con "Dulce Coquí": plan de 8 piezas + 8 captions
+      boricuas reales, todo en `crecer_ia_log`. Costo del mes ≈ **\$0.0115**.
+
+### Aprendizajes de credenciales/cuota (no repetir errores)
+- API key de AI Studio puede venir con prefijo `AQ.` (no solo `AIza`). Válida.
+- Free tier es **por modelo**: `gemini-2.0-flash` = limit 0; `gemini-2.5-flash` = OK.
+- `gemini-1.5-flash` → 404 (descontinuado).
+- gemini-2.5 es "pensante": en tareas JSON usar `thinking_budget=0` o trunca.
+- Free tier = **5 requests/min** → el backoff de `ia.php` lo absorbe solo.
+
 ## QUÉ SIGUE (en orden)
 
-Lo único que bloquea la primera llamada REAL a Gemini: conseguir credencial.
-- **Vía rápida:** `GEMINI_API_KEY` de AI Studio → pegar en `config.local.php`
-  → re-correr `scripts/demo_caption.php` (hará llamada real, logueará tokens/costo
-  reales). Migrar a Vertex después (decisión B) sin tocar el código de los agentes.
-- **Vía Vertex (decisión B):** crear proyecto GCP, habilitar Vertex AI,
-  service account JSON → `GOOGLE_APPLICATION_CREDENTIALS` + `GCP_PROJECT_ID`.
+El ciclo planifica→crea ya corre. Falta cerrar el loop y hacerlo usable:
+1. **Aprobación desde el celular** (paso 7): UI móvil para ver borradores y
+   aprobar/rechazar (cambia `crecer_contenido.estado` a aprobado/rechazado).
+2. **Intake real** (paso 4): formulario web para que un negocio cargue su marca
+   + fotos (reusar sistema `fotos`; regla de IP — fotos propias del negocio).
+3. **Agente RESPONDER** (DMs) → `crecer_mensajes`.
+4. **Publicación** (paso 5 final) y **Stripe** (paso 6) → `pagos` + recibo.
+5. **Migrar a Vertex AI** (decisión B) cuando convenga: service account JSON →
+   `GOOGLE_APPLICATION_CREDENTIALS` + `GCP_PROJECT_ID` (el código ya lo soporta,
+   sin tocar a los agentes).
 
 ## SECUENCIA COMPLETA (después de mañana)
 
