@@ -1,0 +1,159 @@
+/* ============================================================
+   ENCUÉNTRALO — Sistema de diseño · "Calor Boricua"
+   assets/encuentralo-ui.css
+
+   Identidad: cálido, artesanal, orgullo local — pero pulido.
+   Tipografía: Fraunces (display, con alma) + Inter (texto, claro).
+   Toda pantalla del producto hereda de aquí. No estilos sueltos.
+   ============================================================ */
+
+:root{
+  /* ── Color: 1 base cálida, terracota como acento, palma como apoyo ── */
+  --crema:#FBF6EE;        /* fondo */
+  --crema-2:#F2E8D7;      /* fondo hundido / tracks */
+  --card:#FFFDF9;         /* superficie */
+  --terracota:#C75B39;    /* acento principal (marca, énfasis) */
+  --terracota-700:#A8472B;
+  --palma:#2F6B4F;        /* secundario / acción positiva */
+  --palma-600:#3A7D5E;
+  --tinta:#2A211B;        /* texto principal */
+  --muted:#8C7E6E;        /* texto secundario */
+  --line:#EADFCF;         /* hairlines */
+
+  /* ── Pills de estado (tintes cálidos, no genéricos) ── */
+  --amber-ink:#94650F; --amber-bg:#F7E9C8;
+  --okk-ink:#235A41;   --okk-bg:#DCEAE0;
+  --noo-ink:#8E2C22;   --noo-bg:#F4DCD5;
+  --blue-ink:#2A5474;  --blue-bg:#DDE8F0;
+
+  /* ── Radio, espacio (escala 4/8), sombra ── */
+  --r-sm:10px; --r-md:16px; --r-lg:22px; --r-xl:30px;
+  --shadow:0 6px 22px rgba(74,52,32,.10);
+  --shadow-sm:0 2px 10px rgba(74,52,32,.07);
+
+  --font-display:"Fraunces","Georgia",serif;
+  --font-body:"Inter",system-ui,-apple-system,sans-serif;
+}
+
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+
+body{
+  font-family:var(--font-body);
+  color:var(--tinta);
+  line-height:1.55;
+  background:var(--crema);
+  /* textura cálida sutil: dos destellos muy tenues, no degradado plano */
+  background-image:
+    radial-gradient(120% 60% at 100% 0%, rgba(199,91,57,.06), transparent 60%),
+    radial-gradient(90% 50% at 0% 0%, rgba(47,107,79,.05), transparent 55%);
+  background-attachment:fixed;
+  padding-bottom:env(safe-area-inset-bottom);
+  -webkit-font-smoothing:antialiased;
+}
+
+.app{max-width:520px;margin:0 auto;min-height:100vh}
+
+/* ── Barra de marca ───────────────────────────────────────── */
+.topbar{
+  display:flex;align-items:center;gap:8px;
+  padding:18px 22px 6px;
+}
+.brand{
+  font-family:var(--font-display);
+  font-weight:600;font-size:19px;letter-spacing:-.01em;
+  color:var(--terracota);
+}
+.brand .dot{color:var(--palma)}
+.topbar .tier{
+  margin-left:auto;font-size:12px;font-weight:600;
+  color:var(--palma);background:var(--okk-bg);
+  padding:5px 11px;border-radius:99px;
+}
+
+/* ── Hero / encabezado del negocio ───────────────────────── */
+.hero{padding:6px 22px 18px}
+.hero h1{
+  font-family:var(--font-display);
+  font-weight:600;font-size:30px;line-height:1.1;
+  letter-spacing:-.02em;color:var(--tinta);
+}
+.hero .lede{
+  margin-top:7px;font-size:15px;color:var(--muted);max-width:34ch;
+}
+
+/* progreso — elegante, no barra plana sobre color */
+.progress{margin-top:18px}
+.progress .row{
+  display:flex;align-items:baseline;justify-content:space-between;
+  margin-bottom:8px;
+}
+.progress .count{font-family:var(--font-display);font-weight:600;font-size:15px;color:var(--tinta)}
+.progress .count b{color:var(--terracota)}
+.progress .pending{font-size:13px;color:var(--muted)}
+.track{height:7px;background:var(--crema-2);border-radius:99px;overflow:hidden}
+.track > i{
+  display:block;height:100%;border-radius:99px;
+  background:linear-gradient(90deg,var(--palma),var(--palma-600));
+  transition:width .5s cubic-bezier(.2,.7,.2,1);
+}
+
+/* ── Feed de piezas ───────────────────────────────────────── */
+.feed{padding:18px 16px 110px;display:flex;flex-direction:column;gap:16px}
+
+.post{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:var(--r-lg);
+  box-shadow:var(--shadow-sm);
+  overflow:hidden;
+  transition:box-shadow .25s ease, transform .25s ease;
+}
+.post.done{opacity:.66}
+
+.post-head{display:flex;align-items:center;gap:8px;padding:15px 17px 0}
+.chip{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:12.5px;font-weight:600;color:var(--tinta);
+  background:var(--crema);border:1px solid var(--line);
+  padding:5px 11px;border-radius:99px;text-transform:capitalize;
+}
+.chip .ico{width:7px;height:7px;border-radius:99px;background:var(--terracota)}
+.chip.fb .ico{background:#2A5474}
+.date{margin-left:auto;font-size:12.5px;color:var(--muted);font-weight:500}
+
+.pill{
+  font-size:11px;font-weight:700;letter-spacing:.02em;
+  padding:4px 10px;border-radius:99px;text-transform:uppercase;
+}
+.pill.wait{color:var(--amber-ink);background:var(--amber-bg)}
+.pill.ok{color:var(--okk-ink);background:var(--okk-bg)}
+.pill.no{color:var(--noo-ink);background:var(--noo-bg)}
+.pill.pub{color:var(--blue-ink);background:var(--blue-bg)}
+
+.caption{padding:12px 17px 16px;font-size:15px;color:#3A2F26;white-space:pre-wrap}
+
+.post-actions{display:flex;border-top:1px solid var(--line)}
+.post-actions form{flex:1;display:flex}
+.btn{
+  flex:1;border:0;cursor:pointer;font-family:inherit;
+  font-size:15px;font-weight:700;padding:15px 12px;
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  background:none;transition:background .18s ease;
+}
+.btn:active{transform:translateY(1px)}
+.btn-ok{color:#fff;background:var(--palma)}
+.btn-ok:hover{background:var(--palma-600)}
+.btn-no{color:var(--noo-ink);border-left:1px solid var(--line)}
+.btn-no:hover{background:var(--noo-bg)}
+.btn-ghost{color:var(--muted)}
+.btn-ghost:hover{background:var(--crema)}
+.btn:focus-visible{outline:3px solid rgba(199,91,57,.35);outline-offset:-3px}
+
+/* ── Vacío / footer ──────────────────────────────────────── */
+.empty{text-align:center;padding:64px 26px;color:var(--muted)}
+.empty .big{font-size:44px;margin-bottom:10px}
+.foot{
+  text-align:center;color:var(--muted);font-size:12.5px;
+  padding:6px 0 28px;
+}
+.foot b{color:var(--terracota);font-weight:600}
