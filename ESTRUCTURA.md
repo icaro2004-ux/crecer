@@ -18,7 +18,10 @@
 ### 🌐 ZONA PÚBLICA — marketing + directorio (encuentralo.com)
 Sirve a dos públicos, sin mezclarlos:
 
-- `/` — entrada (dos caminos: "Busco un servicio" vs "Tengo un negocio").
+- `/` — **EL HUB**: lidera con dos puertas — 🔎 "Busco un servicio" (→ directorio)
+  y 🚀 "Tengo un negocio" (→ Crecer). NO es un splash vacío de dos botones: es un
+  landing real (hero con las 2 puertas + tira corta de "qué es" + prueba social).
+  Cada puerta lleva a su landing específico.
 - `/crecer` — **Landing de Crecer** (la página que VENDE a los dueños):
   pitch *"¿Cuánto quieres crecer?"* → los 3 niveles → el flywheel → precios →
   CTA "Empieza". *(Máquina de revenue — primera prioridad de build.)*
