@@ -19,7 +19,7 @@
 //  constantes de config (GEMINI_MODEL, GCP_*, GEMINI_API_KEY).
 // ============================================================
 
-if (!defined('GEMINI_MODEL'))  define('GEMINI_MODEL', 'gemini-2.0-flash');
+if (!defined('GEMINI_MODEL'))  define('GEMINI_MODEL', 'gemini-2.5-flash');
 if (!defined('GCP_LOCATION'))  define('GCP_LOCATION', 'us-central1');
 if (!defined('GEMINI_API_KEY')) define('GEMINI_API_KEY', '');
 if (!defined('GCP_PROJECT_ID')) define('GCP_PROJECT_ID', '');

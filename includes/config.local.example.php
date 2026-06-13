@@ -31,7 +31,7 @@ define('GEMINI_API_KEY', '');
 define('GOOGLE_APPLICATION_CREDENTIALS', '');
 define('GCP_PROJECT_ID', '');
 define('GCP_LOCATION',   'us-central1');
-define('GEMINI_MODEL',   'gemini-2.0-flash');
+define('GEMINI_MODEL',   'gemini-2.5-flash'); // 2.0-flash no tiene free tier; 2.5 sí
 
 // ── Stripe ──
 define('STRIPE_SECRET_KEY',      '');
