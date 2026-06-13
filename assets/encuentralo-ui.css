@@ -8,23 +8,30 @@
    ============================================================ */
 
 :root{
-  /* ── Color: 1 base cálida, terracota como acento, palma como apoyo ── */
-  --crema:#FBF6EE;        /* fondo */
-  --crema-2:#F2E8D7;      /* fondo hundido / tracks */
-  --card:#FFFDF9;         /* superficie */
-  --terracota:#C75B39;    /* acento principal (marca, énfasis) */
-  --terracota-700:#A8472B;
-  --palma:#2F6B4F;        /* secundario / acción positiva */
-  --palma-600:#3A7D5E;
-  --tinta:#2A211B;        /* texto principal */
-  --muted:#8C7E6E;        /* texto secundario */
-  --line:#EADFCF;         /* hairlines */
+  /* ── Color: paleta tropical boricua, alineada con Encuéntralo ──
+     Base sand + acento rosa/coral de marca + VERDE de Crecer (crecimiento). */
+  --crema:#FFF8F1;        /* sand-50 — fondo */
+  --crema-2:#FDEEDE;      /* sand — tracks / fondo hundido */
+  --card:#FFFDFA;         /* superficie */
 
-  /* ── Pills de estado (tintes cálidos, no genéricos) ── */
-  --amber-ink:#94650F; --amber-bg:#F7E9C8;
-  --okk-ink:#235A41;   --okk-bg:#DCEAE0;
-  --noo-ink:#8E2C22;   --noo-bg:#F4DCD5;
-  --blue-ink:#2A5474;  --blue-bg:#DDE8F0;
+  --terracota:#EF4375;    /* (= rosa del pin) acento de MARCA / énfasis */
+  --terracota-700:#D62E61;
+  --coral:#FF6B3D;        /* coral tropical (gradientes) */
+  --magenta:#FF2B85;
+  --teal:#0096A6;         /* caribbean teal */
+  --gold:#FBC02D;
+
+  --palma:#16B86A;        /* VERDE Crecer — brillante, tropical (acción +) */
+  --palma-600:#0FA25C;
+  --tinta:#1B1622;        /* texto principal (casi negro cálido) */
+  --muted:#8A8178;        /* texto secundario */
+  --line:#F1E4D4;         /* hairlines cálidas */
+
+  /* ── Pills de estado (tintes tropicales) ── */
+  --amber-ink:#9A6A0E; --amber-bg:#FDEAC2;
+  --okk-ink:#0F7A45;   --okk-bg:#D6F2E2;
+  --noo-ink:#C23A2E;   --noo-bg:#FFE0D6;
+  --blue-ink:#0A7886;  --blue-bg:#D3EDF1;
 
   /* ── Radio, espacio (escala 4/8), sombra ── */
   --r-sm:10px; --r-md:16px; --r-lg:22px; --r-xl:30px;
@@ -45,8 +52,8 @@ body{
   background:var(--crema);
   /* textura cálida sutil: dos destellos muy tenues, no degradado plano */
   background-image:
-    radial-gradient(120% 60% at 100% 0%, rgba(199,91,57,.06), transparent 60%),
-    radial-gradient(90% 50% at 0% 0%, rgba(47,107,79,.05), transparent 55%);
+    radial-gradient(120% 60% at 100% 0%, rgba(255,43,133,.08), transparent 60%),
+    radial-gradient(90% 55% at 0% 0%, rgba(0,150,166,.07), transparent 58%);
   background-attachment:fixed;
   padding-bottom:env(safe-area-inset-bottom);
   -webkit-font-smoothing:antialiased;
@@ -102,7 +109,7 @@ body{
 .track{height:7px;background:var(--crema-2);border-radius:99px;overflow:hidden}
 .track > i{
   display:block;height:100%;border-radius:99px;
-  background:linear-gradient(90deg,var(--palma),var(--palma-600));
+  background:linear-gradient(90deg,var(--palma),var(--teal));
   transition:width .5s cubic-bezier(.2,.7,.2,1);
 }
 
@@ -127,7 +134,7 @@ body{
   padding:5px 11px;border-radius:99px;text-transform:capitalize;
 }
 .chip .ico{width:7px;height:7px;border-radius:99px;background:var(--terracota)}
-.chip.fb .ico{background:#2A5474}
+.chip.fb .ico{background:var(--teal)}
 .date{margin-left:auto;font-size:12.5px;color:var(--muted);font-weight:500}
 
 .pill{
