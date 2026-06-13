@@ -37,11 +37,21 @@ comida, salones, servicios. Vive en el celular, no tiene tiempo ni equipo.
 - **Responder DMs/comentarios** — la IA contesta en su voz.  ⬜
 - **Publicar/programar** en sus redes.                 ⬜
 
-### 👥 CLIENTELA / CRM — pago
-- Lista de clientes.
-- Pedidos/órdenes y su estado.
-- Seguimiento y recordatorios.
-- Historial de conversaciones.
+### 👥 CLIENTELA / ÓRDENES — pago (la joya)
+- Recibir órdenes (por WhatsApp, formulario, o creadas por la IA desde un DM).
+- Gestionarlas: recibida → en proceso → completada.
+- Al completar: invitar al cliente a dejar un **review** en Encuéntralo.
+- Lista de clientes + historial.
+- Cada orden completada = ingreso registrado (alimenta Cuentas).
+
+### 🔁 EL FLYWHEEL (la rueda de crecimiento — conecta TODO)
+> Orden recibida → gestionada → completada → cliente invitado al review en
+> Encuéntralo → reputación sube → más clientes te encuentran → más órdenes.
+
+- Reusa de Encuéntralo: `reviews` (con verificación por email = reviews REALES
+  de órdenes reales, no relleno), `pagos`, `usuarios`.
+- No reemplaza WhatsApp: lo captura. El agente de DMs puede crear la orden solo.
+- Es lo que vuelve a Encuéntralo un **motor de crecimiento**, no solo un directorio.
 
 ### 💵 CUENTAS — pago (básico, NADA regulado)
 - Registrar ingresos y gastos.
@@ -64,7 +74,8 @@ comida, salones, servicios. Vive en el celular, no tiene tiempo ni equipo.
 - **Capa 3 — Autonomía**: publicar/programar + responder DMs. La IA corre sola.
 - **Capa 4 — Cobro (Stripe)**: transversal; se activa cuando hay qué cobrar.
 - **Capa 5 — Visibilidad/Directorio gratis**: el gancho que atrae negocios nuevos.
-- **Capa 6 — CRM Clientela**.
-- **Capa 7 — Cuentas básicas**.
+- **Capa 6 — Órdenes + Flywheel de reviews** *(la joya: recibir/gestionar/completar
+  órdenes → review en Encuéntralo → reputación → más órdenes)*.
+- **Capa 7 — Cuentas básicas** *(se alimenta de las órdenes completadas)*.
 
 *(El orden no es ley. Manuel decide qué capa va primero.)*
