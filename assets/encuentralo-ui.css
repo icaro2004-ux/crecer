@@ -65,8 +65,13 @@ body{
   color:var(--tinta);text-transform:lowercase;
 }
 .brand .dot{color:var(--terracota)}
-/* El SVG del wordmark trae lienzo cuadrado con mucho aire vertical;
-   object-fit:cover recorta el blanco y deja solo la bandita del logo. */
+/* El PIN es el símbolo de marca principal (SVG ya recortado al pin exacto). */
+.mark{height:34px;width:auto;display:block;filter:drop-shadow(0 2px 5px rgba(239,67,117,.28))}
+.brand-name{
+  font-family:var(--font-display);font-weight:800;font-size:19px;
+  letter-spacing:-.03em;color:var(--tinta);text-transform:lowercase;
+}
+/* Wordmark completo (para login/landing donde sí queremos el logo entero). */
 .logo{width:152px;height:32px;object-fit:cover;object-position:center 45%;display:block}
 .topbar .tier{
   margin-left:auto;font-size:12px;font-weight:600;
