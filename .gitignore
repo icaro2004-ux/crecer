@@ -1,0 +1,21 @@
+# === Secretos / config local (NUNCA subir) ===
+includes/config.local.php
+includes/config.smtp.php
+.env
+*.key
+*-credentials.json
+service-account*.json
+
+# === Dependencias ===
+/vendor/
+
+# === Subidas de usuarios (fotos de los negocios) ===
+/uploads/*
+!/uploads/.gitkeep
+
+# === Sistema / editor ===
+Thumbs.db
+.DS_Store
+*.log
+.vscode/
+.idea/
