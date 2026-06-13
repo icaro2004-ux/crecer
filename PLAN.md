@@ -9,37 +9,35 @@
 - [x] Proyecto creado en `C:\xampp\htdocs\crecer`.
 - [x] `CLAUDE.md` — contexto, reglas del concurso (verificadas), decisiones A/B/C.
 - [x] `REUSE.md` — declaración de lo reusado de Encuéntralo (requisito XPRIZE).
-- [x] Git instalado, repo `main` inicializado, 2 commits, fecha 2026-06-13
+- [x] Git instalado, repo `main` inicializado, fecha 2026-06-13
       (= prueba de "proyecto nuevo").
 - [x] `.gitignore` protege secretos.
+
+**Núcleo técnico COMPLETO (2026-06-13):**
+- [x] **Paso 1 — Conexión a BD compartida.** `includes/db.php` +
+      `security-headers.php` (reusados) + `config.local.php` (gitignored)
+      apuntando a `encuentralo_db`. Conexión PDO verificada por CLI.
+- [x] **Paso 2 — Esquema `crecer_*`.** `migrations/2026-06-13_crecer_schema.sql`
+      con las 5 tablas y 11 FKs (a usuarios/municipios/categorias). Corrida OK.
+- [x] **Paso 3 — Núcleo agéntico Gemini + logging.** `includes/ia.php`:
+      `gemini_generar()` (transportes Gemini API / Vertex / mock auto-detectados)
+      + `ia_ejecutar()` que registra CADA llamada en `crecer_ia_log`.
+      `scripts/demo_caption.php` probado: caption boricua logueado (fila #1, modo
+      mock por falta de creds). Pipeline del criterio #2 vivo.
 
 **Decisiones cerradas (ver CLAUDE.md para detalle):**
 - A — Cobro: Stripe ahora; ATH Móvil en roadmap.
 - B — Google Cloud: Gemini vía Vertex AI; hosting en Hostinger.
 - C — Repo nuevo, BD compartida con Encuéntralo (`encuentralo_db`).
 
-## QUÉ HACEMOS MAÑANA (en orden)
+## QUÉ SIGUE (en orden)
 
-Foco: construir el núcleo técnico. NO depende de ventas.
-
-1. **Conectar Crecer a la BD compartida.**
-   - Traer `includes/db.php` + `config.local.example.php` de Encuéntralo
-     (declarado en REUSE.md).
-   - Crear `includes/config.local.php` local apuntando a `encuentralo_db`
-     (XAMPP: host localhost, user root, sin password).
-   - Probar que conecta.
-
-2. **Esquema `crecer_*` (migración SQL).**
-   - Escribir y correr la migración con las 5 tablas:
-     `crecer_marca`, `crecer_calendario`, `crecer_contenido`,
-     `crecer_ia_log`, `crecer_mensajes`.
-   - Convención: prefijo `crecer_`, conviven con las tablas de Encuéntralo.
-
-3. **Función Gemini vía Vertex AI + logging (el corazón agéntico).**
-   - Una función que llama a Gemini y escribe CADA llamada en `crecer_ia_log`
-     (prompt, modelo, tokens, costo, timestamp, decisión).
-   - Prueba real: generar un caption boricua de muestra y verlo logueado.
-   - Esto es la primera evidencia viva del criterio #2 del concurso.
+Lo único que bloquea la primera llamada REAL a Gemini: conseguir credencial.
+- **Vía rápida:** `GEMINI_API_KEY` de AI Studio → pegar en `config.local.php`
+  → re-correr `scripts/demo_caption.php` (hará llamada real, logueará tokens/costo
+  reales). Migrar a Vertex después (decisión B) sin tocar el código de los agentes.
+- **Vía Vertex (decisión B):** crear proyecto GCP, habilitar Vertex AI,
+  service account JSON → `GOOGLE_APPLICATION_CREDENTIALS` + `GCP_PROJECT_ID`.
 
 ## SECUENCIA COMPLETA (después de mañana)
 

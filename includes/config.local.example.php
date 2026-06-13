@@ -24,8 +24,10 @@ define('DB_PASS', '');
 // LOCAL: define('UPLOADS_PATH', 'C:/xampp/htdocs/crecer/uploads');
 //        define('UPLOADS_URL',  '/crecer/uploads');
 
-// ── Vertex AI / Gemini ──
-// Ruta al JSON del service account (NO versionar; ver .gitignore).
+// ── Gemini / Vertex AI ──
+// Opción rápida: GEMINI_API_KEY de AI Studio (un solo valor).
+define('GEMINI_API_KEY', '');
+// Opción Vertex: ruta al JSON del service account (NO versionar).
 define('GOOGLE_APPLICATION_CREDENTIALS', '');
 define('GCP_PROJECT_ID', '');
 define('GCP_LOCATION',   'us-central1');
