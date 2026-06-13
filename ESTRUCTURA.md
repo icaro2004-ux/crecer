@@ -57,9 +57,10 @@ Sirve a dos públicos, sin mezclarlos:
 | Logo/identidad con IA | 🌱 Arranca $25 | ⬜ |
 | Gráficas con IA (imágenes desde sus fotos) | 🌿 Crecer $55 | ⬜ |
 | IA responde WhatsApp/DMs (agente RESPONDER) | 🌿 Crecer $55 | ⬜ |
-| Agendamiento de órdenes | 🌿 Crecer $55 | ⬜ |
-| Flywheel reviews + análisis + cuentas | 🚀 Despegar $75 | ⬜ |
-| Dashboard del panel (shell PC+móvil) | todos | ⬜ |
+| Órdenes & Agenda (recibir/gestionar/completar) | 🌿 Crecer $55 | ✅ |
+| Pedir reseña al completar (flywheel) | 🌿 Crecer $55 | ✅ (vía WhatsApp) |
+| Análisis + cuentas detalladas | 🚀 Despegar $75 | ⬜ |
+| Dashboard del panel (shell PC+móvil) | todos | ✅ |
 
 **Nota WhatsApp:** conectar la IA a WhatsApp real = WhatsApp Business API de Meta
 (número de negocio, verificación, posible costo). Su propio montaje. Opciones van
