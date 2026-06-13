@@ -106,10 +106,10 @@
         <span class="go">Ver el directorio →</span>
       </a>
       <a class="door crecer" href="/crecer/crecer.php">
-        <span class="tag">Para negocios</span>
+        <span class="tag">Negocios &amp; ideas</span>
         <div class="ic">🚀</div>
-        <h2>Tengo un negocio</h2>
-        <p>Tu departamento de marketing con IA: contenido, redes y clientela. Tú solo creces.</p>
+        <h2>Tengo un negocio<br><span style="color:var(--muted);font-weight:700">…o una idea</span></h2>
+        <p>Ya montado o por montar: te hacemos el montaje, el marketing y te damos la mano para arrancar.</p>
         <span class="go">Conoce Crecer →</span>
       </a>
     </div>

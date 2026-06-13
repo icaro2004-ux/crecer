@@ -76,6 +76,18 @@ Crecer regala un nivel más alto de Encuéntralo.
 El microempresario boricua de economía de WhatsApp/Instagram: reposterías,
 comida, salones, servicios. Vive en el celular, no tiene tiempo ni equipo.
 
+**Dos segmentos de dueño (mismo producto, distinto onboarding):**
+- 🌱 **Emprendedor** — tiene una idea / quiere montar (ej. quien perdió su empleo,
+  el estudiante). Quiere el **montaje completo** + que le den la mano para arrancar.
+- 🚀 **Negocio existente** — ya opera. Quiere la **agencia de publicidad** (promo,
+  contenido, crecer).
+
+**Guía de primeros pasos (para el emprendedor):** orientación GENERAL sobre montar
+un negocio en PR (registro en Depto. de Estado, Hacienda/SURI, patente municipal),
+generada por IA y adaptada a su tipo de negocio + municipio, CON enlaces a fuentes
+oficiales y disclaimer. **NUNCA** asesoría legal/contributiva personalizada (raya
+roja, igual que Hacienda en "fuera de alcance"). Es mano amiga, no abogado.
+
 ---
 
 ## EL TERRITORIO COMPLETO (todos los módulos)
