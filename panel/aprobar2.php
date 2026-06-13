@@ -89,7 +89,19 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
   <div class="feed">
     <?php if (!$total): ?>
-      <div class="empty"><div class="big">🌱</div>Todavía no hay contenido para este negocio.</div>
+      <div class="empty">
+        <div class="big">🌱</div>
+        <p style="margin-bottom:18px">Todavía no hay contenido para este negocio.</p>
+        <?php if (!empty($_GET['err'])): ?>
+          <p style="color:var(--noo-ink);font-size:13px;margin-bottom:14px">No se pudo generar ahora (<?= $h($_GET['err']) ?>). Intenta de nuevo en un minuto.</p>
+        <?php endif; ?>
+        <form method="post" action="/crecer/panel/generar.php"
+              onsubmit="var b=this.querySelector('button');b.textContent='✨ Creando tu mes…';b.disabled=true;">
+          <input type="hidden" name="marca" value="<?= $marca_id ?>">
+          <button type="submit" style="border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:15px;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));padding:15px 26px;border-radius:99px;box-shadow:0 12px 28px rgba(255,43,133,.3)">✨ Que la IA prepare mi primer mes</button>
+        </form>
+        <p style="color:var(--muted);font-size:12.5px;margin-top:12px">Tarda un minutito — la IA está creando tu contenido.</p>
+      </div>
     <?php endif; ?>
 
     <?php foreach ($piezas as $p):

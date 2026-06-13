@@ -162,7 +162,7 @@ SYS;
  *
  * @return array{caption:string, ia_log_id:int, costo:float}
  */
-function redactar_pieza(PDO $pdo, int $contenido_id): array {
+function redactar_pieza(PDO $pdo, int $contenido_id, array $extra = []): array {
     $c = $pdo->prepare("SELECT * FROM crecer_contenido WHERE id = ?");
     $c->execute([$contenido_id]);
     $pieza = $c->fetch();
@@ -187,14 +187,14 @@ SYS;
         . "Idea de esta pieza: {$idea}\n\n"
         . "Escribe el caption.";
 
-    $r = ia_ejecutar($pdo, 'creador', "Redactar caption pieza #{$contenido_id}", $prompt, [
+    $r = ia_ejecutar($pdo, 'creador', "Redactar caption pieza #{$contenido_id}", $prompt, array_merge([
         'marca_id'    => (int)$pieza['marca_id'],
         'sistema'     => $sistema,
         'temperatura' => 0.95,
         'max_tokens'  => 400,
         'thinking_budget' => 0,
         'mock_texto'  => "[MOCK] Caption para: {$idea}",
-    ]);
+    ], $extra));
 
     $pdo->prepare(
         "UPDATE crecer_contenido SET caption = ?, ia_log_id = ?, updated_at = NOW() WHERE id = ?"
