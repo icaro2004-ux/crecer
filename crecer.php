@@ -33,12 +33,12 @@
   .hero .sub{font-size:clamp(16px,2.3vw,19px);color:var(--muted);margin-top:16px}
 
   /* Dos caminos */
-  .tracks{display:grid;grid-template-columns:1fr 1fr;gap:18px;max-width:760px;margin:34px auto 0}
-  .track{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);
+  .caminos{display:grid;grid-template-columns:1fr 1fr;gap:18px;max-width:760px;margin:34px auto 0}
+  .camino{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);
     padding:24px;text-align:left;box-shadow:var(--shadow-sm)}
-  .track .e{font-size:30px}
-  .track h3{font-family:var(--font-display);font-weight:800;font-size:20px;margin:10px 0 4px;letter-spacing:-.02em}
-  .track p{font-size:14.5px;color:var(--muted)}
+  .camino .e{font-size:30px}
+  .camino h3{font-family:var(--font-display);font-weight:800;font-size:20px;margin:10px 0 4px;letter-spacing:-.02em}
+  .camino p{font-size:14.5px;color:var(--muted)}
 
   /* Cómo funciona */
   .how{max-width:900px;margin:56px auto 0;text-align:center}
@@ -122,14 +122,14 @@
     <p class="sub">La IA te maneja el marketing del negocio — contenido, redes, clientela —
        y tú solo apruebas desde el celular. Escoge tu punto de partida:</p>
 
-    <div class="tracks">
-      <div class="track">
+    <div class="caminos">
+      <div class="camino">
         <div class="e">🌱</div>
         <h3>Empiezo de cero</h3>
         <p>Tienes una idea y quieres montar tu negocio. Te hacemos el montaje completo
            — nombre, imagen, presencia — y te damos la mano con los primeros pasos.</p>
       </div>
-      <div class="track">
+      <div class="camino">
         <div class="e">🚀</div>
         <h3>Ya tengo negocio</h3>
         <p>Ya operas y quieres más ventas. Te montamos la agencia de publicidad con IA:
@@ -164,11 +164,11 @@
         <div class="lvl">🌱 Nivel 1 · Básico</div>
         <div class="name">Te ves PRO</div>
         <div class="promise">Tu identidad y tu presencia online, listas.</div>
-        <div class="price">$15<small>/mes</small></div>
+        <div class="price">$25<small>/mes</small></div>
         <ul>
           <li>Logo + colores + portada (IA)</li>
           <li>Presencia online lista</li>
-          <li class="gift">GRATIS: Encuéntralo Intermedio<br>(perfil destacado, galería, verificado)</li>
+          <li class="gift">GRATIS: Encuéntralo <b>Pro</b> (vale $5)<br>verificado, fotos ilimitadas, prioridad</li>
         </ul>
         <a class="cta" href="#empezar">Empezar</a>
       </div>
@@ -179,14 +179,14 @@
         <div class="lvl">🌿 Nivel 2 · Intermedio</div>
         <div class="name">Te mueves solo</div>
         <div class="promise">La IA te corre las redes y las órdenes.</div>
-        <div class="price">$39<small>/mes</small></div>
+        <div class="price">$55<small>/mes</small></div>
         <ul>
           <li>Todo lo de Básico</li>
           <li>Calendario + captions + gráficas con tus fotos</li>
           <li>Aprobación desde el celular</li>
           <li>La IA responde tus DMs</li>
           <li>Agendamiento de órdenes</li>
-          <li class="gift">GRATIS: algo de Encuéntralo Pro<br>(boost de promoción + analítica)</li>
+          <li class="gift">GRATIS: Encuéntralo <b>Max</b> (vale $15)<br>posición destacada, prioridad máxima</li>
         </ul>
         <a class="cta" href="#empezar">Empezar</a>
       </div>
@@ -196,13 +196,13 @@
         <div class="lvl">🌳 Nivel 3 · Avanzado</div>
         <div class="name">Creces con data</div>
         <div class="promise">Sabes qué funciona y decides con números.</div>
-        <div class="price">$79<small>/mes</small></div>
+        <div class="price">$85<small>/mes</small></div>
         <ul>
           <li>Todo lo de Intermedio</li>
           <li>Flywheel de reseñas reales</li>
           <li>Análisis de ventas</li>
           <li>Cuentas: ingresos, gastos, ganancia</li>
-          <li class="gift">GRATIS: Encuéntralo Pro full<br>(top, promo, analítica, multi)</li>
+          <li class="gift">GRATIS: Encuéntralo <b>Max</b> full (vale $15)<br>máxima exposición + soporte prioritario</li>
         </ul>
         <a class="cta" href="#empezar">Empezar</a>
       </div>

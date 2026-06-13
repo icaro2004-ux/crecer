@@ -54,22 +54,23 @@ Encuéntralo, como directorio, también tiene su escalera. El directorio base es
 gratis para CUALQUIERA — por eso no sirve de incentivo. La jugada: cada nivel de
 Crecer regala un nivel más alto de Encuéntralo.
 
-- **🆓 Free:** ficha básica (apareces en búsquedas, contacto, WhatsApp).
-- **⭐ Intermedio:** perfil **destacado** en tu categoría/municipio, galería de
-  fotos, badge **"verificado"**, apareces más arriba en resultados.
-- **🚀 Pro:** todo lo anterior + posición **top/portada**, **promoción/boost**
-  (te ve más gente), **multi-categoría y multi-municipio**, **analítica** de
-  visitas y leads.
+Tiers REALES (de `pricing.php` de Encuéntralo):
+- **🆓 Básico — $0:** perfil, 5 fotos, WhatsApp, visibilidad, reseñas.
+- **⭐ Pro — $5/mes:** verificado, fotos ilimitadas, responde reseñas,
+  estadísticas, posición prioritaria.
+- **🚀 Max — $15/mes:** posición destacada, prioridad máxima, soporte.
 
-### El emparejamiento (Crecer ↔ Encuéntralo gratis)
+### Emparejamiento + precios (PROPUESTA — Manuel fija el número final)
 
-| Pagas en Crecer | Te regalamos de Encuéntralo |
-|---|---|
-| 🌱 Nivel 1 · Básico | ⭐ Encuéntralo **Intermedio** (destacado + galería + verificado) |
-| 🌿 Nivel 2 · Intermedio | 🚀 **Algo de Pro** (boost de promoción + analítica básica) |
-| 🌳 Nivel 3 · Avanzado | 🚀 Encuéntralo **Pro full** (top + promo + analítica + multi) |
+| Crecer (paga) | Precio | Encuéntralo incluido (gratis) |
+|---|---|---|
+| 🌱 Básico · identidad + presencia | **$25** | ⭐ Pro (vale $5) |
+| 🌿 Intermedio · motor IA ★ | **$55** | 🚀 Max (vale $15) |
+| 🌳 Avanzado · data + flywheel | **$85** | 🚀 Max + analítica propia |
 
-(El directorio Free queda como gancho para los que aún no pagan Crecer.)
+Saltos parejos de **+$30** (2→3 es solo 1.5×, ya no el doble). El directorio
+Free queda de gancho para quien aún no paga Crecer. Principio: el precio de
+Crecer = valor del directorio incluido + margen del servicio de IA.
 
 ## A quién sirve
 
