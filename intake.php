@@ -132,7 +132,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <h1>¡<?= $h($ok_marca['nombre_negocio']) ?> está en Encuéntralo! 🎉</h1>
     <p>La IA ya está aprendiendo de tu negocio. En un ratito te prepara tu primer
        mes de contenido — y tú solo lo apruebas desde el celular.</p>
-    <a class="cta" href="/crecer/panel/aprobar2.php?marca=<?= $ok_id ?>">Ir a mi panel →</a>
+    <a class="cta" href="/crecer/panel/index.php?marca=<?= $ok_id ?>">Ir a mi panel →</a>
   </div>
 
 <?php else: ?>
