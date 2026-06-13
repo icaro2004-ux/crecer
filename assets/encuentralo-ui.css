@@ -65,7 +65,9 @@ body{
   color:var(--tinta);text-transform:lowercase;
 }
 .brand .dot{color:var(--terracota)}
-.logo{height:24px;width:auto;display:block}
+/* El SVG del wordmark trae lienzo cuadrado con mucho aire vertical;
+   object-fit:cover recorta el blanco y deja solo la bandita del logo. */
+.logo{width:152px;height:32px;object-fit:cover;object-position:center 45%;display:block}
 .topbar .tier{
   margin-left:auto;font-size:12px;font-weight:600;
   color:var(--palma);background:var(--okk-bg);
