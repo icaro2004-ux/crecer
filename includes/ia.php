@@ -98,8 +98,20 @@ function gemini_generar(string $prompt, array $opts = []): array {
     if (!empty($opts['sistema'])) {
         $payload['systemInstruction'] = ['parts' => [['text' => $opts['sistema']]]];
     }
+    // Modo JSON: fuerza a Gemini a devolver SOLO JSON válido (sin ```).
+    if (!empty($opts['json'])) {
+        $payload['generationConfig']['responseMimeType'] = 'application/json';
+    }
+    // Control del "pensamiento" (modelos 2.5): thinking_budget=0 lo apaga.
+    // Útil en tareas estructuradas: más rápido, barato y sin truncar la salida.
+    if (array_key_exists('thinking_budget', $opts)) {
+        $payload['generationConfig']['thinkingConfig'] = [
+            'thinkingBudget' => (int)$opts['thinking_budget'],
+        ];
+    }
 
-    $resp = ia_http_post($url, $headers, json_encode($payload, JSON_UNESCAPED_UNICODE));
+    $body = json_encode($payload, JSON_UNESCAPED_UNICODE);
+    $resp = ia_http_post_retry($url, $headers, $body, $opts['max_reintentos'] ?? 4);
     $data = json_decode($resp, true);
     if (!is_array($data)) {
         throw new IaError('Respuesta no-JSON de Gemini: ' . substr($resp, 0, 300));
@@ -145,6 +157,37 @@ function ia_http_post(string $url, array $headers, string $body): string {
         throw new IaError("HTTP $code: " . substr($resp, 0, 500));
     }
     return $resp;
+}
+
+/**
+ * POST con reintentos ante HTTP 429 (rate limit). Honra el retryDelay
+ * que sugiere Google si viene; si no, usa backoff exponencial.
+ * Así el sistema agéntico tolera el límite de velocidad por sí solo.
+ */
+function ia_http_post_retry(string $url, array $headers, string $body, int $max_reintentos = 4): string {
+    $intento = 0;
+    while (true) {
+        try {
+            return ia_http_post($url, $headers, $body);
+        } catch (IaError $e) {
+            $msg = $e->getMessage();
+            $es_429 = strpos($msg, 'HTTP 429') !== false;
+            if (!$es_429 || $intento >= $max_reintentos) {
+                throw $e;
+            }
+            // Buscar "retry in 17.8s" o "retryDelay": "18s"; si no, backoff.
+            $espera = 0;
+            if (preg_match('/retry in ([\d.]+)s/i', $msg, $m)
+                || preg_match('/"?retryDelay"?\s*:\s*"?([\d.]+)s/i', $msg, $m)) {
+                $espera = (float)$m[1];
+            }
+            if ($espera <= 0) $espera = min(60, 2 ** $intento);   // backoff exponencial
+            $espera = min(65, $espera + 1);                        // +1s de colchón, tope 65s
+            error_log("ia: 429 rate limit; reintento " . ($intento + 1) . "/$max_reintentos en {$espera}s");
+            usleep((int)($espera * 1_000_000));
+            $intento++;
+        }
+    }
 }
 
 /**

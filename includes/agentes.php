@@ -1,0 +1,222 @@
+<?php
+// ============================================================
+//  CRECER — Agentes de IA del producto
+//  includes/agentes.php
+//
+//  Cada agente es una función que usa ia_ejecutar() (de ia.php),
+//  así que TODA decisión queda registrada en crecer_ia_log.
+//  Requiere db.php + ia.php cargados antes.
+// ============================================================
+
+require_once __DIR__ . '/ia.php';
+
+/**
+ * INTAKE: guarda (o actualiza) el perfil de un negocio en crecer_marca.
+ * Idempotente por (usuario_id + nombre_negocio): si ya existe, lo devuelve.
+ *
+ * @param array $d  nombre_negocio, usuario_id, municipio_id, descripcion,
+ *                  voz, productos(array), publico_objetivo, ofertas,
+ *                  instagram, whatsapp
+ * @return int  id de la marca
+ */
+function crear_marca(PDO $pdo, array $d): int {
+    $existe = $pdo->prepare(
+        "SELECT id FROM crecer_marca WHERE usuario_id = ? AND nombre_negocio = ?");
+    $existe->execute([$d['usuario_id'], $d['nombre_negocio']]);
+    if ($id = $existe->fetchColumn()) return (int)$id;
+
+    $stmt = $pdo->prepare(
+        "INSERT INTO crecer_marca
+           (usuario_id, municipio_id, categoria_id, nombre_negocio, descripcion,
+            voz, productos, publico_objetivo, ofertas, instagram, whatsapp, estado)
+         VALUES
+           (:usuario_id, :municipio_id, :categoria_id, :nombre, :descripcion,
+            :voz, :productos, :publico, :ofertas, :instagram, :whatsapp, 'activo')");
+    $stmt->execute([
+        ':usuario_id'   => $d['usuario_id'],
+        ':municipio_id' => $d['municipio_id'] ?? null,
+        ':categoria_id' => $d['categoria_id'] ?? null,
+        ':nombre'       => $d['nombre_negocio'],
+        ':descripcion'  => $d['descripcion'] ?? null,
+        ':voz'          => $d['voz'] ?? null,
+        ':productos'    => isset($d['productos']) ? json_encode($d['productos'], JSON_UNESCAPED_UNICODE) : null,
+        ':publico'      => $d['publico_objetivo'] ?? null,
+        ':ofertas'      => $d['ofertas'] ?? null,
+        ':instagram'    => $d['instagram'] ?? null,
+        ':whatsapp'     => $d['whatsapp'] ?? null,
+    ]);
+    return (int)$pdo->lastInsertId();
+}
+
+/** Lee una marca como array asociativo (productos decodificado). */
+function leer_marca(PDO $pdo, int $marca_id): array {
+    $m = $pdo->prepare("SELECT * FROM crecer_marca WHERE id = ?");
+    $m->execute([$marca_id]);
+    $row = $m->fetch();
+    if (!$row) throw new RuntimeException("Marca #$marca_id no existe.");
+    $row['productos'] = $row['productos'] ? json_decode($row['productos'], true) : [];
+    return $row;
+}
+
+/** Resume el perfil de la marca en texto para meterlo en un prompt. */
+function marca_contexto(array $m): string {
+    $prod = $m['productos'] ? implode(', ', array_map(
+        fn($p) => is_array($p) ? ($p['nombre'] ?? json_encode($p)) : $p, $m['productos'])) : 'n/d';
+    return "Negocio: {$m['nombre_negocio']}\n"
+         . "Descripción: " . ($m['descripcion'] ?: 'n/d') . "\n"
+         . "Productos: {$prod}\n"
+         . "Público: " . ($m['publico_objetivo'] ?: 'n/d') . "\n"
+         . "Voz/tono: " . ($m['voz'] ?: 'boricua cercano') . "\n"
+         . "Ofertas: " . ($m['ofertas'] ?: 'n/d');
+}
+
+/**
+ * AGENTE PLANIFICADOR. Le pide a Gemini un plan de contenido para el
+ * mes y lo materializa: crea/actualiza crecer_calendario + N borradores
+ * en crecer_contenido. Devuelve [calendario_id, piezas[], ia_log_id].
+ *
+ * @param int $n_piezas  cuántas piezas planificar (ej. 8 para un mes ligero)
+ */
+function planificar_mes(PDO $pdo, int $marca_id, int $anio, int $mes, int $n_piezas = 8): array {
+    $m = leer_marca($pdo, $marca_id);
+    $ctx = marca_contexto($m);
+
+    $sistema = <<<SYS
+Eres el PLANIFICADOR de contenido de Crecer, un departamento de marketing
+con IA para microempresas boricuas. Planificas el mes de redes sociales.
+Reglas:
+- Piensa como mercadólogo boricua: aprovecha fechas, cobros quincenales,
+  fines de semana, y la cultura local de Puerto Rico.
+- Variedad de plataformas (instagram, facebook) y tipos (post, story, reel).
+- Cada pieza debe tener una IDEA concreta y accionable, no genérica.
+- Responde SOLO JSON válido, sin texto extra.
+SYS;
+
+    $prompt = "Perfil del negocio:\n{$ctx}\n\n"
+        . "Planifica {$n_piezas} piezas de contenido para el mes {$mes}/{$anio}.\n"
+        . "Devuelve un JSON con esta forma EXACTA:\n"
+        . '{"piezas":[{"dia":1,"plataforma":"instagram","tipo":"post","tema":"...","idea":"..."}]}'
+        . "\n- dia: número 1-28.\n- plataforma: instagram|facebook.\n"
+        . "- tipo: post|story|reel.\n- tema: 2-4 palabras.\n- idea: 1 oración concreta.";
+
+    $r = ia_ejecutar($pdo, 'planificador', "Planificar {$n_piezas} piezas {$mes}/{$anio}", $prompt, [
+        'marca_id'   => $marca_id,
+        'sistema'    => $sistema,
+        'json'       => true,
+        'temperatura'=> 0.8,
+        'max_tokens' => 4096,
+        'thinking_budget' => 0,   // tarea estructurada: sin pensamiento, JSON completo
+        'mock_texto' => '{"piezas":[{"dia":5,"plataforma":"instagram","tipo":"post","tema":"Producto estrella","idea":"Foto del bizcocho de guayaba con CTA por WhatsApp."}]}',
+    ]);
+
+    $plan = json_decode($r['texto'], true);
+    $piezas = $plan['piezas'] ?? [];
+    if (!$piezas) throw new RuntimeException("El planificador no devolvió piezas. Respuesta: " . substr($r['texto'], 0, 300));
+
+    // Crear/obtener el calendario del periodo (UNIQUE por marca+anio+mes).
+    $pdo->prepare(
+        "INSERT INTO crecer_calendario (marca_id, anio, mes, estado, generado_por_ia, ia_log_id)
+         VALUES (?,?,?, 'borrador', 1, ?)
+         ON DUPLICATE KEY UPDATE ia_log_id = VALUES(ia_log_id), updated_at = NOW()"
+    )->execute([$marca_id, $anio, $mes, $r['ia_log_id']]);
+    $cal_id = (int)$pdo->query(
+        "SELECT id FROM crecer_calendario WHERE marca_id={$marca_id} AND anio={$anio} AND mes={$mes}"
+    )->fetchColumn();
+
+    // Materializar cada pieza como borrador en crecer_contenido.
+    $ins = $pdo->prepare(
+        "INSERT INTO crecer_contenido
+           (calendario_id, marca_id, plataforma, tipo, caption, fecha_programada, estado)
+         VALUES (?,?,?,?,?,?, 'borrador')");
+    $creadas = [];
+    foreach ($piezas as $p) {
+        $dia = max(1, min(28, (int)($p['dia'] ?? 1)));
+        $fecha = sprintf('%04d-%02d-%02d 10:00:00', $anio, $mes, $dia);
+        $plat = in_array($p['plataforma'] ?? '', ['instagram','facebook'], true) ? $p['plataforma'] : 'instagram';
+        $tipo = in_array($p['tipo'] ?? '', ['post','story','reel'], true) ? $p['tipo'] : 'post';
+        // Guardamos la IDEA en el caption provisional (el creador lo reemplaza luego).
+        $idea = trim(($p['tema'] ?? '') . ' — ' . ($p['idea'] ?? ''));
+        $ins->execute([$cal_id, $marca_id, $plat, $tipo, $idea, $fecha]);
+        $creadas[] = [
+            'id'         => (int)$pdo->lastInsertId(),
+            'dia'        => $dia,
+            'plataforma' => $plat,
+            'tipo'       => $tipo,
+            'idea'       => $idea,
+        ];
+    }
+
+    return [
+        'calendario_id' => $cal_id,
+        'ia_log_id'     => $r['ia_log_id'],
+        'piezas'        => $creadas,
+        'costo'         => $r['costo'],
+        'transporte'    => $r['transporte'],
+    ];
+}
+
+/**
+ * AGENTE CREADOR. Toma UNA pieza (borrador con su idea) y escribe el
+ * caption boricua real. Actualiza crecer_contenido (caption + ia_log_id),
+ * dejándola en 'borrador' para que el dueño la apruebe.
+ *
+ * @return array{caption:string, ia_log_id:int, costo:float}
+ */
+function redactar_pieza(PDO $pdo, int $contenido_id): array {
+    $c = $pdo->prepare("SELECT * FROM crecer_contenido WHERE id = ?");
+    $c->execute([$contenido_id]);
+    $pieza = $c->fetch();
+    if (!$pieza) throw new RuntimeException("Contenido #$contenido_id no existe.");
+
+    $m = leer_marca($pdo, (int)$pieza['marca_id']);
+    $ctx = marca_contexto($m);
+    $idea = $pieza['caption']; // en el borrador, el caption guarda la IDEA del plan
+
+    $sistema = <<<SYS
+Eres el CREADOR de contenido de Crecer. Escribes captions para redes
+sociales de microempresas boricuas. Reglas:
+- Español puertorriqueño AUTÉNTICO, nunca traducido ni "AI slop".
+- Vocabulario local (bizcocho, no "tarta"; chavos; nene/nena; etc.).
+- Tono según la voz del negocio. 1-2 emojis máximo.
+- Llamado a la acción por WhatsApp y 3-4 hashtags locales.
+- Máximo 60 palabras. Devuelve SOLO el caption, sin comillas ni explicación.
+SYS;
+
+    $prompt = "Perfil del negocio:\n{$ctx}\n\n"
+        . "Plataforma: {$pieza['plataforma']} | Tipo: {$pieza['tipo']}\n"
+        . "Idea de esta pieza: {$idea}\n\n"
+        . "Escribe el caption.";
+
+    $r = ia_ejecutar($pdo, 'creador', "Redactar caption pieza #{$contenido_id}", $prompt, [
+        'marca_id'    => (int)$pieza['marca_id'],
+        'sistema'     => $sistema,
+        'temperatura' => 0.95,
+        'max_tokens'  => 400,
+        'thinking_budget' => 0,
+        'mock_texto'  => "[MOCK] Caption para: {$idea}",
+    ]);
+
+    $pdo->prepare(
+        "UPDATE crecer_contenido SET caption = ?, ia_log_id = ?, updated_at = NOW() WHERE id = ?"
+    )->execute([trim($r['texto']), $r['ia_log_id'], $contenido_id]);
+
+    return ['caption' => trim($r['texto']), 'ia_log_id' => $r['ia_log_id'], 'costo' => $r['costo']];
+}
+
+/**
+ * Corre el CREADOR sobre todas las piezas en borrador de un calendario
+ * cuyo caption aún es la idea (sin redactar). Devuelve resumen.
+ */
+function redactar_calendario(PDO $pdo, int $calendario_id): array {
+    $ids = $pdo->prepare(
+        "SELECT id FROM crecer_contenido WHERE calendario_id = ? AND estado = 'borrador' ORDER BY fecha_programada");
+    $ids->execute([$calendario_id]);
+    $resultados = [];
+    $costo_total = 0.0;
+    foreach ($ids->fetchAll(PDO::FETCH_COLUMN) as $cid) {
+        $res = redactar_pieza($pdo, (int)$cid);
+        $costo_total += $res['costo'];
+        $resultados[] = ['contenido_id' => (int)$cid] + $res;
+    }
+    return ['piezas' => $resultados, 'costo_total' => round($costo_total, 6)];
+}
