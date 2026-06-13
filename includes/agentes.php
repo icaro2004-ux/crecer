@@ -10,6 +10,14 @@
 
 require_once __DIR__ . '/ia.php';
 
+/** Convierte "El Palo Dulce" → "el-palo-dulce" (para links públicos). */
+function slugify(string $s): string {
+    $s = mb_strtolower(trim($s), 'UTF-8');
+    $s = strtr($s, ['á'=>'a','é'=>'e','í'=>'i','ó'=>'o','ú'=>'u','ü'=>'u','ñ'=>'n']);
+    $s = preg_replace('/[^a-z0-9]+/', '-', $s);
+    return trim($s, '-') ?: 'negocio';
+}
+
 /**
  * INTAKE: guarda (o actualiza) el perfil de un negocio en crecer_marca.
  * Idempotente por (usuario_id + nombre_negocio): si ya existe, lo devuelve.
@@ -45,7 +53,11 @@ function crear_marca(PDO $pdo, array $d): int {
         ':instagram'    => $d['instagram'] ?? null,
         ':whatsapp'     => $d['whatsapp'] ?? null,
     ]);
-    return (int)$pdo->lastInsertId();
+    $id = (int)$pdo->lastInsertId();
+    // slug único para el link público (nombre + id garantiza unicidad)
+    $slug = slugify($d['nombre_negocio']) . '-' . $id;
+    $pdo->prepare("UPDATE crecer_marca SET slug=? WHERE id=?")->execute([$slug, $id]);
+    return $id;
 }
 
 /** Lee una marca como array asociativo (productos decodificado). */

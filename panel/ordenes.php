@@ -62,6 +62,8 @@ function dia_rel($f){ if(!$f) return ''; $d=floor((strtotime(date('Y-m-d',strtot
 function wa_link($c,$msg){ $n=preg_replace('/\D/','',(string)$c); if(strlen($n)<10) return null;
   if(strlen($n)==10) $n='1'.$n; return "https://wa.me/$n?text=".rawurlencode($msg); }
 
+$publink = (defined('BASE_URL') ? BASE_URL : '') . '/ordenar.php?n=' . $marca['slug'];
+
 $active = 'ordenes';
 $page_title = 'Órdenes & Agenda';
 require __DIR__ . '/_shell.php';
@@ -113,6 +115,21 @@ require __DIR__ . '/_shell.php';
     <p class="page-sub">Recibe, maneja y completa. Al terminar, pídele la reseña — así crece tu reputación. 🔁</p>
   </div>
   <button class="new-btn" onclick="document.getElementById('mod').classList.add('show')">+ Nueva orden</button>
+</div>
+
+<div class="pcard" style="margin-top:18px;display:flex;gap:18px;align-items:center;flex-wrap:wrap">
+  <img src="https://api.qrserver.com/v1/create-qr-code/?size=130x130&margin=0&data=<?= urlencode($publink) ?>"
+       width="120" height="120" alt="QR de tu link" style="border-radius:12px;flex:none">
+  <div style="flex:1;min-width:220px">
+    <div style="font-family:var(--font-display);font-weight:800;font-size:17px">📲 Tu link de órdenes</div>
+    <div style="color:var(--muted);font-size:13.5px;margin:4px 0 10px">Compártelo en Instagram, Facebook o WhatsApp — o imprime el QR para la barra/mostrador. El cliente ordena sin cuenta.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <input id="plink" readonly value="<?= $h($publink) ?>" style="flex:1;min-width:200px;font-family:inherit;font-size:13px;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff">
+      <button onclick="navigator.clipboard.writeText(document.getElementById('plink').value);this.textContent='✓ Copiado'"
+              style="border:0;cursor:pointer;background:var(--tinta);color:#fff;font-weight:700;border-radius:10px;padding:10px 16px;font-family:inherit">Copiar</button>
+      <a href="<?= $h($publink) ?>" target="_blank" style="border:1.5px solid var(--line);border-radius:10px;padding:10px 16px;text-decoration:none;color:var(--tinta);font-weight:700">Ver</a>
+    </div>
+  </div>
 </div>
 
 <?php if ($agenda): ?>

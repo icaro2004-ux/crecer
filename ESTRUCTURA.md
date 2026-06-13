@@ -57,7 +57,8 @@ Sirve a dos públicos, sin mezclarlos:
 | Logo/identidad con IA | 🌱 Arranca $25 | ⬜ |
 | Gráficas con IA (imágenes desde sus fotos) | 🌿 Crecer $55 | ⬜ |
 | IA responde WhatsApp/DMs (agente RESPONDER) | 🌿 Crecer $55 | ⬜ |
-| Órdenes & Agenda (recibir/gestionar/completar) | 🌿 Crecer $55 | ✅ |
+| Órdenes & Agenda (panel del dueño) | 🌿 Crecer $55 | ✅ |
+| Página PÚBLICA de órdenes (link + QR, sin cuenta) | 🌿 Crecer $55 | ✅ |
 | Pedir reseña al completar (flywheel) | 🌿 Crecer $55 | ✅ (vía WhatsApp) |
 | Análisis + cuentas detalladas | 🚀 Despegar $75 | ⬜ |
 | Dashboard del panel (shell PC+móvil) | todos | ✅ |
