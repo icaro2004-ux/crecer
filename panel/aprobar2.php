@@ -61,14 +61,14 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <title>Aprobar contenido · <?= $h($marca['nombre_negocio']) ?></title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link href="/crecer/assets/encuentralo-ui.css" rel="stylesheet">
 </head>
 <body>
 <div class="app">
 
   <div class="topbar">
-    <span class="brand">Encuéntra<span class="dot">·</span>lo</span>
+    <span class="brand">encuéntra<span class="dot">·</span>lo</span>
     <span class="tier">🌿 Crecer · Intermedio</span>
   </div>
 
