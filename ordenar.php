@@ -79,18 +79,29 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .done .big{font-size:54px}
   .done h1{font-family:var(--font-display);font-weight:800;font-size:28px;letter-spacing:-.02em;margin-top:10px}
   .done p{color:var(--muted);font-size:16px;margin-top:10px}
-  .done a{display:inline-block;margin-top:22px;color:var(--terracota);font-weight:800;text-decoration:none}
+  .done-cta{display:inline-block;margin-top:24px;background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;font-weight:800;padding:14px 26px;border-radius:99px;text-decoration:none;box-shadow:0 12px 28px rgba(255,43,133,.3)}
+  .done-links{margin-top:16px;font-size:14px}
+  .done-links a{color:var(--muted);font-weight:700;text-decoration:none}
+  .done-links a:hover{color:var(--terracota)}
 </style>
 </head>
 <body>
 <div class="wrap">
 
-<?php if ($ok): ?>
+<?php if ($ok):
+  $wn = preg_replace('/\D/','',(string)$marca['whatsapp']);
+  if (strlen($wn)===10) $wn='1'.$wn;
+  $wa = strlen($wn)>=11 ? "https://wa.me/$wn" : null;
+?>
   <div class="done">
     <div class="big">🎉</div>
     <h1>¡Tu orden llegó!</h1>
     <p><b><?= $h($marca['nombre_negocio']) ?></b> ya la recibió y te va a contactar pronto<?= $marca['whatsapp']?' por WhatsApp':'' ?>. ¡Gracias! 🇵🇷</p>
-    <a href="/crecer/ordenar.php?n=<?= $h($marca['slug']) ?>">Hacer otra orden</a>
+    <a class="done-cta" href="/crecer/buscar.php">Explorar más negocios boricuas →</a>
+    <div class="done-links">
+      <?php if ($wa): ?><a href="<?= $h($wa) ?>" target="_blank">💬 Escríbele por WhatsApp</a> · <?php endif; ?>
+      <a href="/crecer/ordenar.php?n=<?= $h($marca['slug']) ?>">Hacer otra orden</a>
+    </div>
   </div>
 <?php else: ?>
 
