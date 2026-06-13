@@ -25,6 +25,14 @@
       `scripts/demo_caption.php` probado: caption boricua logueado (fila #1, modo
       mock por falta de creds). Pipeline del criterio #2 vivo.
 
+**Entrega / infraestructura (2026-06-13):**
+- [x] Registrado en el concurso (Devpost, usuario GitHub `icaro2004-ux`).
+- [x] **GitHub:** repo privado `https://github.com/icaro2004-ux/crecer`
+      (`origin/main`). Git Credential Manager configurado → `git push` funciona.
+      PENDIENTE: al entregar, dar acceso a los jueces (testing@devpost.com,
+      judging@hacker.fund) si el repo sigue privado.
+- [x] Panel de aprobación móvil: `panel/aprobar.php` (paso 7).
+
 **Decisiones cerradas (ver CLAUDE.md para detalle):**
 - A — Cobro: Stripe ahora; ATH Móvil en roadmap.
 - B — Google Cloud: Gemini vía Vertex AI; hosting en Hostinger.
