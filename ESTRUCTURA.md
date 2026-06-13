@@ -45,6 +45,26 @@ Sirve a dos públicos, sin mezclarlos:
 
 ---
 
+## ESTADO DE CONSTRUCCIÓN (¿qué hay y de qué plan es?)
+
+| Pieza | Plan | ¿Construido? |
+|---|---|---|
+| Sitio público (hub, landing, precios) | — | ✅ |
+| Intake "crear mi negocio" | entrada a todos | ✅ |
+| Calendario + captions (IA escribe) | 🌿 Crecer $55 | ✅ |
+| Panel de aprobación móvil | 🌿 Crecer $55 | ✅ |
+| Generar 1er mes (botón mágico) | 🌿 Crecer $55 | ✅ |
+| Logo/identidad con IA | 🌱 Arranca $25 | ⬜ |
+| Gráficas con IA (imágenes desde sus fotos) | 🌿 Crecer $55 | ⬜ |
+| IA responde WhatsApp/DMs (agente RESPONDER) | 🌿 Crecer $55 | ⬜ |
+| Agendamiento de órdenes | 🌿 Crecer $55 | ⬜ |
+| Flywheel reviews + análisis + cuentas | 🚀 Despegar $75 | ⬜ |
+| Dashboard del panel (shell PC+móvil) | todos | ⬜ |
+
+**Nota WhatsApp:** conectar la IA a WhatsApp real = WhatsApp Business API de Meta
+(número de negocio, verificación, posible costo). Su propio montaje. Opciones van
+desde "la IA redacta y el dueño pega" hasta integración full con Meta.
+
 ## ORDEN DE BUILD (la ruta, para no perdernos)
 
 1. **Landing de Crecer** — la página que vende + que puedes enseñarle a la gente.
