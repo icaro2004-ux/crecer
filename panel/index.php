@@ -112,7 +112,7 @@ require __DIR__ . '/_shell.php';
     <div class="ct">🎨 Próximo wow</div>
     <div style="font-family:var(--font-display);font-weight:800;font-size:21px;margin:6px 0 4px;letter-spacing:-.02em">Gráficas con tus fotos</div>
     <div class="soon">La IA va a convertir las fotos de tu negocio en posts profesionales. Sube tus fotos para activarlo.</div>
-    <a class="ctab" href="#">Subir mis fotos (pronto)</a>
+    <a class="ctab" href="<?= $BASE ?>/pronto.php?s=marca&marca=<?= $marca_id ?>">Subir mis fotos (pronto)</a>
   </div>
 </div>
 

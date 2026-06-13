@@ -10,12 +10,12 @@ $h = $h ?? fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 $nav = [
   ['key'=>'inicio',   'ic'=>'🏠','lb'=>'Inicio',          'hr'=>"$BASE/index.php?marca=$marca_id",   'st'=>''],
   ['key'=>'contenido','ic'=>'📅','lb'=>'Contenido',       'hr'=>"$BASE/aprobar2.php?marca=$marca_id",'st'=>''],
-  ['key'=>'marca',    'ic'=>'🎨','lb'=>'Marca',           'hr'=>'#',                                 'st'=>'pronto'],
-  ['key'=>'ordenes',  'ic'=>'📦','lb'=>'Órdenes & Agenda','hr'=>"$BASE/ordenes.php?marca=$marca_id",'st'=>''],
-  ['key'=>'clientela','ic'=>'👥','lb'=>'Clientela',       'hr'=>'#',                                 'st'=>'pronto'],
-  ['key'=>'cuentas',  'ic'=>'💵','lb'=>'Cuentas',         'hr'=>'#',                                 'st'=>'despegar'],
-  ['key'=>'analitica','ic'=>'📊','lb'=>'Analítica',       'hr'=>'#',                                 'st'=>'despegar'],
-  ['key'=>'config',   'ic'=>'⚙️','lb'=>'Configuración',    'hr'=>'#',                                 'st'=>'pronto'],
+  ['key'=>'marca',    'ic'=>'🎨','lb'=>'Marca',           'hr'=>"$BASE/pronto.php?s=marca&marca=$marca_id",    'st'=>'pronto'],
+  ['key'=>'ordenes',  'ic'=>'📦','lb'=>'Órdenes & Agenda','hr'=>"$BASE/ordenes.php?marca=$marca_id",          'st'=>''],
+  ['key'=>'clientela','ic'=>'👥','lb'=>'Clientela',       'hr'=>"$BASE/pronto.php?s=clientela&marca=$marca_id",'st'=>'pronto'],
+  ['key'=>'cuentas',  'ic'=>'💵','lb'=>'Cuentas',         'hr'=>"$BASE/pronto.php?s=cuentas&marca=$marca_id",  'st'=>'despegar'],
+  ['key'=>'analitica','ic'=>'📊','lb'=>'Analítica',       'hr'=>"$BASE/pronto.php?s=analitica&marca=$marca_id",'st'=>'despegar'],
+  ['key'=>'config',   'ic'=>'⚙️','lb'=>'Configuración',    'hr'=>"$BASE/pronto.php?s=config&marca=$marca_id",   'st'=>'pronto'],
 ];
 ?>
 <!DOCTYPE html>
