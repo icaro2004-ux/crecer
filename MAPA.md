@@ -18,19 +18,35 @@ y sube cuando su negocio crece (su crecimiento = nuestro crecimiento).
 
 ## Los niveles (cómo se empaqueta y se vende)
 
-```
-🆓  APARECE                 estás en el directorio, te encuentran (el gancho)
-🌱  NIVEL 1 · BÁSICO        "tu negocio se ve PRO"
-      → identidad visual (logo + colores) + presencia online
-🌿  NIVEL 2 · INTERMEDIO    "tu negocio se mueve solo"
-      → manejo de redes (posts, gráficas, DMs) + agendamiento de órdenes
-🌳  NIVEL 3 · AVANZADO      "tu negocio crece con data"
-      → análisis de ventas + flywheel de reviews + cuentas básicas
-```
+Cada nivel **incluye todo lo del anterior** (se apilan). Precios: por definir.
+**Perk transversal:** todo participante de Crecer (cualquier nivel pago) recibe
+GRATIS los servicios de promo de Encuéntralo (perfil destacado en el directorio)
+— normalmente tendrían costo. Eso sube el valor y alimenta el flywheel.
 
-Cada nivel = una promesa clara + un precio. Da flexibilidad y escalabilidad,
-y crea un camino natural de *upgrade*. (Qué módulo cae en qué nivel y el
-precio: Manuel afina.)
+### 🆓 GRATIS — "Aparece"  (el gancho, para todos)
+- Ficha en el directorio: nombre, categoría, municipio, contacto, botón WhatsApp.
+- Te encuentran clientes. Promesa: **"existes online sin pagar."**
+
+### 🌱 NIVEL 1 · BÁSICO — "Tu negocio se ve PRO"
+- Identidad visual por IA: **logo + paleta de colores + portada**.
+- Perfil **destacado** en el directorio (la promo de Encuéntralo, incluida).
+- Mini-presencia online lista (ficha pro / mini-landing).
+- Promesa: **"te ves profesional y te encuentran mejor."**
+
+### 🌿 NIVEL 2 · INTERMEDIO — "Tu negocio se mueve solo"
+- El motor IA completo: **calendario mensual + captions boricuas + gráficas**
+  (desde sus fotos o generadas) **+ aprobación móvil**.
+- **Agente que responde DMs/comentarios** en su voz.
+- **Agendamiento**: recibir y gestionar órdenes/citas con fecha
+  (recibida → en proceso → completada).
+- Promesa: **"la IA te corre el día a día — tú solo apruebas."**
+
+### 🌳 NIVEL 3 · AVANZADO — "Tu negocio crece con data"
+- **Flywheel completo**: al completar una orden → invita al cliente al review
+  en Encuéntralo (reviews reales, verificadas).
+- **Análisis de ventas**: qué se vende más, ingresos del mes, clientes recurrentes.
+- **Cuentas básicas**: ingresos / gastos / ganancia (nada regulado).
+- Promesa: **"sabes qué funciona y creces con números."**
 
 ## A quién sirve
 
