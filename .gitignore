@@ -19,3 +19,6 @@ Thumbs.db
 *.log
 .vscode/
 .idea/
+
+# Previews temporales de screenshots
+scripts/_preview_*.png
