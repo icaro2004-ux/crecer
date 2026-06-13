@@ -10,8 +10,27 @@ El *one-stop do-it-all* del microempresario boricua. Doble sentido:
 - 🔎 El **cliente** te *encuentra* a ti (el directorio).
 - 🧰 El **dueño** *encuentra* aquí TODO para manejar y crecer su negocio.
 
-Una sola marca. Lo que antes llamábamos "Crecer" es el **motor de IA** dentro
-de Encuéntralo (nombre del módulo: por decidir).
+Una sola marca. **"Crecer" NO es un producto aparte ni un nombre** — es el
+**verbo / la ruta de evolución**: los niveles que el negocio va subiendo.
+Doble sentido: el producto te hace *crecer*, y los niveles son etapas de
+crecimiento. Pitch: **"¿Cuánto quieres crecer?"** Cada cliente elige su nivel,
+y sube cuando su negocio crece (su crecimiento = nuestro crecimiento).
+
+## Los niveles (cómo se empaqueta y se vende)
+
+```
+🆓  APARECE                 estás en el directorio, te encuentran (el gancho)
+🌱  NIVEL 1 · BÁSICO        "tu negocio se ve PRO"
+      → identidad visual (logo + colores) + presencia online
+🌿  NIVEL 2 · INTERMEDIO    "tu negocio se mueve solo"
+      → manejo de redes (posts, gráficas, DMs) + agendamiento de órdenes
+🌳  NIVEL 3 · AVANZADO      "tu negocio crece con data"
+      → análisis de ventas + flywheel de reviews + cuentas básicas
+```
+
+Cada nivel = una promesa clara + un precio. Da flexibilidad y escalabilidad,
+y crea un camino natural de *upgrade*. (Qué módulo cae en qué nivel y el
+precio: Manuel afina.)
 
 ## A quién sirve
 
