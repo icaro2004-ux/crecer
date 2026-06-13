@@ -196,7 +196,7 @@
         <div class="lvl">🌳 Nivel 3 · Avanzado</div>
         <div class="name">Creces con data</div>
         <div class="promise">Sabes qué funciona y decides con números.</div>
-        <div class="price">$85<small>/mes</small></div>
+        <div class="price">$75<small>/mes</small></div>
         <ul>
           <li>Todo lo de Intermedio</li>
           <li>Flywheel de reseñas reales</li>

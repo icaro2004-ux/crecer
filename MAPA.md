@@ -66,9 +66,10 @@ Tiers REALES (de `pricing.php` de Encuéntralo):
 |---|---|---|
 | 🌱 Básico · identidad + presencia | **$25** | ⭐ Pro (vale $5) |
 | 🌿 Intermedio · motor IA ★ | **$55** | 🚀 Max (vale $15) |
-| 🌳 Avanzado · data + flywheel | **$85** | 🚀 Max + analítica propia |
+| 🌳 Avanzado · data + flywheel | **$75** | 🚀 Max + analítica propia |
 
-Saltos parejos de **+$30** (2→3 es solo 1.5×, ya no el doble). El directorio
+Saltos +$30 y +$20 (2→3 es solo 1.36×, súper fácil de subir). Precio accesible
+a propósito: PR está dura y la meta es ayudar al microempresario, no exprimirlo. El directorio
 Free queda de gancho para quien aún no paga Crecer. Principio: el precio de
 Crecer = valor del directorio incluido + margen del servicio de IA.
 
