@@ -154,60 +154,60 @@
   <!-- NIVELES -->
   <div class="wrap">
     <div class="sec-head">
-      <h2>Escoge cuánto crecer</h2>
-      <p>Cada nivel incluye el anterior. Y todos llevan la promo de Encuéntralo gratis 🎁</p>
+      <h2>Empieza chiquito, crece a tu ritmo</h2>
+      <p>Arranca con tu logo por $25. Si te gusta lo que hace la IA, sigue creciendo mes a mes.</p>
     </div>
 
     <div class="plans">
-      <!-- BÁSICO -->
+      <!-- ARRANCA · pago único (el anzuelo) -->
       <div class="plan">
-        <div class="lvl">🌱 Nivel 1 · Básico</div>
-        <div class="name">Te ves PRO</div>
-        <div class="promise">Tu identidad y tu presencia online, listas.</div>
-        <div class="price">$25<small>/mes</small></div>
+        <div class="lvl">🌱 Pago único</div>
+        <div class="name">Arranca</div>
+        <div class="promise">Tu logo profesional, listo para usar — y una probadita de la IA.</div>
+        <div class="price">$25<small>una vez</small></div>
         <ul>
-          <li>Logo + colores + portada (IA)</li>
-          <li>Presencia online lista</li>
-          <li class="gift">GRATIS: Encuéntralo <b>Pro</b> (vale $5)<br>verificado, fotos ilimitadas, prioridad</li>
+          <li>Logo + paleta + portada (IA)</li>
+          <li>Descárgalo en todos los formatos (PNG, SVG…)</li>
+          <li>2 publicaciones de prueba</li>
+          <li>1 mes para verlo en acción</li>
+          <li class="gift">Bonus: te listamos gratis en Encuéntralo</li>
         </ul>
-        <a class="cta" href="#empezar">Empezar</a>
+        <a class="cta" href="#empezar">Quiero mi logo</a>
       </div>
 
-      <!-- INTERMEDIO -->
+      <!-- CRECER · mensual (el motor) -->
       <div class="plan pop">
         <span class="pop-tag">★ El más popular</span>
-        <div class="lvl">🌿 Nivel 2 · Intermedio</div>
-        <div class="name">Te mueves solo</div>
-        <div class="promise">La IA te corre las redes y las órdenes.</div>
+        <div class="lvl">🌿 Mensual</div>
+        <div class="name">Crecer</div>
+        <div class="promise">La IA te corre las redes y las órdenes. Tú apruebas.</div>
         <div class="price">$55<small>/mes</small></div>
         <ul>
-          <li>Todo lo de Básico</li>
-          <li>Calendario + captions + gráficas con tus fotos</li>
+          <li>Calendario completo + captions boricuas</li>
+          <li>Gráficas con tus fotos (o generadas)</li>
           <li>Aprobación desde el celular</li>
           <li>La IA responde tus DMs</li>
           <li>Agendamiento de órdenes</li>
-          <li class="gift">GRATIS: Encuéntralo <b>Max</b> (vale $15)<br>posición destacada, prioridad máxima</li>
         </ul>
         <a class="cta" href="#empezar">Empezar</a>
       </div>
 
-      <!-- AVANZADO -->
+      <!-- CRECER FULL · mensual (con data) -->
       <div class="plan">
-        <div class="lvl">🌳 Nivel 3 · Avanzado</div>
-        <div class="name">Creces con data</div>
-        <div class="promise">Sabes qué funciona y decides con números.</div>
+        <div class="lvl">🌳 Mensual</div>
+        <div class="name">Crecer Full</div>
+        <div class="promise">Creces con data y números claros.</div>
         <div class="price">$75<small>/mes</small></div>
         <ul>
-          <li>Todo lo de Intermedio</li>
+          <li>Todo lo de Crecer</li>
           <li>Flywheel de reseñas reales</li>
           <li>Análisis de ventas</li>
           <li>Cuentas: ingresos, gastos, ganancia</li>
-          <li class="gift">GRATIS: Encuéntralo <b>Max</b> full (vale $15)<br>máxima exposición + soporte prioritario</li>
         </ul>
         <a class="cta" href="#empezar">Empezar</a>
       </div>
     </div>
-    <p class="note">💡 Precios de ejemplo — por confirmar.</p>
+    <p class="note">💡 El directorio Encuéntralo está creciendo — pronto cada plan incluirá promoción destacada gratis. Precios accesibles a propósito 🇵🇷</p>
   </div>
 
   <!-- FLYWHEEL -->

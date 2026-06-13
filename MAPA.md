@@ -60,16 +60,25 @@ Tiers REALES (de `pricing.php` de Encuéntralo):
   estadísticas, posición prioritaria.
 - **🚀 Max — $15/mes:** posición destacada, prioridad máxima, soporte.
 
-### Emparejamiento + precios (PROPUESTA — Manuel fija el número final)
+### Oferta por FASES (decidido 2026-06-13)
 
-| Crecer (paga) | Precio | Encuéntralo incluido (gratis) |
+**Realidad:** el directorio Encuéntralo está EN PAÑALES (vacío). Vender "presencia
+en un directorio vacío" como gran valor hoy no atrae. Por eso la oferta va por fases.
+
+**FASE 1 — HOY (el valor es la IA, no el directorio):**
+| Plan | Precio | Qué da |
 |---|---|---|
-| 🌱 Básico · identidad + presencia | **$25** | ⭐ Pro (vale $5) |
-| 🌿 Intermedio · motor IA ★ | **$55** | 🚀 Max (vale $15) |
-| 🌳 Avanzado · data + flywheel | **$75** | 🚀 Max + analítica propia |
+| 🌱 Arranca | **$25 pago único** | logo pro (descarga en todo formato) + paleta + portada + 2 posts + 1 mes de prueba. ES EL ANZUELO que vende el mensual. |
+| 🌿 Crecer ★ | **$55/mes** | motor IA: calendario + captions + gráficas + DMs + agendamiento. |
+| 🌳 Crecer Full | **$75/mes** | + flywheel de reseñas + análisis + cuentas. |
 
-Saltos +$30 y +$20 (2→3 es solo 1.36×, súper fácil de subir). Precio accesible
-a propósito: PR está dura y la meta es ayudar al microempresario, no exprimirlo. El directorio
+Directorio hoy = bonus chiquito ("te listamos gratis"), NO el titular.
+
+**FASE 2 — cuando el directorio se llene (oferta 2.0):** re-introducir el bundling
+fuerte (Encuéntralo Pro $5 / Max $15 GRATIS con cada plan), como diseñamos arriba.
+Los propios usuarios de Crecer van llenando el directorio → habilita la Fase 2.
+
+Precio accesible a propósito: PR está dura, la meta es ayudar, no exprimir. El directorio
 Free queda de gancho para quien aún no paga Crecer. Principio: el precio de
 Crecer = valor del directorio incluido + margen del servicio de IA.
 
