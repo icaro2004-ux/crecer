@@ -19,9 +19,9 @@ y sube cuando su negocio crece (su crecimiento = nuestro crecimiento).
 ## Los niveles (cómo se empaqueta y se vende)
 
 Cada nivel **incluye todo lo del anterior** (se apilan). Precios: por definir.
-**Perk transversal:** todo participante de Crecer (cualquier nivel pago) recibe
-GRATIS los servicios de promo de Encuéntralo (perfil destacado en el directorio)
-— normalmente tendrían costo. Eso sube el valor y alimenta el flywheel.
+**Perk transversal — la doble escalera:** cada nivel de Crecer regala un nivel
+MÁS ALTO de Encuéntralo (ver tabla de emparejamiento abajo). El directorio Free
+ya es gratis para todos, así que no cuenta como premio — por eso se escala.
 
 ### 🆓 GRATIS — "Aparece"  (el gancho, para todos)
 - Ficha en el directorio: nombre, categoría, municipio, contacto, botón WhatsApp.
@@ -47,6 +47,29 @@ GRATIS los servicios de promo de Encuéntralo (perfil destacado en el directorio
 - **Análisis de ventas**: qué se vende más, ingresos del mes, clientes recurrentes.
 - **Cuentas básicas**: ingresos / gastos / ganancia (nada regulado).
 - Promesa: **"sabes qué funciona y creces con números."**
+
+## Encuéntralo — sus propios niveles (el lado directorio/promo)
+
+Encuéntralo, como directorio, también tiene su escalera. El directorio base es
+gratis para CUALQUIERA — por eso no sirve de incentivo. La jugada: cada nivel de
+Crecer regala un nivel más alto de Encuéntralo.
+
+- **🆓 Free:** ficha básica (apareces en búsquedas, contacto, WhatsApp).
+- **⭐ Intermedio:** perfil **destacado** en tu categoría/municipio, galería de
+  fotos, badge **"verificado"**, apareces más arriba en resultados.
+- **🚀 Pro:** todo lo anterior + posición **top/portada**, **promoción/boost**
+  (te ve más gente), **multi-categoría y multi-municipio**, **analítica** de
+  visitas y leads.
+
+### El emparejamiento (Crecer ↔ Encuéntralo gratis)
+
+| Pagas en Crecer | Te regalamos de Encuéntralo |
+|---|---|
+| 🌱 Nivel 1 · Básico | ⭐ Encuéntralo **Intermedio** (destacado + galería + verificado) |
+| 🌿 Nivel 2 · Intermedio | 🚀 **Algo de Pro** (boost de promoción + analítica básica) |
+| 🌳 Nivel 3 · Avanzado | 🚀 Encuéntralo **Pro full** (top + promo + analítica + multi) |
+
+(El directorio Free queda como gancho para los que aún no pagan Crecer.)
 
 ## A quién sirve
 
