@@ -192,11 +192,11 @@
         <a class="cta" href="#empezar">Empezar</a>
       </div>
 
-      <!-- CRECER FULL · mensual (con data) -->
+      <!-- DESPEGAR · mensual (con data) -->
       <div class="plan">
-        <div class="lvl">🌳 Mensual</div>
-        <div class="name">Crecer Full</div>
-        <div class="promise">Creces con data y números claros.</div>
+        <div class="lvl">🚀 Mensual</div>
+        <div class="name">Despegar</div>
+        <div class="promise">Tu negocio despega: data y números claros.</div>
         <div class="price">$75<small>/mes</small></div>
         <ul>
           <li>Todo lo de Crecer</li>

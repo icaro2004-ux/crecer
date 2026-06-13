@@ -70,7 +70,7 @@ en un directorio vacío" como gran valor hoy no atrae. Por eso la oferta va por 
 |---|---|---|
 | 🌱 Arranca | **$25 pago único** | logo pro (descarga en todo formato) + paleta + portada + 2 posts + 1 mes de prueba. ES EL ANZUELO que vende el mensual. |
 | 🌿 Crecer ★ | **$55/mes** | motor IA: calendario + captions + gráficas + DMs + agendamiento. |
-| 🌳 Crecer Full | **$75/mes** | + flywheel de reseñas + análisis + cuentas. |
+| 🚀 Despegar | **$75/mes** | + flywheel de reseñas + análisis + cuentas. |
 
 Directorio hoy = bonus chiquito ("te listamos gratis"), NO el titular.
 
