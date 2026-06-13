@@ -67,11 +67,20 @@ Cada paso lo ejecuta un agente de IA y se loguea (evidencia del criterio #2).
 - Hereda la voz de Encuéntralo: "Tranqui", "Cero revolú", "te montamos por
   WhatsApp".
 
-## Regla de IP (CRÍTICA)
+## Regla de IP e imágenes (CRÍTICA)
 
-**Nunca** usar fotos de terceros ni de stock para un negocio real. Cada negocio
-sube SUS propias fotos — el intake de fotos es obligatorio (reusa el sistema
-`fotos` de Encuéntralo).
+**Nunca** usar fotos de terceros ni de stock para un negocio real (riesgo legal +
+inauténtico = "AI slop"). Jerarquía de imágenes:
+
+1. **Preferido:** el negocio sube SUS propias fotos (intake de fotos obligatorio;
+   reusa el sistema `fotos` de Encuéntralo). La IA las puede editar/realzar.
+2. **Si no tiene fotos:** la IA GENERA las imágenes (Gemini / Nano Banana) y el
+   dueño las **APRUEBA** antes de publicarse. La aprobación del dueño es obligatoria.
+   La IA lo invita a subir una foto real cuando pueda (lo real siempre gana).
+3. **Anti-misrepresentación:** la imagen que muestra "el producto que vas a recibir"
+   (ej. el bizcocho específico) idealmente es real o se aprueba como ilustrativa.
+   Las gráficas promocionales / concepto / fondos / temáticas la IA las genera libre.
+   Nunca prometer en imagen un producto que el negocio no entrega igual.
 
 ## Marca
 
