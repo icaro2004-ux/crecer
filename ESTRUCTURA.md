@@ -50,7 +50,8 @@ Sirve a dos públicos, sin mezclarlos:
 | Pieza | Plan | ¿Construido? |
 |---|---|---|
 | Sitio público (hub, landing, precios) | — | ✅ |
-| Intake "crear mi negocio" | entrada a todos | ✅ |
+| **Auth: registro / login / logout** (tabla `usuarios` compartida) | todos | ✅ |
+| Intake "crear mi negocio" (requiere login) | entrada a todos | ✅ |
 | Calendario + captions (IA escribe) | 🌿 Crecer $55 | ✅ |
 | Panel de aprobación móvil | 🌿 Crecer $55 | ✅ |
 | Generar 1er mes (botón mágico) | 🌿 Crecer $55 | ✅ |
