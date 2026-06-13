@@ -48,8 +48,8 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 </head>
 <body>
   <nav class="nav">
-    <img class="mark" src="/crecer/assets/brand/encuentralo-pin.svg" alt="">
-    <span class="bn">encuéntralo</span>
+    <a href="/crecer/index.php" style="display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit">
+      <img class="mark" src="/crecer/assets/brand/encuentralo-pin.svg" alt="Inicio"><span class="bn">encuéntralo</span></a>
     <a class="back" href="/crecer/index.php">← Inicio</a>
   </nav>
 

@@ -106,7 +106,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <?php else: ?>
 
   <div class="hero">
-    <img class="pin" src="/crecer/assets/brand/encuentralo-pin.svg" alt="">
+    <a href="/crecer/buscar.php" title="Ver más negocios"><img class="pin" src="/crecer/assets/brand/encuentralo-pin.svg" alt="Encuéntralo"></a>
     <h1><?= $h($marca['nombre_negocio']) ?></h1>
     <?php if ($marca['descripcion']): ?><p><?= $h($marca['descripcion']) ?></p><?php endif; ?>
     <div class="from">Ordena directo · powered by <b>Encuéntralo</b></div>

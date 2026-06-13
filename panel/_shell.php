@@ -33,7 +33,7 @@ $nav = [
 <body>
 <div class="layout">
   <aside class="side" id="side">
-    <div class="sbrand"><img src="/crecer/assets/brand/encuentralo-pin.svg" alt=""><b>encuéntralo</b></div>
+    <a class="sbrand" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="text-decoration:none;color:inherit"><img src="/crecer/assets/brand/encuentralo-pin.svg" alt="Inicio"><b>encuéntralo</b></a>
     <nav>
       <?php foreach ($nav as $n): ?>
         <a href="<?= $n['hr'] ?>" class="<?= $n['key']===$active?'on':'' ?> <?= in_array($n['st'],['pronto','despegar'])?'locked':'' ?>">
@@ -52,7 +52,8 @@ $nav = [
 
   <div class="main">
     <div class="ptop">
-      <img src="/crecer/assets/brand/encuentralo-pin.svg" alt=""><b>encuéntralo</b>
+      <a href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit">
+        <img src="/crecer/assets/brand/encuentralo-pin.svg" alt="Inicio"><b>encuéntralo</b></a>
       <button class="burger" id="burger" aria-label="Menú">☰</button>
     </div>
     <div class="content">

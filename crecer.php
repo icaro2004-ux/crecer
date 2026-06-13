@@ -110,8 +110,8 @@
 <div class="page">
 
   <nav class="nav">
-    <img class="mark" src="/crecer/assets/brand/encuentralo-pin.svg" alt="">
-    <span class="bn">encuéntralo</span>
+    <a href="/crecer/index.php" style="display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit">
+      <img class="mark" src="/crecer/assets/brand/encuentralo-pin.svg" alt="Inicio"><span class="bn">encuéntralo</span></a>
     <a class="back" href="/crecer/index.php">← Volver</a>
   </nav>
 
