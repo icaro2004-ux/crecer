@@ -144,9 +144,8 @@ sube SUS propias fotos — el intake de fotos es obligatorio (reusa el sistema
 
 ## Pendientes de setup
 
-- Instalar **git** en la máquina y correr `git init` + primer commit (fecha
-  quedará en junio 2026 — cumple la regla de "proyecto nuevo").
+- [x] Git instalado + repo inicializado + primer commit (2026-06-13, rama `main`).
 - Crear el repo en **GitHub** (público o privado compartido con los emails de
-  judging) para la entrega.
+  judging) para la entrega — falta `git remote add` + `git push`.
 - Definir **oferta y precio** del paquete (por definir; no bloquea el build).
 - Configurar credenciales/billing de **Vertex AI** y **Stripe** para prod.
