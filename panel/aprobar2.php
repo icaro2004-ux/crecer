@@ -77,6 +77,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>substr($e->getMessage(),0,120)]); exit;
         }
     }
+    // ── Reusar un arte ya creado (sin regenerar, sin gastar del límite) ──
+    if ($accion === 'reusar_arte') {
+        $gid = (int)($_POST['gid'] ?? 0);
+        $g = $pdo->prepare("SELECT archivo FROM crecer_graficas WHERE id=? AND marca_id=?");
+        $g->execute([$gid, $marca_id]); $arch = $g->fetchColumn();
+        if ($arch && $id) {
+            $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$arch, $id, $marca_id]);
+            header('Content-Type: application/json'); echo json_encode(['ok'=>true,'id'=>$id,'img'=>$arch], JSON_UNESCAPED_UNICODE); exit;
+        }
+        header('Content-Type: application/json'); echo json_encode(['ok'=>false]); exit;
+    }
+
     // ── Pedir un post a la IA (tema sugerido / borrador a pulir / random) ──
     if ($accion === 'pedir_post') {
         @set_time_limit(0);
@@ -184,6 +196,9 @@ $fotos = is_dir($dir_fotos) ? array_values(array_filter(scandir($dir_fotos), fn(
 $tiene_logo = !empty($marca['logo_path']);
 $wk = $pdo->prepare("SELECT COUNT(*) FROM crecer_graficas WHERE marca_id=? AND created_at >= (NOW() - INTERVAL 7 DAY)");
 $wk->execute([$marca_id]); $restantes_sem = max(0, 5 - (int)$wk->fetchColumn());
+// Artes ya creados (para reciclar sin gastar del límite)
+$gq = $pdo->prepare("SELECT id, archivo FROM crecer_graficas WHERE marca_id=? ORDER BY id DESC LIMIT 30");
+$gq->execute([$marca_id]); $graficas = $gq->fetchAll();
 
 $total = count($piezas);
 $meses_es = [1=>'Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -232,6 +247,9 @@ require __DIR__ . '/_shell.php';
   .art-box .sub{font-size:13px;color:var(--muted);margin-bottom:6px}
   .art-box .x{position:absolute;top:12px;right:14px;border:0;background:none;font-size:20px;cursor:pointer;color:var(--muted)}
   .art-box .fl{display:block;font-weight:700;font-size:13px;margin:14px 0 7px}
+  .art-box .reuse-strip{display:flex;gap:8px;overflow-x:auto;padding:4px 0 8px}
+  .art-box .reuse-thumb{width:72px;height:72px;border-radius:12px;object-fit:cover;border:2.5px solid var(--line);cursor:pointer;flex:0 0 auto;transition:border-color .12s,transform .12s}
+  .art-box .reuse-thumb:hover{border-color:var(--terracota);transform:scale(1.04)}
   .art-box .picker{display:flex;gap:8px;flex-wrap:wrap}
   .art-box .pk{cursor:pointer}.art-box .pk input{position:absolute;opacity:0}
   .art-box .pk img,.art-box .pk .none{width:64px;height:64px;border-radius:12px;object-fit:cover;border:2.5px solid var(--line);display:block}
@@ -407,6 +425,16 @@ require __DIR__ . '/_shell.php';
     <div class="sub" id="art-copyprev">La imagen irá acorde a tu copy.</div>
     <input type="hidden" name="accion" value="arte">
     <input type="hidden" name="id" id="art-id" value="">
+
+    <?php if ($graficas): ?>
+    <label class="fl" style="margin-top:8px">♻️ Reusar un arte que ya creaste <span style="color:var(--muted);font-weight:500">(tócalo para usarlo — no gasta del límite)</span></label>
+    <div class="reuse-strip">
+      <?php foreach ($graficas as $g): ?>
+        <img class="reuse-thumb" src="<?= $h($g['archivo']) ?>" data-gid="<?= (int)$g['id'] ?>" alt="arte previo" title="Usar este arte">
+      <?php endforeach; ?>
+    </div>
+    <div style="text-align:center;font-size:12px;color:var(--muted);margin:2px 0 4px">— o crea uno nuevo abajo —</div>
+    <?php endif; ?>
 
     <label class="fl">Foto base <span style="color:var(--muted);font-weight:500">(real de tu negocio)</span></label>
     <div class="picker">
@@ -595,6 +623,22 @@ require __DIR__ . '/_shell.php';
       if(thenApprove){ enviarAccion(card,'aprobar').then(function(){ toast('✅ Post completo y aprobado'); }); }
       else toast('🎨 Arte listo y pegado al post');
     }).catch(function(){ go.disabled=false; go.textContent='✨ Crear el arte (~15s)'; toast('Error de conexión.'); });
+  });
+  // Reusar un arte ya creado (clic en miniatura)
+  artform.addEventListener('click', function(e){
+    var t=e.target.closest('.reuse-thumb'); if(!t || !artCard) return; e.preventDefault();
+    var card=artCard, thenApprove=artThenApprove;
+    var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','reusar_arte'); fd.append('id',card.dataset.id); fd.append('gid',t.dataset.gid);
+    fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+      if(!d.ok){ toast('No se pudo usar ese arte.'); return; }
+      var wrap=card.querySelector('.artwrap');
+      if(wrap) wrap.innerHTML='<img class="zoomable" src="'+d.img+'?t='+Date.now()+'" alt="arte" style="width:100%;display:block">';
+      card.dataset.img='1'; setChk(card,'art',true);
+      var tl=card.querySelector('.toolrow .artbtn'); if(tl) tl.innerHTML='🖼️ Cambiar arte';
+      cerrarArte();
+      if(thenApprove){ enviarAccion(card,'aprobar').then(function(){ toast('✅ Post completo y aprobado'); }); }
+      else toast('♻️ Arte reutilizado');
+    }).catch(function(){ toast('Error de conexión.'); });
   });
   document.getElementById('art-skip').addEventListener('click', function(e){
     e.preventDefault(); var card=artCard; cerrarArte(); if(card) enviarAccion(card,'aprobar').then(function(){ toast('✓ Aprobado (solo texto)'); });
