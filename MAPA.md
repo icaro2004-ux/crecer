@@ -16,6 +16,29 @@ Doble sentido: el producto te hace *crecer*, y los niveles son etapas de
 crecimiento. Pitch: **"¿Cuánto quieres crecer?"** Cada cliente elige su nivel,
 y sube cuando su negocio crece (su crecimiento = nuestro crecimiento).
 
+## ALCANCE POR FASE — producto (decidido 2026-06-13)
+
+**Realidad:** el directorio vacío no sirve como descubrimiento todavía. Entonces:
+
+- **FASE 1 (el concurso):** Crecer completo (back-office del proveedor: identidad
+  + posts/arte con IA + agenda/órdenes + dashboard) **+ la "página de negocio"
+  pública** dentro de Encuéntralo (lo que hoy es `ordenar.php?n=slug`), que el
+  proveedor **comparte con SUS clientes** (link/QR en IG, WhatsApp, etc.). El
+  cliente ahí ve servicios, ordena y agenda.
+- **FASE 2 (después, ~100 negocios dentro):** abrir el **directorio de búsqueda**
+  completo (`buscar.php`, registro abierto de Encuéntralo) para descubrimiento,
+  incluso para negocios que NO usan Crecer. **Ese trabajo de Encuéntralo queda
+  ESTACIONADO, no botado.**
+
+**El consumidor NUNCA entra a Crecer.** Solo ve la página de negocio (Encuéntralo).
+Una sola página por negocio; en Fase 1 se llega por link, en Fase 2 también por
+búsqueda.
+
+**La página de negocio = 1 esqueleto + "modo de interacción" (1 de 3):**
+💬 Contactar (base/todos) · 📅 Agendar cita (groomer, entrenador, salón, jardinero)
+· 🧾 Hacer pedido (repostería, comida). + vitrina (fotos + servicios, precio
+opcional). La IA prende el modo correcto según el tipo de negocio en el intake.
+
 ## Los niveles (cómo se empaqueta y se vende)
 
 Cada nivel **incluye todo lo del anterior** (se apilan). Precios: por definir.
