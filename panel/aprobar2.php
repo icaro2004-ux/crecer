@@ -131,9 +131,9 @@ require __DIR__ . '/_shell.php';
   var PILL = {borrador:['Pendiente','wait'], aprobado:['Aprobado','ok'], rechazado:['Rechazado','no'], publicado:['Publicado','pub']};
   function actionsHTML(id, estado){
     if (estado === 'borrador')
-      return '<form><input type="hidden" name="id" value="'+id+'"><button class="btn btn-ok" name="accion" value="aprobar">✓ Aprobar</button></form>'
-           + '<form><input type="hidden" name="id" value="'+id+'"><button class="btn btn-no" name="accion" value="rechazar">Rechazar</button></form>';
-    return '<form><input type="hidden" name="id" value="'+id+'"><button class="btn btn-ghost" name="accion" value="reabrir">↺ Volver a revisar</button></form>';
+      return '<form method="post"><input type="hidden" name="id" value="'+id+'"><button class="btn btn-ok" name="accion" value="aprobar">✓ Aprobar</button></form>'
+           + '<form method="post"><input type="hidden" name="id" value="'+id+'"><button class="btn btn-no" name="accion" value="rechazar">Rechazar</button></form>';
+    return '<form method="post"><input type="hidden" name="id" value="'+id+'"><button class="btn btn-ghost" name="accion" value="reabrir">↺ Volver a revisar</button></form>';
   }
   var feed = document.querySelector('.feedwrap');
   if (feed) feed.addEventListener('submit', function(e){
@@ -142,6 +142,9 @@ require __DIR__ . '/_shell.php';
     e.preventDefault();
     var card = f.closest('.post');
     var fd = new FormData(f); fd.append('ajax','1');
+    // el botón apretado (aprobar/rechazar/reabrir) NO entra en FormData solo: añadirlo
+    var btn = e.submitter || f.querySelector('button[name="accion"]');
+    if (btn && btn.name) fd.append(btn.name, btn.value);
     f.querySelectorAll('button').forEach(function(b){b.disabled=true;});
     fetch(location.pathname + location.search, {method:'POST', body:fd})
       .then(function(r){return r.json();})
