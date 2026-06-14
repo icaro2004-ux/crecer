@@ -60,6 +60,26 @@ function crear_marca(PDO $pdo, array $d): int {
     return $id;
 }
 
+/**
+ * AGENTE DISEÑADOR — genera el logo del negocio con IA y lo guarda.
+ * Devuelve ['archivo'=>url, 'costo'].
+ */
+function generar_logo(PDO $pdo, int $marca_id): array {
+    $m = leer_marca($pdo, $marca_id);
+    $ctx = marca_contexto($m);
+    $prompt = "Diseña un LOGO profesional para este negocio boricua.\n{$ctx}\n\n"
+        . "Requisitos: logo plano vectorial, moderno, memorable, símbolo simple y "
+        . "limpio (un ícono que represente el negocio). Colores cálidos y alegres. "
+        . "Fondo blanco liso. Estilo redondeado y amigable, no corporativo frío. "
+        . "Apto para foto de perfil de Instagram. Puede incluir el nombre del "
+        . "negocio en letra clara y bonita debajo del ícono, bien escrito.";
+    $r = ia_imagen($pdo, 'diseñador', 'Generar logo del negocio', $prompt,
+        "marca_{$marca_id}/logo.png", ['marca_id' => $marca_id]);
+    $pdo->prepare("UPDATE crecer_marca SET logo_path = ? WHERE id = ?")
+        ->execute([$r['archivo'], $marca_id]);
+    return $r;
+}
+
 /** Lee una marca como array asociativo (productos decodificado). */
 function leer_marca(PDO $pdo, int $marca_id): array {
     $m = $pdo->prepare("SELECT * FROM crecer_marca WHERE id = ?");

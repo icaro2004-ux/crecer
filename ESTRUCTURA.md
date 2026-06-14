@@ -55,8 +55,9 @@ Sirve a dos públicos, sin mezclarlos:
 | Calendario + captions (IA escribe) | 🌿 Crecer $55 | ✅ |
 | Panel de aprobación móvil | 🌿 Crecer $55 | ✅ |
 | Generar 1er mes (botón mágico) | 🌿 Crecer $55 | ✅ |
-| Logo/identidad con IA | 🌱 Arranca $25 | ⬜ |
-| Gráficas con IA (imágenes desde sus fotos) | 🌿 Crecer $55 | ⬜ |
+| Logo/identidad con IA (pantalla "Mi Marca") | 🌱 Arranca $25 | ✅ |
+| Motor de imágenes IA (Nano Banana) en `ia.php` | — | ✅ |
+| Gráficas con IA en cada post | 🌿 Crecer $55 | ⬜ próximo |
 | IA responde WhatsApp/DMs (agente RESPONDER) | 🌿 Crecer $55 | ⬜ |
 | Órdenes & Agenda (panel del dueño) | 🌿 Crecer $55 | ✅ |
 | Página PÚBLICA de órdenes (link + QR, sin cuenta) | 🌿 Crecer $55 | ✅ |

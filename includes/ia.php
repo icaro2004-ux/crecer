@@ -312,3 +312,58 @@ function ia_ejecutar(PDO $pdo, string $agente, string $accion, string $prompt, a
         'costo'      => $costo,
     ];
 }
+
+// ============================================================
+//  IMÁGENES — generación con Gemini (Nano Banana) + logging
+// ============================================================
+const CRECER_IMG_PRECIO = 0.039; // USD aprox por imagen (gemini-2.5-flash-image)
+
+/**
+ * Genera (o edita) una imagen con Gemini. Si pasas imagen_base64, la usa de
+ * base (editar la foto real del negocio). Devuelve ['data'=>bytes,'mime','modelo'].
+ */
+function gemini_imagen(string $prompt, array $opts = []): array {
+    $modelo = $opts['modelo'] ?? 'gemini-2.5-flash-image';
+    if (ia_transporte() !== 'gemini_api') {
+        throw new IaSinCredenciales('Generación de imágenes requiere GEMINI_API_KEY.');
+    }
+    $url = "https://generativelanguage.googleapis.com/v1beta/models/"
+         . rawurlencode($modelo) . ":generateContent?key=" . rawurlencode(GEMINI_API_KEY);
+    $parts = [['text' => $prompt]];
+    if (!empty($opts['imagen_base64'])) {
+        $parts[] = ['inlineData' => ['mimeType' => $opts['imagen_mime'] ?? 'image/jpeg', 'data' => $opts['imagen_base64']]];
+    }
+    $payload = ['contents' => [['role'=>'user','parts'=>$parts]], 'generationConfig' => ['responseModalities' => ['IMAGE']]];
+    $resp = ia_http_post_retry($url, ['Content-Type: application/json'], json_encode($payload, JSON_UNESCAPED_UNICODE), $opts['max_reintentos'] ?? 3);
+    $d = json_decode($resp, true);
+    if (isset($d['error'])) throw new IaError('Gemini imagen: ' . ($d['error']['message'] ?? 'error'));
+    foreach (($d['candidates'][0]['content']['parts'] ?? []) as $p) {
+        if (isset($p['inlineData']['data'])) {
+            return ['data' => base64_decode($p['inlineData']['data']), 'mime' => $p['inlineData']['mimeType'] ?? 'image/png', 'modelo' => $modelo];
+        }
+    }
+    throw new IaError('Gemini no devolvió imagen.');
+}
+
+/**
+ * Wrapper: genera imagen, la guarda en uploads/$destino_rel y la registra en
+ * crecer_ia_log. Devuelve ['archivo'=>url, 'costo', 'modelo'].
+ */
+function ia_imagen(PDO $pdo, string $agente, string $accion, string $prompt, string $destino_rel, array $opts = []): array {
+    $t0 = microtime(true); $estado = 'ok'; $err = null; $modelo = 'gemini-2.5-flash-image'; $rel = null;
+    try {
+        $img = gemini_imagen($prompt, $opts); $modelo = $img['modelo'];
+        $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . $destino_rel;
+        @mkdir(dirname($abs), 0775, true);
+        file_put_contents($abs, $img['data']);
+        $rel = rtrim(UPLOADS_URL, '/') . '/' . str_replace('\\', '/', $destino_rel);
+    } catch (IaSinCredenciales $e) { $estado='error'; $err='sin credenciales de imagen'; }
+      catch (IaError $e)        { $estado='error'; $err=$e->getMessage(); }
+    $lat = (int)round((microtime(true) - $t0) * 1000);
+    $costo = $estado === 'ok' ? CRECER_IMG_PRECIO : 0;
+    $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,costo_usd,latencia_ms,estado,error_msg)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)")
+        ->execute([$opts['marca_id'] ?? null, $agente, $accion, $modelo, $prompt, $rel, $costo, $lat, $estado, $err]);
+    if ($estado === 'error') throw new IaError($err);
+    return ['archivo' => $rel, 'costo' => $costo, 'modelo' => $modelo];
+}
