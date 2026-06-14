@@ -44,6 +44,25 @@ foreach ($o->fetchAll() as $r) {
     $lineas[] = "DESCRIPTION:" . ics_esc(($r['descripcion'] ?: '') . ' · Estado: ' . $r['estado']);
     $lineas[] = "END:VEVENT";
 }
+// Agenda de trabajo (eventos propios del cliente)
+$ev = $pdo->prepare("SELECT id, titulo, nota, fecha FROM crecer_eventos WHERE marca_id=?");
+$ev->execute([$marca_id]);
+foreach ($ev->fetchAll() as $r) {
+    $dt = date('Ymd\THis', strtotime($r['fecha']));
+    $end = date('Ymd\THis', strtotime($r['fecha'] . ' +1 hour'));
+    $lineas[] = "BEGIN:VEVENT";
+    $lineas[] = "UID:crecer-evento-{$r['id']}@encuentralo";
+    $lineas[] = "DTSTART:$dt";
+    $lineas[] = "DTEND:$end";
+    $lineas[] = "SUMMARY:" . ics_esc('📌 ' . $r['titulo']);
+    $lineas[] = "DESCRIPTION:" . ics_esc($r['nota'] ?: '');
+    $lineas[] = "BEGIN:VALARM";
+    $lineas[] = "ACTION:DISPLAY";
+    $lineas[] = "TRIGGER:-PT30M";
+    $lineas[] = "DESCRIPTION:" . ics_esc($r['titulo']);
+    $lineas[] = "END:VALARM";
+    $lineas[] = "END:VEVENT";
+}
 $lineas[] = "END:VCALENDAR";
 
 $slug = $marca['slug'] ?: ('negocio-' . $marca_id);
