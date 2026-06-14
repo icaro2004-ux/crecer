@@ -360,7 +360,7 @@ function ia_imagen(PDO $pdo, string $agente, string $accion, string $prompt, str
     } catch (IaSinCredenciales $e) { $estado='error'; $err='sin credenciales de imagen'; }
       catch (IaError $e)        { $estado='error'; $err=$e->getMessage(); }
     $lat = (int)round((microtime(true) - $t0) * 1000);
-    $costo = $estado === 'ok' ? CRECER_IMG_PRECIO : 0;
+    $costo = $estado === 'ok' ? (['gemini-3-pro-image'=>0.134, 'gemini-2.5-flash-image'=>0.039][$modelo] ?? CRECER_IMG_PRECIO) : 0;
     $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,costo_usd,latencia_ms,estado,error_msg)
                    VALUES (?,?,?,?,?,?,?,?,?,?)")
         ->execute([$opts['marca_id'] ?? null, $agente, $accion, $modelo, $prompt, $rel, $costo, $lat, $estado, $err]);

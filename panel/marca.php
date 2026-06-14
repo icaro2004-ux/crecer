@@ -12,13 +12,24 @@ $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (i
 if (!$marca) { header('Location: /crecer/intake.php'); exit; }
 $marca_id = (int)$marca['id'];
 
+// Límite de pruebas de logo (cada imagen cuesta; no puede ser infinito).
+$LIMITE_LOGO = 10;
+$cnt = $pdo->prepare("SELECT COUNT(*) FROM crecer_ia_log WHERE marca_id=? AND agente='diseñador' AND estado='ok'");
+$cnt->execute([$marca_id]);
+$usados = (int)$cnt->fetchColumn();
+
 $err = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'logo') {
-    @set_time_limit(0);
-    try { generar_logo($pdo, $marca_id); }
-    catch (Throwable $e) { $err = 'No se pudo generar el logo: ' . substr($e->getMessage(), 0, 120); }
-    if (!$err) { header('Location: /crecer/panel/marca.php?marca=' . $marca_id . '&ok=1'); exit; }
+    if ($usados >= $LIMITE_LOGO) {
+        $err = "Llegaste a tus {$LIMITE_LOGO} pruebas de logo. Para más, sube de plan o usa tu propia llave de IA.";
+    } else {
+        @set_time_limit(0);
+        try { generar_logo($pdo, $marca_id, trim($_POST['instrucciones'] ?? '')); }
+        catch (Throwable $e) { $err = 'No se pudo generar el logo: ' . substr($e->getMessage(), 0, 120); }
+        if (!$err) { header('Location: /crecer/panel/marca.php?marca=' . $marca_id . '&ok=1'); exit; }
+    }
 }
+$restantes = max(0, $LIMITE_LOGO - $usados);
 
 // recargar marca (por si se actualizó el logo)
 $marca = marca_del_usuario($pdo, (int)$usuario['id'], $marca_id);
@@ -57,18 +68,22 @@ require __DIR__ . '/_shell.php';
   <div class="logobox">
     <?php if ($marca['logo_path']): ?>
       <img src="<?= $h($marca['logo_path']) ?>?v=<?= time() ?>" alt="Logo de <?= $h($marca['nombre_negocio']) ?>">
-      <form method="post" onsubmit="this.querySelector('button').textContent='✨ Creando…';this.querySelector('button').disabled=true;">
-        <input type="hidden" name="accion" value="logo">
-        <button class="genbtn alt" type="submit">↻ Generar otra versión</button>
-      </form>
-      <div class="hint">¿No te encanta? Genera otra (cada una es distinta).</div>
     <?php else: ?>
       <div class="ph">🎨</div>
-      <form method="post" onsubmit="this.querySelector('button').textContent='✨ Creando tu logo…';this.querySelector('button').disabled=true;">
+    <?php endif; ?>
+    <?php if ($restantes > 0): ?>
+      <form method="post" onsubmit="this.querySelector('button').textContent='✨ Creando… (~15s)';this.querySelector('button').disabled=true;">
         <input type="hidden" name="accion" value="logo">
-        <button class="genbtn" type="submit">✨ Generar mi logo con IA</button>
+        <textarea name="instrucciones" rows="2" placeholder="Dile a la IA cómo lo quieres (opcional): &quot;ponle un coquí&quot;, &quot;más moderno&quot;, &quot;colores azules&quot;…"
+          style="width:100%;font-family:inherit;font-size:14px;border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px;resize:vertical"></textarea>
+        <button class="genbtn <?= $marca['logo_path']?'alt':'' ?>" type="submit"><?= $marca['logo_path'] ? '↻ Generar otra versión' : '✨ Generar mi logo con IA' ?></button>
       </form>
-      <div class="hint">La IA lo crea de tu descripción en ~10 segundos.</div>
+      <div class="hint">Escríbele lo que quieras y la IA lo ajusta. Te quedan <b style="color:var(--terracota)"><?= $restantes ?> de <?= $LIMITE_LOGO ?></b> pruebas.</div>
+    <?php else: ?>
+      <div class="hint" style="background:var(--amber-bg);color:var(--amber-ink);border-radius:12px;padding:12px;font-weight:600">
+        Usaste tus <?= $LIMITE_LOGO ?> pruebas de logo 🎨<br>
+        ¿Necesitas más? <a href="/crecer/crecer.php" style="color:var(--terracota);font-weight:800">Sube de plan</a> o trae tu propia llave de IA.
+      </div>
     <?php endif; ?>
   </div>
 

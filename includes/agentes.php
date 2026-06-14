@@ -64,17 +64,26 @@ function crear_marca(PDO $pdo, array $d): int {
  * AGENTE DISEÑADOR — genera el logo del negocio con IA y lo guarda.
  * Devuelve ['archivo'=>url, 'costo'].
  */
-function generar_logo(PDO $pdo, int $marca_id): array {
+function generar_logo(PDO $pdo, int $marca_id, string $instrucciones = ''): array {
     $m = leer_marca($pdo, $marca_id);
     $ctx = marca_contexto($m);
-    $prompt = "Diseña un LOGO profesional para este negocio boricua.\n{$ctx}\n\n"
-        . "Requisitos: logo plano vectorial, moderno, memorable, símbolo simple y "
-        . "limpio (un ícono que represente el negocio). Colores cálidos y alegres. "
-        . "Fondo blanco liso. Estilo redondeado y amigable, no corporativo frío. "
-        . "Apto para foto de perfil de Instagram. Puede incluir el nombre del "
-        . "negocio en letra clara y bonita debajo del ícono, bien escrito.";
+    $prompt =
+        "Diseña un LOGO de marca profesional, nivel estudio de diseño (calidad "
+      . "Behance/Dribbble), para este negocio boricua.\n\n{$ctx}\n\n"
+      . "DIRECCIÓN DE ARTE:\n"
+      . "- Un símbolo/ícono distintivo y memorable que capture la esencia del negocio "
+      . "(no genérico, con personalidad y un concepto creativo).\n"
+      . "- Vectorial, plano, formas limpias, buen uso del espacio negativo, balanceado.\n"
+      . "- Paleta caribeña cálida y vibrante, armónica (2–3 colores).\n"
+      . "- El nombre \"{$m['nombre_negocio']}\" en una tipografía moderna y bonita, "
+      . "perfectamente escrito y bien espaciado, debajo o integrado al ícono.\n"
+      . "- Composición centrada sobre fondo blanco liso. Apto para foto de perfil.\n"
+      . "- Que se sienta premium y con alma, no plantilla genérica.";
+    if (trim($instrucciones) !== '') {
+        $prompt .= "\n\nLO QUE PIDE EL DUEÑO (prioriza esto): " . trim($instrucciones);
+    }
     $r = ia_imagen($pdo, 'diseñador', 'Generar logo del negocio', $prompt,
-        "marca_{$marca_id}/logo.png", ['marca_id' => $marca_id]);
+        "marca_{$marca_id}/logo.png", ['marca_id' => $marca_id, 'modelo' => 'gemini-3-pro-image']);
     $pdo->prepare("UPDATE crecer_marca SET logo_path = ? WHERE id = ?")
         ->execute([$r['archivo'], $marca_id]);
     return $r;
