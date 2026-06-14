@@ -56,8 +56,37 @@ require __DIR__ . '/_shell.php';
   .tag2{font-size:13px;font-weight:600;background:var(--crema);border:1px solid var(--line);border-radius:99px;padding:6px 12px}
   .ok-banner{background:var(--okk-bg);color:var(--okk-ink);font-weight:700;font-size:14px;padding:11px 14px;border-radius:12px;margin-top:14px}
   .err-banner{background:var(--noo-bg);color:var(--noo-ink);font-weight:700;font-size:14px;padding:11px 14px;border-radius:12px;margin-top:14px}
+  .dl{margin:14px 0 4px;text-align:center}
+  .dl-t{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:7px}
+  .dl button{font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer;border:1.5px solid var(--line);
+    background:#fff;color:var(--tinta);border-radius:99px;padding:7px 12px;margin:3px}
+  .dl button:hover{border-color:var(--terracota);color:var(--terracota-700)}
   @media(max-width:760px){.mk{grid-template-columns:1fr}}
 </style>
+<?php if ($marca['logo_path']): ?>
+<script>
+  function dlLogo(fmt, size){
+    var src = document.getElementById('logoimg').src;
+    var img = new Image();
+    img.onload = function(){
+      var s = size || img.naturalWidth || 1024;
+      var c = document.createElement('canvas'); c.width = s; c.height = s;
+      var ctx = c.getContext('2d');
+      if (fmt === 'jpeg'){ ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,s,s); }
+      ctx.drawImage(img, 0, 0, s, s);
+      var mime = fmt==='jpeg' ? 'image/jpeg' : (fmt==='webp' ? 'image/webp' : 'image/png');
+      c.toBlob(function(b){
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(b);
+        a.download = 'logo-<?= $h($marca['slug']) ?>' + (size?('-'+size):'') + '.' + (fmt==='jpeg'?'jpg':fmt);
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+      }, mime, 0.95);
+    };
+    img.src = src;
+  }
+</script>
+<?php endif; ?>
 
 <h1 class="page-h">Mi Marca 🎨</h1>
 <p class="page-sub">Tu identidad visual, hecha por IA. Tu logo aparece en tu página y tus posts.</p>
@@ -67,7 +96,14 @@ require __DIR__ . '/_shell.php';
 <div class="mk">
   <div class="logobox">
     <?php if ($marca['logo_path']): ?>
-      <img src="<?= $h($marca['logo_path']) ?>?v=<?= time() ?>" alt="Logo de <?= $h($marca['nombre_negocio']) ?>">
+      <img id="logoimg" src="<?= $h($marca['logo_path']) ?>?v=<?= time() ?>" alt="Logo de <?= $h($marca['nombre_negocio']) ?>">
+      <div class="dl">
+        <div class="dl-t">⬇ Descargar:</div>
+        <button type="button" onclick="dlLogo('png')">PNG</button>
+        <button type="button" onclick="dlLogo('jpeg')">JPG</button>
+        <button type="button" onclick="dlLogo('webp')">WebP</button>
+        <button type="button" onclick="dlLogo('png',400)">Perfil 400px</button>
+      </div>
     <?php else: ?>
       <div class="ph">🎨</div>
     <?php endif; ?>
