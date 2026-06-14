@@ -14,7 +14,7 @@ $marca_id = (int)$marca['id'];
 
 // Límite de pruebas de logo (cada imagen cuesta; no puede ser infinito).
 $LIMITE_LOGO = 10;
-$cnt = $pdo->prepare("SELECT COUNT(*) FROM crecer_ia_log WHERE marca_id=? AND agente='diseñador' AND estado='ok'");
+$cnt = $pdo->prepare("SELECT COUNT(*) FROM crecer_ia_log WHERE marca_id=? AND accion LIKE 'Generar logo%' AND estado='ok'");
 $cnt->execute([$marca_id]);
 $usados = (int)$cnt->fetchColumn();
 
