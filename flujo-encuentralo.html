@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flujo de Encuéntralo · El directorio</title>
+<link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/encuentralo-pin.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css" rel="stylesheet">
+<style>
+  body{padding-bottom:40px}
+  .wrap{max-width:1080px;margin:0 auto;padding:26px 22px}
+  .top{display:flex;align-items:center;gap:10px}
+  .top img{height:32px}.top b{font-family:var(--font-display);font-weight:800;font-size:20px;text-transform:lowercase;letter-spacing:-.03em}
+  h1{font-family:var(--font-display);font-weight:800;font-size:clamp(24px,4vw,36px);letter-spacing:-.025em;margin-top:18px;text-align:center}
+  .tagline{text-align:center;color:var(--muted);font-size:15px;margin-top:6px}
+  .legend{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin:14px 0 8px;font-size:13px;color:var(--muted);font-weight:600}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:99px;vertical-align:middle;margin-right:5px}
+
+  .hub{max-width:540px;margin:18px auto 0;background:linear-gradient(135deg,var(--teal),#0a7886);
+    color:#fff;border-radius:18px;padding:18px 22px;text-align:center;box-shadow:0 12px 30px rgba(0,150,166,.25)}
+  .hub b{font-family:var(--font-display);font-weight:800;font-size:18px}
+  .hub span{display:block;font-size:13px;opacity:.92;margin-top:3px}
+  .down{text-align:center;color:var(--teal);font-size:24px;font-weight:900}
+
+  .lanes{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:6px}
+  .lane{border-radius:20px;padding:16px;border:1.5px solid var(--line);background:var(--card)}
+  .lane.prov{border-color:#bfe6ec;background:linear-gradient(180deg,rgba(0,150,166,.05),transparent)}
+  .lane.cons{border-color:#f7dca8;background:linear-gradient(180deg,rgba(251,192,45,.07),transparent)}
+  .lane h2{font-family:var(--font-display);font-weight:800;font-size:18px;text-align:center;letter-spacing:-.02em;margin-bottom:4px}
+  .lane .who{text-align:center;font-size:12.5px;color:var(--muted);margin-bottom:12px}
+  .step{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;position:relative}
+  .step .t{font-weight:800;font-size:14px}
+  .step .pg{font-size:12px;color:var(--muted);margin-top:2px}
+  .step .dot{position:absolute;top:12px;right:12px;width:10px;height:10px;border-radius:99px;background:var(--palma)}
+  .arr{text-align:center;font-size:18px;font-weight:900;margin:5px 0}
+  .lane.prov .arr{color:var(--teal)} .lane.cons .arr{color:var(--gold)}
+
+  .bridge{margin-top:28px;background:var(--card);border:1.5px dashed var(--magenta);border-radius:20px;padding:24px;text-align:center}
+  .bridge h3{font-family:var(--font-display);font-weight:800;font-size:21px;letter-spacing:-.02em}
+  .bridge .sub{color:var(--muted);font-size:14px;margin-top:4px}
+  .links{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:16px;text-align:left}
+  .link{background:var(--crema);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .link b{font-family:var(--font-display);font-weight:800;font-size:14px;display:block;margin-bottom:3px}
+  .link span{font-size:13px;color:var(--muted)}
+  .note{font-size:13px;color:var(--muted);margin-top:14px}
+  .note b{color:var(--terracota)}
+
+  @media(max-width:740px){.lanes{grid-template-columns:1fr}.links{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><img src="/crecer/assets/brand/encuentralo-pin.svg" alt=""><b>encuéntralo</b></div>
+  <h1>El flujo de Encuéntralo — el directorio</h1>
+  <p class="tagline">El marketplace donde el cliente encuentra al negocio. (Hoy: en pañales — pocas fichas todavía.)</p>
+  <div class="legend">
+    <span><i style="background:var(--palma)"></i>Ya existe en Encuéntralo</span>
+    <span><i style="background:var(--teal)"></i>Proveedor de servicios</span>
+    <span><i style="background:var(--gold)"></i>Consumidor</span>
+  </div>
+
+  <div class="hub"><b>🔎 Entras a encuentraloahora.com</b><span>Puerta: “Busco un servicio” → el directorio</span></div>
+  <div class="down">▾ ▾</div>
+
+  <div class="lanes">
+    <!-- PROVEEDOR DE SERVICIOS -->
+    <div class="lane prov">
+      <h2>🔧 El Proveedor de servicios</h2>
+      <div class="who">se lista para que lo encuentren · con login</div>
+      <div class="step"><div class="dot"></div><div class="t">1 · Descubre Encuéntralo</div><div class="pg">landing / founding providers</div></div>
+      <div class="arr">↓</div>
+      <div class="step"><div class="dot"></div><div class="t">2 · Se registra + verifica email</div><div class="pg">registro.php · verificar-email.php</div></div>
+      <div class="arr">↓</div>
+      <div class="step"><div class="dot"></div><div class="t">3 · Llena su perfil + sube fotos</div><div class="pg">panel/perfil.php · panel/fotos.php</div></div>
+      <div class="arr">↓</div>
+      <div class="step"><div class="dot"></div><div class="t">4 · Escoge plan (Free/Pro/Max)</div><div class="pg">precios.php · panel/suscripcion.php</div></div>
+      <div class="arr">↓</div>
+      <div class="step"><div class="dot"></div><div class="t">5 · Aparece en el directorio</div><div class="pg">visible en búsquedas</div></div>
+      <div class="arr">↓</div>
+      <div class="step"><div class="dot"></div><div class="t">6 · Recibe contactos (leads)</div><div class="pg">botón WhatsApp / contacto</div></div>
+      <div class="arr">↓</div>
+      <div class="step"><div class="dot"></div><div class="t">7 · Gestiona sus reseñas</div><div class="pg">panel/resenas.php</div></div>
+      <div class="arr">↓</div>
+      <div class="step"><div class="dot"></div><div class="t">8 · Ve métricas (vistas, rating)</div><div class="pg">panel/index.php</div></div>
+    </div>
+
+    <!-- CONSUMIDOR -->
+    <div class="lane cons">
+      <h2>🔎 El Consumidor</h2>
+      <div class="who">busca un servicio · sin cuenta</div>
+      <div class="step"><div class="dot"></div><div class="t">1 · Entra a Encuéntralo</div><div class="pg">home.php / index.php</div></div>
+      <div class="arr">↓</div>
+      <div class="step"><div class="dot"></div><div class="t">2 · Busca y filtra</div><div class="pg">buscar.php · por municipio + categoría</div></div>
+      <div class="arr">↓</div>
+      <div class="step"><div class="dot"></div><div class="t">3 · Ve el perfil del proveedor</div><div class="pg">proveedor.php?slug=</div></div>
+      <div class="arr">↓</div>
+      <div class="step"><div class="dot"></div><div class="t">4 · Lo contacta por WhatsApp</div><div class="pg">contacto directo</div></div>
+      <div class="arr">↓</div>
+      <div class="step"><div class="dot"></div><div class="t">5 · Recibe el servicio (mundo real)</div><div class="pg">—</div></div>
+      <div class="arr">↓</div>
+      <div class="step"><div class="dot"></div><div class="t">6 · Deja su reseña (verificada)</div><div class="pg">confirmar-resena.php · por email</div></div>
+    </div>
+  </div>
+
+  <!-- PUENTE -->
+  <div class="bridge">
+    <h3>🌉 Cómo se conecta con Crecer</h3>
+    <p class="sub">(el adelanto — esto lo detallamos después)</p>
+    <div class="links">
+      <div class="link"><b>👤 Una sola cuenta</b><span>Misma tabla <code>usuarios</code>: un login sirve para Crecer y para Encuéntralo.</span></div>
+      <div class="link"><b>📈 Crecer LLENA el directorio</b><span>Cada cliente de Crecer = un proveedor nuevo en Encuéntralo. Adiós directorio vacío.</span></div>
+      <div class="link"><b>🎁 La doble escalera</b><span>El plan de Crecer regala el nivel de Encuéntralo (Pro/Max).</span></div>
+      <div class="link"><b>⭐ El flywheel cae aquí</b><span>Las reseñas que Crecer pide suben la reputación del proveedor en el directorio.</span></div>
+    </div>
+    <p class="note">En corto: <b>Crecer es el motor</b> que hace al proveedor digno de encontrar; <b>Encuéntralo es el destino</b> donde el consumidor lo encuentra.</p>
+  </div>
+</div>
+</body>
+</html>
