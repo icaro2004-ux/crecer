@@ -87,9 +87,16 @@ require __DIR__ . '/_shell.php';
   .cprogress .count b{color:var(--terracota)}
   .cprogress .pending{font-size:13px;color:var(--muted)}
   .feedwrap .post{margin-top:14px}
+  .viewtoggle{display:flex;gap:6px;margin:6px 0 10px}
+  .vt{font-weight:700;font-size:13.5px;text-decoration:none;color:var(--muted);padding:8px 16px;border-radius:99px;border:1.5px solid var(--line)}
+  .vt.on{color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));border-color:transparent}
 </style>
 
-<h1 class="page-h">Tu contenido del mes</h1>
+<h1 class="page-h">Contenido</h1>
+<div class="viewtoggle">
+  <a class="vt on" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>">📋 Lista</a>
+  <a class="vt" href="/crecer/panel/calendario.php?marca=<?= $marca_id ?>">📅 Calendario</a>
+</div>
 <p class="page-sub">La IA lo preparó. Aprueba lo que te guste — tú tienes la última palabra. ✋</p>
 <p style="font-size:12.5px;color:var(--muted);margin-top:8px;max-width:600px"><b style="color:var(--amber-ink)">Pendiente</b> = esperando tu OK · <b style="color:var(--okk-ink)">Aprobado</b> = listo para publicar · <b style="color:var(--noo-ink)">Rechazado</b> = descartado. ✏️ Edita un post y la IA <b>aprende tu vocabulario</b> para los próximos.</p>
 
