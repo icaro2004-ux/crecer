@@ -82,10 +82,12 @@ function generar_logo(PDO $pdo, int $marca_id, string $instrucciones = ''): arra
     if (trim($instrucciones) !== '') {
         $prompt .= "\n\nLO QUE PIDE EL DUEÑO (prioriza esto): " . trim($instrucciones);
     }
+    // Cada generación es un tile único (no sobrescribe) → galería para escoger.
+    $fname = "marca_{$marca_id}/logo_" . uniqid() . ".png";
     $r = ia_imagen($pdo, 'diseñador', 'Generar logo del negocio', $prompt,
-        "marca_{$marca_id}/logo.png", ['marca_id' => $marca_id, 'modelo' => 'gemini-3-pro-image']);
-    $pdo->prepare("UPDATE crecer_marca SET logo_path = ? WHERE id = ?")
-        ->execute([$r['archivo'], $marca_id]);
+        $fname, ['marca_id' => $marca_id, 'modelo' => 'gemini-3-pro-image']);
+    $pdo->prepare("INSERT INTO crecer_logos (marca_id, archivo) VALUES (?, ?)")
+        ->execute([$marca_id, $r['archivo']]);
     return $r;
 }
 

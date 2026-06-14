@@ -1,6 +1,6 @@
 <?php
 // ============================================================
-//  ENCUÉNTRALO · CRECER — Mi Marca (identidad / logo con IA)
+//  ENCUÉNTRALO · CRECER — Mi Marca (galería de logos + escoger)
 //  panel/marca.php
 // ============================================================
 require __DIR__ . '/../includes/db.php';
@@ -12,28 +12,43 @@ $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (i
 if (!$marca) { header('Location: /crecer/intake.php'); exit; }
 $marca_id = (int)$marca['id'];
 
-// Límite de pruebas de logo (cada imagen cuesta; no puede ser infinito).
-$LIMITE_LOGO = 10;
-$cnt = $pdo->prepare("SELECT COUNT(*) FROM crecer_ia_log WHERE marca_id=? AND accion LIKE 'Generar logo%' AND estado='ok'");
-$cnt->execute([$marca_id]);
-$usados = (int)$cnt->fetchColumn();
+$LIMITE_LOGO = 5;
+$cuenta = $pdo->prepare("SELECT COUNT(*) FROM crecer_logos WHERE marca_id=?");
+$cuenta->execute([$marca_id]); $usados = (int)$cuenta->fetchColumn();
+$restantes = max(0, $LIMITE_LOGO - $usados);
+$final = (int)$marca['logo_final'] === 1;
 
 $err = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'logo') {
-    if ($usados >= $LIMITE_LOGO) {
-        $err = "Llegaste a tus {$LIMITE_LOGO} pruebas de logo. Para más, sube de plan o usa tu propia llave de IA.";
-    } else {
-        @set_time_limit(0);
-        try { generar_logo($pdo, $marca_id, trim($_POST['instrucciones'] ?? '')); }
-        catch (Throwable $e) { $err = 'No se pudo generar el logo: ' . substr($e->getMessage(), 0, 120); }
-        if (!$err) { header('Location: /crecer/panel/marca.php?marca=' . $marca_id . '&ok=1'); exit; }
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $accion = $_POST['accion'] ?? '';
+    if ($accion === 'logo') {
+        if ($final)             $err = 'Tu logo ya está finalizado.';
+        elseif ($usados >= $LIMITE_LOGO) $err = "Llegaste a tus {$LIMITE_LOGO} pruebas.";
+        else {
+            @set_time_limit(0);
+            try { generar_logo($pdo, $marca_id, trim($_POST['instrucciones'] ?? '')); }
+            catch (Throwable $e) { $err = 'No se pudo generar: ' . substr($e->getMessage(), 0, 120); }
+            if (!$err) { header("Location: /crecer/panel/marca.php?marca={$marca_id}&ok=1"); exit; }
+        }
+    } elseif ($accion === 'elegir' && !$final) {
+        $lid = (int)($_POST['logo_id'] ?? 0);
+        $own = $pdo->prepare("SELECT archivo FROM crecer_logos WHERE id=? AND marca_id=?");
+        $own->execute([$lid, $marca_id]);
+        if ($arch = $own->fetchColumn()) {
+            $pdo->prepare("UPDATE crecer_logos SET elegido=0 WHERE marca_id=?")->execute([$marca_id]);
+            $pdo->prepare("UPDATE crecer_logos SET elegido=1 WHERE id=?")->execute([$lid]);
+            $pdo->prepare("UPDATE crecer_marca SET logo_path=? WHERE id=?")->execute([$arch, $marca_id]);
+        }
+        header("Location: /crecer/panel/marca.php?marca={$marca_id}"); exit;
+    } elseif ($accion === 'bloquear' && !$final) {
+        $pdo->prepare("UPDATE crecer_marca SET logo_final=1 WHERE id=?")->execute([$marca_id]);
+        http_response_code(204); exit; // para el fetch del download
     }
 }
-$restantes = max(0, $LIMITE_LOGO - $usados);
 
-// recargar marca (por si se actualizó el logo)
-$marca = marca_del_usuario($pdo, (int)$usuario['id'], $marca_id);
-$productos = $marca['productos'] ? json_decode($marca['productos'], true) : [];
+$logos = $pdo->prepare("SELECT * FROM crecer_logos WHERE marca_id=? ORDER BY id");
+$logos->execute([$marca_id]); $logos = $logos->fetchAll();
+$elegido = null; foreach ($logos as $l) if ($l['elegido']) $elegido = $l;
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
 $active = 'marca';
@@ -41,110 +56,130 @@ $page_title = 'Mi Marca';
 require __DIR__ . '/_shell.php';
 ?>
 <style>
-  .mk{display:grid;grid-template-columns:300px 1fr;gap:24px;margin-top:18px;align-items:start}
-  .logobox{background:var(--card);border:1px solid var(--line);border-radius:var(--r-xl);padding:24px;text-align:center;box-shadow:var(--shadow-sm)}
-  .logobox img{width:100%;max-width:240px;border-radius:16px}
-  .logobox .ph{width:100%;aspect-ratio:1;border:2px dashed var(--line);border-radius:16px;display:grid;place-items:center;color:var(--muted);font-size:46px}
-  .logobox form{margin-top:16px}
-  .genbtn{width:100%;border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:15px;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));padding:14px;border-radius:99px;box-shadow:0 10px 24px rgba(255,43,133,.28)}
-  .genbtn.alt{background:none;color:var(--muted);box-shadow:none;border:1.5px solid var(--line);margin-top:8px}
-  .hint{font-size:12.5px;color:var(--muted);margin-top:10px}
-  .info .pcard{margin-bottom:14px}
-  .info h3{font-family:var(--font-display);font-weight:800;font-size:15px;margin-bottom:8px}
-  .kv{font-size:14px;margin:5px 0}.kv b{color:var(--muted);font-weight:700}
-  .tags{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px}
-  .tag2{font-size:13px;font-weight:600;background:var(--crema);border:1px solid var(--line);border-radius:99px;padding:6px 12px}
+  .subline{color:var(--muted);font-size:15px;margin-top:4px}
+  .subline b{color:var(--terracota)}
   .ok-banner{background:var(--okk-bg);color:var(--okk-ink);font-weight:700;font-size:14px;padding:11px 14px;border-radius:12px;margin-top:14px}
   .err-banner{background:var(--noo-bg);color:var(--noo-ink);font-weight:700;font-size:14px;padding:11px 14px;border-radius:12px;margin-top:14px}
-  .dl{margin:14px 0 4px;text-align:center}
-  .dl-t{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:7px}
-  .dl button{font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer;border:1.5px solid var(--line);
-    background:#fff;color:var(--tinta);border-radius:99px;padding:7px 12px;margin:3px}
+
+  .genbox{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:18px;box-shadow:var(--shadow-sm);margin-top:16px;max-width:620px}
+  .genbox textarea{width:100%;font-family:inherit;font-size:14px;border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;resize:vertical;margin-bottom:10px}
+  .genbtn{border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:15px;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));padding:13px 22px;border-radius:99px;box-shadow:0 10px 24px rgba(255,43,133,.28)}
+  .genline{font-size:12.5px;color:var(--muted);margin-top:10px}
+  .policy{font-size:11.5px;color:var(--muted);margin-top:4px}
+
+  .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-top:22px}
+  .tile{background:var(--card);border:2px solid var(--line);border-radius:18px;padding:12px;text-align:center;transition:border-color .15s,opacity .15s}
+  .tile.sel{border-color:var(--terracota);box-shadow:0 10px 26px rgba(239,67,117,.16)}
+  .tile.locked{opacity:.45}
+  .tile img{width:100%;border-radius:12px;display:block}
+  .tile .badge{display:inline-block;margin-top:9px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;color:var(--okk-ink);background:var(--okk-bg);padding:4px 10px;border-radius:99px}
+  .tile .pick{margin-top:9px;width:100%;border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;border-radius:99px;padding:8px}
+  .tile .pick:hover{border-color:var(--terracota);color:var(--terracota-700)}
+
+  .chosen{background:linear-gradient(135deg,rgba(255,107,61,.06),rgba(255,43,133,.06));border:1px solid var(--line);border-radius:var(--r-lg);padding:18px;margin-top:22px;max-width:620px}
+  .chosen h3{font-family:var(--font-display);font-weight:800;font-size:16px;margin-bottom:4px}
+  .dl{margin-top:10px}
+  .dl button{font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;border:1.5px solid var(--line);background:#fff;color:var(--tinta);border-radius:99px;padding:8px 14px;margin:3px}
   .dl button:hover{border-color:var(--terracota);color:var(--terracota-700)}
-  @media(max-width:760px){.mk{grid-template-columns:1fr}}
+  .warn{font-size:12px;color:var(--muted);margin-top:8px}
+  .empty-g{color:var(--muted);font-size:15px;margin-top:22px}
 </style>
-<?php if ($marca['logo_path']): ?>
+
+<h1 class="page-h">Mi Marca 🎨</h1>
+<p class="subline">Tienes <b><?= $LIMITE_LOGO ?> oportunidades</b> para crear tu logo con IA. Genéralos, compáralos y escoge el que más te guste.</p>
+<?php if (!empty($_GET['ok'])): ?><div class="ok-banner">✓ ¡Nuevo logo listo! Mira la galería abajo.</div><?php endif; ?>
+<?php if ($err): ?><div class="err-banner">⚠️ <?= $h($err) ?></div><?php endif; ?>
+
+<?php if (!$final && $restantes > 0): ?>
+  <div class="genbox">
+    <form method="post" onsubmit="var b=this.querySelector('button');b.textContent='✨ Creando… (~15s)';b.disabled=true;">
+      <input type="hidden" name="accion" value="logo">
+      <textarea name="instrucciones" rows="2" placeholder="Dile a la IA cómo lo quieres (opcional): &quot;ponle un coquí&quot;, &quot;más moderno&quot;, &quot;colores azules&quot;…"></textarea>
+      <button class="genbtn" type="submit"><?= $usados ? '✨ Generar otro' : '✨ Generar mi primer logo' ?></button>
+    </form>
+    <div class="genline">Te quedan <b style="color:var(--terracota)"><?= $restantes ?> de <?= $LIMITE_LOGO ?></b> pruebas incluidas.</div>
+    <div class="policy">Después de las <?= $LIMITE_LOGO ?>: intentos adicionales tienen costo, o pide un logo personalizado por un artista gráfico.</div>
+  </div>
+<?php elseif (!$final && $restantes <= 0): ?>
+  <div class="genbox" style="background:var(--amber-bg)">
+    <b style="color:var(--amber-ink)">🎨 Usaste tus <?= $LIMITE_LOGO ?> pruebas incluidas.</b>
+    <div class="genline">Escoge tu favorito abajo. ¿Quieres más opciones? Compra intentos adicionales o pide un logo personalizado por un artista gráfico.</div>
+  </div>
+<?php endif; ?>
+
+<?php if ($final): ?>
+  <div class="ok-banner" style="max-width:620px">🔒 Tu logo final está elegido. Descárgalo cuando quieras en los formatos que necesites.</div>
+<?php endif; ?>
+
+<!-- GALERÍA -->
+<?php if (!$logos): ?>
+  <p class="empty-g">Aún no has generado ningún logo. Dale a "Generar mi primer logo" arriba. 🎨</p>
+<?php else: ?>
+  <div class="gallery">
+    <?php foreach ($logos as $l):
+      $es = $l['elegido'];
+      $oculto = $final && !$es; // si ya finalizó, atenúa los no elegidos
+    ?>
+      <div class="tile <?= $es?'sel':'' ?> <?= $oculto?'locked':'' ?>">
+        <img src="<?= $h($l['archivo']) ?>" alt="logo">
+        <?php if ($es): ?>
+          <div class="badge">✓ Tu logo</div>
+        <?php elseif (!$final): ?>
+          <form method="post"><input type="hidden" name="accion" value="elegir"><input type="hidden" name="logo_id" value="<?= $l['id'] ?>">
+            <button class="pick" type="submit">Elegir este</button></form>
+        <?php endif; ?>
+      </div>
+    <?php endforeach; ?>
+  </div>
+<?php endif; ?>
+
+<!-- DESCARGA DEL ELEGIDO -->
+<?php if ($elegido): ?>
+  <div class="chosen">
+    <h3>⬇ Descargar tu logo<?= $final?' final':'' ?></h3>
+    <img id="logoimg" src="<?= $h($elegido['archivo']) ?>" style="display:none">
+    <div class="dl">
+      <button type="button" onclick="dlLogo('png')">PNG</button>
+      <button type="button" onclick="dlLogo('jpeg')">JPG</button>
+      <button type="button" onclick="dlLogo('webp')">WebP</button>
+      <button type="button" onclick="dlLogo('png',400)">Perfil 400px</button>
+    </div>
+    <?php if (!$final): ?>
+      <div class="warn">⚠️ Al descargar, <b>este será tu logo final</b> y ya no podrás escoger otro. Descárgalo en todos los formatos que quieras.</div>
+    <?php endif; ?>
+  </div>
+<?php endif; ?>
+
 <script>
+  var _locked = <?= $final ? 'true' : 'false' ?>;
   function dlLogo(fmt, size){
-    var src = document.getElementById('logoimg').src;
     var img = new Image();
     img.onload = function(){
-      // Respetar la proporción real (no forzar cuadrado = no deformar)
       var w = img.naturalWidth || 1024, h = img.naturalHeight || 1024;
-      if (size){ var sc = size / Math.max(w, h); w = Math.round(w * sc); h = Math.round(h * sc); }
+      if (size){ var sc = size / Math.max(w,h); w = Math.round(w*sc); h = Math.round(h*sc); }
       var c = document.createElement('canvas'); c.width = w; c.height = h;
       var ctx = c.getContext('2d');
-      if (fmt === 'jpeg'){ ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,w,h); }
+      if (fmt === 'jpeg'){ ctx.fillStyle = '#fff'; ctx.fillRect(0,0,w,h); }
       ctx.drawImage(img, 0, 0, w, h);
-      var mime = fmt==='jpeg' ? 'image/jpeg' : (fmt==='webp' ? 'image/webp' : 'image/png');
+      var mime = fmt==='jpeg'?'image/jpeg':(fmt==='webp'?'image/webp':'image/png');
       c.toBlob(function(b){
-        var a = document.createElement('a');
-        a.href = URL.createObjectURL(b);
+        var a = document.createElement('a'); a.href = URL.createObjectURL(b);
         a.download = 'logo-<?= $h($marca['slug']) ?>' + (size?('-'+size):'') + '.' + (fmt==='jpeg'?'jpg':fmt);
         document.body.appendChild(a); a.click(); a.remove();
         setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
       }, mime, 0.95);
+      // Primera descarga = finaliza la elección (bloquea los demás)
+      if (!_locked){
+        _locked = true;
+        fetch('?marca=<?= $marca_id ?>', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:'accion=bloquear'});
+        document.querySelectorAll('.tile .pick').forEach(function(b){b.style.display='none';});
+        document.querySelectorAll('.genbox').forEach(function(b){b.style.display='none';});
+        document.querySelectorAll('.tile:not(.sel)').forEach(function(t){t.classList.add('locked');});
+        var w2=document.querySelector('.warn'); if(w2) w2.textContent='🔒 Logo finalizado. Puedes seguir descargándolo en otros formatos.';
+      }
     };
-    img.src = src;
+    img.src = document.getElementById('logoimg').src;
   }
 </script>
-<?php endif; ?>
-
-<h1 class="page-h">Mi Marca 🎨</h1>
-<p class="page-sub">Tu identidad visual, hecha por IA. Tu logo aparece en tu página y tus posts.</p>
-<?php if (!empty($_GET['ok'])): ?><div class="ok-banner">✓ ¡Tu logo está listo!</div><?php endif; ?>
-<?php if ($err): ?><div class="err-banner">⚠️ <?= $h($err) ?></div><?php endif; ?>
-
-<div class="mk">
-  <div class="logobox">
-    <?php if ($marca['logo_path']): ?>
-      <img id="logoimg" src="<?= $h($marca['logo_path']) ?>?v=<?= time() ?>" alt="Logo de <?= $h($marca['nombre_negocio']) ?>">
-      <div class="dl">
-        <div class="dl-t">⬇ Descargar tu logo final (el que ves):</div>
-        <button type="button" onclick="dlLogo('png')">PNG</button>
-        <button type="button" onclick="dlLogo('jpeg')">JPG</button>
-        <button type="button" onclick="dlLogo('webp')">WebP</button>
-        <button type="button" onclick="dlLogo('png',400)">Perfil 400px</button>
-      </div>
-    <?php else: ?>
-      <div class="ph">🎨</div>
-    <?php endif; ?>
-    <?php if ($restantes > 0): ?>
-      <form method="post" onsubmit="this.querySelector('button').textContent='✨ Creando… (~15s)';this.querySelector('button').disabled=true;">
-        <input type="hidden" name="accion" value="logo">
-        <textarea name="instrucciones" rows="2" placeholder="Dile a la IA cómo lo quieres (opcional): &quot;ponle un coquí&quot;, &quot;más moderno&quot;, &quot;colores azules&quot;…"
-          style="width:100%;font-family:inherit;font-size:14px;border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px;resize:vertical"></textarea>
-        <button class="genbtn <?= $marca['logo_path']?'alt':'' ?>" type="submit"><?= $marca['logo_path'] ? '↻ Generar otra versión' : '✨ Generar mi logo con IA' ?></button>
-      </form>
-      <div class="hint">Escríbele lo que quieras y la IA lo ajusta. Te quedan <b style="color:var(--terracota)"><?= $restantes ?> de <?= $LIMITE_LOGO ?></b> pruebas <b>incluidas</b>.</div>
-      <div class="hint" style="margin-top:6px;font-size:11.5px">Después de las <?= $LIMITE_LOGO ?>: intentos adicionales tienen costo, o pide un <b>logo personalizado por un artista gráfico</b>.</div>
-    <?php else: ?>
-      <div class="hint" style="background:var(--amber-bg);color:var(--amber-ink);border-radius:12px;padding:14px;font-weight:600;text-align:left">
-        🎨 Usaste tus <?= $LIMITE_LOGO ?> pruebas incluidas. ¿Quieres más?
-        <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
-          <a href="/crecer/crecer.php" style="background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;font-weight:800;text-decoration:none;padding:10px;border-radius:99px;text-align:center;font-size:13px">💳 Comprar más intentos</a>
-          <a href="/crecer/crecer.php" style="border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-weight:700;text-decoration:none;padding:10px;border-radius:99px;text-align:center;font-size:13px">🎨 Logo personalizado por un artista</a>
-        </div>
-      </div>
-    <?php endif; ?>
-  </div>
-
-  <div class="info">
-    <div class="pcard">
-      <h3>De lo que la IA aprende</h3>
-      <div class="kv"><b>Negocio:</b> <?= $h($marca['nombre_negocio']) ?></div>
-      <div class="kv"><b>Descripción:</b> <?= $h($marca['descripcion'] ?: '—') ?></div>
-      <div class="kv"><b>Voz:</b> <?= $h($marca['voz'] ?: '—') ?></div>
-      <?php if ($productos): ?>
-        <div class="kv"><b>Productos/servicios:</b></div>
-        <div class="tags"><?php foreach ($productos as $p): $n = is_array($p)?($p['nombre']??''):$p; if($n): ?><span class="tag2"><?= $h($n) ?></span><?php endif; endforeach; ?></div>
-      <?php endif; ?>
-    </div>
-    <div class="pcard">
-      <h3>¿Algo cambió?</h3>
-      <div class="kv" style="color:var(--muted)">El logo se genera de esta info. Si actualizas tu descripción o productos, genera una versión nueva y la IA la adapta.</div>
-    </div>
-  </div>
-</div>
 
 <?php require __DIR__ . '/_shell_foot.php'; ?>
