@@ -360,6 +360,61 @@ SYS;
 }
 
 /**
+ * CREADOR guiado por el dueño. Toma una pieza y la redacta a partir de un
+ * TEMA sugerido y/o un BORRADOR del dueño (que la IA pule respetando su
+ * intención). Respeta el glosario aprendido. Actualiza el caption.
+ */
+function redactar_sugerido(PDO $pdo, int $contenido_id, string $tema = '', string $borrador = ''): array {
+    $c = $pdo->prepare("SELECT * FROM crecer_contenido WHERE id = ?");
+    $c->execute([$contenido_id]);
+    $pieza = $c->fetch();
+    if (!$pieza) throw new RuntimeException("Contenido #$contenido_id no existe.");
+
+    $m = leer_marca($pdo, (int)$pieza['marca_id']);
+    $ctx = marca_contexto($m);
+
+    $sistema = <<<SYS
+Eres el CREADOR de contenido de Crecer. Escribes captions para redes
+sociales de microempresas boricuas. Reglas:
+- Español puertorriqueño AUTÉNTICO, nunca traducido ni "AI slop".
+- Vocabulario local (bizcocho, no "tarta"; chavos; nene/nena; etc.).
+- Tono según la voz del negocio. 1-2 emojis máximo.
+- Llamado a la acción por WhatsApp y 3-4 hashtags locales.
+- Máximo 60 palabras. Devuelve SOLO el caption, sin comillas ni explicación.
+SYS;
+    if (!empty($m['glosario'])) {
+        $sistema .= "\n\nVOCABULARIO DEL NEGOCIO (el dueño lo corrigió — RESPÉTALO SIEMPRE, no repitas los errores):\n" . $m['glosario'];
+    }
+
+    $prompt = "Perfil del negocio:\n{$ctx}\n\n"
+        . "Plataforma: {$pieza['plataforma']} | Tipo: {$pieza['tipo']}\n";
+    if (trim($borrador) !== '') {
+        $prompt .= "El DUEÑO escribió este BORRADOR del post. MEJÓRALO: corrige, pule y dale chispa "
+                 . "boricua, pero RESPETA su intención y sus datos (precios, fechas, productos). "
+                 . "No lo cambies por completo ni inventes datos.\n\nBORRADOR DEL DUEÑO:\n\"{$borrador}\"\n";
+        if (trim($tema) !== '') $prompt .= "Tema/contexto extra: {$tema}\n";
+    } else {
+        $prompt .= "El DUEÑO pidió un post sobre este TEMA específico: \"{$tema}\".\n";
+    }
+    $prompt .= "\nEscribe el caption final.";
+
+    $r = ia_ejecutar($pdo, 'creador', "Redactar post sugerido #{$contenido_id}", $prompt, [
+        'marca_id'    => (int)$pieza['marca_id'],
+        'sistema'     => $sistema,
+        'temperatura' => 0.9,
+        'max_tokens'  => 400,
+        'thinking_budget' => 0,
+        'mock_texto'  => "[MOCK] " . (trim($borrador) ?: trim($tema)),
+    ]);
+
+    $pdo->prepare(
+        "UPDATE crecer_contenido SET caption = ?, ia_log_id = ?, updated_at = NOW() WHERE id = ?"
+    )->execute([trim($r['texto']), $r['ia_log_id'], $contenido_id]);
+
+    return ['caption' => trim($r['texto']), 'ia_log_id' => $r['ia_log_id'], 'costo' => $r['costo']];
+}
+
+/**
  * Corre el CREADOR sobre todas las piezas en borrador de un calendario
  * cuyo caption aún es la idea (sin redactar). Devuelve resumen.
  */

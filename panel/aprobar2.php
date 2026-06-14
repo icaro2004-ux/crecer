@@ -77,9 +77,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>substr($e->getMessage(),0,120)]); exit;
         }
     }
-    // ── Pedir a la IA que redacte MÁS posts ──
-    if ($accion === 'generar_mas') {
+    // ── Pedir un post a la IA (tema sugerido / borrador a pulir / random) ──
+    if ($accion === 'pedir_post') {
         @set_time_limit(0);
+        $tema     = trim($_POST['tema'] ?? '');
+        $borrador = trim($_POST['borrador'] ?? '');
+        $plat = in_array($_POST['plataforma'] ?? '', ['instagram','facebook','whatsapp'], true) ? $_POST['plataforma'] : 'instagram';
+        $fecha = $_POST['fecha'] ?? '';
+        $fecha_dt = ($fecha && strtotime($fecha)) ? (date('Y-m-d', strtotime($fecha)) . ' 10:00:00') : date('Y-m-d 10:00:00');
+
+        if ($tema !== '' || $borrador !== '') {
+            // ── Post guiado por el dueño (1 pieza) ──
+            $fa = (int)date('Y', strtotime($fecha_dt)); $fm = (int)date('n', strtotime($fecha_dt));
+            $pdo->prepare("INSERT INTO crecer_calendario (marca_id, anio, mes, estado, generado_por_ia) VALUES (?,?,?, 'borrador', 1) ON DUPLICATE KEY UPDATE updated_at=NOW()")->execute([$marca_id,$fa,$fm]);
+            $calid = (int)$pdo->query("SELECT id FROM crecer_calendario WHERE marca_id={$marca_id} AND anio={$fa} AND mes={$fm}")->fetchColumn();
+            $idea = $tema !== '' ? $tema : 'Pulir borrador del dueño';
+            $pdo->prepare("INSERT INTO crecer_contenido (calendario_id, marca_id, plataforma, tipo, caption, fecha_programada, estado) VALUES (?,?,?,?,?,?, 'borrador')")
+                ->execute([$calid, $marca_id, $plat, 'post', $idea, $fecha_dt]);
+            $nid = (int)$pdo->lastInsertId();
+            try { redactar_sugerido($pdo, $nid, $tema, $borrador); }
+            catch (Throwable $e) { /* queda el borrador con la idea para editar */ }
+            header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&generados=1#cap-{$nid}"); exit;
+        }
+        // ── Sin tema: la IA inventa N (planificador) ──
         $n = max(1, min(6, (int)($_POST['n'] ?? 3)));
         $cal = $pdo->prepare("SELECT anio, mes FROM crecer_calendario WHERE marca_id=? ORDER BY anio DESC, mes DESC LIMIT 1");
         $cal->execute([$marca_id]); $cal = $cal->fetch();
@@ -227,18 +247,10 @@ require __DIR__ . '/_shell.php';
   </div>
 
   <div class="factorybar">
-    <form method="post" class="fbform" onsubmit="var b=this.querySelector('button');b.textContent='✨ Creando…';b.disabled=true;">
-      <input type="hidden" name="accion" value="generar_mas">
-      <select name="n" aria-label="Cuántos posts">
-        <option value="1">1 post</option>
-        <option value="3" selected>3 posts</option>
-        <option value="6">6 posts</option>
-      </select>
-      <button type="submit" class="fbgen">✨ Que la IA escriba más</button>
-    </form>
+    <button type="button" class="fbgen" onclick="abrirBrief()">✏️ Pedir un post a la IA</button>
     <form method="post" onsubmit="var b=this.querySelector('button');b.disabled=true;">
       <input type="hidden" name="accion" value="nuevo_manual">
-      <button type="submit" class="fbnew">➕ Escribir uno yo</button>
+      <button type="submit" class="fbnew">➕ Escribir uno yo (sin IA)</button>
     </form>
   </div>
 <?php endif; ?>
@@ -312,6 +324,47 @@ require __DIR__ . '/_shell.php';
       </div>
     </article>
   <?php endforeach; ?>
+</div>
+
+<!-- MODAL: PEDIR UN POST A LA IA (brief del dueño) -->
+<div class="art-ov" id="briefov">
+  <form class="art-box" method="post" id="briefform" onsubmit="var b=this.querySelector('.art-go');b.textContent='✨ Redactando… (~10s)';b.disabled=true;">
+    <button type="button" class="x" onclick="document.getElementById('briefov').classList.remove('show')">✕</button>
+    <h3>✏️ Pedir un post a la IA</h3>
+    <div class="sub">Sugiere el tema, o escribe un borrador y la IA lo pule respetando tu intención. Déjalo todo en blanco y la IA inventa.</div>
+    <input type="hidden" name="accion" value="pedir_post">
+
+    <label class="fl">¿De qué quieres el post? <span style="color:var(--muted);font-weight:500">(opcional)</span></label>
+    <textarea name="tema" rows="2" placeholder="Ej: promo del bizcocho de guayaba para el Día de las Madres"></textarea>
+
+    <label class="fl">¿Tienes un borrador? La IA lo mejora <span style="color:var(--muted);font-weight:500">(opcional)</span></label>
+    <textarea name="borrador" rows="3" placeholder="Escríbelo como te salga; la IA lo pule manteniendo tu intención y tus datos (precios, fechas)."></textarea>
+
+    <label class="fl">Plataforma</label>
+    <div class="chips">
+      <label class="chip-opt"><input type="radio" name="plataforma" value="instagram" checked><span>📸 Instagram</span></label>
+      <label class="chip-opt"><input type="radio" name="plataforma" value="facebook"><span>👍 Facebook</span></label>
+      <label class="chip-opt"><input type="radio" name="plataforma" value="whatsapp"><span>💬 WhatsApp</span></label>
+    </div>
+
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px">
+      <div style="flex:1;min-width:140px">
+        <label class="fl">Fecha del post</label>
+        <input type="date" name="fecha" value="<?= date('Y-m-d') ?>" style="width:100%;font-family:inherit;font-size:13.5px;border:1.5px solid var(--line);border-radius:12px;padding:9px 11px">
+      </div>
+      <div style="flex:1;min-width:140px">
+        <label class="fl">Si dejas todo vacío…</label>
+        <select name="n" style="width:100%;font-family:inherit;font-size:13.5px;font-weight:700;border:1.5px solid var(--line);border-radius:12px;padding:9px 11px;background:#fff">
+          <option value="1">la IA inventa 1</option>
+          <option value="3" selected>la IA inventa 3</option>
+          <option value="6">la IA inventa 6</option>
+        </select>
+      </div>
+    </div>
+
+    <button type="submit" class="art-go">✨ Redactar</button>
+    <div class="art-note">La IA usa el perfil de tu negocio y el vocabulario que le has enseñado.</div>
+  </form>
 </div>
 
 <!-- MODAL: ESTUDIO DE ARTE (fábrica de posts) -->
@@ -460,6 +513,10 @@ require __DIR__ . '/_shell.php';
       }
     }).catch(function(){ b.disabled=false; b.textContent='Guardar'; });
   });
+
+  // ===== Pedir un post a la IA (brief) =====
+  function abrirBrief(){ document.getElementById('briefov').classList.add('show'); }
+  document.getElementById('briefov').addEventListener('click', function(e){ if(e.target===this) this.classList.remove('show'); });
 
   // ===== Estudio de arte (modal) — fábrica de posts =====
   var artov=document.getElementById('artov'), artform=document.getElementById('artform');
