@@ -10,6 +10,10 @@
 
 require_once __DIR__ . '/ia.php';
 
+// Límites de generación de imágenes (control de costos)
+if (!defined('CRECER_IMG_SEMANA')) define('CRECER_IMG_SEMANA', 10); // máximo por semana (ventana 7 días)
+if (!defined('CRECER_IMG_POST'))   define('CRECER_IMG_POST', 2);    // máximo de generaciones IA por post
+
 /** Convierte "El Palo Dulce" → "el-palo-dulce" (para links públicos). */
 function slugify(string $s): string {
     $s = mb_strtolower(trim($s), 'UTF-8');

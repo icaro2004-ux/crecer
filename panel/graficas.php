@@ -28,7 +28,7 @@ if ($post_id) {
 }
 
 // Límite: 5 imágenes por semana (ventana de 7 días). Se recargan a los 7 días.
-$LIMITE_SEM = 5;
+$LIMITE_SEM = CRECER_IMG_SEMANA;
 $wk = $pdo->prepare("SELECT COUNT(*) c, MIN(created_at) oldest FROM crecer_graficas WHERE marca_id=? AND created_at >= (NOW() - INTERVAL 7 DAY)");
 $wk->execute([$marca_id]); $w = $wk->fetch();
 $usados_sem = (int)$w['c'];

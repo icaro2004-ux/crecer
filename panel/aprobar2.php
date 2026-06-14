@@ -43,9 +43,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($accion === 'arte') {
         @set_time_limit(0);
         $dir_fotos = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/fotos";
-        $wk = $pdo->prepare("SELECT COUNT(*) FROM crecer_graficas WHERE marca_id=? AND created_at >= (NOW() - INTERVAL 7 DAY)");
-        $wk->execute([$marca_id]); $usados = (int)$wk->fetchColumn();
-        if ($usados >= 5) { header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'limite']); exit; }
+        // Tope por post (2 generaciones IA)
+        $ai = $pdo->prepare("SELECT arte_intentos FROM crecer_contenido WHERE id=? AND marca_id=?");
+        $ai->execute([$id, $marca_id]); $intentos = (int)$ai->fetchColumn();
+        if ($intentos >= CRECER_IMG_POST) { header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'post_limite']); exit; }
+        // Tope semanal (10 imágenes)
+        $wk = $pdo->prepare("SELECT COUNT(*) c, MIN(created_at) oldest FROM crecer_graficas WHERE marca_id=? AND created_at >= (NOW() - INTERVAL 7 DAY)");
+        $wk->execute([$marca_id]); $w = $wk->fetch(); $usados = (int)$w['c'];
+        $reset = $w['oldest'] ? date('d/m', strtotime($w['oldest'].' +7 days')) : null;
+        if ($usados >= CRECER_IMG_SEMANA) { header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'limite','reset'=>$reset]); exit; }
         // Foto: subida nueva (inline) o escogida del picker
         $src = null;
         if (!empty($_FILES['foto_nueva']['tmp_name']) && $_FILES['foto_nueva']['error'] === UPLOAD_ERR_OK) {
@@ -68,10 +74,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'estilo'       => $_POST['estilo'] ?? '',
                 'instrucciones'=> trim($_POST['instrucciones'] ?? ''),
             ]);
-            $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")
+            $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, arte_intentos=arte_intentos+1, updated_at=NOW() WHERE id=? AND marca_id=?")
                 ->execute([$r['archivo'], $id, $marca_id]);
             header('Content-Type: application/json');
-            echo json_encode(['ok'=>true,'id'=>$id,'img'=>$r['archivo'],'restantes'=>max(0,5-($usados+1))], JSON_UNESCAPED_UNICODE);
+            echo json_encode([
+                'ok'=>true, 'id'=>$id, 'img'=>$r['archivo'],
+                'restantes'=>max(0, CRECER_IMG_SEMANA - ($usados+1)),
+                'restantes_post'=>max(0, CRECER_IMG_POST - ($intentos+1)),
+                'reset'=>$reset,
+            ], JSON_UNESCAPED_UNICODE);
             exit;
         } catch (Throwable $e) {
             header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>substr($e->getMessage(),0,120)]); exit;
@@ -87,6 +98,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Content-Type: application/json'); echo json_encode(['ok'=>true,'id'=>$id,'img'=>$arch], JSON_UNESCAPED_UNICODE); exit;
         }
         header('Content-Type: application/json'); echo json_encode(['ok'=>false]); exit;
+    }
+
+    // ── Usar foto propia TAL CUAL (sin IA, sin límite) ──
+    if ($accion === 'foto_directa') {
+        $dir_fotos = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/fotos";
+        if (!empty($_FILES['imagen']['tmp_name']) && $_FILES['imagen']['error'] === UPLOAD_ERR_OK && $_FILES['imagen']['size'] <= 12*1024*1024) {
+            $info = @getimagesize($_FILES['imagen']['tmp_name']);
+            $ext = ['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp'][$info['mime'] ?? ''] ?? null;
+            if ($ext) {
+                @mkdir($dir_fotos, 0775, true); $fn = 'foto_'.uniqid().'.'.$ext;
+                if (move_uploaded_file($_FILES['imagen']['tmp_name'], $dir_fotos.'/'.$fn)) {
+                    $url = rtrim(UPLOADS_URL, '/') . "/marca_{$marca_id}/fotos/" . $fn;
+                    $pdo->prepare("INSERT INTO crecer_graficas (marca_id, archivo, copy_text) VALUES (?,?,?)")->execute([$marca_id, $url, '(imagen propia)']);
+                    $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$url, $id, $marca_id]);
+                    header('Content-Type: application/json'); echo json_encode(['ok'=>true,'id'=>$id,'img'=>$url], JSON_UNESCAPED_UNICODE); exit;
+                }
+            }
+        }
+        header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'No se pudo subir (usa JPG/PNG/WebP, máx 12MB).']); exit;
     }
 
     // ── Pedir un post a la IA (tema sugerido / borrador a pulir / random) ──
@@ -194,8 +224,10 @@ $dir_fotos = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/fotos";
 $url_fotos = rtrim(UPLOADS_URL, '/') . "/marca_{$marca_id}/fotos";
 $fotos = is_dir($dir_fotos) ? array_values(array_filter(scandir($dir_fotos), fn($x)=>$x[0]!=='.')) : [];
 $tiene_logo = !empty($marca['logo_path']);
-$wk = $pdo->prepare("SELECT COUNT(*) FROM crecer_graficas WHERE marca_id=? AND created_at >= (NOW() - INTERVAL 7 DAY)");
-$wk->execute([$marca_id]); $restantes_sem = max(0, 5 - (int)$wk->fetchColumn());
+$wk = $pdo->prepare("SELECT COUNT(*) c, MIN(created_at) oldest FROM crecer_graficas WHERE marca_id=? AND created_at >= (NOW() - INTERVAL 7 DAY)");
+$wk->execute([$marca_id]); $w = $wk->fetch();
+$restantes_sem = max(0, CRECER_IMG_SEMANA - (int)$w['c']);
+$reset_fecha = $w['oldest'] ? date('d/m', strtotime($w['oldest'].' +7 days')) : null;
 // Artes ya creados (para reciclar sin gastar del límite)
 $gq = $pdo->prepare("SELECT id, archivo FROM crecer_graficas WHERE marca_id=? ORDER BY id DESC LIMIT 30");
 $gq->execute([$marca_id]); $graficas = $gq->fetchAll();
@@ -265,6 +297,8 @@ require __DIR__ . '/_shell.php';
   .art-go:disabled{opacity:.6;cursor:default}
   .art-skip{display:block;text-align:center;margin-top:12px;font-size:13px;font-weight:700;color:var(--muted);text-decoration:none}
   .art-note{font-size:11.5px;color:var(--muted);margin-top:10px;text-align:center}
+  .art-divider{display:flex;align-items:center;gap:10px;margin:18px 0 4px;color:var(--muted);font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+  .art-divider::before,.art-divider::after{content:"";flex:1;height:1px;background:var(--line)}
 </style>
 
 <h1 class="page-h">Contenido</h1>
@@ -329,7 +363,7 @@ require __DIR__ . '/_shell.php';
     $fecha = date('d/m', strtotime($p['fecha_programada'] ?: 'now'));
   ?>
     <?php $has_cap = trim($p['caption'])!==''; $has_art = !empty($p['grafica_path']); $is_ok = in_array($p['estado'],['aprobado','publicado'],true); ?>
-    <article class="post" data-id="<?= $p['id'] ?>" data-img="<?= $has_art?'1':'' ?>">
+    <article class="post" data-id="<?= $p['id'] ?>" data-img="<?= $has_art?'1':'' ?>" data-intentos="<?= max(0, CRECER_IMG_POST - (int)($p['arte_intentos'] ?? 0)) ?>">
       <div class="post-head">
         <span class="chip <?= $pl_cls ?>"><span class="ico"></span><?= $h($pl_label) ?></span>
         <span class="chip"><?= $h($p['tipo']) ?></span>
@@ -473,9 +507,17 @@ require __DIR__ . '/_shell.php';
     </div>
     <?php endif; ?>
 
+    <div id="art-postnote" style="font-size:12px;font-weight:700;margin-top:14px;text-align:center"></div>
     <button type="submit" class="art-go" id="art-go">✨ Crear el arte (~15s)</button>
     <a href="#" class="art-skip" id="art-skip" style="display:none">Aprobar solo con el texto (sin imagen) →</a>
-    <div class="art-note">Te quedan <b id="art-rest" style="color:var(--terracota)"><?= $restantes_sem ?></b> de 5 imágenes esta semana. Con texto = modelo Pro (letras perfectas).</div>
+    <div class="art-note">📅 Te quedan <b id="art-rest" style="color:var(--terracota)"><?= $restantes_sem ?></b> de <?= CRECER_IMG_SEMANA ?> generaciones esta semana<?php if($reset_fecha): ?> · se recargan el <span id="art-reset"><?= $h($reset_fecha) ?></span><?php endif; ?>. Con texto = modelo Pro.</div>
+
+    <div class="art-divider"><span>o usa lo tuyo</span></div>
+    <label class="fl" style="margin-top:0">📎 Subir mi propia imagen tal cual <span style="color:var(--muted);font-weight:500">(sin IA, sin gastar límite)</span></label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="file" id="art-directa-file" accept="image/png,image/jpeg,image/webp" style="flex:1">
+      <button type="button" class="fbnew" id="art-directa-btn" style="white-space:nowrap">Usar esta</button>
+    </div>
   </form>
 </div>
 
@@ -592,8 +634,21 @@ require __DIR__ . '/_shell.php';
     var cap=card.querySelector('.caption'); var txt=cap?cap.textContent.trim():'';
     document.getElementById('art-copyprev').textContent = txt ? ('"'+txt.slice(0,90)+(txt.length>90?'…':'')+'"') : 'La imagen irá acorde a tu copy.';
     document.getElementById('art-skip').style.display = thenApprove ? 'block' : 'none';
-    var go=document.getElementById('art-go'); go.disabled=false; go.textContent='✨ Crear el arte (~15s)';
+    actualizarLimitePost(card);
     artov.classList.add('show');
+  }
+  function actualizarLimitePost(card){
+    var rest=parseInt(card.dataset.intentos||'2',10);
+    var go=document.getElementById('art-go'), note=document.getElementById('art-postnote');
+    if(rest<=0){
+      go.disabled=true; go.textContent='Se acabaron las generaciones de este post';
+      note.style.color='var(--noo-ink)';
+      note.innerHTML='⚠️ Usaste tus <?= CRECER_IMG_POST ?> generaciones IA de este post. Recicla un arte de arriba ♻️ o sube tu propia imagen abajo 📎.';
+    } else {
+      go.disabled=false; go.textContent='✨ Crear el arte (~15s)';
+      note.style.color='var(--muted)';
+      note.innerHTML='Te quedan <b style="color:var(--terracota)">'+rest+' de <?= CRECER_IMG_POST ?></b> generaciones IA en este post.';
+    }
   }
   function cerrarArte(){ artov.classList.remove('show'); artCard=null; artThenApprove=false; }
   artov.addEventListener('click', function(e){ if(e.target===artov) cerrarArte(); });
@@ -611,12 +666,15 @@ require __DIR__ . '/_shell.php';
     fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
       if(!d.ok){
         go.disabled=false; go.textContent='✨ Crear el arte (~15s)';
-        toast(d.err==='limite'?'🗓️ Usaste tus 5 imágenes de la semana.':'No se pudo crear el arte. Intenta de nuevo.');
+        if(d.err==='post_limite') toast('⚠️ Ya usaste las <?= CRECER_IMG_POST ?> generaciones de este post. Recicla o sube tu foto.');
+        else if(d.err==='limite') toast('🗓️ Usaste tus <?= CRECER_IMG_SEMANA ?> imágenes de la semana'+(d.reset?' (vuelven el '+d.reset+')':'')+'.');
+        else toast('No se pudo crear el arte. Intenta de nuevo.');
         return;
       }
       var wrap=card.querySelector('.artwrap');
       if(wrap) wrap.innerHTML='<img class="zoomable" src="'+d.img+'?t='+Date.now()+'" alt="arte" style="width:100%;display:block">';
       card.dataset.img='1'; setChk(card,'art',true);
+      card.dataset.intentos=d.restantes_post;
       var tl=card.querySelector('.toolrow .artbtn'); if(tl) tl.innerHTML='🖼️ Cambiar arte';
       document.getElementById('art-rest').textContent=d.restantes;
       cerrarArte();
@@ -639,6 +697,26 @@ require __DIR__ . '/_shell.php';
       if(thenApprove){ enviarAccion(card,'aprobar').then(function(){ toast('✅ Post completo y aprobado'); }); }
       else toast('♻️ Arte reutilizado');
     }).catch(function(){ toast('Error de conexión.'); });
+  });
+  // Subir foto propia tal cual (sin IA)
+  document.getElementById('art-directa-btn').addEventListener('click', function(){
+    if(!artCard) return;
+    var fileEl=document.getElementById('art-directa-file');
+    if(!fileEl.files.length){ toast('Escoge una imagen primero.'); return; }
+    var btn=this; btn.disabled=true; btn.textContent='Subiendo…';
+    var card=artCard, thenApprove=artThenApprove;
+    var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','foto_directa'); fd.append('id',card.dataset.id); fd.append('imagen',fileEl.files[0]);
+    fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+      btn.disabled=false; btn.textContent='Usar esta';
+      if(!d.ok){ toast(d.err||'No se pudo subir.'); return; }
+      var wrap=card.querySelector('.artwrap');
+      if(wrap) wrap.innerHTML='<img class="zoomable" src="'+d.img+'?t='+Date.now()+'" alt="arte" style="width:100%;display:block">';
+      card.dataset.img='1'; setChk(card,'art',true);
+      var tl=card.querySelector('.toolrow .artbtn'); if(tl) tl.innerHTML='🖼️ Cambiar arte';
+      fileEl.value=''; cerrarArte();
+      if(thenApprove){ enviarAccion(card,'aprobar').then(function(){ toast('✅ Post completo y aprobado'); }); }
+      else toast('📎 Imagen propia añadida');
+    }).catch(function(){ btn.disabled=false; btn.textContent='Usar esta'; toast('Error de conexión.'); });
   });
   document.getElementById('art-skip').addEventListener('click', function(e){
     e.preventDefault(); var card=artCard; cerrarArte(); if(card) enviarAccion(card,'aprobar').then(function(){ toast('✓ Aprobado (solo texto)'); });
