@@ -64,25 +64,44 @@ function crear_marca(PDO $pdo, array $d): int {
  * AGENTE DISEÑADOR — genera el logo del negocio con IA y lo guarda.
  * Devuelve ['archivo'=>url, 'costo'].
  */
-function generar_logo(PDO $pdo, int $marca_id, string $instrucciones = ''): array {
+function generar_logo(PDO $pdo, int $marca_id, array $opts = []): array {
     $m = leer_marca($pdo, $marca_id);
-    $ctx = marca_contexto($m);
-    $prompt =
-        "Diseña un LOGO de marca profesional, nivel estudio de diseño (calidad "
-      . "Behance/Dribbble), para este negocio boricua.\n\n{$ctx}\n\n"
-      . "DIRECCIÓN DE ARTE:\n"
-      . "- Un símbolo/ícono distintivo y memorable que capture la esencia del negocio "
-      . "(no genérico, con personalidad y un concepto creativo).\n"
-      . "- Vectorial, plano, formas limpias, buen uso del espacio negativo, balanceado.\n"
-      . "- Paleta caribeña cálida y vibrante, armónica (2–3 colores).\n"
-      . "- El nombre \"{$m['nombre_negocio']}\" en una tipografía moderna y bonita, "
-      . "perfectamente escrito y bien espaciado, debajo o integrado al ícono.\n"
-      . "- Composición centrada sobre fondo blanco liso. Apto para foto de perfil.\n"
-      . "- Que se sienta premium y con alma, no plantilla genérica.";
-    if (trim($instrucciones) !== '') {
-        $prompt .= "\n\nLO QUE PIDE EL DUEÑO (prioriza esto): " . trim($instrucciones);
-    }
-    // Cada generación es un tile único (no sobrescribe) → galería para escoger.
+    $nombre = $m['nombre_negocio'];
+    $desc = trim($opts['descripcion'] ?? '') ?: (string)($m['descripcion'] ?? '');
+    $prods = $m['productos'] ? implode(', ', array_map(
+        fn($p) => is_array($p) ? ($p['nombre'] ?? '') : $p, $m['productos'])) : '';
+
+    // Sliders (0–100) → frases de dirección de arte
+    $tono = (int)($opts['tono'] ?? 50);
+    $epoca = (int)($opts['epoca'] ?? 50);
+    $detalle = (int)($opts['detalle'] ?? 50);
+    $f_tono   = $tono < 35 ? 'serio, formal, sobrio' : ($tono > 65 ? 'alegre, divertido, con energía' : 'equilibrado entre serio y alegre');
+    $f_epoca  = $epoca < 35 ? 'clásico, tradicional, atemporal' : ($epoca > 65 ? 'moderno, contemporáneo, fresco' : 'entre clásico y moderno');
+    $f_detalle= $detalle < 35 ? 'minimalista, simple, mucho aire' : ($detalle > 65 ? 'detallado, elaborado, rico en elementos' : 'balanceado');
+
+    $estilo = trim($opts['estilo'] ?? '');
+    $tipo   = trim($opts['tipografia'] ?? '');
+    $color  = trim($opts['color'] ?? '');
+    $instr  = trim($opts['instrucciones'] ?? '');
+
+    $prompt = "Diseña un LOGO de marca profesional, nivel estudio de diseño "
+      . "(calidad Behance/Dribbble), para este negocio boricua.\n"
+      . "Negocio: {$nombre}\n"
+      . ($desc  ? "Descripción: {$desc}\n" : '')
+      . ($prods ? "Ofrece: {$prods}\n" : '')
+      . "\nDIRECCIÓN DE ARTE:\n"
+      . "- Tono: {$f_tono}.\n"
+      . "- Estilo: {$f_epoca}.\n"
+      . "- Complejidad: {$f_detalle}.\n"
+      . ($estilo ? "- Vibra/estilo: {$estilo}.\n" : '')
+      . ($tipo   ? "- Tipografía: {$tipo}.\n" : '')
+      . ($color  ? "- Colores: {$color}.\n" : '')
+      . "- Un símbolo/ícono distintivo y memorable (concepto creativo, no genérico).\n"
+      . "- El nombre \"{$nombre}\" perfectamente escrito y bien integrado.\n"
+      . "- Fondo blanco liso, composición centrada, apto para foto de perfil.\n"
+      . "- Con alma y personalidad.";
+    if ($instr !== '') $prompt .= "\n\nLO QUE PIDE EL DUEÑO (prioriza esto): {$instr}";
+
     $fname = "marca_{$marca_id}/logo_" . uniqid() . ".png";
     $r = ia_imagen($pdo, 'diseñador', 'Generar logo del negocio', $prompt,
         $fname, ['marca_id' => $marca_id, 'modelo' => 'gemini-3-pro-image']);

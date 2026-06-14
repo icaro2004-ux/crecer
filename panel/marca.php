@@ -26,7 +26,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         elseif ($usados >= $LIMITE_LOGO) $err = "Llegaste a tus {$LIMITE_LOGO} pruebas.";
         else {
             @set_time_limit(0);
-            try { generar_logo($pdo, $marca_id, trim($_POST['instrucciones'] ?? '')); }
+            $desc = trim($_POST['descripcion'] ?? '');
+            if ($desc !== '' && $desc !== (string)$marca['descripcion']) {
+                $pdo->prepare("UPDATE crecer_marca SET descripcion=? WHERE id=?")->execute([$desc, $marca_id]);
+            }
+            $opts = [
+                'descripcion'   => $desc,
+                'estilo'        => $_POST['estilo'] ?? '',
+                'tipografia'    => $_POST['tipografia'] ?? '',
+                'tono'          => (int)($_POST['tono'] ?? 50),
+                'epoca'         => (int)($_POST['epoca'] ?? 50),
+                'detalle'       => (int)($_POST['detalle'] ?? 50),
+                'instrucciones' => $_POST['instrucciones'] ?? '',
+            ];
+            try { generar_logo($pdo, $marca_id, $opts); }
             catch (Throwable $e) { $err = 'No se pudo generar: ' . substr($e->getMessage(), 0, 120); }
             if (!$err) { header("Location: /crecer/panel/marca.php?marca={$marca_id}&ok=1"); exit; }
         }
@@ -66,6 +79,17 @@ require __DIR__ . '/_shell.php';
   .genbtn{border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:15px;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));padding:13px 22px;border-radius:99px;box-shadow:0 10px 24px rgba(255,43,133,.28)}
   .genline{font-size:12.5px;color:var(--muted);margin-top:10px}
   .policy{font-size:11.5px;color:var(--muted);margin-top:4px}
+  .genbox textarea{width:100%}
+  .fl{display:block;font-weight:700;font-size:13px;margin:14px 0 7px}
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip-opt{cursor:pointer}
+  .chip-opt input{position:absolute;opacity:0;pointer-events:none}
+  .chip-opt span{display:inline-block;padding:7px 13px;border-radius:99px;border:1.5px solid var(--line);background:#fff;font-weight:700;font-size:13px;transition:all .15s}
+  .chip-opt input:checked + span{border-color:transparent;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta))}
+  .slider{display:flex;align-items:center;gap:10px;margin:8px 0}
+  .slider span{font-size:12px;color:var(--muted);font-weight:700;width:64px}
+  .slider span:last-child{text-align:right}
+  .slider input[type=range]{flex:1;accent-color:var(--terracota)}
 
   .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-top:22px}
   .tile{background:var(--card);border:2px solid var(--line);border-radius:18px;padding:12px;text-align:center;transition:border-color .15s,opacity .15s}
@@ -92,10 +116,39 @@ require __DIR__ . '/_shell.php';
 
 <?php if (!$final && $restantes > 0): ?>
   <div class="genbox">
-    <form method="post" onsubmit="var b=this.querySelector('button');b.textContent='✨ Creando… (~15s)';b.disabled=true;">
+    <form method="post" onsubmit="var b=this.querySelector('.genbtn');b.textContent='✨ Creando… (~15s)';b.disabled=true;">
       <input type="hidden" name="accion" value="logo">
-      <textarea name="instrucciones" rows="2" placeholder="Dile a la IA cómo lo quieres (opcional): &quot;ponle un coquí&quot;, &quot;más moderno&quot;, &quot;colores azules&quot;…"></textarea>
-      <button class="genbtn" type="submit"><?= $usados ? '✨ Generar otro' : '✨ Generar mi primer logo' ?></button>
+
+      <label class="fl">Descripción del negocio <span style="color:var(--muted);font-weight:500">(edítala a tu gusto)</span></label>
+      <textarea name="descripcion" rows="2"><?= $h($marca['descripcion']) ?></textarea>
+
+      <label class="fl">Estilo</label>
+      <div class="chips">
+        <?php
+        $estilos = ['Auto'=>'', 'Boricua'=>'boricua, con orgullo puertorriqueño', 'Moderno'=>'moderno y minimalista', 'Clásico'=>'clásico y atemporal', 'Elegante'=>'elegante y premium', 'Divertido'=>'divertido y colorido', 'Retro'=>'retro vintage'];
+        foreach ($estilos as $lb=>$val): ?>
+          <label class="chip-opt"><input type="radio" name="estilo" value="<?= $h($val) ?>" <?= $lb==='Auto'?'checked':'' ?>><span><?= $h($lb) ?></span></label>
+        <?php endforeach; ?>
+      </div>
+
+      <label class="fl">Ajusta el feeling</label>
+      <div class="slider"><span>Serio</span><input type="range" name="tono" min="0" max="100" value="50"><span>Alegre</span></div>
+      <div class="slider"><span>Clásico</span><input type="range" name="epoca" min="0" max="100" value="50"><span>Moderno</span></div>
+      <div class="slider"><span>Simple</span><input type="range" name="detalle" min="0" max="100" value="50"><span>Detallado</span></div>
+
+      <label class="fl">Tipografía</label>
+      <div class="chips">
+        <?php
+        $tipos = ['Auto'=>'', 'Moderna'=>'sans-serif moderna', 'Clásica'=>'serif clásica', 'Redonda'=>'redondeada y amigable', 'Manuscrita'=>'manuscrita / script', 'Negrita'=>'bold fuerte e impactante'];
+        foreach ($tipos as $lb=>$val): ?>
+          <label class="chip-opt"><input type="radio" name="tipografia" value="<?= $h($val) ?>" <?= $lb==='Auto'?'checked':'' ?>><span><?= $h($lb) ?></span></label>
+        <?php endforeach; ?>
+      </div>
+
+      <label class="fl">Algo más (opcional)</label>
+      <textarea name="instrucciones" rows="2" placeholder="&quot;ponle un coquí&quot;, &quot;colores azul y dorado&quot;, &quot;que parezca sello&quot;…"></textarea>
+
+      <button class="genbtn" type="submit" style="margin-top:6px"><?= $usados ? '✨ Generar otro logo' : '✨ Generar mi primer logo' ?></button>
     </form>
     <div class="genline">Te quedan <b style="color:var(--terracota)"><?= $restantes ?> de <?= $LIMITE_LOGO ?></b> pruebas incluidas.</div>
     <div class="policy">Después de las <?= $LIMITE_LOGO ?>: intentos adicionales tienen costo, o pide un logo personalizado por un artista gráfico.</div>
