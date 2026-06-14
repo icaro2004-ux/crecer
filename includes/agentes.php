@@ -146,7 +146,14 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
         $prompt .= "- La imagen debe ser COHERENTE con este mensaje del post (mismo tema, ambiente y vibra): \"{$copy}\".\n";
     }
     if ($con_logo && $logo_abs) {
-        $prompt .= "- Integra el LOGO de la marca (última imagen) pequeño y elegante en una esquina.\n";
+        $le = $opts['logo_estilo'] ?? 'esquina';
+        $como = [
+            'esquina'   => 'el SÍMBOLO del logo, pequeño y elegante, en una esquina, en un color que combine con la imagen',
+            'watermark' => 'el logo como MARCA DE AGUA sutil: monocromático o lineal, semitransparente, integrado a la composición SIN tapar el producto',
+            'integrado' => 'el SÍMBOLO del logo integrado de forma creativa al diseño, recoloreado para que armonice con la paleta de la imagen',
+        ][$le] ?? 'el símbolo del logo discreto en una esquina';
+        $prompt .= "- Aplica {$como}.\n"
+                 . "  IMPORTANTE: usa SOLO el símbolo/marca del logo (última imagen); NO copies su fondo blanco ni el recuadro — recórtalo y adáptalo a la imagen.\n";
     }
     if ($con_texto) {
         $prompt .= "- Añade un TEXTO corto y llamativo (un gancho sacado del mensaje), perfectamente escrito y bien diseñado sobre la imagen.\n";

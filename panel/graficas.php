@@ -36,10 +36,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         @set_time_limit(0);
         try {
             generar_grafica($pdo, $marca_id, $src, [
-                'copy'      => trim($_POST['copy'] ?? ''),
-                'con_texto' => ($_POST['con_texto'] ?? '') === '1',
-                'con_logo'  => !empty($_POST['con_logo']),
-                'estilo'    => $_POST['estilo'] ?? '',
+                'copy'        => trim($_POST['copy'] ?? ''),
+                'con_texto'   => ($_POST['con_texto'] ?? '') === '1',
+                'con_logo'    => !empty($_POST['con_logo']),
+                'logo_estilo' => $_POST['logo_estilo'] ?? 'esquina',
+                'estilo'      => $_POST['estilo'] ?? '',
             ]);
         } catch (Throwable $e) { $err = 'No se pudo crear el arte: ' . substr($e->getMessage(), 0, 120); }
     } elseif ($accion === 'publicar') {
@@ -180,8 +181,18 @@ require __DIR__ . '/_shell.php';
 
     <label class="fl">Extras</label>
     <div class="row2">
-      <label class="ck"><input type="checkbox" name="con_logo" value="1" <?= $tiene_logo?'':'disabled' ?>> Incluir mi logo <?= $tiene_logo?'':'<span style="color:var(--muted);font-weight:500">(crea tu logo primero)</span>' ?></label>
+      <label class="ck"><input type="checkbox" name="con_logo" value="1" id="cklogo" <?= $tiene_logo?'':'disabled' ?>> Incluir mi logo <?= $tiene_logo?'':'<span style="color:var(--muted);font-weight:500">(crea tu logo primero)</span>' ?></label>
     </div>
+    <?php if ($tiene_logo): ?>
+    <div id="logoest" style="margin-top:10px">
+      <label class="fl" style="margin-top:0">¿Cómo poner el logo? <span style="color:var(--muted);font-weight:500">(la IA lo adapta, sin fondo blanco)</span></label>
+      <div class="chips">
+        <label class="chip-opt"><input type="radio" name="logo_estilo" value="watermark" checked><span>💧 Marca de agua</span></label>
+        <label class="chip-opt"><input type="radio" name="logo_estilo" value="esquina"><span>📍 En la esquina</span></label>
+        <label class="chip-opt"><input type="radio" name="logo_estilo" value="integrado"><span>🎨 Integrado al diseño</span></label>
+      </div>
+    </div>
+    <?php endif; ?>
 
     <button class="genbtn" type="submit">✨ Crear el arte</button>
     <div class="costnote">Sin texto: imagen limpia (más barato). Con texto: usamos el modelo Pro para que las letras salgan perfectas.</div>
@@ -201,7 +212,7 @@ require __DIR__ . '/_shell.php';
           <?php if ($g['publicado']): ?><div style="text-align:center;margin-top:6px"><span style="font-size:11px;font-weight:800;color:var(--okk-ink);background:var(--okk-bg);padding:3px 9px;border-radius:99px">✓ PUBLICADO</span></div><?php endif; ?>
           <button class="prevbtn" type="button"
             onclick="openPrev(<?= (int)$g['id'] ?>, '<?= $h($g['archivo']) ?>', this.dataset.copy)"
-            data-copy="<?= $h($g['copy_text'] ?? '') ?>">👁 Vista previa</button>
+            data-copy="<?= $h($g['copy_text'] ?? '') ?>">📱 Ver en redes (IG/FB)</button>
         </div>
       <?php endforeach; ?>
     </div>
