@@ -82,22 +82,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         @set_time_limit(0);
         $tema     = trim($_POST['tema'] ?? '');
         $borrador = trim($_POST['borrador'] ?? '');
-        $plat = in_array($_POST['plataforma'] ?? '', ['instagram','facebook','whatsapp'], true) ? $_POST['plataforma'] : 'instagram';
+        // Una o varias plataformas (un post por cada una, adaptado a esa red)
+        $plats = $_POST['plataformas'] ?? ['instagram'];
+        if (!is_array($plats)) $plats = [$plats];
+        $plats = array_values(array_intersect(['instagram','facebook','whatsapp'], $plats));
+        if (!$plats) $plats = ['instagram'];
         $fecha = $_POST['fecha'] ?? '';
         $fecha_dt = ($fecha && strtotime($fecha)) ? (date('Y-m-d', strtotime($fecha)) . ' 10:00:00') : date('Y-m-d 10:00:00');
 
         if ($tema !== '' || $borrador !== '') {
-            // ── Post guiado por el dueño (1 pieza) ──
+            // ── Post guiado por el dueño: 1 pieza por plataforma ──
             $fa = (int)date('Y', strtotime($fecha_dt)); $fm = (int)date('n', strtotime($fecha_dt));
             $pdo->prepare("INSERT INTO crecer_calendario (marca_id, anio, mes, estado, generado_por_ia) VALUES (?,?,?, 'borrador', 1) ON DUPLICATE KEY UPDATE updated_at=NOW()")->execute([$marca_id,$fa,$fm]);
             $calid = (int)$pdo->query("SELECT id FROM crecer_calendario WHERE marca_id={$marca_id} AND anio={$fa} AND mes={$fm}")->fetchColumn();
             $idea = $tema !== '' ? $tema : 'Pulir borrador del dueño';
-            $pdo->prepare("INSERT INTO crecer_contenido (calendario_id, marca_id, plataforma, tipo, caption, fecha_programada, estado) VALUES (?,?,?,?,?,?, 'borrador')")
-                ->execute([$calid, $marca_id, $plat, 'post', $idea, $fecha_dt]);
-            $nid = (int)$pdo->lastInsertId();
-            try { redactar_sugerido($pdo, $nid, $tema, $borrador); }
-            catch (Throwable $e) { /* queda el borrador con la idea para editar */ }
-            header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&generados=1#cap-{$nid}"); exit;
+            $ins = $pdo->prepare("INSERT INTO crecer_contenido (calendario_id, marca_id, plataforma, tipo, caption, fecha_programada, estado) VALUES (?,?,?,?,?,?, 'borrador')");
+            $first = 0;
+            foreach ($plats as $pl) {
+                $tipo = $pl === 'whatsapp' ? 'story' : 'post'; // WhatsApp = Estado (≈ story)
+                $ins->execute([$calid, $marca_id, $pl, $tipo, $idea, $fecha_dt]);
+                $nid = (int)$pdo->lastInsertId(); if (!$first) $first = $nid;
+                try { redactar_sugerido($pdo, $nid, $tema, $borrador); }
+                catch (Throwable $e) { /* queda el borrador con la idea para editar */ }
+            }
+            header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&generados=".count($plats)."#cap-{$first}"); exit;
         }
         // ── Sin tema: la IA inventa N (planificador) ──
         $n = max(1, min(6, (int)($_POST['n'] ?? 3)));
@@ -234,7 +242,7 @@ require __DIR__ . '/_shell.php';
 <p class="page-sub">La IA lo preparó. Aprueba lo que te guste — tú tienes la última palabra. ✋</p>
 <p style="font-size:12.5px;color:var(--muted);margin-top:8px;max-width:600px"><b style="color:var(--amber-ink)">Pendiente</b> = esperando tu OK · <b style="color:var(--okk-ink)">Aprobado</b> = listo para publicar · <b style="color:var(--noo-ink)">Rechazado</b> = descartado. ✏️ Edita un post y la IA <b>aprende tu vocabulario</b> para los próximos.</p>
 
-<?php if (!empty($_GET['generados'])): ?><div class="okbar">✨ La IA redactó <?= (int)$_GET['generados'] ?> post(s) nuevo(s). Revísalos abajo.</div><?php endif; ?>
+<?php if (!empty($_GET['generados'])): ?><div class="okbar">✨ La IA redactó <?= (int)$_GET['generados'] ?> post(s) — ya quedaron programados en tu calendario. <a href="/crecer/panel/calendario.php?marca=<?= $marca_id ?>" style="color:var(--okk-ink);font-weight:800;text-decoration:underline">Ver en el calendario →</a></div><?php endif; ?>
 <?php if (!empty($_GET['err'])): ?><div class="errbar">⚠️ No se pudo generar (<?= $h($_GET['err']) ?>). Intenta de nuevo en un minuto.</div><?php endif; ?>
 
 <?php if ($total): ?>
@@ -340,11 +348,11 @@ require __DIR__ . '/_shell.php';
     <label class="fl">¿Tienes un borrador? La IA lo mejora <span style="color:var(--muted);font-weight:500">(opcional)</span></label>
     <textarea name="borrador" rows="3" placeholder="Escríbelo como te salga; la IA lo pule manteniendo tu intención y tus datos (precios, fechas)."></textarea>
 
-    <label class="fl">Plataforma</label>
+    <label class="fl">Plataformas <span style="color:var(--muted);font-weight:500">(elige todas las que quieras — se crea un post adaptado a cada una)</span></label>
     <div class="chips">
-      <label class="chip-opt"><input type="radio" name="plataforma" value="instagram" checked><span>📸 Instagram</span></label>
-      <label class="chip-opt"><input type="radio" name="plataforma" value="facebook"><span>👍 Facebook</span></label>
-      <label class="chip-opt"><input type="radio" name="plataforma" value="whatsapp"><span>💬 WhatsApp</span></label>
+      <label class="chip-opt"><input type="checkbox" name="plataformas[]" value="instagram" checked><span>📸 Instagram</span></label>
+      <label class="chip-opt"><input type="checkbox" name="plataformas[]" value="facebook" checked><span>👍 Facebook</span></label>
+      <label class="chip-opt"><input type="checkbox" name="plataformas[]" value="whatsapp" checked><span>💬 WhatsApp (Estado)</span></label>
     </div>
 
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px">

@@ -12,11 +12,13 @@ $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (i
 if (!$marca) { header('Location: /crecer/intake.php'); exit; }
 $marca_id = (int)$marca['id'];
 
-// Mes a mostrar (default: mes del calendario más reciente, o el actual)
-$calrec = $pdo->prepare("SELECT anio, mes FROM crecer_calendario WHERE marca_id=? ORDER BY anio DESC, mes DESC LIMIT 1");
-$calrec->execute([$marca_id]); $calrec = $calrec->fetch();
-$anio = (int)($_GET['anio'] ?? ($calrec['anio'] ?? date('Y')));
-$mes  = (int)($_GET['mes']  ?? ($calrec['mes']  ?? date('n')));
+// Mes a mostrar (default: mes del PRÓXIMO post programado; si no hay, el mes actual)
+$prox = $pdo->prepare("SELECT MIN(fecha_programada) FROM crecer_contenido WHERE marca_id=? AND fecha_programada IS NOT NULL AND fecha_programada >= CURDATE()");
+$prox->execute([$marca_id]); $prox = $prox->fetchColumn();
+$def_anio = $prox ? (int)date('Y', strtotime($prox)) : (int)date('Y');
+$def_mes  = $prox ? (int)date('n', strtotime($prox)) : (int)date('n');
+$anio = (int)($_GET['anio'] ?? $def_anio);
+$mes  = (int)($_GET['mes']  ?? $def_mes);
 if ($mes < 1) { $mes = 12; $anio--; } if ($mes > 12) { $mes = 1; $anio++; }
 
 // POST: mover / crear evento / borrar evento
