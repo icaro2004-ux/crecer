@@ -1,7 +1,24 @@
 # PLAN — Crecer (Build with Gemini XPRIZE)
 
 > Estado de avance y próximos pasos. Se actualiza al cerrar cada sesión.
-> Si se pierde el contexto de la conversación, EMPIEZA LEYENDO ESTO + CLAUDE.md.
+> Si se pierde el contexto de la conversación, EMPIEZA LEYENDO ESTO + CLAUDE.md + MAPA.md + ESTRUCTURA.md + FLUJO.md.
+
+## ⏸️ DÓNDE QUEDAMOS (cierre 2026-06-14) — leer primero
+
+**El producto YA funciona de punta a punta, multiusuario, con IA real (paid tier).**
+
+- **IA: PAID TIER ACTIVO** en la Gemini API (la key `AQ.Ab8…` ya factura; sin muro de cuota). Texto: gemini-2.5-flash. Imágenes: gemini-2.5-flash-image (Nano Banana, ~$0.039) y gemini-3-pro-image (Nano Banana Pro, ~$0.134, mejor texto).
+- **Auth** (registro/login/logout) sobre tabla `usuarios`. Login de prueba: **jmp.arch.eng@gmail.com / crecer1234** (usuario 7; dueño de Dulce Coquí #1, El Palo Dulce #3, Lambete la Arepa #4). Selector de negocio en el sidebar.
+- **Construido y probado real:** sitio público (hub, landing /crecer, directorio /buscar), intake, panel con shell (dashboard, Contenido/aprobar, Órdenes&Agenda + página pública /ordenar + QR + flywheel de reseñas), **Mi Marca** (estudio de logo: descripción editable + estilos + sliders + tipografía + galería de tiles, escoger 1, descargar en formatos, **límite 5 pruebas**), **Gráficas** (estudio: subir foto → arte coherente con el copy, controles texto sí/no, estilo, logo marca-agua/esquina/integrado, instrucciones libres; **preview de redes IG/FB**; **límite 5 imágenes/semana**), lightbox para agrandar.
+- Tablas nuevas hoy: `crecer_ordenes`, `crecer_logos`, `crecer_graficas` + columnas `crecer_marca.slug/logo_path/logo_final`. Migraciones en `/migrations`.
+
+**QUÉ SIGUE (mañana):**
+1. **Unir Contenido ↔ Gráficas**: que cada post del calendario muestre caption + su arte juntos y se genere el arte desde ahí.
+2. **Publicar real** a IG/FB = integración Meta (su propio montaje) — Fase 2.
+3. Pendientes del MVP: Stripe (cobro), agente WhatsApp/DMs, CRM, cuentas (Despegar), reseña real del cliente.
+4. Reclamar/usar los $300 del concurso (cupón por email) — hoy se paga pay-as-you-go (centavos).
+
+**Gotcha entorno:** tras reiniciar la PC, levantar MySQL y Apache de XAMPP a mano (ver memoria). App en `http://localhost/crecer/`.
 
 ## Dónde estamos (al 2026-06-13)
 
