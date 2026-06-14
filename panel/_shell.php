@@ -43,9 +43,26 @@ $nav = [
         </a>
       <?php endforeach; ?>
     </nav>
+    <?php
+      $mis_negocios = $pdo->prepare("SELECT id, nombre_negocio FROM crecer_marca WHERE usuario_id = ? ORDER BY id");
+      $mis_negocios->execute([(int)$marca['usuario_id']]);
+      $mis_negocios = $mis_negocios->fetchAll();
+    ?>
     <div class="who">
       <div class="av"><?= $h(mb_strtoupper(mb_substr($marca['nombre_negocio'],0,1))) ?></div>
-      <div><div class="nm"><?= $h($marca['nombre_negocio']) ?></div><div class="tag">🌿 Crecer · Intermedio</div></div>
+      <div style="flex:1;min-width:0">
+        <?php if (count($mis_negocios) > 1): ?>
+          <select onchange="location.href='?marca='+this.value"
+            style="font-family:inherit;font-weight:700;font-size:13.5px;color:var(--tinta);border:1px solid var(--line);border-radius:9px;padding:5px 7px;max-width:150px;background:#fff;cursor:pointer">
+            <?php foreach ($mis_negocios as $mn): ?>
+              <option value="<?= $mn['id'] ?>" <?= $mn['id']==$marca_id?'selected':'' ?>><?= $h($mn['nombre_negocio']) ?></option>
+            <?php endforeach; ?>
+          </select>
+          <div class="tag">🌿 Crecer · Intermedio · cambia negocio ↑</div>
+        <?php else: ?>
+          <div class="nm"><?= $h($marca['nombre_negocio']) ?></div><div class="tag">🌿 Crecer · Intermedio</div>
+        <?php endif; ?>
+      </div>
     </div>
     <a href="/crecer/logout.php" style="display:flex;align-items:center;gap:10px;padding:9px 12px;margin-top:6px;border-radius:12px;text-decoration:none;color:var(--muted);font-weight:600;font-size:13.5px"><span class="ic">🚪</span> Salir</a>
   </aside>
