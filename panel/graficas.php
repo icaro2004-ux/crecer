@@ -42,13 +42,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'estilo'    => $_POST['estilo'] ?? '',
             ]);
         } catch (Throwable $e) { $err = 'No se pudo crear el arte: ' . substr($e->getMessage(), 0, 120); }
+    } elseif ($accion === 'publicar') {
+        $gid = (int)($_POST['gid'] ?? 0);
+        $pdo->prepare("UPDATE crecer_graficas SET publicado=1 WHERE id=? AND marca_id=?")->execute([$gid, $marca_id]);
     }
     if (!$err) { header("Location: /crecer/panel/graficas.php?marca={$marca_id}&ok=1"); exit; }
 }
 
 $fotos = is_dir($dir_fotos) ? array_values(array_filter(scandir($dir_fotos), fn($x)=>$x[0]!=='.')) : [];
-$graficas = is_dir($dir_graf) ? array_reverse(array_values(array_filter(scandir($dir_graf), fn($x)=>$x[0]!=='.'))) : [];
+$posts_g = $pdo->prepare("SELECT * FROM crecer_graficas WHERE marca_id=? ORDER BY id DESC");
+$posts_g->execute([$marca_id]); $posts_g = $posts_g->fetchAll();
 $tiene_logo = !empty($marca['logo_path']);
+$handle = $marca['instagram'] ?: ('@' . preg_replace('/[^a-z0-9]/', '', mb_strtolower($marca['nombre_negocio'])));
+$avatar = $marca['logo_path'] ?: '/crecer/assets/brand/encuentralo-pin.svg';
 // posts del calendario (para atar el copy)
 $posts = $pdo->prepare("SELECT caption FROM crecer_contenido WHERE marca_id=? AND caption<>'' ORDER BY fecha_programada DESC LIMIT 12");
 $posts->execute([$marca_id]); $posts = $posts->fetchAll();
@@ -92,6 +98,32 @@ require __DIR__ . '/_shell.php';
   .gphoto img{width:100%;border-radius:12px;display:block}
   .gphoto a{display:block;text-align:center;margin-top:8px;font-weight:700;font-size:12.5px;color:var(--terracota);text-decoration:none}
   .empty{color:var(--muted);font-size:14px}
+  .prevbtn{width:100%;margin-top:8px;border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer;border-radius:99px;padding:8px}
+  .prevbtn:hover{border-color:var(--terracota);color:var(--terracota-700)}
+  .prev-ov{display:none;position:fixed;inset:0;background:rgba(20,12,8,.7);z-index:90;align-items:flex-start;justify-content:center;padding:28px 16px;overflow:auto}
+  .prev-ov.show{display:flex}
+  .prev-box{background:var(--crema);border-radius:var(--r-xl);padding:18px;max-width:420px;width:100%;position:relative}
+  .prev-x{position:absolute;top:12px;right:14px;border:0;background:none;font-size:20px;cursor:pointer;color:var(--muted)}
+  .prev-tabs{display:flex;gap:8px;justify-content:center;margin-bottom:14px}
+  .ptab{border:1.5px solid var(--line);background:#fff;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;border-radius:99px;padding:7px 14px}
+  .ptab.on{border-color:transparent;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta))}
+  .mock{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;max-width:360px;margin:0 auto;box-shadow:var(--shadow);color:#111}
+  .mock .av{width:34px;height:34px;border-radius:50%;object-fit:cover;background:#eee}
+  .mock .post-img{width:100%;display:block}
+  .ig-head{display:flex;align-items:center;gap:9px;padding:10px 12px;font-size:14px}
+  .ig-head .dots{margin-left:auto;color:#888}
+  .ig-acts{display:flex;gap:14px;padding:10px 12px 4px;font-size:20px}
+  .ig-acts .sp{flex:1}
+  .ig-likes{padding:0 12px;font-size:13px;font-weight:700}
+  .ig-cap{padding:4px 12px 14px;font-size:13.5px;line-height:1.4}
+  .fb-head{display:flex;align-items:center;gap:9px;padding:12px}
+  .fb-meta{font-size:12px;color:#888}
+  .fb-text{padding:0 12px 10px;font-size:14px;line-height:1.4;white-space:pre-wrap}
+  .fb-bar{display:flex;justify-content:space-around;padding:10px;border-top:1px solid #eee;font-size:13px;color:#555}
+  .prev-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:16px}
+  .pa{border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;border-radius:99px;padding:9px 14px;text-decoration:none}
+  .pa.pub{background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;border-color:transparent}
+  .prev-note{font-size:11.5px;color:var(--muted);text-align:center;margin-top:12px}
 </style>
 
 <h1 class="page-h">Estudio de arte 🖼️</h1>
@@ -159,18 +191,83 @@ require __DIR__ . '/_shell.php';
 <!-- 3. RESULTADOS -->
 <div class="sec" style="max-width:none">
   <h2>3. Tus posts listos</h2>
-  <?php if (!$graficas): ?>
-    <p class="empty">Aquí aparecerán los posts que cree la IA. Toca uno para verlo grande.</p>
+  <?php if (!$posts_g): ?>
+    <p class="empty">Aquí aparecerán los posts que cree la IA. Toca "Vista previa" para verlo como saldría en redes.</p>
   <?php else: ?>
     <div class="grid">
-      <?php foreach ($graficas as $gn): ?>
+      <?php foreach ($posts_g as $g): ?>
         <div class="gphoto">
-          <img class="zoomable" src="<?= $h($url_graf.'/'.$gn) ?>" alt="post">
-          <a href="<?= $h($url_graf.'/'.$gn) ?>" download>⬇ Descargar</a>
+          <img class="zoomable" src="<?= $h($g['archivo']) ?>" alt="post">
+          <?php if ($g['publicado']): ?><div style="text-align:center;margin-top:6px"><span style="font-size:11px;font-weight:800;color:var(--okk-ink);background:var(--okk-bg);padding:3px 9px;border-radius:99px">✓ PUBLICADO</span></div><?php endif; ?>
+          <button class="prevbtn" type="button"
+            onclick="openPrev(<?= (int)$g['id'] ?>, '<?= $h($g['archivo']) ?>', this.dataset.copy)"
+            data-copy="<?= $h($g['copy_text'] ?? '') ?>">👁 Vista previa</button>
         </div>
       <?php endforeach; ?>
     </div>
   <?php endif; ?>
 </div>
+
+<!-- MODAL PREVIEW REDES -->
+<div class="prev-ov" id="prevov">
+  <div class="prev-box">
+    <button class="prev-x" onclick="document.getElementById('prevov').classList.remove('show')">✕</button>
+    <div class="prev-tabs">
+      <button class="ptab on" data-net="ig" onclick="setNet('ig')">📸 Instagram</button>
+      <button class="ptab" data-net="fb" onclick="setNet('fb')">👍 Facebook</button>
+    </div>
+
+    <!-- Instagram -->
+    <div class="mock ig" id="m-ig">
+      <div class="ig-head"><img class="av" src="<?= $h($avatar) ?>"><b><?= $h($handle) ?></b><span class="dots">•••</span></div>
+      <img class="post-img" id="ig-img" src="">
+      <div class="ig-acts"><span>♡</span><span>💬</span><span>➤</span><span class="sp"></span><span>🔖</span></div>
+      <div class="ig-likes">A 47 personas les gusta esto</div>
+      <div class="ig-cap"><b><?= $h($handle) ?></b> <span id="ig-cap"></span></div>
+    </div>
+
+    <!-- Facebook -->
+    <div class="mock fb" id="m-fb" style="display:none">
+      <div class="fb-head"><img class="av" src="<?= $h($avatar) ?>"><div><b><?= $h($marca['nombre_negocio']) ?></b><div class="fb-meta">Justo ahora · 🌐</div></div></div>
+      <div class="fb-text" id="fb-cap"></div>
+      <img class="post-img" id="fb-img" src="">
+      <div class="fb-bar"><span>👍 Me gusta</span><span>💬 Comentar</span><span>➤ Compartir</span></div>
+    </div>
+
+    <div class="prev-actions">
+      <button type="button" class="pa" onclick="copiarCopy()">📋 Copiar copy</button>
+      <a class="pa" id="pa-dl" href="" download>⬇ Descargar imagen</a>
+      <form method="post" style="display:inline" id="pubform"><input type="hidden" name="accion" value="publicar"><input type="hidden" name="gid" id="pub-gid"><button class="pa pub" type="submit">🚀 Publicar</button></form>
+    </div>
+    <div class="prev-note">Por ahora "Publicar" lo marca como publicado y te da el copy + la imagen para subirla. La publicación automática a IG/FB (conexión con Meta) viene pronto.</div>
+  </div>
+</div>
+<textarea id="copybuffer" style="position:absolute;left:-9999px"></textarea>
+
+<script>
+  function openPrev(gid, img, copy){
+    document.getElementById('ig-img').src = img;
+    document.getElementById('fb-img').src = img;
+    document.getElementById('ig-cap').textContent = copy || '';
+    document.getElementById('fb-cap').textContent = copy || '';
+    document.getElementById('pa-dl').href = img;
+    document.getElementById('pub-gid').value = gid;
+    document.getElementById('copybuffer').value = copy || '';
+    setNet('ig');
+    document.getElementById('prevov').classList.add('show');
+  }
+  function setNet(n){
+    document.getElementById('m-ig').style.display = n==='ig' ? '' : 'none';
+    document.getElementById('m-fb').style.display = n==='fb' ? '' : 'none';
+    document.querySelectorAll('.ptab').forEach(function(t){ t.classList.toggle('on', t.dataset.net===n); });
+  }
+  function copiarCopy(){
+    var t = document.getElementById('copybuffer');
+    if (navigator.clipboard) navigator.clipboard.writeText(t.value);
+    else { t.select(); document.execCommand('copy'); }
+    event.target.textContent = '✓ Copiado';
+  }
+  document.getElementById('prevov').addEventListener('click', function(e){ if(e.target===this) this.classList.remove('show'); });
+</script>
 
 <?php require __DIR__ . '/_shell_foot.php'; ?>

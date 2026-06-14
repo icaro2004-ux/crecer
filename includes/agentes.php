@@ -159,11 +159,14 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
     // Con texto -> modelo Pro (texto perfecto). Sin texto -> estándar (más barato).
     $modelo = $con_texto ? 'gemini-3-pro-image' : 'gemini-2.5-flash-image';
     $fname = "marca_{$marca_id}/graficas/post_" . uniqid() . ".png";
-    return ia_imagen($pdo, 'creador', 'Crear arte de post', $prompt, $fname, [
+    $r = ia_imagen($pdo, 'creador', 'Crear arte de post', $prompt, $fname, [
         'marca_id' => $marca_id,
         'modelo'   => $modelo,
         'imagenes' => $imagenes,
     ]);
+    $pdo->prepare("INSERT INTO crecer_graficas (marca_id, archivo, copy_text) VALUES (?,?,?)")
+        ->execute([$marca_id, $r['archivo'], $copy]);
+    return $r;
 }
 
 /** Lee una marca como array asociativo (productos decodificado). */
