@@ -161,6 +161,8 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
         $prompt .= "- SIN texto sobre la imagen: solo la foto/arte limpio y bonito.\n";
     }
     if ($estilo !== '') $prompt .= "- Estilo: {$estilo}.\n";
+    $instr = trim($opts['instrucciones'] ?? '');
+    if ($instr !== '') $prompt .= "- LO QUE PIDE EL DUEÑO (prioriza esto): {$instr}\n";
     $prompt .= "- Calidad de agencia top, colores cálidos boricuas, premium, listo para publicar.";
 
     // Con texto -> modelo Pro (texto perfecto). Sin texto -> estándar (más barato).

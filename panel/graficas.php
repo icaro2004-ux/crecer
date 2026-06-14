@@ -17,6 +17,14 @@ $dir_graf  = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/graficas";
 $url_fotos = rtrim(UPLOADS_URL, '/') . "/marca_{$marca_id}/fotos";
 $url_graf  = rtrim(UPLOADS_URL, '/') . "/marca_{$marca_id}/graficas";
 
+// Límite: 5 imágenes por semana (ventana de 7 días). Se recargan a los 7 días.
+$LIMITE_SEM = 5;
+$wk = $pdo->prepare("SELECT COUNT(*) c, MIN(created_at) oldest FROM crecer_graficas WHERE marca_id=? AND created_at >= (NOW() - INTERVAL 7 DAY)");
+$wk->execute([$marca_id]); $w = $wk->fetch();
+$usados_sem = (int)$w['c'];
+$restantes_sem = max(0, $LIMITE_SEM - $usados_sem);
+$reset_fecha = $w['oldest'] ? date('d/m', strtotime($w['oldest'] . ' +7 days')) : null;
+
 $err = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accion = $_POST['accion'] ?? '';
@@ -31,18 +39,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             else { @mkdir($dir_fotos, 0775, true); move_uploaded_file($f['tmp_name'], $dir_fotos.'/foto_'.uniqid().'.'.$ext); }
         }
     } elseif ($accion === 'arte') {
+        if ($restantes_sem <= 0) {
+            $err = "Usaste tus {$LIMITE_SEM} imágenes de la semana. Se recargan el {$reset_fecha}.";
+        } else {
         $nombre = basename($_POST['foto'] ?? '');
         $src = ($nombre && strpos($nombre,'..')===false && is_file($dir_fotos.'/'.$nombre)) ? $dir_fotos.'/'.$nombre : null;
         @set_time_limit(0);
         try {
             generar_grafica($pdo, $marca_id, $src, [
-                'copy'        => trim($_POST['copy'] ?? ''),
-                'con_texto'   => ($_POST['con_texto'] ?? '') === '1',
-                'con_logo'    => !empty($_POST['con_logo']),
-                'logo_estilo' => $_POST['logo_estilo'] ?? 'esquina',
-                'estilo'      => $_POST['estilo'] ?? '',
+                'copy'         => trim($_POST['copy'] ?? ''),
+                'con_texto'    => ($_POST['con_texto'] ?? '') === '1',
+                'con_logo'     => !empty($_POST['con_logo']),
+                'logo_estilo'  => $_POST['logo_estilo'] ?? 'esquina',
+                'estilo'       => $_POST['estilo'] ?? '',
+                'instrucciones'=> trim($_POST['instrucciones'] ?? ''),
             ]);
         } catch (Throwable $e) { $err = 'No se pudo crear el arte: ' . substr($e->getMessage(), 0, 120); }
+        }
     } elseif ($accion === 'publicar') {
         $gid = (int)($_POST['gid'] ?? 0);
         $pdo->prepare("UPDATE crecer_graficas SET publicado=1 WHERE id=? AND marca_id=?")->execute([$gid, $marca_id]);
@@ -179,6 +192,9 @@ require __DIR__ . '/_shell.php';
       <?php endforeach; ?>
     </div>
 
+    <label class="fl">Dile a la IA cómo editar la foto <span style="color:var(--muted);font-weight:500">(opcional)</span></label>
+    <textarea name="instrucciones" rows="2" placeholder="Ej. &quot;quítale el fondo y ponlo en una mesa de madera&quot;, &quot;añade confeti&quot;, &quot;que se vea de noche&quot;, &quot;estilo navideño&quot;…"></textarea>
+
     <label class="fl">Extras</label>
     <div class="row2">
       <label class="ck"><input type="checkbox" name="con_logo" value="1" id="cklogo" <?= $tiene_logo?'':'disabled' ?>> Incluir mi logo <?= $tiene_logo?'':'<span style="color:var(--muted);font-weight:500">(crea tu logo primero)</span>' ?></label>
@@ -194,8 +210,15 @@ require __DIR__ . '/_shell.php';
     </div>
     <?php endif; ?>
 
-    <button class="genbtn" type="submit">✨ Crear el arte</button>
-    <div class="costnote">Sin texto: imagen limpia (más barato). Con texto: usamos el modelo Pro para que las letras salgan perfectas.</div>
+    <?php if ($restantes_sem > 0): ?>
+      <button class="genbtn" type="submit">✨ Crear el arte</button>
+      <div class="costnote">Te quedan <b style="color:var(--terracota)"><?= $restantes_sem ?> de <?= $LIMITE_SEM ?></b> imágenes esta semana. Sin texto = más barato; con texto = modelo Pro (letras perfectas).</div>
+    <?php else: ?>
+      <div class="costnote" style="background:var(--amber-bg);color:var(--amber-ink);padding:12px;border-radius:12px;font-weight:600">
+        🗓️ Usaste tus <?= $LIMITE_SEM ?> imágenes de esta semana. Se recargan el <?= $h($reset_fecha) ?>.<br>
+        <span style="font-weight:500">Tip: con 5 imágenes/semana puedes programar tus posts. ¿Necesitas más? Sube de plan.</span>
+      </div>
+    <?php endif; ?>
   </form>
 </div>
 
