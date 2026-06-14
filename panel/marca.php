@@ -116,11 +116,15 @@ require __DIR__ . '/_shell.php';
           style="width:100%;font-family:inherit;font-size:14px;border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px;resize:vertical"></textarea>
         <button class="genbtn <?= $marca['logo_path']?'alt':'' ?>" type="submit"><?= $marca['logo_path'] ? '↻ Generar otra versión' : '✨ Generar mi logo con IA' ?></button>
       </form>
-      <div class="hint">Escríbele lo que quieras y la IA lo ajusta. Te quedan <b style="color:var(--terracota)"><?= $restantes ?> de <?= $LIMITE_LOGO ?></b> pruebas.</div>
+      <div class="hint">Escríbele lo que quieras y la IA lo ajusta. Te quedan <b style="color:var(--terracota)"><?= $restantes ?> de <?= $LIMITE_LOGO ?></b> pruebas <b>incluidas</b>.</div>
+      <div class="hint" style="margin-top:6px;font-size:11.5px">Después de las <?= $LIMITE_LOGO ?>: intentos adicionales tienen costo, o pide un <b>logo personalizado por un artista gráfico</b>.</div>
     <?php else: ?>
-      <div class="hint" style="background:var(--amber-bg);color:var(--amber-ink);border-radius:12px;padding:12px;font-weight:600">
-        Usaste tus <?= $LIMITE_LOGO ?> pruebas de logo 🎨<br>
-        ¿Necesitas más? <a href="/crecer/crecer.php" style="color:var(--terracota);font-weight:800">Sube de plan</a> o trae tu propia llave de IA.
+      <div class="hint" style="background:var(--amber-bg);color:var(--amber-ink);border-radius:12px;padding:14px;font-weight:600;text-align:left">
+        🎨 Usaste tus <?= $LIMITE_LOGO ?> pruebas incluidas. ¿Quieres más?
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+          <a href="/crecer/crecer.php" style="background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;font-weight:800;text-decoration:none;padding:10px;border-radius:99px;text-align:center;font-size:13px">💳 Comprar más intentos</a>
+          <a href="/crecer/crecer.php" style="border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-weight:700;text-decoration:none;padding:10px;border-radius:99px;text-align:center;font-size:13px">🎨 Logo personalizado por un artista</a>
+        </div>
       </div>
     <?php endif; ?>
   </div>
