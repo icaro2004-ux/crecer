@@ -292,6 +292,29 @@ SYS;
  *
  * @return array{caption:string, ia_log_id:int, costo:float}
  */
+/**
+ * APRENDIZAJE — cuando el dueño edita un caption, la IA extrae la lección de
+ * vocabulario/voz boricua y la añade al glosario del negocio (para no repetirla).
+ * No rompe la edición si la IA falla.
+ */
+function aprender_de_edicion(PDO $pdo, int $marca_id, string $original, string $editado): ?string {
+    if (trim($original) === trim($editado) || trim($editado) === '') return null;
+    $prompt = "El dueño de un negocio boricua editó el caption de un post. Compara el ORIGINAL con el EDITADO y extrae SOLO lecciones de VOCABULARIO o VOZ boricua para no repetir el error (ej: 'usa china, no naranja'; 'evita platicar, di hablar'). Máximo 2 viñetas muy cortas. Si el cambio NO es de vocabulario/voz (solo cambió datos o contenido), responde EXACTAMENTE: NINGUNA.\n\nORIGINAL:\n{$original}\n\nEDITADO:\n{$editado}";
+    try {
+        $r = ia_ejecutar($pdo, 'aprendiz', 'Aprender de edicion', $prompt, [
+            'marca_id' => $marca_id, 'thinking_budget' => 0, 'max_tokens' => 200, 'temperatura' => 0.3,
+            'mock_texto' => 'NINGUNA',
+        ]);
+        $leccion = trim($r['texto']);
+        if ($leccion === '' || stripos($leccion, 'NINGUNA') !== false) return null;
+        $g = $pdo->prepare("SELECT glosario FROM crecer_marca WHERE id=?"); $g->execute([$marca_id]);
+        $actual = (string)$g->fetchColumn();
+        $nuevo = trim($actual . "\n" . $leccion);
+        $pdo->prepare("UPDATE crecer_marca SET glosario=? WHERE id=?")->execute([$nuevo, $marca_id]);
+        return $leccion;
+    } catch (Throwable $e) { return null; }
+}
+
 function redactar_pieza(PDO $pdo, int $contenido_id, array $extra = []): array {
     $c = $pdo->prepare("SELECT * FROM crecer_contenido WHERE id = ?");
     $c->execute([$contenido_id]);
@@ -311,6 +334,9 @@ sociales de microempresas boricuas. Reglas:
 - Llamado a la acción por WhatsApp y 3-4 hashtags locales.
 - Máximo 60 palabras. Devuelve SOLO el caption, sin comillas ni explicación.
 SYS;
+    if (!empty($m['glosario'])) {
+        $sistema .= "\n\nVOCABULARIO DEL NEGOCIO (el dueño lo corrigió — RESPÉTALO SIEMPRE, no repitas los errores):\n" . $m['glosario'];
+    }
 
     $prompt = "Perfil del negocio:\n{$ctx}\n\n"
         . "Plataforma: {$pieza['plataforma']} | Tipo: {$pieza['tipo']}\n"

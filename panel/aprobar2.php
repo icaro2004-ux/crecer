@@ -5,6 +5,7 @@
 // ============================================================
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/auth.php';
+require __DIR__ . '/../includes/agentes.php';
 requiere_login();
 $usuario = usuario_actual($pdo);
 $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (int)$_GET['marca'] : null);
@@ -15,6 +16,29 @@ $marca_id = (int)$marca['id'];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id     = (int)($_POST['id'] ?? 0);
     $accion = $_POST['accion'] ?? '';
+
+    // ── Editar caption (+ el bot aprende) ──
+    if ($accion === 'editar') {
+        $nuevo_cap = trim($_POST['caption'] ?? '');
+        $o = $pdo->prepare("SELECT caption FROM crecer_contenido WHERE id=? AND marca_id=?");
+        $o->execute([$id, $marca_id]); $orig = (string)$o->fetchColumn();
+        $leccion = null;
+        if ($id && $nuevo_cap !== '') {
+            $pdo->prepare("UPDATE crecer_contenido SET caption=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$nuevo_cap, $id, $marca_id]);
+            $leccion = aprender_de_edicion($pdo, $marca_id, $orig, $nuevo_cap);
+        }
+        if (!empty($_POST['ajax'])) { header('Content-Type: application/json'); echo json_encode(['ok'=>true,'id'=>$id,'caption'=>$nuevo_cap,'leccion'=>$leccion], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE); exit; }
+        header('Location: ' . $_SERVER['REQUEST_URI']); exit;
+    }
+    // ── Regenerar caption con la IA ──
+    if ($accion === 'regenerar') {
+        @set_time_limit(0);
+        try { $r = redactar_pieza($pdo, $id); $cap = $r['caption']; }
+        catch (Throwable $e) { $cap = null; }
+        if (!empty($_POST['ajax'])) { header('Content-Type: application/json'); echo json_encode(['ok'=>(bool)$cap,'id'=>$id,'caption'=>$cap], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE); exit; }
+        header('Location: ' . $_SERVER['REQUEST_URI']); exit;
+    }
+
     $nuevo  = ['aprobar'=>'aprobado','rechazar'=>'rechazado','reabrir'=>'borrador'][$accion] ?? null;
     if ($id && $nuevo) {
         $pdo->prepare("UPDATE crecer_contenido SET estado=?, updated_at=NOW() WHERE id=? AND marca_id=?")
@@ -67,6 +91,7 @@ require __DIR__ . '/_shell.php';
 
 <h1 class="page-h">Tu contenido del mes</h1>
 <p class="page-sub">La IA lo preparó. Aprueba lo que te guste — tú tienes la última palabra. ✋</p>
+<p style="font-size:12.5px;color:var(--muted);margin-top:8px;max-width:600px"><b style="color:var(--amber-ink)">Pendiente</b> = esperando tu OK · <b style="color:var(--okk-ink)">Aprobado</b> = listo para publicar · <b style="color:var(--noo-ink)">Rechazado</b> = descartado. ✏️ Edita un post y la IA <b>aprende tu vocabulario</b> para los próximos.</p>
 
 <?php if ($total): ?>
   <div class="cprogress">
@@ -111,10 +136,20 @@ require __DIR__ . '/_shell.php';
       <?php if (!empty($p['grafica_path'])): ?>
         <img class="zoomable" src="<?= $h($p['grafica_path']) ?>" alt="arte" style="width:100%;display:block">
       <?php endif; ?>
-      <div class="caption"><?= $h($p['caption']) ?></div>
-      <div style="padding:0 17px 12px">
-        <a href="/crecer/panel/graficas.php?marca=<?= $marca_id ?>&post=<?= $p['id'] ?>" style="font-weight:700;font-size:13px;color:var(--terracota);text-decoration:none">🖼️ <?= !empty($p['grafica_path']) ? 'Cambiar arte' : 'Crear arte para este post' ?> →</a>
+      <div class="caption" id="cap-<?= $p['id'] ?>"><?= $h($p['caption']) ?></div>
+      <div class="toolrow" id="tools-<?= $p['id'] ?>" style="padding:0 17px 12px;display:flex;gap:16px;flex-wrap:wrap;font-size:13px">
+        <a href="#" class="editlink" data-id="<?= $p['id'] ?>" style="font-weight:700;color:var(--terracota);text-decoration:none">✏️ Editar</a>
+        <a href="/crecer/panel/graficas.php?marca=<?= $marca_id ?>&post=<?= $p['id'] ?>" style="font-weight:700;color:var(--terracota);text-decoration:none">🖼️ <?= !empty($p['grafica_path']) ? 'Cambiar arte' : 'Crear arte' ?></a>
+        <a href="#" class="regenlink" data-id="<?= $p['id'] ?>" style="font-weight:700;color:var(--muted);text-decoration:none">🔄 Regenerar</a>
       </div>
+      <form class="editform" data-id="<?= $p['id'] ?>" style="display:none;padding:0 17px 14px">
+        <textarea name="caption" style="width:100%;font-family:inherit;font-size:14px;color:var(--tinta);border:1.5px solid var(--line);border-radius:12px;padding:11px 13px;min-height:96px"><?= $h($p['caption']) ?></textarea>
+        <div style="font-size:11.5px;color:var(--muted);margin:6px 0">💡 Corrige el vocabulario y la IA aprende para los próximos posts.</div>
+        <div style="display:flex;gap:8px">
+          <button type="submit" style="border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:13px;color:#fff;background:var(--palma);padding:9px 18px;border-radius:99px">Guardar</button>
+          <button type="button" class="cancel" style="border:1.5px solid var(--line);cursor:pointer;font-family:inherit;font-weight:700;font-size:13px;background:#fff;color:var(--muted);padding:9px 16px;border-radius:99px">Cancelar</button>
+        </div>
+      </form>
       <div class="post-actions">
         <?php if ($p['estado']==='borrador'): ?>
           <form method="post"><input type="hidden" name="id" value="<?= $p['id'] ?>"><button class="btn btn-ok" name="accion" value="aprobar">✓ Aprobar</button></form>
@@ -164,6 +199,56 @@ require __DIR__ . '/_shell.php';
         if(bar) bar.style.width=d.pct+'%';
       })
       .catch(function(){ f.querySelectorAll('button').forEach(function(b){b.disabled=false;}); });
+  });
+
+  function toast(msg){
+    var t=document.createElement('div');
+    t.textContent=msg;
+    t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--tinta);color:#fff;padding:12px 20px;border-radius:99px;font-weight:700;font-size:14px;z-index:200;box-shadow:0 10px 30px rgba(0,0,0,.3);max-width:90vw;text-align:center';
+    document.body.appendChild(t);
+    setTimeout(function(){t.style.opacity='0';t.style.transition='opacity .4s';},2800);
+    setTimeout(function(){t.remove();},3300);
+  }
+  // Editar / regenerar / cancelar
+  if(feed) feed.addEventListener('click', function(e){
+    var el=e.target.closest('.editlink,.regenlink,.cancel'); if(!el) return; e.preventDefault();
+    var card=el.closest('.post');
+    if(el.classList.contains('editlink')){
+      card.querySelector('.editform').style.display='block';
+      card.querySelector('.caption').style.display='none';
+      card.querySelector('.toolrow').style.display='none';
+      card.querySelector('.editform textarea').focus();
+    } else if(el.classList.contains('cancel')){
+      card.querySelector('.editform').style.display='none';
+      card.querySelector('.caption').style.display='';
+      card.querySelector('.toolrow').style.display='flex';
+    } else if(el.classList.contains('regenlink')){
+      el.textContent='🔄 Regenerando…';
+      var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','regenerar'); fd.append('id',el.dataset.id);
+      fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+        el.textContent='🔄 Regenerar';
+        if(d.ok){ card.querySelector('.caption').textContent=d.caption; var ta=card.querySelector('.editform textarea'); if(ta)ta.value=d.caption; toast('✨ Caption regenerado'); }
+        else toast('No se pudo regenerar (¿límite de IA?)');
+      }).catch(function(){ el.textContent='🔄 Regenerar'; });
+    }
+  });
+  // Guardar edición (el bot aprende)
+  if(feed) feed.addEventListener('submit', function(e){
+    var f=e.target.closest('.editform'); if(!f) return; e.preventDefault();
+    var card=f.closest('.post');
+    var fd=new FormData(f); fd.append('ajax','1'); fd.append('accion','editar'); fd.append('id',f.dataset.id);
+    var b=f.querySelector('button[type=submit]'); b.disabled=true; b.textContent='Guardando…';
+    fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+      b.disabled=false; b.textContent='Guardar';
+      if(d.ok){
+        card.querySelector('.caption').textContent=d.caption;
+        f.style.display='none';
+        card.querySelector('.caption').style.display='';
+        card.querySelector('.toolrow').style.display='flex';
+        if(d.leccion) toast('🧠 La IA aprendió: '+d.leccion.replace(/\n/g,' · ').slice(0,90));
+        else toast('✓ Guardado');
+      }
+    }).catch(function(){ b.disabled=false; b.textContent='Guardar'; });
   });
 </script>
 
