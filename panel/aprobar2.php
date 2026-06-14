@@ -142,25 +142,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ->execute([$nuevo, $id, $marca_id]);
     }
     if (!empty($_POST['ajax'])) {
-        $cal = (int)$pdo->query("SELECT id FROM crecer_calendario WHERE marca_id={$marca_id} ORDER BY anio DESC, mes DESC LIMIT 1")->fetchColumn();
         $c = ['borrador'=>0,'aprobado'=>0,'rechazado'=>0,'publicado'=>0];
-        foreach ($pdo->query("SELECT estado, COUNT(*) n FROM crecer_contenido WHERE calendario_id={$cal} GROUP BY estado") as $r) $c[$r['estado']] = (int)$r['n'];
-        $tot = array_sum($c); $list = $c['aprobado'] + $c['publicado'];
+        foreach ($pdo->query("SELECT estado, COUNT(*) n FROM crecer_contenido WHERE marca_id={$marca_id} GROUP BY estado") as $r) $c[$r['estado']] = (int)$r['n'];
         header('Content-Type: application/json');
-        echo json_encode(['ok'=>true, 'id'=>$id, 'estado'=>$nuevo, 'listos'=>$list, 'total'=>$tot, 'pend'=>$c['borrador'], 'pct'=>$tot?round($list/$tot*100):0]);
+        echo json_encode(['ok'=>true, 'id'=>$id, 'estado'=>$nuevo, 'pend'=>$c['borrador'], 'aprob'=>$c['aprobado']+$c['publicado']]);
         exit;
     }
     header('Location: ' . $_SERVER['REQUEST_URI']); exit;
 }
 
-$piezas = $pdo->prepare(
-    "SELECT c.* FROM crecer_contenido c
-       JOIN crecer_calendario cal ON cal.id = c.calendario_id
-      WHERE c.marca_id = ?
-        AND cal.id = (SELECT id FROM crecer_calendario WHERE marca_id = ? ORDER BY anio DESC, mes DESC LIMIT 1)
-      ORDER BY c.fecha_programada");
-$piezas->execute([$marca_id, $marca_id]);
-$piezas = $piezas->fetchAll();
+// ── Sub-tab: pendientes (por aprobar) | aprobados (por mes) ──
+$tab = (($_GET['tab'] ?? '') === 'aprobados') ? 'aprobados' : 'pendientes';
+
+// Conteos globales para los tabs
+$cnt = ['borrador'=>0,'aprobado'=>0,'rechazado'=>0,'publicado'=>0];
+foreach ($pdo->query("SELECT estado, COUNT(*) n FROM crecer_contenido WHERE marca_id={$marca_id} GROUP BY estado") as $r) $cnt[$r['estado']] = (int)$r['n'];
+$n_pend  = $cnt['borrador'];
+$n_aprob = $cnt['aprobado'] + $cnt['publicado'];
+
+$meses_aprob = []; $mes_sel = '';
+if ($tab === 'aprobados') {
+    // Meses que tienen posts aprobados (para cargar uno a la vez)
+    $mq = $pdo->prepare("SELECT DATE_FORMAT(fecha_programada,'%Y-%m') ym, COUNT(*) n FROM crecer_contenido
+                          WHERE marca_id=? AND estado IN ('aprobado','publicado') AND fecha_programada IS NOT NULL
+                          GROUP BY ym ORDER BY ym DESC");
+    $mq->execute([$marca_id]); $meses_aprob = $mq->fetchAll();
+    $mes_sel = $_GET['mes'] ?? ($meses_aprob[0]['ym'] ?? date('Y-m'));
+    $pq = $pdo->prepare("SELECT * FROM crecer_contenido
+                          WHERE marca_id=? AND estado IN ('aprobado','publicado') AND DATE_FORMAT(fecha_programada,'%Y-%m')=?
+                          ORDER BY fecha_programada");
+    $pq->execute([$marca_id, $mes_sel]); $piezas = $pq->fetchAll();
+} else {
+    $pq = $pdo->prepare("SELECT * FROM crecer_contenido WHERE marca_id=? AND estado='borrador' ORDER BY fecha_programada");
+    $pq->execute([$marca_id]); $piezas = $pq->fetchAll();
+}
 
 // Recursos para el estudio de arte inline (fábrica de posts)
 $dir_fotos = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/fotos";
@@ -170,11 +185,9 @@ $tiene_logo = !empty($marca['logo_path']);
 $wk = $pdo->prepare("SELECT COUNT(*) FROM crecer_graficas WHERE marca_id=? AND created_at >= (NOW() - INTERVAL 7 DAY)");
 $wk->execute([$marca_id]); $restantes_sem = max(0, 5 - (int)$wk->fetchColumn());
 
-$cuenta = ['borrador'=>0,'aprobado'=>0,'rechazado'=>0,'publicado'=>0];
-foreach ($piezas as $p) { $cuenta[$p['estado']] = ($cuenta[$p['estado']] ?? 0) + 1; }
-$total  = count($piezas);
-$listos = $cuenta['aprobado'] + $cuenta['publicado'];
-$pct    = $total ? round($listos / $total * 100) : 0;
+$total = count($piezas);
+$meses_es = [1=>'Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+$nombre_mes = function($ym) use ($meses_es) { $p=explode('-',$ym); return ($meses_es[(int)($p[1]??1)] ?? '') . ' ' . ($p[0] ?? ''); };
 
 $plat = ['instagram'=>['Instagram',''], 'facebook'=>['Facebook','fb'], 'whatsapp'=>['WhatsApp','']];
 $pill = ['borrador'=>['Pendiente','wait'],'aprobado'=>['Aprobado','ok'],'rechazado'=>['Rechazado','no'],'publicado'=>['Publicado','pub']];
@@ -186,15 +199,17 @@ require __DIR__ . '/_shell.php';
 ?>
 <style>
   .feedwrap{max-width:600px}
-  .cprogress{max-width:600px;margin-top:16px}
-  .cprogress .row{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
-  .cprogress .count{font-family:var(--font-display);font-weight:700;font-size:15px}
-  .cprogress .count b{color:var(--terracota)}
-  .cprogress .pending{font-size:13px;color:var(--muted)}
   .feedwrap .post{margin-top:14px}
   .viewtoggle{display:flex;gap:6px;margin:6px 0 10px}
   .vt{font-weight:700;font-size:13.5px;text-decoration:none;color:var(--muted);padding:8px 16px;border-radius:99px;border:1.5px solid var(--line)}
   .vt.on{color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));border-color:transparent}
+  .subtabs{display:flex;gap:8px;max-width:600px;margin:14px 0 4px;border-bottom:1.5px solid var(--line);padding-bottom:0}
+  .st{display:flex;align-items:center;gap:7px;font-weight:800;font-size:14px;text-decoration:none;color:var(--muted);padding:10px 14px;border-bottom:3px solid transparent;margin-bottom:-1.5px}
+  .st.on{color:var(--terracota);border-bottom-color:var(--terracota)}
+  .st .b{font-size:11.5px;font-weight:800;background:var(--crema);color:var(--muted);border-radius:99px;padding:1px 9px;min-width:20px;text-align:center}
+  .st.on .b{background:var(--terracota);color:#fff}
+  .mesnav{max-width:600px;display:flex;align-items:center;gap:10px;margin:14px 0 4px}
+  .mesnav select{font-family:inherit;font-size:13.5px;font-weight:700;border:1.5px solid var(--line);border-radius:99px;padding:9px 14px;background:#fff}
   .okbar{max-width:600px;background:var(--okk-bg);color:var(--okk-ink);font-weight:700;font-size:14px;padding:11px 14px;border-radius:12px;margin-top:14px}
   .errbar{max-width:600px;background:var(--noo-bg);color:var(--noo-ink);font-weight:700;font-size:14px;padding:11px 14px;border-radius:12px;margin-top:14px}
   .factorybar{max-width:600px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0 4px}
@@ -240,20 +255,17 @@ require __DIR__ . '/_shell.php';
   <a class="vt" href="/crecer/panel/calendario.php?marca=<?= $marca_id ?>">📅 Calendario</a>
 </div>
 <p class="page-sub">La IA lo preparó. Aprueba lo que te guste — tú tienes la última palabra. ✋</p>
-<p style="font-size:12.5px;color:var(--muted);margin-top:8px;max-width:600px"><b style="color:var(--amber-ink)">Pendiente</b> = esperando tu OK · <b style="color:var(--okk-ink)">Aprobado</b> = listo para publicar · <b style="color:var(--noo-ink)">Rechazado</b> = descartado. ✏️ Edita un post y la IA <b>aprende tu vocabulario</b> para los próximos.</p>
+<p style="font-size:12.5px;color:var(--muted);margin-top:8px;max-width:600px"><b style="color:var(--amber-ink)">Pendiente</b> = esperando tu OK · <b style="color:var(--okk-ink)">Aprobado</b> = listo para publicar. ✏️ Edita un post y la IA <b>aprende tu vocabulario</b> para los próximos.</p>
 
 <?php if (!empty($_GET['generados'])): ?><div class="okbar">✨ La IA redactó <?= (int)$_GET['generados'] ?> post(s) — ya quedaron programados en tu calendario. <a href="/crecer/panel/calendario.php?marca=<?= $marca_id ?>" style="color:var(--okk-ink);font-weight:800;text-decoration:underline">Ver en el calendario →</a></div><?php endif; ?>
 <?php if (!empty($_GET['err'])): ?><div class="errbar">⚠️ No se pudo generar (<?= $h($_GET['err']) ?>). Intenta de nuevo en un minuto.</div><?php endif; ?>
 
-<?php if ($total): ?>
-  <div class="cprogress">
-    <div class="row">
-      <span class="count"><b><?= $listos ?></b> de <?= $total ?> listos para publicar</span>
-      <span class="pending"><?= $cuenta['borrador'] ?> por revisar</span>
-    </div>
-    <div class="track"><i style="width:<?= $pct ?>%"></i></div>
-  </div>
+<div class="subtabs">
+  <a class="st <?= $tab==='pendientes'?'on':'' ?>" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=pendientes">⏳ Por aprobar <span class="b" id="cnt-pend"><?= $n_pend ?></span></a>
+  <a class="st <?= $tab==='aprobados'?'on':'' ?>" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=aprobados">✅ Aprobados <span class="b" id="cnt-aprob"><?= $n_aprob ?></span></a>
+</div>
 
+<?php if ($tab === 'pendientes'): ?>
   <div class="factorybar">
     <button type="button" class="fbgen" onclick="abrirBrief()">✏️ Pedir un post a la IA</button>
     <form method="post" onsubmit="var b=this.querySelector('button');b.disabled=true;">
@@ -261,16 +273,24 @@ require __DIR__ . '/_shell.php';
       <button type="submit" class="fbnew">➕ Escribir uno yo (sin IA)</button>
     </form>
   </div>
+<?php elseif ($meses_aprob): ?>
+  <form method="get" class="mesnav">
+    <input type="hidden" name="marca" value="<?= $marca_id ?>">
+    <input type="hidden" name="tab" value="aprobados">
+    <label style="font-weight:700;font-size:13.5px;color:var(--muted)">📦 Archivo por mes:</label>
+    <select name="mes" onchange="this.form.submit()">
+      <?php foreach ($meses_aprob as $m): ?>
+        <option value="<?= $h($m['ym']) ?>" <?= $m['ym']===$mes_sel?'selected':'' ?>><?= $h($nombre_mes($m['ym'])) ?> (<?= (int)$m['n'] ?>)</option>
+      <?php endforeach; ?>
+    </select>
+  </form>
 <?php endif; ?>
 
 <div class="feedwrap">
-  <?php if (!$total): ?>
+  <?php if (!$total && $tab==='pendientes' && $n_aprob==0): ?>
     <div class="empty">
       <div class="big">🌱</div>
       <p style="margin-bottom:18px">Todavía no hay contenido para este negocio.</p>
-      <?php if (!empty($_GET['err'])): ?>
-        <p style="color:var(--noo-ink);font-size:13px;margin-bottom:14px">No se pudo generar ahora (<?= $h($_GET['err']) ?>). Intenta de nuevo en un minuto.</p>
-      <?php endif; ?>
       <form method="post" action="/crecer/panel/generar.php"
             onsubmit="var b=this.querySelector('button');b.textContent='✨ Creando tu mes…';b.disabled=true;">
         <input type="hidden" name="marca" value="<?= $marca_id ?>">
@@ -278,6 +298,10 @@ require __DIR__ . '/_shell.php';
       </form>
       <p style="color:var(--muted);font-size:12.5px;margin-top:12px">Tarda un minutito — la IA está creando tu contenido.</p>
     </div>
+  <?php elseif (!$total && $tab==='pendientes'): ?>
+    <div class="empty"><div class="big">🎉</div><p>¡Todo al día! No tienes posts pendientes por aprobar.<br><a href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=aprobados" style="color:var(--terracota);font-weight:800">Ver tus <?= $n_aprob ?> aprobados →</a></p></div>
+  <?php elseif (!$total): ?>
+    <div class="empty"><div class="big">📭</div><p>No hay posts aprobados<?= $meses_aprob ? ' en este mes' : ' todavía' ?>.</p></div>
   <?php endif; ?>
 
   <?php foreach ($piezas as $p):
@@ -287,7 +311,7 @@ require __DIR__ . '/_shell.php';
     $fecha = date('d/m', strtotime($p['fecha_programada'] ?: 'now'));
   ?>
     <?php $has_cap = trim($p['caption'])!==''; $has_art = !empty($p['grafica_path']); $is_ok = in_array($p['estado'],['aprobado','publicado'],true); ?>
-    <article class="post <?= $done?'done':'' ?>" data-id="<?= $p['id'] ?>" data-img="<?= $has_art?'1':'' ?>">
+    <article class="post" data-id="<?= $p['id'] ?>" data-img="<?= $has_art?'1':'' ?>">
       <div class="post-head">
         <span class="chip <?= $pl_cls ?>"><span class="ico"></span><?= $h($pl_label) ?></span>
         <span class="chip"><?= $h($p['tipo']) ?></span>
@@ -447,15 +471,20 @@ require __DIR__ . '/_shell.php';
       .then(function(r){return r.json();})
       .then(function(d){
         if(!d.ok) return;
+        var cp=document.getElementById('cnt-pend'), ca=document.getElementById('cnt-aprob');
+        if(cp) cp.textContent=d.pend; if(ca) ca.textContent=d.aprob;
+        var TAB='<?= $tab ?>';
+        var enTab = (TAB==='pendientes' && d.estado==='borrador') || (TAB==='aprobados' && (d.estado==='aprobado'||d.estado==='publicado'));
+        if(!enTab){
+          card.style.transition='opacity .3s, transform .3s'; card.style.opacity='0'; card.style.transform='translateX(24px)';
+          setTimeout(function(){ card.remove(); if(!document.querySelector('.feedwrap .post')) location.reload(); }, 320);
+          return;
+        }
         var pill = card.querySelector('.pill');
         if(pill){ pill.textContent = PILL[d.estado][0]; pill.className = 'pill '+PILL[d.estado][1]; }
         card.classList.toggle('done', d.estado !== 'borrador');
         card.querySelector('.post-actions').innerHTML = actionsHTML(d.id, d.estado);
         setChk(card,'ok', d.estado==='aprobado' || d.estado==='publicado');
-        var cnt=document.querySelector('.cprogress .count'), pen=document.querySelector('.cprogress .pending'), bar=document.querySelector('.track > i');
-        if(cnt) cnt.innerHTML='<b>'+d.listos+'</b> de '+d.total+' listos para publicar';
-        if(pen) pen.textContent=d.pend+' por revisar';
-        if(bar) bar.style.width=d.pct+'%';
       })
       .catch(function(){ card.querySelectorAll('.post-actions button').forEach(function(b){b.disabled=false;}); });
   }
