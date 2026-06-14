@@ -20,6 +20,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->prepare("UPDATE crecer_contenido SET estado=?, updated_at=NOW() WHERE id=? AND marca_id=?")
             ->execute([$nuevo, $id, $marca_id]);
     }
+    if (!empty($_POST['ajax'])) {
+        $cal = (int)$pdo->query("SELECT id FROM crecer_calendario WHERE marca_id={$marca_id} ORDER BY anio DESC, mes DESC LIMIT 1")->fetchColumn();
+        $c = ['borrador'=>0,'aprobado'=>0,'rechazado'=>0,'publicado'=>0];
+        foreach ($pdo->query("SELECT estado, COUNT(*) n FROM crecer_contenido WHERE calendario_id={$cal} GROUP BY estado") as $r) $c[$r['estado']] = (int)$r['n'];
+        $tot = array_sum($c); $list = $c['aprobado'] + $c['publicado'];
+        header('Content-Type: application/json');
+        echo json_encode(['ok'=>true, 'id'=>$id, 'estado'=>$nuevo, 'listos'=>$list, 'total'=>$tot, 'pend'=>$c['borrador'], 'pct'=>$tot?round($list/$tot*100):0]);
+        exit;
+    }
     header('Location: ' . $_SERVER['REQUEST_URI']); exit;
 }
 
@@ -117,5 +126,42 @@ require __DIR__ . '/_shell.php';
     </article>
   <?php endforeach; ?>
 </div>
+
+<script>
+  var PILL = {borrador:['Pendiente','wait'], aprobado:['Aprobado','ok'], rechazado:['Rechazado','no'], publicado:['Publicado','pub']};
+  function actionsHTML(id, estado){
+    if (estado === 'borrador')
+      return '<form><input type="hidden" name="id" value="'+id+'"><button class="btn btn-ok" name="accion" value="aprobar">✓ Aprobar</button></form>'
+           + '<form><input type="hidden" name="id" value="'+id+'"><button class="btn btn-no" name="accion" value="rechazar">Rechazar</button></form>';
+    return '<form><input type="hidden" name="id" value="'+id+'"><button class="btn btn-ghost" name="accion" value="reabrir">↺ Volver a revisar</button></form>';
+  }
+  var feed = document.querySelector('.feedwrap');
+  if (feed) feed.addEventListener('submit', function(e){
+    var f = e.target.closest('form');
+    if (!f || !f.closest('.post-actions')) return;
+    e.preventDefault();
+    var card = f.closest('.post');
+    var fd = new FormData(f); fd.append('ajax','1');
+    f.querySelectorAll('button').forEach(function(b){b.disabled=true;});
+    fetch(location.pathname + location.search, {method:'POST', body:fd})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        if(!d.ok) return;
+        // pill
+        var pill = card.querySelector('.pill');
+        if(pill){ pill.textContent = PILL[d.estado][0]; pill.className = 'pill '+PILL[d.estado][1]; }
+        // done state
+        card.classList.toggle('done', d.estado !== 'borrador');
+        // acciones
+        card.querySelector('.post-actions').innerHTML = actionsHTML(d.id, d.estado);
+        // progreso
+        var cnt=document.querySelector('.cprogress .count'), pen=document.querySelector('.cprogress .pending'), bar=document.querySelector('.track > i');
+        if(cnt) cnt.innerHTML='<b>'+d.listos+'</b> de '+d.total+' listos para publicar';
+        if(pen) pen.textContent=d.pend+' por revisar';
+        if(bar) bar.style.width=d.pct+'%';
+      })
+      .catch(function(){ f.querySelectorAll('button').forEach(function(b){b.disabled=false;}); });
+  });
+</script>
 
 <?php require __DIR__ . '/_shell_foot.php'; ?>
