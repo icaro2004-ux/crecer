@@ -174,7 +174,7 @@ require __DIR__ . '/_shell.php';
       $oculto = $final && !$es; // si ya finalizó, atenúa los no elegidos
     ?>
       <div class="tile <?= $es?'sel':'' ?> <?= $oculto?'locked':'' ?>">
-        <img src="<?= $h($l['archivo']) ?>" alt="logo">
+        <img class="zoomable" src="<?= $h($l['archivo']) ?>" alt="logo">
         <?php if ($es): ?>
           <div class="badge">✓ Tu logo</div>
         <?php elseif (!$final): ?>

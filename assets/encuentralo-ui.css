@@ -224,3 +224,10 @@ body{
   .grid.g2,.grid.g3{grid-template-columns:1fr}
   .backdrop.show{display:block}
 }
+
+/* ── Lightbox (agrandar imágenes al tocar) ── */
+img.zoomable{cursor:zoom-in}
+.lightbox-ov{display:none;position:fixed;inset:0;background:rgba(20,12,8,.82);z-index:100;
+  align-items:center;justify-content:center;padding:24px;cursor:zoom-out}
+.lightbox-ov.show{display:flex}
+.lightbox-ov img{max-width:92vw;max-height:90vh;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.45)}

@@ -109,10 +109,10 @@ require __DIR__ . '/_shell.php';
   </div>
 
   <div class="pcard feature">
-    <div class="ct">🎨 Próximo wow</div>
-    <div style="font-family:var(--font-display);font-weight:800;font-size:21px;margin:6px 0 4px;letter-spacing:-.02em">Gráficas con tus fotos</div>
-    <div class="soon">La IA va a convertir las fotos de tu negocio en posts profesionales. Sube tus fotos para activarlo.</div>
-    <a class="ctab" href="<?= $BASE ?>/marca.php?marca=<?= $marca_id ?>">🎨 Crear mi logo con IA →</a>
+    <div class="ct">🖼️ Gráficas con IA</div>
+    <div style="font-family:var(--font-display);font-weight:800;font-size:21px;margin:6px 0 4px;letter-spacing:-.02em">Convierte tus fotos en posts</div>
+    <div class="soon">Sube las fotos de tu negocio y la IA las vuelve posts profesionales, con tu producto real.</div>
+    <a class="ctab" href="<?= $BASE ?>/graficas.php?marca=<?= $marca_id ?>">🖼️ Crear gráficas con IA →</a>
   </div>
 </div>
 

@@ -110,6 +110,36 @@ function generar_logo(PDO $pdo, int $marca_id, array $opts = []): array {
     return $r;
 }
 
+/**
+ * AGENTE CREADOR (visual) — convierte la FOTO REAL del negocio en un post
+ * profesional para redes (mantiene el producto real; regla de IP).
+ */
+function generar_grafica(PDO $pdo, int $marca_id, string $foto_abs, array $opts = []): array {
+    $m = leer_marca($pdo, $marca_id);
+    if (!is_file($foto_abs)) throw new RuntimeException('Foto no encontrada.');
+    $b64  = base64_encode((string)file_get_contents($foto_abs));
+    $mime = function_exists('mime_content_type') ? (mime_content_type($foto_abs) ?: 'image/jpeg') : 'image/jpeg';
+    $texto  = trim($opts['texto'] ?? '');
+    $estilo = trim($opts['estilo'] ?? '');
+    $prompt =
+        "Convierte esta foto en un POST profesional para las redes sociales de "
+      . "\"{$m['nombre_negocio']}\" (negocio boricua).\n"
+      . "- MANTÉN el producto REAL de la foto como protagonista (no lo inventes ni lo cambies).\n"
+      . "- Mejora la composición: fondo atractivo, iluminación apetitosa, estilo de agencia.\n"
+      . "- Colores cálidos, vibrantes y boricuas. Formato cuadrado 1:1 para Instagram.\n"
+      . ($estilo ? "- Estilo: {$estilo}.\n" : '')
+      . ($texto ? "- Integra el texto \"{$texto}\" de forma bonita y perfectamente escrita.\n" : '')
+      . "- Que se vea premium, con onda, listo para publicar.";
+    $fname = "marca_{$marca_id}/graficas/post_" . uniqid() . ".png";
+    $r = ia_imagen($pdo, 'creador', 'Crear grafica de post', $prompt, $fname, [
+        'marca_id'      => $marca_id,
+        'modelo'        => 'gemini-2.5-flash-image',
+        'imagen_base64' => $b64,
+        'imagen_mime'   => $mime,
+    ]);
+    return $r;
+}
+
 /** Lee una marca como array asociativo (productos decodificado). */
 function leer_marca(PDO $pdo, int $marca_id): array {
     $m = $pdo->prepare("SELECT * FROM crecer_marca WHERE id = ?");
