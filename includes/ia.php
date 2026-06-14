@@ -330,8 +330,15 @@ function gemini_imagen(string $prompt, array $opts = []): array {
     $url = "https://generativelanguage.googleapis.com/v1beta/models/"
          . rawurlencode($modelo) . ":generateContent?key=" . rawurlencode(GEMINI_API_KEY);
     $parts = [['text' => $prompt]];
+    // Una imagen de entrada (compat) …
     if (!empty($opts['imagen_base64'])) {
         $parts[] = ['inlineData' => ['mimeType' => $opts['imagen_mime'] ?? 'image/jpeg', 'data' => $opts['imagen_base64']]];
+    }
+    // … o varias (ej. foto del producto + logo de la marca).
+    if (!empty($opts['imagenes']) && is_array($opts['imagenes'])) {
+        foreach ($opts['imagenes'] as $im) {
+            if (!empty($im['data'])) $parts[] = ['inlineData' => ['mimeType' => $im['mime'] ?? 'image/jpeg', 'data' => $im['data']]];
+        }
     }
     $payload = ['contents' => [['role'=>'user','parts'=>$parts]], 'generationConfig' => ['responseModalities' => ['IMAGE']]];
     $resp = ia_http_post_retry($url, ['Content-Type: application/json'], json_encode($payload, JSON_UNESCAPED_UNICODE), $opts['max_reintentos'] ?? 3);

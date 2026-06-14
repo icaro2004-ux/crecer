@@ -114,30 +114,56 @@ function generar_logo(PDO $pdo, int $marca_id, array $opts = []): array {
  * AGENTE CREADOR (visual) — convierte la FOTO REAL del negocio en un post
  * profesional para redes (mantiene el producto real; regla de IP).
  */
-function generar_grafica(PDO $pdo, int $marca_id, string $foto_abs, array $opts = []): array {
+function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts = []): array {
     $m = leer_marca($pdo, $marca_id);
-    if (!is_file($foto_abs)) throw new RuntimeException('Foto no encontrada.');
-    $b64  = base64_encode((string)file_get_contents($foto_abs));
-    $mime = function_exists('mime_content_type') ? (mime_content_type($foto_abs) ?: 'image/jpeg') : 'image/jpeg';
-    $texto  = trim($opts['texto'] ?? '');
-    $estilo = trim($opts['estilo'] ?? '');
-    $prompt =
-        "Convierte esta foto en un POST profesional para las redes sociales de "
-      . "\"{$m['nombre_negocio']}\" (negocio boricua).\n"
-      . "- MANTÉN el producto REAL de la foto como protagonista (no lo inventes ni lo cambies).\n"
-      . "- Mejora la composición: fondo atractivo, iluminación apetitosa, estilo de agencia.\n"
-      . "- Colores cálidos, vibrantes y boricuas. Formato cuadrado 1:1 para Instagram.\n"
-      . ($estilo ? "- Estilo: {$estilo}.\n" : '')
-      . ($texto ? "- Integra el texto \"{$texto}\" de forma bonita y perfectamente escrita.\n" : '')
-      . "- Que se vea premium, con onda, listo para publicar.";
+    $copy      = trim($opts['copy'] ?? '');         // el texto del post (coherencia)
+    $con_texto = !empty($opts['con_texto']);
+    $con_logo  = !empty($opts['con_logo']);
+    $estilo    = trim($opts['estilo'] ?? '');
+
+    // Imágenes de entrada: foto del producto (si hay) + logo (si se pide)
+    $imagenes = [];
+    if ($foto_abs && is_file($foto_abs)) {
+        $imagenes[] = ['data' => base64_encode((string)file_get_contents($foto_abs)),
+                       'mime' => (function_exists('mime_content_type') ? mime_content_type($foto_abs) : null) ?: 'image/jpeg'];
+    }
+    $logo_abs = null;
+    if ($con_logo && !empty($m['logo_path'])) {
+        $logo_abs = rtrim(UPLOADS_PATH, '/\\') . '/' . ltrim(str_replace(rtrim(UPLOADS_URL,'/'), '', $m['logo_path']), '/');
+        if (is_file($logo_abs)) {
+            $imagenes[] = ['data' => base64_encode((string)file_get_contents($logo_abs)), 'mime' => 'image/png'];
+        }
+    }
+
+    $tiene_foto = (bool)($foto_abs && is_file($foto_abs));
+    $prompt = "Crea el ARTE de un post de Instagram (cuadrado 1:1) para \"{$m['nombre_negocio']}\", negocio boricua.\n";
+    if ($tiene_foto) {
+        $prompt .= "- Usa la FOTO REAL del producto (primera imagen) como protagonista; NO la inventes ni la cambies, solo realza composición, luz y fondo.\n";
+    } else {
+        $prompt .= "- Genera una imagen apetitosa y realista acorde al negocio.\n";
+    }
+    if ($copy !== '') {
+        $prompt .= "- La imagen debe ser COHERENTE con este mensaje del post (mismo tema, ambiente y vibra): \"{$copy}\".\n";
+    }
+    if ($con_logo && $logo_abs) {
+        $prompt .= "- Integra el LOGO de la marca (última imagen) pequeño y elegante en una esquina.\n";
+    }
+    if ($con_texto) {
+        $prompt .= "- Añade un TEXTO corto y llamativo (un gancho sacado del mensaje), perfectamente escrito y bien diseñado sobre la imagen.\n";
+    } else {
+        $prompt .= "- SIN texto sobre la imagen: solo la foto/arte limpio y bonito.\n";
+    }
+    if ($estilo !== '') $prompt .= "- Estilo: {$estilo}.\n";
+    $prompt .= "- Calidad de agencia top, colores cálidos boricuas, premium, listo para publicar.";
+
+    // Con texto -> modelo Pro (texto perfecto). Sin texto -> estándar (más barato).
+    $modelo = $con_texto ? 'gemini-3-pro-image' : 'gemini-2.5-flash-image';
     $fname = "marca_{$marca_id}/graficas/post_" . uniqid() . ".png";
-    $r = ia_imagen($pdo, 'creador', 'Crear grafica de post', $prompt, $fname, [
-        'marca_id'      => $marca_id,
-        'modelo'        => 'gemini-2.5-flash-image',
-        'imagen_base64' => $b64,
-        'imagen_mime'   => $mime,
+    return ia_imagen($pdo, 'creador', 'Crear arte de post', $prompt, $fname, [
+        'marca_id' => $marca_id,
+        'modelo'   => $modelo,
+        'imagenes' => $imagenes,
     ]);
-    return $r;
 }
 
 /** Lee una marca como array asociativo (productos decodificado). */
