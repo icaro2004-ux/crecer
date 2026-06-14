@@ -99,7 +99,13 @@ require __DIR__ . '/_shell.php';
         <span class="pill <?= $pi_cls ?>"><?= $pi_label ?></span>
         <span class="date"><?= $fecha ?></span>
       </div>
+      <?php if (!empty($p['grafica_path'])): ?>
+        <img class="zoomable" src="<?= $h($p['grafica_path']) ?>" alt="arte" style="width:100%;display:block">
+      <?php endif; ?>
       <div class="caption"><?= $h($p['caption']) ?></div>
+      <div style="padding:0 17px 12px">
+        <a href="/crecer/panel/graficas.php?marca=<?= $marca_id ?>&post=<?= $p['id'] ?>" style="font-weight:700;font-size:13px;color:var(--terracota);text-decoration:none">🖼️ <?= !empty($p['grafica_path']) ? 'Cambiar arte' : 'Crear arte para este post' ?> →</a>
+      </div>
       <div class="post-actions">
         <?php if ($p['estado']==='borrador'): ?>
           <form method="post"><input type="hidden" name="id" value="<?= $p['id'] ?>"><button class="btn btn-ok" name="accion" value="aprobar">✓ Aprobar</button></form>

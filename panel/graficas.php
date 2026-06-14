@@ -17,6 +17,16 @@ $dir_graf  = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/graficas";
 $url_fotos = rtrim(UPLOADS_URL, '/') . "/marca_{$marca_id}/fotos";
 $url_graf  = rtrim(UPLOADS_URL, '/') . "/marca_{$marca_id}/graficas";
 
+// ¿Venimos a crear el arte de un post del calendario?
+$post_id = (int)($_GET['post'] ?? $_POST['post'] ?? 0);
+$post_caption = '';
+if ($post_id) {
+    $ps = $pdo->prepare("SELECT caption FROM crecer_contenido WHERE id=? AND marca_id=?");
+    $ps->execute([$post_id, $marca_id]);
+    $row = $ps->fetch();
+    if ($row) $post_caption = (string)$row['caption']; else $post_id = 0;
+}
+
 // Límite: 5 imágenes por semana (ventana de 7 días). Se recargan a los 7 días.
 $LIMITE_SEM = 5;
 $wk = $pdo->prepare("SELECT COUNT(*) c, MIN(created_at) oldest FROM crecer_graficas WHERE marca_id=? AND created_at >= (NOW() - INTERVAL 7 DAY)");
@@ -46,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $src = ($nombre && strpos($nombre,'..')===false && is_file($dir_fotos.'/'.$nombre)) ? $dir_fotos.'/'.$nombre : null;
         @set_time_limit(0);
         try {
-            generar_grafica($pdo, $marca_id, $src, [
+            $r = generar_grafica($pdo, $marca_id, $src, [
                 'copy'         => trim($_POST['copy'] ?? ''),
                 'con_texto'    => ($_POST['con_texto'] ?? '') === '1',
                 'con_logo'     => !empty($_POST['con_logo']),
@@ -54,6 +64,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'estilo'       => $_POST['estilo'] ?? '',
                 'instrucciones'=> trim($_POST['instrucciones'] ?? ''),
             ]);
+            // Si vino de un post del calendario, le pegamos el arte
+            if ($post_id) {
+                $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")
+                    ->execute([$r['archivo'], $post_id, $marca_id]);
+                header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}"); exit;
+            }
         } catch (Throwable $e) { $err = 'No se pudo crear el arte: ' . substr($e->getMessage(), 0, 120); }
         }
     } elseif ($accion === 'publicar') {
@@ -161,6 +177,10 @@ require __DIR__ . '/_shell.php';
   <h2>2. Crea el arte de tu post</h2>
   <form class="card2" method="post" onsubmit="var b=this.querySelector('.genbtn');b.textContent='✨ Creando… (~15s)';b.disabled=true;">
     <input type="hidden" name="accion" value="arte">
+    <input type="hidden" name="post" value="<?= $post_id ?>">
+    <?php if ($post_id): ?>
+      <div style="background:var(--okk-bg);color:var(--okk-ink);font-weight:700;font-size:13.5px;padding:11px 14px;border-radius:12px;margin-bottom:14px">🎯 Creando el arte para tu post — al terminar se adjunta solo. <a href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>" style="color:var(--okk-ink);font-weight:800">← volver al post</a></div>
+    <?php endif; ?>
 
     <label class="fl">Escoge la foto base</label>
     <div class="picker">
@@ -177,7 +197,7 @@ require __DIR__ . '/_shell.php';
         <?php foreach ($posts as $p): ?><option value="<?= $h($p['caption']) ?>"><?= $h(mb_substr($p['caption'],0,55)) ?>…</option><?php endforeach; ?>
       </select>
     <?php endif; ?>
-    <textarea id="copy" name="copy" rows="2" placeholder="Ej. ¡Mi gente! El bizcocho de guayaba fresquecito, ordena por WhatsApp 🇵🇷"></textarea>
+    <textarea id="copy" name="copy" rows="2" placeholder="Ej. ¡Mi gente! El bizcocho de guayaba fresquecito, ordena por WhatsApp 🇵🇷"><?= $h($post_caption) ?></textarea>
 
     <label class="fl">¿Texto sobre la imagen?</label>
     <div class="chips">
