@@ -69,11 +69,13 @@ require __DIR__ . '/_shell.php';
     var src = document.getElementById('logoimg').src;
     var img = new Image();
     img.onload = function(){
-      var s = size || img.naturalWidth || 1024;
-      var c = document.createElement('canvas'); c.width = s; c.height = s;
+      // Respetar la proporción real (no forzar cuadrado = no deformar)
+      var w = img.naturalWidth || 1024, h = img.naturalHeight || 1024;
+      if (size){ var sc = size / Math.max(w, h); w = Math.round(w * sc); h = Math.round(h * sc); }
+      var c = document.createElement('canvas'); c.width = w; c.height = h;
       var ctx = c.getContext('2d');
-      if (fmt === 'jpeg'){ ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,s,s); }
-      ctx.drawImage(img, 0, 0, s, s);
+      if (fmt === 'jpeg'){ ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,w,h); }
+      ctx.drawImage(img, 0, 0, w, h);
       var mime = fmt==='jpeg' ? 'image/jpeg' : (fmt==='webp' ? 'image/webp' : 'image/png');
       c.toBlob(function(b){
         var a = document.createElement('a');
@@ -98,7 +100,7 @@ require __DIR__ . '/_shell.php';
     <?php if ($marca['logo_path']): ?>
       <img id="logoimg" src="<?= $h($marca['logo_path']) ?>?v=<?= time() ?>" alt="Logo de <?= $h($marca['nombre_negocio']) ?>">
       <div class="dl">
-        <div class="dl-t">⬇ Descargar:</div>
+        <div class="dl-t">⬇ Descargar tu logo final (el que ves):</div>
         <button type="button" onclick="dlLogo('png')">PNG</button>
         <button type="button" onclick="dlLogo('jpeg')">JPG</button>
         <button type="button" onclick="dlLogo('webp')">WebP</button>
