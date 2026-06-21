@@ -175,7 +175,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 try { redactar_sugerido($pdo, $nid, $tema, $borrador); }
                 catch (Throwable $e) { /* queda el borrador con la idea para editar */ }
             }
-            header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&generados=".count($plats)."#cap-{$first}"); exit;
+            header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&tab=pendientes&generados=".count($plats)."#cap-{$first}"); exit;
         }
         // ── Sin tema: la IA inventa N (planificador) ──
         $n = max(1, min(6, (int)($_POST['n'] ?? 3)));
@@ -189,7 +189,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (Throwable $e) {
             header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&err=".urlencode(substr($e->getMessage(),0,100))); exit;
         }
-        header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&generados={$n}"); exit;
+        header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&tab=pendientes&generados={$n}"); exit;
     }
     // ── Escribir un post yo mismo (borrador vacío para editar) ──
     if ($accion === 'nuevo_manual') {
@@ -221,14 +221,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Location: ' . $_SERVER['REQUEST_URI']); exit;
 }
 
-// ── Sub-tab: pendientes (por aprobar) | aprobados (por mes) ──
-$tab = (($_GET['tab'] ?? '') === 'aprobados') ? 'aprobados' : 'pendientes';
+// ── Vista: '' = portada (hub) · pendientes · aprobados (fábrica) ──
+$tab = $_GET['tab'] ?? '';
+if ($tab !== 'aprobados' && $tab !== '') $tab = 'pendientes';
+$es_hub = ($tab === '');
 
 // Conteos globales para los tabs
 $cnt = ['borrador'=>0,'aprobado'=>0,'rechazado'=>0,'publicado'=>0];
 foreach ($pdo->query("SELECT estado, COUNT(*) n FROM crecer_contenido WHERE marca_id={$marca_id} GROUP BY estado") as $r) $cnt[$r['estado']] = (int)$r['n'];
 $n_pend  = $cnt['borrador'];
 $n_aprob = $cnt['aprobado'] + $cnt['publicado'];
+
+// ── Datos de la PORTADA (hub) ──
+$publicados_mes = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$marca_id} AND estado='publicado' AND YEAR(COALESCE(publicado_at,updated_at))=YEAR(NOW()) AND MONTH(COALESCE(publicado_at,updated_at))=MONTH(NOW())")->fetchColumn();
+$feed_map = [
+  'planificador'=>['estratega','El Estratega','cuadró el plan'],
+  'creador'     =>['creativa','La Creativa','escribió contenido'],
+  'diseñador'   =>['disenador','El Diseñador','preparó un arte'],
+  'analitica'   =>['analista','El Analista','revisó tus números'],
+  'retencion'   =>['vendedor','El Vendedor','le escribió a un cliente'],
+  'intake'      =>['estratega','El Estratega','aprendió de tu negocio'],
+  'asistente'   =>['creativa','El Asistente','resolvió una duda'],
+  'aprendiz'    =>['creativa','La Creativa','aprendió tu vocabulario'],
+  'editor'      =>['creativa','La Creativa','pulió un texto'],
+];
+$tl = $pdo->prepare("SELECT agente, created_at FROM crecer_ia_log WHERE marca_id=? AND estado='ok' ORDER BY id DESC LIMIT 5");
+$tl->execute([$marca_id]); $timeline = $tl->fetchAll();
+$idq = $pdo->prepare("SELECT caption FROM crecer_contenido WHERE marca_id=? AND estado='borrador' ORDER BY id DESC LIMIT 4");
+$idq->execute([$marca_id]); $ideas = $idq->fetchAll();
 
 $meses_aprob = []; $mes_sel = '';
 if ($tab === 'aprobados') {
@@ -384,6 +404,162 @@ require __DIR__ . '/_shell.php';
   .prev-note{font-size:11.5px;color:var(--muted);text-align:center;margin-top:12px}
 </style>
 
+<?php if ($es_hub):
+  $CX = '/crecer/assets/crecer-contenido';
+  $url = fn($t) => "/crecer/panel/aprobar2.php?marca={$marca_id}".($t?"&tab={$t}":"");
+?>
+<style>
+  .cux{max-width:1080px}
+  .cux-hero{position:relative;display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:4px 0 0;padding:8px 0 0}
+  .cux-hero-copy{flex:1 1 320px;min-width:0;position:relative;z-index:3}
+  .cux-agent{text-transform:uppercase;color:var(--terracota);font-weight:900;font-size:15px;letter-spacing:.06em;margin-bottom:8px}
+  .cux-h1{font-family:var(--font-impact);text-transform:uppercase;font-size:clamp(38px,5.4vw,62px);line-height:.9;letter-spacing:.01em;margin:0;color:var(--tinta)}
+  .cux-h1 .g{background:linear-gradient(120deg,var(--coral),var(--magenta));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .cux-hb{display:block;width:min(380px,82%);margin:2px 0 0;filter:drop-shadow(0 8px 14px rgba(192,57,95,.18))}
+  .cux-hero-copy p{font-size:16px;line-height:1.5;color:var(--muted);max-width:44ch;margin-top:14px}
+  .cux-vis{flex:0 0 auto;position:relative;width:230px;align-self:flex-end}
+  .cux-vis .bbg{position:absolute;left:-26px;right:-26px;bottom:-10px;top:-26px;width:auto;height:auto;z-index:1;opacity:.5;object-fit:contain;pointer-events:none}
+  .cux-vis .crea{position:relative;z-index:2;width:100%;display:block;pointer-events:none;filter:drop-shadow(0 20px 26px rgba(40,20,20,.16))}
+  .cux-vis .crown{position:absolute;top:-8px;left:-8px;width:58px;z-index:3;opacity:.85;pointer-events:none}
+  .cux-need{flex:0 0 280px;position:relative;z-index:3;background:var(--card);border:1px solid var(--line);border-radius:24px;box-shadow:var(--shadow);padding:24px}
+  .cux-need h3{font-family:var(--font-impact);text-transform:uppercase;font-size:23px;margin:0 0 9px;color:var(--tinta);letter-spacing:.01em}
+  .cux-need p{font-size:14px;color:var(--muted);margin:0 0 18px}
+  .cux-need button{width:100%;border:0;border-radius:14px;background:linear-gradient(120deg,var(--coral),var(--magenta));color:#fff;font-weight:800;font-size:15px;padding:14px;cursor:pointer;font-family:inherit;box-shadow:0 12px 24px -10px rgba(192,57,95,.5)}
+
+  .cux-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:26px}
+  .cux-stat{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow-sm);padding:20px 22px;text-decoration:none;color:inherit;transition:transform .18s,box-shadow .18s}
+  .cux-stat:hover{transform:translateY(-4px);box-shadow:0 18px 36px -18px rgba(40,28,12,.3)}
+  .cux-si{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;font-size:22px;font-weight:900;margin-bottom:12px}
+  .cux-si.yel{background:#fff0bd;color:#c98a00}.cux-si.pnk{background:color-mix(in srgb,var(--terracota) 16%,#fff);color:var(--terracota)}.cux-si.cya{background:#d9fbfd;color:var(--teal)}
+  .cux-stat strong{font-family:var(--font-impact);font-size:44px;line-height:1;color:var(--tinta)}
+  .cux-stat h4{text-transform:uppercase;font-size:13px;letter-spacing:.03em;margin:6px 0 4px;color:var(--tinta)}
+  .cux-stat .sub{color:var(--muted);font-size:13px;margin:0 0 12px}
+  .cux-stat .lk{color:var(--terracota);font-weight:800;font-size:13.5px}
+  .cux-stat .lk.cya{color:var(--teal)}
+
+  .cux-quick{margin-top:24px;background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow-sm);padding:22px 24px}
+  .cux-quick h3{font-family:var(--font-impact);text-transform:uppercase;font-size:18px;letter-spacing:.02em;margin:0 0 16px;color:var(--tinta)}
+  .cux-qgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .cux-qgrid button{display:flex;align-items:center;gap:12px;text-align:left;border:1px solid var(--line);background:#fff;border-radius:14px;padding:14px 16px;font-family:inherit;font-weight:800;font-size:14px;color:var(--tinta);cursor:pointer;box-shadow:0 8px 22px -14px rgba(40,25,12,.35)}
+  .cux-qgrid button:hover{border-color:var(--terracota)}
+  .cux-qgrid .q{width:42px;height:42px;border-radius:50%;flex:none;display:grid;place-items:center;color:#fff}
+  .cux-qgrid .q svg{width:20px;height:20px}
+  .q.blue{background:#3478f6}.q.insta{background:linear-gradient(135deg,#7952ff,#c0395f,#ffc44d)}.q.pnk{background:var(--magenta)}.q.cya{background:var(--teal)}.q.yel{background:#ffc44d;color:#8a5d00}.q.tea{background:var(--palma)}
+
+  .cux-lower{margin-top:24px;display:grid;grid-template-columns:1.4fr 1.2fr .95fr;gap:18px}
+  .cux-card{background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow-sm);padding:22px 24px}
+  .cux-card h3{font-family:var(--font-impact);text-transform:uppercase;font-size:17px;letter-spacing:.02em;margin:0 0 16px;color:var(--tinta)}
+  .cux-soft{color:var(--muted);font-size:14px;line-height:1.5}
+  .cux-tl{position:relative}
+  .cux-it{display:flex;gap:12px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line)}
+  .cux-it:last-child{border-bottom:0}
+  .cux-it img{width:38px;height:38px;border-radius:50%;flex:none;background:var(--crema);border:2px solid #fff;box-shadow:0 6px 14px rgba(0,0,0,.07);padding:5px}
+  .cux-it p{margin:0;font-size:14px;color:#3d374b;line-height:1.4}
+  .cux-it small{display:block;color:var(--muted);margin-top:2px;font-size:11.5px}
+  .cux-more{display:inline-block;margin-top:14px;color:var(--terracota);font-weight:800;font-size:13.5px;text-decoration:none}
+  .cux-done{background:linear-gradient(135deg,var(--terracota),var(--magenta));color:#fff;position:relative;overflow:hidden}
+  .cux-done h2{font-family:var(--font-impact);text-transform:uppercase;font-size:30px;margin:0 0 12px;letter-spacing:.01em}
+  .cux-done p{font-size:15.5px;line-height:1.45;opacity:.95;margin:0;max-width:34ch}
+  .cux-badge{position:absolute;right:-10px;top:-6px;width:120px;opacity:.9;pointer-events:none}
+  .cux-done-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
+  .cux-done-actions a,.cux-done-actions button{border:0;cursor:pointer;font-family:inherit;background:#fff;color:var(--terracota);font-weight:800;font-size:13.5px;border-radius:12px;padding:11px 16px;text-decoration:none}
+  .cux-idea{background:#fff;border:1px solid var(--line);border-radius:14px;padding:13px 15px;margin-bottom:10px}
+  .cux-idea span{display:block;font-weight:700;color:var(--tinta);font-size:13.5px;line-height:1.35}
+  .cux-idea em{display:inline-block;margin-top:8px;font-style:normal;background:#fff0bd;color:#c18400;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:800}
+  .cux-ideas a{color:var(--terracota);font-weight:800;font-size:13.5px;text-decoration:none}
+  @media(max-width:1100px){.cux-lower{grid-template-columns:1fr}.cux-qgrid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:720px){.cux-stats{grid-template-columns:1fr}.cux-qgrid{grid-template-columns:1fr}.cux-vis{order:-1;width:200px;margin:0 auto}.cux-need{flex:1 1 100%}}
+</style>
+
+<div class="cux">
+  <section class="cux-hero">
+    <div class="cux-hero-copy">
+      <div class="cux-agent">La Creativa</div>
+      <h1 class="cux-h1">Tu contenido,<br><span class="g">en buenas manos</span></h1>
+      <img class="cux-hb" src="<?= $CX ?>/headline_brush.png" alt="">
+      <p>La Creativa está ideando, escribiendo y preparando contenido pa' hacer crecer tu negocio.</p>
+    </div>
+    <div class="cux-vis">
+      <img class="bbg" src="<?= $CX ?>/hero_pink_brush.png" alt="">
+      <img class="crown" src="<?= $CX ?>/tiny_crown.png" alt="">
+      <img class="crea" src="<?= $CX ?>/creativa_character.png" alt="La Creativa">
+    </div>
+    <div class="cux-need">
+      <h3>¿Qué necesitas hoy?</h3>
+      <p>Pídele a La Creativa lo que tu negocio necesita.</p>
+      <button type="button" onclick="abrirBrief()">＋ Pedir contenido</button>
+    </div>
+  </section>
+
+  <section class="cux-stats">
+    <a class="cux-stat" href="<?= $url('pendientes') ?>"><div class="cux-si yel"><?= ico('clock') ?></div><strong><?= $n_pend ?></strong><h4>Esperando tu OK</h4><p class="sub">Pendientes de aprobar</p><span class="lk">Ver por aprobar →</span></a>
+    <a class="cux-stat" href="<?= $url('aprobados') ?>"><div class="cux-si pnk"><?= ico('check-circle') ?></div><strong><?= (int)$cnt['aprobado'] ?></strong><h4>Listos para publicar</h4><p class="sub">Aprobados</p><span class="lk">Ver aprobados →</span></a>
+    <a class="cux-stat" href="/crecer/panel/analitica.php?marca=<?= $marca_id ?>"><div class="cux-si cya"><?= ico('chart') ?></div><strong><?= $publicados_mes ?></strong><h4>Publicados</h4><p class="sub">Este mes</p><span class="lk cya">Ver analítica →</span></a>
+  </section>
+
+  <section class="cux-quick">
+    <h3>¿Qué quieres que haga La Creativa hoy?</h3>
+    <div class="cux-qgrid">
+      <button type="button" onclick="abrirBriefPreset('facebook')"><span class="q blue"><?= ico('facebook') ?></span>Post de Facebook</button>
+      <button type="button" onclick="abrirBriefPreset('instagram')"><span class="q insta"><?= ico('instagram') ?></span>Historia de Instagram</button>
+      <button type="button" onclick="abrirBriefPreset('promo')"><span class="q pnk"><?= ico('gift') ?></span>Promoción u oferta</button>
+      <button type="button" onclick="abrirBriefPreset('anuncio')"><span class="q cya"><?= ico('bolt') ?></span>Anuncio pagado</button>
+      <button type="button" onclick="abrirBriefPreset('idea')"><span class="q yel"><?= ico('lightbulb') ?></span>Idea para mi negocio</button>
+      <button type="button" onclick="abrirBriefPreset('otro')"><span class="q tea"><?= ico('sparkles') ?></span>Otro contenido</button>
+    </div>
+  </section>
+
+  <section class="cux-lower">
+    <article class="cux-card">
+      <h3>Actividad reciente del corillo</h3>
+      <?php if (!$timeline): ?>
+        <p class="cux-soft">Todavía no hay actividad. Pídele algo a La Creativa y aquí verás lo que hace el corillo. 👇</p>
+      <?php else: ?>
+        <div class="cux-tl">
+          <?php foreach ($timeline as $tlx): [$tic,$tnm,$tmsg] = $feed_map[$tlx['agente']] ?? ['bolt','El Corillo','metió mano']; ?>
+            <div class="cux-it"><img src="/crecer/assets/icons/<?= $h($tic) ?>.svg" alt=""><p><strong><?= $h($tnm) ?></strong> <?= $h($tmsg) ?><small><?= date('g:i A', strtotime($tlx['created_at'])) ?></small></p></div>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+      <a class="cux-more" href="/crecer/panel/evidencia.php?marca=<?= $marca_id ?>">Ver toda la actividad →</a>
+    </article>
+
+    <article class="cux-card cux-done">
+      <img class="cux-badge" src="<?= $CX ?>/todo_al_dia_badge.png" alt="">
+      <?php if ($n_pend == 0): ?>
+        <h2>¡Todo al día! 🔥</h2>
+        <p>No tienes nada pendiente de aprobar. La Creativa y el corillo están trabajando en lo próximo.</p>
+        <div class="cux-done-actions"><a href="<?= $url('aprobados') ?>">↗ Ver aprobados</a><button type="button" onclick="abrirBrief()">＋ Pedir más</button></div>
+      <?php else: ?>
+        <h2><?= $n_pend ?> esperan tu OK</h2>
+        <p>La Creativa te dejó contenido listo. Apruébalo cuando quieras desde el celular.</p>
+        <div class="cux-done-actions"><a href="<?= $url('pendientes') ?>">Revisar y aprobar →</a></div>
+      <?php endif; ?>
+    </article>
+
+    <article class="cux-card cux-ideas">
+      <h3>Ideas en proceso</h3>
+      <?php if (!$ideas): ?>
+        <p class="cux-soft">Aún no hay ideas en borrador. Pídele a La Creativa y empiezan a aparecer.</p>
+      <?php else: foreach ($ideas as $idx): $txt = trim((string)$idx['caption']); ?>
+        <div class="cux-idea"><span><?= $h($txt !== '' ? mb_strimwidth($txt,0,54,'…') : 'Borrador sin título') ?></span><em>Borrador</em></div>
+      <?php endforeach; endif; ?>
+      <a href="<?= $url('pendientes') ?>">Ver todas →</a>
+    </article>
+  </section>
+</div>
+
+<script>
+  function abrirBriefPreset(tipo){
+    var f=document.getElementById('briefform'); if(!f){ if(window.abrirBrief)abrirBrief(); return; }
+    var chks=f.querySelectorAll('input[name="plataformas[]"]'), tema=f.querySelector('textarea[name="tema"]');
+    if(tipo==='facebook'||tipo==='instagram'){ chks.forEach(function(c){c.checked=(c.value===tipo);}); }
+    else { chks.forEach(function(c){c.checked=true;}); }
+    if(tema){ var t={promo:'Una promoción u oferta especial',anuncio:'Un anuncio para atraer clientes nuevos'}[tipo]; tema.value=t||''; }
+    abrirBrief();
+  }
+</script>
+<?php else: ?>
 <div class="cfhead">
   <div class="cf-orb"><img src="/crecer/assets/icons/creativa.svg" alt="La Creativa"></div>
   <div class="cf-body">
@@ -505,6 +681,7 @@ require __DIR__ . '/_shell.php';
     </article>
   <?php endforeach; ?>
 </div>
+<?php endif; /* fin vistas: hub | fábrica */ ?>
 
 <!-- MODAL: PEDIR UN POST A LA IA (brief del dueño) -->
 <div class="art-ov" id="briefov">

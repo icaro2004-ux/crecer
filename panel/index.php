@@ -40,6 +40,22 @@ $cnt_citas = (int)$pdo->query("SELECT COUNT(*) FROM crecer_ordenes WHERE marca_i
 $cnt_oport = $aprob;
 $tiene_logo = (int)$pdo->query("SELECT COUNT(*) FROM crecer_logos WHERE marca_id={$marca_id}")->fetchColumn() > 0;
 
+// Activity feed — actividad REAL reciente del corillo (de crecer_ia_log)
+$feed_map = [
+  'planificador'=>['estratega','El Estratega','cuadró el plan del mes'],
+  'creador'     =>['creativa','La Creativa','escribió contenido nuevo'],
+  'diseñador'   =>['disenador','El Diseñador','preparó un arte'],
+  'analitica'   =>['analista','El Analista','revisó tus números'],
+  'retencion'   =>['vendedor','El Vendedor','le escribió a un cliente'],
+  'intake'      =>['estratega','El Estratega','aprendió de tu negocio'],
+  'asistente'   =>['creativa','El Asistente','resolvió una duda'],
+  'aprendiz'    =>['creativa','La Creativa','aprendió tu vocabulario'],
+  'editor'      =>['creativa','La Creativa','pulió un texto'],
+];
+$fq = $pdo->prepare("SELECT agente, created_at FROM crecer_ia_log WHERE marca_id=? AND estado='ok' ORDER BY id DESC LIMIT 6");
+$fq->execute([$marca_id]);
+$feed = $fq->fetchAll();
+
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 $ICON = '/crecer/assets/icons';
 $BASE = '/crecer/panel';
@@ -94,6 +110,7 @@ elseif ($cnt_artes==0)  $paso = ['Sube una foto pa\' tu primer arte', 'graficas.
 elseif ($ord['abiertas']>0) $paso = ['Tienes '.$ord['abiertas'].' órden'.($ord['abiertas']==1?'':'es').' abierta'.($ord['abiertas']==1?'':'s'), 'ordenes.php', 'package'];
 else                    $paso = ['Vas bien — pídele al corillo más contenido', 'aprobar2.php', 'bolt'];
 ?>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
   .content{max-width:1440px}
   .dashx{--ink:var(--tinta)}
@@ -193,6 +210,23 @@ else                    $paso = ['Vas bien — pídele al corillo más contenido
   .dashx .coach .ca{font-family:var(--font-impact);color:var(--teal);font-size:20px}
   @media(max-width:1200px){.dashx .agents{grid-template-columns:repeat(3,1fr)}.dashx .metrics,.dashx .bottom{grid-template-columns:1fr}.dashx .cta .cta-bolt{opacity:.5}}
   @media(max-width:640px){.dashx .agents{grid-template-columns:repeat(2,1fr)}.dashx .active-card{min-width:0}}
+
+  /* CAMBIO 1 — Activity feed (timeline liviano) */
+  .dashx .feed{list-style:none;margin:0;padding:0}
+  .dashx .feed-it{display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--line);
+    opacity:0;transform:translateY(8px);animation:feedIn .35s ease both;animation-delay:var(--d,0s)}
+  .dashx .feed-it:last-child{border-bottom:0}
+  .dashx .feed-t{font-size:12px;font-weight:700;color:var(--muted);width:66px;flex:none;font-variant-numeric:tabular-nums}
+  .dashx .feed-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--terracota);box-shadow:0 0 0 4px color-mix(in srgb,var(--terracota) 14%,transparent)}
+  .dashx .feed-ic{width:26px;height:26px;flex:none}
+  .dashx .feed-m{font-size:14px;color:#473b46;line-height:1.35}
+  @keyframes feedIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @media(prefers-reduced-motion:reduce){.dashx .feed-it{animation:none;opacity:1;transform:none}}
+
+  /* CAMBIO 2 — Tipografía de títulos: Bebas Neue (solo encabezados, NO métricas/texto) */
+  .dashx .hero h1, .dashx .sec h2, .dashx .agent h3, .dashx .activity h3, .dashx .cta h3{
+    font-family:'Oswald', sans-serif; letter-spacing:.4px; line-height:1.05; font-weight:700;
+  }
 </style>
 
 <div class="dashx">
@@ -285,12 +319,18 @@ else                    $paso = ['Vas bien — pídele al corillo más contenido
   <section class="bottom">
     <article class="activity">
       <h3><img class="mini" src="<?= $ICON ?>/bolt.svg" alt=""> Lo que hizo el corillo hoy</h3>
-      <div class="chips">
-        <div class="chip"><span class="ci" style="background:color-mix(in srgb,#ff2d6f 14%,#fff)"><img src="<?= $ICON ?>/creativa.svg"></span><span><b><?= $cnt_ideas ?></b> ideas nuevas</span></div>
-        <div class="chip"><span class="ci" style="background:color-mix(in srgb,#ff7900 14%,#fff)"><img src="<?= $ICON ?>/disenador.svg"></span><span><b><?= $cnt_artes ?></b> artes diseñadas</span></div>
-        <div class="chip"><span class="ci" style="background:color-mix(in srgb,#00a5a8 14%,#fff)"><img src="<?= $ICON ?>/agenda.svg"></span><span><b><?= $cnt_citas ?></b> citas agendadas</span></div>
-        <div class="chip"><span class="ci" style="background:color-mix(in srgb,#33b617 14%,#fff)"><img src="<?= $ICON ?>/vendedor.svg"></span><span><b><?= $cnt_oport ?></b> oportunidades</span></div>
-      </div>
+      <ol class="feed">
+        <?php if (!$feed): ?>
+          <li class="feed-it"><span class="feed-m" style="color:var(--muted)">El corillo está listo pa' arrancar. Dale una tarea y metemos mano.</span></li>
+        <?php else: $fi=0; foreach ($feed as $fa): [$fic,$fnm,$fmsg] = $feed_map[$fa['agente']] ?? ['bolt','El Corillo','metió mano']; ?>
+          <li class="feed-it" style="--d:<?= number_format($fi*0.08,2) ?>s">
+            <span class="feed-t"><?= date('g:i A', strtotime($fa['created_at'])) ?></span>
+            <span class="feed-dot"></span>
+            <img class="feed-ic" src="<?= $ICON ?>/<?= $h($fic) ?>.svg" alt="">
+            <span class="feed-m"><b><?= $h($fnm) ?></b> <?= $h($fmsg) ?></span>
+          </li>
+        <?php $fi++; endforeach; endif; ?>
+      </ol>
       <p class="foot">El corillo está metiendo mano. Tú sigue enfocado en lo tuyo.</p>
     </article>
     <article class="cta">

@@ -34,12 +34,19 @@ $A = '/crecer/assets/encuentralo-hero';
     --ec-disp:'Anton', Impact, Haettenschweiler, "Arial Black", sans-serif;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:linear-gradient(180deg,#fffaf4 0%,#fff6ed 100%);color:var(--ec-ink);
-    font-family:'Plus Jakarta Sans',system-ui,sans-serif}
+  body{margin:0;color:var(--ec-ink);font-family:'Plus Jakarta Sans',system-ui,sans-serif;min-height:100vh;
+    background:
+      radial-gradient(closest-side 60% 50% at 8% 4%, rgba(255,142,69,.22), transparent),
+      radial-gradient(closest-side 55% 45% at 96% 16%, rgba(255,47,130,.16), transparent),
+      radial-gradient(closest-side 55% 50% at 18% 62%, rgba(0,167,183,.10), transparent),
+      linear-gradient(180deg,#fffaf4 0%,#fff6ed 100%);
+    background-attachment:fixed}
   body::before{content:"";position:fixed;top:0;left:0;right:0;height:4px;z-index:60;background:linear-gradient(120deg,var(--ec-coral),var(--ec-hot))}
 
-  /* NAV */
-  .ec-nav{display:flex;align-items:center;gap:10px;max-width:1320px;margin:0 auto;padding:18px 34px}
+  /* NAV (fijo arriba, ancho completo) */
+  .ec-navbar{position:sticky;top:0;z-index:50;backdrop-filter:saturate(1.2) blur(10px);
+    background:rgba(255,250,244,.82);border-bottom:1px solid rgba(241,222,206,.7)}
+  .ec-nav{display:flex;align-items:center;gap:10px;max-width:1320px;margin:0 auto;padding:14px 34px}
   .ec-nav a.brand{display:flex;align-items:center;gap:9px;text-decoration:none;color:var(--ec-ink)}
   .ec-nav img{height:30px}
   .ec-nav b{font-family:'Poppins',sans-serif;font-weight:800;font-size:20px;letter-spacing:-.03em;text-transform:lowercase}
@@ -48,10 +55,7 @@ $A = '/crecer/assets/encuentralo-hero';
     background:linear-gradient(135deg,var(--ec-coral),var(--ec-hot));box-shadow:0 12px 26px -10px rgba(255,47,130,.6)}
 
   /* HERO (paquete ChatGPT) */
-  .ec-hero-page{position:relative;max-width:1320px;margin:0 auto;padding:14px 34px 56px;overflow:hidden;color:var(--ec-ink);
-    background:radial-gradient(circle at 0% 0%,rgba(255,142,69,.20),transparent 18%),
-      radial-gradient(circle at 93% 82%,rgba(255,47,130,.13),transparent 22%),
-      radial-gradient(circle at 20% 55%,rgba(0,167,183,.08),transparent 24%)}
+  .ec-hero-page{position:relative;max-width:1320px;margin:0 auto;padding:14px 34px 56px;overflow:hidden;color:var(--ec-ink);background:transparent}
   .ec-png{position:absolute;pointer-events:none;user-select:none;height:auto;z-index:0}
   .ec-star-cyan{width:84px;left:150px;top:92px;animation:ecFloat 5.5s ease-in-out infinite}
   .ec-star-pink{width:82px;right:130px;top:124px;animation:ecFloat 6s ease-in-out infinite .8s}
@@ -127,11 +131,13 @@ $A = '/crecer/assets/encuentralo-hero';
 </head>
 <body>
 
-<nav class="ec-nav">
-  <a class="brand" href="/crecer/index.php"><img src="/crecer/assets/brand/encuentralo-pin.svg" alt=""><b>encuéntralo</b></a>
-  <span class="sp"></span>
-  <a class="enter" href="/crecer/login.php">Entrar</a>
-</nav>
+<header class="ec-navbar">
+  <nav class="ec-nav">
+    <a class="brand" href="/crecer/index.php"><img src="/crecer/assets/brand/encuentralo-pin.svg" alt=""><b>encuéntralo</b></a>
+    <span class="sp"></span>
+    <a class="enter" href="/crecer/login.php">Entrar</a>
+  </nav>
+</header>
 
 <section class="ec-hero-page">
   <img class="ec-png ec-star-cyan"  src="<?= $A ?>/cyan_star.png" alt="">
