@@ -7,16 +7,26 @@
 $marca_id = (int)$marca['id'];
 $BASE = '/crecer/panel';
 $h = $h ?? fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+require_once __DIR__ . '/../includes/suscripcion.php';
+require_once __DIR__ . '/../includes/iconos.php';
+$susc     = suscripcion_de_marca($pdo, $marca_id);
+$plan     = suscripcion_activa($susc) ? ($susc['plan_slug'] ?? null) : null;
+$plan_etq = suscripcion_etiqueta($susc);
+$u_actual = usuario_actual($pdo);
+$es_admin = (($u_actual['rol'] ?? '') === 'admin');
+$viendo_como_admin = ($es_admin && (int)$marca['usuario_id'] !== (int)($u_actual['id'] ?? 0));
 $nav = [
-  ['key'=>'inicio',   'ic'=>'🏠','lb'=>'Inicio',          'hr'=>"$BASE/index.php?marca=$marca_id",   'st'=>''],
-  ['key'=>'contenido','ic'=>'📅','lb'=>'Contenido',       'hr'=>"$BASE/aprobar2.php?marca=$marca_id",'st'=>''],
-  ['key'=>'graficas', 'ic'=>'🖼️','lb'=>'Gráficas',        'hr'=>"$BASE/graficas.php?marca=$marca_id",          'st'=>''],
-  ['key'=>'marca',    'ic'=>'🎨','lb'=>'Marca',           'hr'=>"$BASE/marca.php?marca=$marca_id",             'st'=>''],
-  ['key'=>'ordenes',  'ic'=>'📦','lb'=>'Órdenes & Agenda','hr'=>"$BASE/ordenes.php?marca=$marca_id",          'st'=>''],
-  ['key'=>'clientela','ic'=>'👥','lb'=>'Clientela',       'hr'=>"$BASE/pronto.php?s=clientela&marca=$marca_id",'st'=>'pronto'],
-  ['key'=>'cuentas',  'ic'=>'💵','lb'=>'Cuentas',         'hr'=>"$BASE/pronto.php?s=cuentas&marca=$marca_id",  'st'=>'despegar'],
-  ['key'=>'analitica','ic'=>'📊','lb'=>'Analítica',       'hr'=>"$BASE/pronto.php?s=analitica&marca=$marca_id",'st'=>'despegar'],
-  ['key'=>'config',   'ic'=>'⚙️','lb'=>'Configuración',    'hr'=>"$BASE/pronto.php?s=config&marca=$marca_id",   'st'=>'pronto'],
+  ['key'=>'inicio',   'ic'=>'home',    'lb'=>'Inicio',          'hr'=>"$BASE/index.php?marca=$marca_id",   'st'=>''],
+  ['key'=>'contenido','ic'=>'calendar','lb'=>'Contenido',       'hr'=>"$BASE/aprobar2.php?marca=$marca_id",'st'=>''],
+  ['key'=>'graficas', 'ic'=>'image',   'lb'=>'Gráficas',        'hr'=>"$BASE/graficas.php?marca=$marca_id",          'st'=>''],
+  ['key'=>'marca',    'ic'=>'palette', 'lb'=>'Marca',           'hr'=>"$BASE/marca.php?marca=$marca_id",             'st'=>''],
+  ['key'=>'ordenes',  'ic'=>'package', 'lb'=>'Órdenes & Agenda','hr'=>"$BASE/ordenes.php?marca=$marca_id",          'st'=>''],
+  ['key'=>'clientela','ic'=>'users',   'lb'=>'Clientela',       'hr'=>"$BASE/clientela.php?marca=$marca_id",         'st'=>''],
+  ['key'=>'cuentas',  'ic'=>'wallet',  'lb'=>'Cuentas',         'hr'=>"$BASE/pronto.php?s=cuentas&marca=$marca_id",  'st'=>'despegar'],
+  ['key'=>'analitica','ic'=>'chart',   'lb'=>'Analítica',       'hr'=>"$BASE/analitica.php?marca=$marca_id",         'st'=>'despegar'],
+  ['key'=>'evidencia','ic'=>'sparkles','lb'=>'Evidencia',       'hr'=>"$BASE/evidencia.php?marca=$marca_id",         'st'=>''],
+  ['key'=>'config',   'ic'=>'settings','lb'=>'Configuración',    'hr'=>"$BASE/configuracion.php?marca=$marca_id",     'st'=>''],
+  ['key'=>'soporte',  'ic'=>'chat',    'lb'=>'Soporte',          'hr'=>"$BASE/soporte.php?marca=$marca_id",           'st'=>''],
 ];
 ?>
 <!DOCTYPE html>
@@ -28,19 +38,24 @@ $nav = [
 <link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/encuentralo-pin.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Poppins:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=6" rel="stylesheet">
 </head>
 <body>
 <div class="layout">
   <aside class="side" id="side">
     <a class="sbrand" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="text-decoration:none;color:inherit"><img src="/crecer/assets/brand/encuentralo-pin.svg" alt="Inicio"><b>encuéntralo</b></a>
     <nav>
-      <?php foreach ($nav as $n): ?>
-        <a href="<?= $n['hr'] ?>" class="<?= $n['key']===$active?'on':'' ?> <?= in_array($n['st'],['pronto','despegar'])?'locked':'' ?>">
-          <span class="ic"><?= $n['ic'] ?></span><?= $n['lb'] ?>
-          <?php if ($n['st']==='pronto'): ?><span class="badge">pronto</span>
-          <?php elseif ($n['st']==='despegar'): ?><span class="badge">despegar</span><?php endif; ?>
+      <?php foreach ($nav as $n):
+        $es_pronto = $n['st']==='pronto';
+        $req_desp  = $n['st']==='despegar';
+        $locked    = $es_pronto || ($req_desp && !marca_puede($plan, 'analitica'));
+        $href      = ($req_desp && $locked) ? "$BASE/precios.php?marca=$marca_id" : $n['hr'];
+      ?>
+        <a href="<?= $href ?>" class="<?= $n['key']===$active?'on':'' ?> <?= $locked?'locked':'' ?>">
+          <?= ico($n['ic']) ?><?= $n['lb'] ?>
+          <?php if ($es_pronto): ?><span class="badge">pronto</span>
+          <?php elseif ($req_desp): ?><span class="badge">despegar</span><?php endif; ?>
         </a>
       <?php endforeach; ?>
     </nav>
@@ -59,12 +74,18 @@ $nav = [
               <option value="<?= $mn['id'] ?>" <?= $mn['id']==$marca_id?'selected':'' ?>><?= $h($mn['nombre_negocio']) ?></option>
             <?php endforeach; ?>
           </select>
-          <div class="tag">🌿 Crecer · Intermedio · cambia negocio ↑</div>
+          <?php if ($plan): ?><div class="tag">🌿 <?= $h($plan_etq) ?> · cambia negocio ↑</div>
+          <?php else: ?><div class="tag"><a href="<?= $BASE ?>/precios.php?marca=<?= $marca_id ?>" style="color:#0d7a44;font-weight:700;text-decoration:none">⚡ Activar plan</a> · cambia negocio ↑</div><?php endif; ?>
         <?php else: ?>
-          <div class="nm"><?= $h($marca['nombre_negocio']) ?></div><div class="tag">🌿 Crecer · Intermedio</div>
+          <div class="nm"><?= $h($marca['nombre_negocio']) ?></div>
+          <?php if ($plan): ?><div class="tag">🌿 <?= $h($plan_etq) ?></div>
+          <?php else: ?><div class="tag"><a href="<?= $BASE ?>/precios.php?marca=<?= $marca_id ?>" style="color:#0d7a44;font-weight:700;text-decoration:none">⚡ Activar plan</a></div><?php endif; ?>
         <?php endif; ?>
       </div>
     </div>
+    <?php if ($es_admin): ?>
+      <a href="<?= $BASE ?>/admin.php" style="display:flex;align-items:center;gap:10px;padding:10px 12px;margin-top:6px;border-radius:12px;text-decoration:none;color:#fff;background:var(--tinta);font-weight:800;font-size:13.5px">⚙️ Centro de Operaciones</a>
+    <?php endif; ?>
     <a href="/crecer/logout.php" style="display:flex;align-items:center;gap:10px;padding:9px 12px;margin-top:6px;border-radius:12px;text-decoration:none;color:var(--muted);font-weight:600;font-size:13.5px"><span class="ic">🚪</span> Salir</a>
   </aside>
   <div class="backdrop" id="bd"></div>
@@ -76,3 +97,9 @@ $nav = [
       <button class="burger" id="burger" aria-label="Menú">☰</button>
     </div>
     <div class="content">
+    <?php if (!empty($viendo_como_admin)): ?>
+      <div style="background:#140a16;color:#fff;padding:11px 16px;border-radius:12px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13.5px">
+        👁 Estás viendo como <b>admin</b> el negocio de <b><?= $h($marca['nombre_negocio']) ?></b>
+        <a href="<?= $BASE ?>/admin.php" style="margin-left:auto;color:#ffcaa8;font-weight:800;text-decoration:none">← Volver a Operaciones</a>
+      </div>
+    <?php endif; ?>

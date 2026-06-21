@@ -1,0 +1,8 @@
+# ============================================================
+#  Alternativa al root-index.php (si prefieres .htaccess)
+#  Pega estas líneas en  public_html/.htaccess  en Hostinger.
+#  Manda la raíz del dominio a /crecer/ sin tocar el resto.
+# ============================================================
+RewriteEngine On
+# Solo la raíz exacta del dominio → /crecer/
+RewriteRule ^$ /crecer/ [R=302,L]

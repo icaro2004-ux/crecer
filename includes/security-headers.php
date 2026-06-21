@@ -32,7 +32,7 @@ $csp = [
     "font-src 'self' https://fonts.gstatic.com data:",
     "script-src 'self' 'unsafe-inline'",
     "connect-src 'self'",
-    "form-action 'self'",
+    "form-action 'self' https://checkout.stripe.com https://billing.stripe.com",
     "frame-ancestors 'self'",
     "base-uri 'self'",
     "object-src 'none'",

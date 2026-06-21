@@ -1,0 +1,198 @@
+<?php
+// ============================================================
+//  CRECER — Agente PUBLICADOR (suelta a IG/FB lo aprobado)
+//  includes/publicador.php
+//
+//  El dueño aprueba cada post; este agente automatiza el ACTO de
+//  publicar a la hora programada. Corre desatendido por cron en
+//  producción (= criterio #2: agente operando en vivo, logueado).
+//
+//  Flujo de estados de crecer_contenido.estado:
+//    aprobado ──(llega la fecha)──► publicando ──► publicado
+//                                        └────────► fallido (avisa)
+//
+//  Seguro contra doble-post:
+//   - Lock atómico por fila (lock_token + estado='publicando').
+//   - Skip por plataforma ya publicada (crecer_publicaciones.ok).
+//
+//  Requiere db.php + meta.php cargados antes.
+// ============================================================
+
+require_once __DIR__ . '/meta.php';
+
+/** Resuelve grafica_path (URL relativa o ruta) a URL ABSOLUTA HTTPS pública. */
+function imagen_url_publica(?string $grafica_path): string {
+    $p = trim((string)$grafica_path);
+    if ($p === '') return '';
+    if (preg_match('#^https?://#i', $p)) return $p;            // ya es absoluta
+    $base = rtrim(BASE_URL, '/');
+    return $base . '/' . ltrim($p, '/');                       // BASE_URL + ruta relativa
+}
+
+/** Plataformas destino de una pieza (csv 'plataformas' o el enum 'plataforma'). */
+function plataformas_de_pieza(array $pieza): array {
+    $raw = trim((string)($pieza['plataformas'] ?? '')) ?: (string)$pieza['plataforma'];
+    $out = [];
+    foreach (explode(',', $raw) as $pl) {
+        $pl = trim(strtolower($pl));
+        if (in_array($pl, ['instagram', 'facebook'], true)) $out[$pl] = true;
+    }
+    return array_keys($out);   // únicas, solo IG/FB (WhatsApp no se publica aquí)
+}
+
+/** ¿Ya se publicó OK esta pieza en esta plataforma? (evita re-postear en reintentos) */
+function ya_publicada(PDO $pdo, int $contenido_id, string $plataforma): bool {
+    $q = $pdo->prepare(
+        "SELECT 1 FROM crecer_publicaciones
+          WHERE contenido_id=? AND plataforma=? AND estado='ok' LIMIT 1");
+    $q->execute([$contenido_id, $plataforma]);
+    return (bool)$q->fetchColumn();
+}
+
+/** Registra un intento de publicación (evidencia del agente en prod). */
+function log_publicacion(PDO $pdo, int $contenido_id, int $marca_id, string $plataforma,
+                         string $estado, array $extra = []): void {
+    $pdo->prepare(
+        "INSERT INTO crecer_publicaciones
+            (contenido_id, marca_id, plataforma, estado, external_id, permalink, intento, detalle, error_msg, latencia_ms)
+         VALUES (?,?,?,?,?,?,?,?,?,?)"
+    )->execute([
+        $contenido_id, $marca_id, $plataforma, $estado,
+        $extra['external_id'] ?? null,
+        $extra['permalink'] ?? null,
+        $extra['intento'] ?? 1,
+        $extra['detalle'] ?? null,
+        $extra['error_msg'] ?? null,
+        $extra['latencia_ms'] ?? null,
+    ]);
+}
+
+/**
+ * Publica UNA pieza ya aprobada cuya fecha llegó. Hace el lock atómico,
+ * publica a cada plataforma destino, loguea cada intento y deja la pieza
+ * en 'publicado' o 'fallido'. Idempotente y seguro ante crons solapados.
+ *
+ * @return array ['ok'=>bool, 'estado'=>string, 'resultados'=>[plataforma=>...], 'motivo'=>string]
+ */
+function publicar_pieza(PDO $pdo, int $contenido_id): array {
+    // 1) LOCK atómico: solo procede si está apto y nadie más lo agarró.
+    //    Reclama también locks viejos (>10 min) por si un cron murió a medias.
+    $tok = bin2hex(random_bytes(8));
+    $lock = $pdo->prepare(
+        "UPDATE crecer_contenido
+            SET estado='publicando', lock_token=?, lock_at=NOW(), pub_intentos=pub_intentos+1
+          WHERE id=?
+            AND estado IN ('aprobado','programado','fallido')
+            AND (lock_token IS NULL OR lock_at < (NOW() - INTERVAL 10 MINUTE))");
+    $lock->execute([$tok, $contenido_id]);
+    if ($lock->rowCount() === 0) {
+        return ['ok' => false, 'estado' => 'omitido', 'resultados' => [], 'motivo' => 'no apto o ya tomado'];
+    }
+
+    // 2) Cargar la pieza (ya con lock nuestro).
+    $c = $pdo->prepare("SELECT * FROM crecer_contenido WHERE id=? AND lock_token=?");
+    $c->execute([$contenido_id, $tok]);
+    $pieza = $c->fetch();
+    if (!$pieza) {
+        return ['ok' => false, 'estado' => 'omitido', 'resultados' => [], 'motivo' => 'lock perdido'];
+    }
+    $marca_id = (int)$pieza['marca_id'];
+    $intento  = (int)$pieza['pub_intentos'];
+
+    // 3) Conexión de Meta de la marca.
+    $conx = conexion_de_marca($pdo, $marca_id);
+    if (!$conx || $conx['estado'] !== 'activa' || empty($conx['page_access_token'])) {
+        return finalizar_pieza($pdo, $contenido_id, $tok, false,
+            ['_conexion' => 'La marca no tiene redes conectadas.'], []);
+    }
+
+    $caption   = (string)($pieza['caption'] ?? '');
+    $image_url = imagen_url_publica($pieza['grafica_path'] ?? null);
+    $destinos  = plataformas_de_pieza($pieza);
+    if (!$destinos) {
+        return finalizar_pieza($pdo, $contenido_id, $tok, false,
+            ['_plataforma' => 'La pieza no tiene plataforma válida (IG/FB).'], []);
+    }
+
+    // 4) Publicar a cada plataforma (skip lo ya publicado OK).
+    $resultados = []; $errores = [];
+    foreach ($destinos as $pl) {
+        if (ya_publicada($pdo, $contenido_id, $pl)) { $resultados[$pl] = 'ya publicada'; continue; }
+        $t0 = microtime(true);
+        try {
+            if ($pl === 'instagram') {
+                if ($image_url === '') throw new MetaError('Instagram requiere una imagen (URL pública).');
+                if (empty($conx['ig_user_id'])) throw new MetaError('No hay cuenta de IG Business conectada.');
+                $r = meta_publicar_ig($conx['ig_user_id'], $conx['page_access_token'], $image_url, $caption);
+            } else { // facebook
+                if (empty($conx['fb_page_id'])) throw new MetaError('No hay Página de Facebook conectada.');
+                $r = meta_publicar_fb($conx['fb_page_id'], $conx['page_access_token'], $caption, $image_url);
+            }
+            $lat = (int)round((microtime(true) - $t0) * 1000);
+            log_publicacion($pdo, $contenido_id, $marca_id, $pl, 'ok', [
+                'external_id' => $r['id'], 'permalink' => $r['permalink'],
+                'intento' => $intento, 'latencia_ms' => $lat,
+            ]);
+            $resultados[$pl] = $r['permalink'] ?: 'publicado';
+        } catch (Throwable $e) {
+            $lat = (int)round((microtime(true) - $t0) * 1000);
+            $msg = $e->getMessage();
+            log_publicacion($pdo, $contenido_id, $marca_id, $pl, 'error', [
+                'intento' => $intento, 'error_msg' => $msg, 'latencia_ms' => $lat,
+            ]);
+            $errores[$pl] = $msg;
+        }
+    }
+
+    $ok = empty($errores);
+    return finalizar_pieza($pdo, $contenido_id, $tok, $ok, $errores, $resultados);
+}
+
+/** Cierra el ciclo: marca la pieza publicado/fallido, suelta el lock. */
+function finalizar_pieza(PDO $pdo, int $contenido_id, string $tok, bool $ok, array $errores, array $resultados): array {
+    if ($ok) {
+        $pdo->prepare(
+            "UPDATE crecer_contenido
+                SET estado='publicado', publicado_at=NOW(), pub_error=NULL,
+                    lock_token=NULL, lock_at=NULL
+              WHERE id=? AND lock_token=?")
+            ->execute([$contenido_id, $tok]);
+        return ['ok' => true, 'estado' => 'publicado', 'resultados' => $resultados, 'motivo' => ''];
+    }
+    $err = implode(' | ', array_map(fn($k, $v) => "$k: $v", array_keys($errores), array_values($errores)));
+    $pdo->prepare(
+        "UPDATE crecer_contenido
+            SET estado='fallido', pub_error=?, lock_token=NULL, lock_at=NULL
+          WHERE id=? AND lock_token=?")
+        ->execute([mb_substr($err, 0, 1000), $contenido_id, $tok]);
+    return ['ok' => false, 'estado' => 'fallido', 'resultados' => $resultados, 'motivo' => $err];
+}
+
+/**
+ * EL LOOP DEL AGENTE. Busca piezas aprobadas cuya fecha llegó (de marcas
+ * con redes conectadas) y las publica. Pensado para correr por cron.
+ *
+ * @return array resumen ['revisadas'=>int, 'publicadas'=>int, 'fallidas'=>int, 'detalle'=>[]]
+ */
+function correr_publicador(PDO $pdo, int $limite = 25): array {
+    $q = $pdo->prepare(
+        "SELECT c.id
+           FROM crecer_contenido c
+           JOIN crecer_conexiones x ON x.marca_id = c.marca_id AND x.estado='activa'
+          WHERE c.estado IN ('aprobado','programado')
+            AND c.fecha_programada IS NOT NULL
+            AND c.fecha_programada <= NOW()
+          ORDER BY c.fecha_programada ASC
+          LIMIT {$limite}");
+    $q->execute();
+    $ids = $q->fetchAll(PDO::FETCH_COLUMN);
+
+    $pub = 0; $fail = 0; $detalle = [];
+    foreach ($ids as $cid) {
+        $r = publicar_pieza($pdo, (int)$cid);
+        if ($r['estado'] === 'publicado') $pub++;
+        elseif ($r['estado'] === 'fallido') $fail++;
+        $detalle[] = ['contenido_id' => (int)$cid] + $r;
+    }
+    return ['revisadas' => count($ids), 'publicadas' => $pub, 'fallidas' => $fail, 'detalle' => $detalle];
+}

@@ -66,6 +66,14 @@ $publink = (defined('BASE_URL') ? BASE_URL : '') . '/ordenar.php?n=' . $marca['s
 
 $active = 'ordenes';
 $page_title = 'Órdenes & Agenda';
+$guia = ['key'=>'ordenes','agente'=>'calendar','titulo'=>'Órdenes y Agenda',
+  'intro'=>'La Agenda te organiza pedidos y citas — sin revoluces.',
+  'pasos'=>[
+    ['qr','Comparte tu link o QR: tus clientes ordenan sin crear cuenta.'],
+    ['plus','O apunta una orden tú mismo con "Nueva orden".'],
+    ['refresh','Muévelas: recibida → en proceso → completada.'],
+    ['star','Al completar, pídele la reseña por WhatsApp — así creces.'],
+  ]];
 require __DIR__ . '/_shell.php';
 ?>
 <style>
@@ -112,7 +120,7 @@ require __DIR__ . '/_shell.php';
 <div class="ohead">
   <div>
     <h1 class="page-h">Órdenes & Agenda</h1>
-    <p class="page-sub">Recibe, maneja y completa. Al terminar, pídele la reseña — así crece tu reputación. 🔁</p>
+    <p class="page-sub">Recibe, maneja y completa. Al terminar, pídele la reseña — así crece tu reputación.</p>
   </div>
   <button class="new-btn" onclick="document.getElementById('mod').classList.add('show')">+ Nueva orden</button>
 </div>
@@ -121,7 +129,7 @@ require __DIR__ . '/_shell.php';
   <img src="https://api.qrserver.com/v1/create-qr-code/?size=130x130&margin=0&data=<?= urlencode($publink) ?>"
        width="120" height="120" alt="QR de tu link" style="border-radius:12px;flex:none">
   <div style="flex:1;min-width:220px">
-    <div style="font-family:var(--font-display);font-weight:800;font-size:17px">📲 Tu link de órdenes</div>
+    <div style="font-family:var(--font-display);font-weight:800;font-size:17px;display:flex;align-items:center;gap:7px"><?= ico('qr') ?> Tu link de órdenes</div>
     <div style="color:var(--muted);font-size:13.5px;margin:4px 0 10px">Compártelo en Instagram, Facebook o WhatsApp — o imprime el QR para la barra/mostrador. El cliente ordena sin cuenta.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <input id="plink" readonly value="<?= $h($publink) ?>" style="flex:1;min-width:200px;font-family:inherit;font-size:13px;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff">
@@ -136,7 +144,7 @@ require __DIR__ . '/_shell.php';
   <div class="agenda">
     <?php foreach (array_slice($agenda,0,8) as $a): $rel=dia_rel($a['fecha_entrega']); ?>
       <div class="ag">
-        <div class="when <?= $rel==='atrasada'?'late':'' ?>">📅 <?= $rel ?> · <?= date('d/m',strtotime($a['fecha_entrega'])) ?></div>
+        <div class="when <?= $rel==='atrasada'?'late':'' ?>"><?= ico('calendar') ?> <?= $rel ?> · <?= date('d/m',strtotime($a['fecha_entrega'])) ?></div>
         <div class="cl"><?= $h($a['cliente_nombre']) ?></div>
         <div class="ds"><?= $h($a['descripcion'] ?: '—') ?></div>
       </div>
@@ -146,12 +154,12 @@ require __DIR__ . '/_shell.php';
 
 <div class="colgrid">
   <?php
-  $cols = ['en_proceso'=>'🔧 En proceso','recibida'=>'📥 Recibidas','completada'=>'✅ Completadas'];
-  foreach ($cols as $estado=>$titulo):
+  $cols = ['en_proceso'=>['refresh','En proceso'],'recibida'=>['inbox','Recibidas'],'completada'=>['check-circle','Completadas']];
+  foreach ($cols as $estado=>$col):
   ?>
     <div class="col">
-      <h3><?= $titulo ?> <span class="cnt"><?= count($grupos[$estado]) ?></span></h3>
-      <?php if (!$grupos[$estado]): ?><div class="empty-c">Nada por aquí.</div><?php endif; ?>
+      <h3 style="display:flex;align-items:center;gap:7px"><?= ico($col[0]) ?> <?= $col[1] ?> <span class="cnt"><?= count($grupos[$estado]) ?></span></h3>
+      <?php if (!$grupos[$estado]): ?><div class="empty-c">Aquí caen cuando lleguen.</div><?php endif; ?>
       <?php foreach ($grupos[$estado] as $o): ?>
         <div class="ord">
           <div class="top">
@@ -160,8 +168,8 @@ require __DIR__ . '/_shell.php';
           </div>
           <?php if ($o['descripcion']): ?><div class="ds"><?= $h($o['descripcion']) ?></div><?php endif; ?>
           <div class="meta">
-            <?php if ($o['fecha_entrega']): ?><span>📅 <?= date('d/m H:i',strtotime($o['fecha_entrega'])) ?></span><?php endif; ?>
-            <?php if ($o['cliente_contacto']): ?><span>📱 <?= $h($o['cliente_contacto']) ?></span><?php endif; ?>
+            <?php if ($o['fecha_entrega']): ?><span><?= ico('calendar') ?> <?= date('d/m H:i',strtotime($o['fecha_entrega'])) ?></span><?php endif; ?>
+            <?php if ($o['cliente_contacto']): ?><span><?= ico('phone') ?> <?= $h($o['cliente_contacto']) ?></span><?php endif; ?>
           </div>
           <div class="acts">
             <?php if ($estado==='recibida'): ?>
@@ -173,10 +181,10 @@ require __DIR__ . '/_shell.php';
               <?php if (!$o['review_solicitada']):
                 $msg = "¡Gracias por tu orden en {$marca['nombre_negocio']}! 🙌 ¿Nos regalas una reseña? Nos ayuda un montón a crecer. 🇵🇷";
                 $wa = wa_link($o['cliente_contacto'], $msg); ?>
-                <?php if ($wa): ?><a class="rev" href="<?= $h($wa) ?>" target="_blank" onclick="setTimeout(()=>this.closest('.ord').querySelector('.mark-rev').click(),300)">⭐ Pedir reseña (WhatsApp)</a><?php endif; ?>
-                <form method="post" style="display:inline"><input type="hidden" name="accion" value="review"><input type="hidden" name="id" value="<?= $o['id'] ?>"><button class="mark-rev rev" style="<?= $wa?'display:none':'' ?>">⭐ Marcar reseña pedida</button></form>
+                <?php if ($wa): ?><a class="rev" href="<?= $h($wa) ?>" target="_blank" onclick="setTimeout(()=>this.closest('.ord').querySelector('.mark-rev').click(),300)"><?= ico('star') ?> Pedir reseña (WhatsApp)</a><?php endif; ?>
+                <form method="post" style="display:inline"><input type="hidden" name="accion" value="review"><input type="hidden" name="id" value="<?= $o['id'] ?>"><button class="mark-rev rev" style="<?= $wa?'display:none':'' ?>"><?= ico('star') ?> Marcar reseña pedida</button></form>
               <?php else: ?>
-                <span class="mut">⭐ Reseña pedida ✓</span>
+                <span class="mut"><?= ico('star') ?> Reseña pedida ✓</span>
               <?php endif; ?>
             <?php endif; ?>
             <?php if ($estado!=='completada'): ?>
@@ -193,7 +201,7 @@ require __DIR__ . '/_shell.php';
 <div class="modal" id="mod">
   <div class="box">
     <button class="x" onclick="document.getElementById('mod').classList.remove('show')">✕</button>
-    <h2>Nueva orden 📦</h2>
+    <h2>Nueva orden</h2>
     <p style="color:var(--muted);font-size:14px">Apúntala aquí — entró por WhatsApp, llamada o en persona.</p>
     <form method="post">
       <input type="hidden" name="accion" value="crear">

@@ -1,5 +1,8 @@
 # === Secretos / config local (NUNCA subir) ===
+config.local.php
 includes/config.local.php
+includes/config.local.PROD-LISTO.php
+_deploy/config.local.php
 includes/config.smtp.php
 .env
 *.key
@@ -22,3 +25,6 @@ Thumbs.db
 
 # Previews temporales de screenshots
 scripts/_preview_*.png
+
+# === Dumps / backups de base de datos (NUNCA a GitHub) ===
+migrations/_backup_*.sql

@@ -65,6 +65,90 @@ function crear_marca(PDO $pdo, array $d): int {
 }
 
 /**
+ * AGENTE INTAKE POR VOZ — escucha al dueño (audio) y extrae su perfil
+ * de negocio como JSON. Es el corazón del onboarding "wow".
+ *
+ * @param string $audio_b64  audio en base64 (webm/ogg/mp3/wav)
+ * @return array  ['descripcion','voz','productos'(array),'publico_objetivo',
+ *                 'ofertas','instagram','whatsapp']
+ */
+function perfil_desde_voz(PDO $pdo, ?int $marca_id, string $audio_b64, string $audio_mime, string $nombre_negocio = ''): array {
+    $sistema = <<<SYS
+Eres el agente de INTAKE de Crecer. Escuchas a un microempresario boricua
+hablar de su negocio y extraes su perfil. Fiel a lo que dijo, en español
+puertorriqueño. Devuelve SOLO JSON válido, sin explicación.
+SYS;
+    $prompt = "Escucha el audio del dueño y devuelve un JSON con estas llaves:\n"
+        . "- descripcion: 1–2 frases de qué es el negocio.\n"
+        . "- voz: cómo habla (tono, palabras típicas, personalidad) para imitar su estilo en los posts.\n"
+        . "- productos: array de strings con sus productos/servicios.\n"
+        . "- publico_objetivo: a quién le vende.\n"
+        . "- ofertas: promo o algo especial que mencione (o \"\").\n"
+        . "- instagram: handle si lo dice (o \"\").\n"
+        . "- whatsapp: número si lo dice (o \"\").\n"
+        . ($nombre_negocio !== '' ? "El negocio se llama: {$nombre_negocio}.\n" : "")
+        . "Si algo no lo menciona, deja \"\" o lista vacía. NO inventes.";
+
+    $r = ia_ejecutar($pdo, 'intake', 'Extraer perfil desde voz', $prompt, [
+        'marca_id'        => $marca_id,
+        'sistema'         => $sistema,
+        'json'            => true,
+        'thinking_budget' => 0,
+        'temperatura'     => 0.4,
+        'max_tokens'      => 900,
+        'audio'           => ['data' => $audio_b64, 'mime' => $audio_mime],
+        'mock_texto'      => '{"descripcion":"[MOCK] negocio boricua de comida","voz":"cercano y alegre, usa nene/nena","productos":["bizcocho","quesitos"],"publico_objetivo":"familias del pueblo","ofertas":"","instagram":"","whatsapp":""}',
+    ]);
+
+    $j = json_decode(trim($r['texto']), true);
+    if (!is_array($j)) $j = [];
+    return $j + [
+        'descripcion' => '', 'voz' => '', 'productos' => [],
+        'publico_objetivo' => '', 'ofertas' => '', 'instagram' => '', 'whatsapp' => '',
+    ];
+}
+
+/**
+ * Variante por TEXTO (respaldo del onboarding por voz): el dueño escribe
+ * de su negocio en vez de grabarse. Misma salida que perfil_desde_voz.
+ */
+function perfil_desde_texto(PDO $pdo, ?int $marca_id, string $texto, string $nombre_negocio = ''): array {
+    $sistema = <<<SYS
+Eres el agente de INTAKE de Crecer. Lees lo que un microempresario boricua
+escribió sobre su negocio y extraes su perfil. Fiel a lo que escribió, en
+español puertorriqueño. Devuelve SOLO JSON válido, sin explicación.
+SYS;
+    $prompt = "Lee lo que el dueño escribió y devuelve un JSON con estas llaves:\n"
+        . "- descripcion: 1–2 frases de qué es el negocio.\n"
+        . "- voz: cómo habla (tono, palabras típicas, personalidad) para imitar su estilo.\n"
+        . "- productos: array de strings con sus productos/servicios.\n"
+        . "- publico_objetivo: a quién le vende.\n"
+        . "- ofertas: promo o algo especial que mencione (o \"\").\n"
+        . "- instagram: handle si lo dice (o \"\").\n"
+        . "- whatsapp: número si lo dice (o \"\").\n"
+        . ($nombre_negocio !== '' ? "El negocio se llama: {$nombre_negocio}.\n" : "")
+        . "Si algo no lo menciona, deja \"\" o lista vacía. NO inventes.\n\n"
+        . "LO QUE ESCRIBIÓ:\n{$texto}";
+
+    $r = ia_ejecutar($pdo, 'intake', 'Extraer perfil desde texto', $prompt, [
+        'marca_id'        => $marca_id,
+        'sistema'         => $sistema,
+        'json'            => true,
+        'thinking_budget' => 0,
+        'temperatura'     => 0.4,
+        'max_tokens'      => 900,
+        'mock_texto'      => '{"descripcion":"[MOCK] negocio boricua de comida","voz":"cercano y alegre","productos":["bizcocho","quesitos"],"publico_objetivo":"familias del pueblo","ofertas":"","instagram":"","whatsapp":""}',
+    ]);
+
+    $j = json_decode(trim($r['texto']), true);
+    if (!is_array($j)) $j = [];
+    return $j + [
+        'descripcion' => '', 'voz' => '', 'productos' => [],
+        'publico_objetivo' => '', 'ofertas' => '', 'instagram' => '', 'whatsapp' => '',
+    ];
+}
+
+/**
  * AGENTE DISEÑADOR — genera el logo del negocio con IA y lo guarda.
  * Devuelve ['archivo'=>url, 'costo'].
  */
@@ -434,4 +518,271 @@ function redactar_calendario(PDO $pdo, int $calendario_id): array {
         $resultados[] = ['contenido_id' => (int)$cid] + $res;
     }
     return ['piezas' => $resultados, 'costo_total' => round($costo_total, 6)];
+}
+
+/**
+ * AGENTE ASISTENTE — el "helper" dentro del web app. Aclara dudas del
+ * dueño sobre cómo funciona Crecer y lo guía. Conoce el contexto de su
+ * marca y las secciones del panel. Tono boricua, corto y útil. Toda
+ * consulta queda logueada en crecer_ia_log (agente='asistente').
+ *
+ * @param array $historial  turnos previos [['rol'=>'user'|'ia','texto'=>...], ...]
+ * @return array{respuesta:string, ia_log_id:int}
+ */
+function asistente_responder(PDO $pdo, int $marca_id, string $pregunta, array $historial = []): array {
+    $m = leer_marca($pdo, $marca_id);
+    $ctx = marca_contexto($m);
+
+    $sistema = <<<SYS
+Eres el ASISTENTE de Crecer (también le decimos "el corillo"): un departamento
+de marketing con IA para microempresas boricuas. Ayudas al dueño DENTRO de la
+app: le aclaras dudas, le explicas cómo usar cada parte y lo guías paso a paso.
+
+Tono: boricua cálido y cercano, claro y CORTO (2-5 frases o una lista breve).
+Nada de relleno ni "AI slop". Tú lo tuteas. Si no sabes algo del negocio del
+dueño, dilo y sugiérele dónde configurarlo. No inventes precios ni datos.
+
+QUÉ HAY EN LA APP (oriéntalo a estas secciones):
+- Inicio: resumen de lo que el corillo ha hecho.
+- Contenido: la "fábrica de posts" — pedirle posts a la IA (tema, borrador o
+  random), escoger plataformas y fecha, montar el arte y APROBAR cada post.
+- Gráficas: estudio de arte; subir foto real del producto → arte de post.
+- Marca: estudio de logo con IA.
+- Órdenes & Agenda: pedidos, calendario, página pública con QR.
+- Conectar redes (conectar.php): enlazar Instagram Business + Página de Facebook
+  para que el corillo publique SOLO los posts que el dueño aprobó.
+
+REGLAS CLAVE QUE DEBES SABER EXPLICAR:
+- El dueño SIEMPRE aprueba cada post antes de que se publique. La IA propone,
+  el dueño dispone.
+- Para publicar automático a Instagram hace falta: cuenta de IG Business/Creator
+  conectada a una Página de Facebook (eso lo pone el dueño una vez en "Conectar
+  redes"). IG personal no se puede.
+- Las imágenes salen de fotos reales del negocio o las genera la IA y el dueño
+  las aprueba. Nunca se inventa el producto.
+SYS;
+    if (!empty($m['glosario'])) {
+        $sistema .= "\n\nVocabulario propio de este negocio (respétalo):\n" . $m['glosario'];
+    }
+
+    // Compactar el historial reciente (últimos 6 turnos) dentro del prompt.
+    $hist = '';
+    foreach (array_slice($historial, -6) as $t) {
+        $quien = (($t['rol'] ?? '') === 'ia') ? 'Asistente' : 'Dueño';
+        $txt = trim((string)($t['texto'] ?? ''));
+        if ($txt !== '') $hist .= "$quien: $txt\n";
+    }
+
+    $prompt = "Contexto del negocio del dueño:\n{$ctx}\n\n"
+        . ($hist !== '' ? "Conversación hasta ahora:\n{$hist}\n" : '')
+        . "Pregunta del dueño: {$pregunta}\n\n"
+        . "Responde corto y útil.";
+
+    $r = ia_ejecutar($pdo, 'asistente', 'Responder duda del dueño', $prompt, [
+        'marca_id'        => $marca_id,
+        'sistema'         => $sistema,
+        'temperatura'     => 0.6,
+        'max_tokens'      => 500,
+        'thinking_budget' => 0,
+        'mock_texto'      => '¡Claro! (respuesta de prueba — falta la credencial de IA). '
+                           . 'Pregúntame cómo crear un post, montar tu logo o conectar tus redes.',
+    ]);
+
+    return ['respuesta' => trim($r['texto']), 'ia_log_id' => $r['ia_log_id']];
+}
+
+/**
+ * AGENTE DE RETENCIÓN (capa Despegar de Clientela). Mira un cliente real del
+ * negocio (sacado de las órdenes) y redacta un mensaje de WhatsApp boricua,
+ * corto y personalizado, para reactivarlo / agradecerle / atraerlo de vuelta
+ * según su segmento. El dueño lo aprueba antes de enviarlo. Logueado.
+ *
+ * @param array  $cli  ['nombre','n','total','dias_sin_comprar']
+ * @param string $segmento  dormido|frecuente|nuevo|top
+ * @return array{mensaje:string, ia_log_id:int}
+ */
+function mensaje_retencion(PDO $pdo, int $marca_id, array $cli, string $segmento): array {
+    $m = leer_marca($pdo, $marca_id);
+    $ctx = marca_contexto($m);
+
+    $guias = [
+        'dormido'   => 'Hace rato que no compra. Escríbele con cariño, sin sonar a venta desesperada: que lo extrañas y lo invitas a volver. Puedes mencionar una de tus ofertas.',
+        'frecuente' => 'Es cliente fiel. Agradécele de corazón y hazlo sentir especial; quizás un detalle o adelanto para él/ella.',
+        'nuevo'     => 'Compró por primera vez hace poco. Dale la bienvenida, agradece y déjale la puerta abierta para volver.',
+        'top'       => 'Es de los que más gasta. Reconócele, trátalo VIP, hazlo sentir tu mejor cliente.',
+    ];
+    $guia = $guias[$segmento] ?? $guias['dormido'];
+
+    $sistema = <<<SYS
+Eres el agente de RETENCIÓN de Crecer. Escribes mensajes de WhatsApp para que
+un negocio boricua le hable a UN cliente suyo. Reglas:
+- Español puertorriqueño AUTÉNTICO, cálido y personal. Nunca "AI slop".
+- CORTO: 2-4 frases, como un mensaje real de WhatsApp. 1 emoji máximo.
+- Tutea al cliente por su nombre. Suena a persona, no a campaña.
+- No inventes precios ni promesas que el negocio no dijo.
+- Devuelve SOLO el mensaje, sin comillas ni explicación.
+SYS;
+    if (!empty($m['glosario'])) {
+        $sistema .= "\n\nVocabulario del negocio (respétalo):\n" . $m['glosario'];
+    }
+
+    $nombre = trim((string)($cli['nombre'] ?? 'cliente'));
+    $detalle = "Cliente: {$nombre}\n"
+        . "Compras: " . (int)($cli['n'] ?? 0) . "\n"
+        . (isset($cli['dias_sin_comprar']) ? "Días sin comprar: " . (int)$cli['dias_sin_comprar'] . "\n" : '')
+        . (isset($cli['total']) ? "Total gastado: \$" . number_format((float)$cli['total'], 2) . "\n" : '');
+
+    $prompt = "Perfil del negocio:\n{$ctx}\n\n"
+        . "Este cliente es del segmento: {$segmento}. {$guia}\n\n"
+        . "Datos del cliente:\n{$detalle}\n"
+        . "Escribe el mensaje de WhatsApp para {$nombre}.";
+
+    $r = ia_ejecutar($pdo, 'retencion', "Mensaje de retención ({$segmento})", $prompt, [
+        'marca_id'        => $marca_id,
+        'sistema'         => $sistema,
+        'temperatura'     => 0.9,
+        'max_tokens'      => 300,
+        'thinking_budget' => 0,
+        'mock_texto'      => "¡Hola {$nombre}! 👋 Hace rato no te veo por aquí. Pásate cuando quieras, que te tengo algo rico.",
+    ]);
+
+    return ['mensaje' => trim($r['texto']), 'ia_log_id' => $r['ia_log_id']];
+}
+
+/**
+ * AGENTE DE ANALÍTICA (capa Despegar). Lee los números reales del mes del
+ * negocio y escribe un resumen boricua corto + 1-2 sugerencias accionables.
+ * No inventa cifras: solo interpreta las que se le pasan. Logueado.
+ *
+ * @param array $d  ['ventas_mes','ordenes_mes','ventas_mes_ant','posts_mes',
+ *                   'piezas_ia_mes','mejor_mes' (texto opcional)]
+ * @return array{texto:string, ia_log_id:int}
+ */
+function resumen_analitica(PDO $pdo, int $marca_id, array $d): array {
+    $m = leer_marca($pdo, $marca_id);
+
+    $sistema = <<<SYS
+Eres el agente de ANALÍTICA de Crecer. Le explicas a un microempresario boricua
+cómo le fue el mes, en cristiano. Reglas:
+- Español puertorriqueño cálido y claro. Nada de jerga ni "AI slop".
+- CORTO: 2-3 frases de resumen + 1 o 2 sugerencias concretas y accionables.
+- Habla SOLO de los números que te doy; NO inventes cifras ni métricas.
+- Tono de socio que te quiere ver crecer, no de reporte frío.
+- Devuelve SOLO el texto, sin títulos ni explicación.
+SYS;
+
+    $ventas = number_format((float)($d['ventas_mes'] ?? 0), 2);
+    $ant    = number_format((float)($d['ventas_mes_ant'] ?? 0), 2);
+    $prompt = "Negocio: {$m['nombre_negocio']}\n"
+        . "Ventas este mes: \${$ventas} en " . (int)($d['ordenes_mes'] ?? 0) . " pedidos.\n"
+        . "Ventas el mes pasado: \${$ant}.\n"
+        . "Posts publicados este mes: " . (int)($d['posts_mes'] ?? 0) . ".\n"
+        . "Piezas que creó el corillo este mes (captions, artes, mensajes): " . (int)($d['piezas_ia_mes'] ?? 0) . ".\n"
+        . (!empty($d['mejor_mes']) ? "Dato extra: {$d['mejor_mes']}\n" : '')
+        . "\nEscribe el resumen del mes para el dueño.";
+
+    $r = ia_ejecutar($pdo, 'analitica', 'Resumen del mes', $prompt, [
+        'marca_id'        => $marca_id,
+        'sistema'         => $sistema,
+        'temperatura'     => 0.7,
+        'max_tokens'      => 350,
+        'thinking_budget' => 0,
+        'mock_texto'      => 'Este mes se movió la cosa 💪 Seguiste publicando y entraron pedidos. '
+                           . 'Mi consejo: dale seguimiento a los clientes que no han vuelto y publica algo el fin de semana, que es cuando más se compra.',
+    ]);
+
+    return ['texto' => trim($r['texto']), 'ia_log_id' => $r['ia_log_id']];
+}
+
+/**
+ * EL CORILLO AUTÓNOMO. Para UNA marca: si tiene menos borradores pendientes
+ * que su meta (autopilot_n), planifica y redacta los que falten SOLO, los
+ * deja como borradores en los próximos días y los registra. El dueño los
+ * aprueba después. No genera arte (lo caro lo controla el dueño al aprobar).
+ *
+ * @return array{creadas:int, ids:array, razon:string}
+ */
+function trabajo_autonomo(PDO $pdo, int $marca_id): array {
+    $m = leer_marca($pdo, $marca_id);
+    $objetivo = max(1, (int)($m['autopilot_n'] ?? 3));
+
+    // ¿Cuántos borradores pendientes tiene ya? (no le amontonamos trabajo)
+    $q = $pdo->prepare("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id=? AND estado='borrador'");
+    $q->execute([$marca_id]);
+    $pendientes = (int)$q->fetchColumn();
+
+    $faltan = $objetivo - $pendientes;
+    if ($faltan <= 0) {
+        $pdo->prepare("UPDATE crecer_marca SET autopilot_ultimo=NOW() WHERE id=?")->execute([$marca_id]);
+        return ['creadas' => 0, 'ids' => [], 'razon' => 'ya tiene suficientes borradores'];
+    }
+
+    $anio = (int)date('Y'); $mes = (int)date('n');
+    try {
+        $plan = planificar_mes($pdo, $marca_id, $anio, $mes, $faltan);
+    } catch (Throwable $e) {
+        return ['creadas' => 0, 'ids' => [], 'razon' => 'planificador falló: ' . substr($e->getMessage(), 0, 100)];
+    }
+
+    $ids = [];
+    $i = 0;
+    $reprog = $pdo->prepare("UPDATE crecer_contenido SET fecha_programada=? WHERE id=? AND marca_id=?");
+    foreach ($plan['piezas'] as $pz) {
+        $cid = (int)$pz['id'];
+        try { redactar_pieza($pdo, $cid); } catch (Throwable $e) { /* queda la idea para editar */ }
+        // Repartir en los próximos días (look "te dejé la semana lista")
+        $fecha = date('Y-m-d 10:00:00', strtotime('+' . ($i + 1) . ' day'));
+        $reprog->execute([$fecha, $cid, $marca_id]);
+        $ids[] = $cid;
+        $i++;
+    }
+
+    $pdo->prepare("UPDATE crecer_marca SET autopilot_ultimo=NOW() WHERE id=?")->execute([$marca_id]);
+    return ['creadas' => count($ids), 'ids' => $ids, 'razon' => ''];
+}
+
+/**
+ * EL LOOP DEL CORILLO AUTÓNOMO. Recorre las marcas con piloto automático
+ * activo y plan vigente, les genera el trabajo, y avisa al dueño por email
+ * cuando dejó posts nuevos. Pensado para correr por cron (semanal).
+ *
+ * @return array{marcas:int, creadas:int, detalle:array}
+ */
+function correr_corillo(PDO $pdo): array {
+    require_once __DIR__ . '/suscripcion.php';
+    require_once __DIR__ . '/notificaciones.php';
+
+    $rows = $pdo->query(
+        "SELECT m.id, m.nombre_negocio, m.usuario_id, u.email, u.nombre AS usuario_nombre
+           FROM crecer_marca m JOIN usuarios u ON u.id = m.usuario_id
+          WHERE m.autopilot = 1")->fetchAll();
+
+    $tot = 0; $detalle = [];
+    foreach ($rows as $r) {
+        $mid = (int)$r['id'];
+        if (plan_de_marca($pdo, $mid) === null) {        // sin plan vigente → no gasta IA
+            $detalle[] = ['marca_id' => $mid, 'creadas' => 0, 'razon' => 'sin plan activo'];
+            continue;
+        }
+        $res = trabajo_autonomo($pdo, $mid);
+        $tot += $res['creadas'];
+        $detalle[] = ['marca_id' => $mid, 'creadas' => $res['creadas'], 'razon' => $res['razon']];
+
+        if ($res['creadas'] > 0 && !empty($r['email'])) {
+            $n = $res['creadas'];
+            $base = defined('BASE_URL') ? rtrim(BASE_URL, '/') : 'http://localhost/crecer';
+            $panel = $base . '/panel/aprobar2.php?marca=' . $mid;
+            $nombre = $r['usuario_nombre'] ?: 'jefe';
+            $negocio = htmlspecialchars($r['nombre_negocio'] ?: 'tu negocio');
+            $asunto = "El corillo te dejó $n post" . ($n === 1 ? '' : 's') . " listo" . ($n === 1 ? '' : 's') . " ✨";
+            $cuerpo = "<div style='font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#1a1a24'>"
+                . "<h2>¡Wepa, $nombre! 👋</h2>"
+                . "<p>Mientras hacías lo tuyo, el corillo trabajó para <b>$negocio</b> y te dejó "
+                . "<b>$n post" . ($n === 1 ? '' : 's') . "</b> listo" . ($n === 1 ? '' : 's') . " para que apruebes.</p>"
+                . "<p style='margin:24px 0'><a href='$panel' style='background:#1a1a24;color:#fff;text-decoration:none;font-weight:bold;padding:13px 22px;border-radius:12px'>Ver lo que hizo el corillo</a></p>"
+                . "<p style='color:#8a8a98;font-size:13px'>Tú apruebas, el corillo ejecuta. 🇵🇷</p></div>";
+            crecer_enviar_email($r['email'], $asunto, $cuerpo);
+        }
+    }
+    return ['marcas' => count($rows), 'creadas' => $tot, 'detalle' => $detalle];
 }

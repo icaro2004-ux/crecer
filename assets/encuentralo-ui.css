@@ -40,6 +40,7 @@
 
   /* Fonts alineados con el web de Encuéntralo */
   --font-display:"Poppins","Plus Jakarta Sans",sans-serif;
+  --font-impact:"Anton","Poppins",sans-serif;   /* display de impacto (titulares) */
   --font-body:"Plus Jakarta Sans",system-ui,-apple-system,sans-serif;
 }
 
@@ -207,7 +208,7 @@ body{
 .content{padding:30px 32px 60px;max-width:1000px}
 .backdrop{display:none;position:fixed;inset:0;background:rgba(20,12,8,.4);z-index:40}
 
-.page-h{font-family:var(--font-display);font-weight:800;font-size:clamp(24px,4vw,33px);letter-spacing:-.025em}
+.page-h{font-family:var(--font-impact);font-weight:400;text-transform:uppercase;font-size:clamp(25px,4vw,37px);letter-spacing:.02em;line-height:1.02}
 .page-sub{color:var(--muted);font-size:15px;margin-top:4px}
 
 /* tarjetas/grid reutilizables del panel */
@@ -231,3 +232,149 @@ img.zoomable{cursor:zoom-in}
   align-items:center;justify-content:center;padding:24px;cursor:zoom-out}
 .lightbox-ov.show{display:flex}
 .lightbox-ov img{max-width:92vw;max-height:90vh;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+
+/* ── Bottom nav + FAB (solo móvil — feel de app/PWA) ── */
+.botnav{display:none}
+.fab-corillo{display:none}
+@media (max-width:860px){
+  .botnav{display:flex;position:fixed;bottom:0;left:0;width:100%;z-index:45;
+    background:var(--card);border-top:1px solid var(--line);
+    justify-content:space-around;align-items:center;padding:8px 6px;
+    padding-bottom:calc(8px + env(safe-area-inset-bottom));
+    box-shadow:0 -6px 20px rgba(74,52,32,.08)}
+  .botnav a{display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;
+    text-decoration:none;color:var(--muted);font-size:10px;font-weight:800;
+    letter-spacing:.01em;transition:color .15s}
+  .botnav a .ic{width:23px;height:23px;display:block}
+  .botnav a.on{color:var(--terracota-700)}
+  .botnav a:active{transform:scale(.92)}
+  .botnav .slot-fab{flex:0 0 64px}            /* hueco para el FAB central */
+  .fab-corillo{display:flex;position:fixed;left:50%;transform:translateX(-50%);
+    bottom:calc(26px + env(safe-area-inset-bottom));z-index:46;
+    width:60px;height:60px;border-radius:50%;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;
+    font-size:26px;text-decoration:none;border:4px solid var(--crema);
+    box-shadow:0 12px 28px -8px rgba(255,43,133,.5);transition:transform .12s}
+  .fab-corillo:active{transform:translateX(-50%) scale(.93)}
+  .content{padding-bottom:104px}              /* espacio para no tapar contenido */
+}
+
+/* ── Íconos flat (set central iconos.php) — tamaño/color por contexto ── */
+.ic{width:20px;height:20px;flex:none;vertical-align:-0.18em}
+.side a .ic{width:20px;height:20px;font-size:0}
+.d-agent .face{color:var(--terracota)}
+.d-agent .face .ic{width:23px;height:23px}
+.d-actfeed .av{color:var(--tinta)}
+.d-actfeed .av .ic{width:16px;height:16px}
+/* checklist / inline en chips */
+.ic-check{color:var(--palma)}
+.ic-mut{color:var(--muted)}
+.chk{width:17px;height:17px;color:var(--palma);flex:none;margin-top:1px}
+.chk-off{width:17px;height:17px;color:var(--muted);flex:none;margin-top:1px}
+.ic-lg{width:28px;height:28px}
+.ic-xl{width:40px;height:40px}
+.empty .big svg, .empty-g svg{width:46px;height:46px;color:var(--terracota)}
+/* tabs/botones con ícono + texto alineados */
+.vt,.st{display:inline-flex;align-items:center;gap:7px}
+
+/* ── Guía del corillo (overlay flotante por página) ── */
+.guia-btn{position:fixed;top:68px;right:18px;z-index:60;width:42px;height:42px;border-radius:50%;
+  border:1.5px solid var(--line);background:var(--card);color:var(--terracota);display:grid;place-items:center;
+  cursor:pointer;box-shadow:var(--shadow-sm);transition:transform .15s}
+.guia-btn:hover{transform:scale(1.08)}
+.guia-btn svg{width:21px;height:21px}
+.guia-ov{display:none;position:fixed;inset:0;z-index:120;background:rgba(27,22,34,.45);backdrop-filter:blur(7px);
+  align-items:center;justify-content:center;padding:24px}
+.guia-ov.show{display:flex;animation:guiaIn .25s ease}
+@keyframes guiaIn{from{opacity:0;transform:scale(.98)}to{opacity:1;transform:none}}
+.guia-card{background:rgba(255,253,250,.97);border:1px solid var(--line);border-radius:var(--r-xl);max-width:440px;width:100%;
+  padding:24px;box-shadow:0 30px 70px rgba(0,0,0,.32);position:relative}
+.guia-x{position:absolute;top:14px;right:16px;border:0;background:none;font-size:20px;cursor:pointer;color:var(--muted)}
+.guia-h{display:flex;gap:14px;align-items:center;margin-bottom:16px}
+.guia-orb{width:56px;height:56px;border-radius:50%;flex:none;display:grid;place-items:center;color:var(--terracota);
+  background:radial-gradient(circle,#fff 0 40%,color-mix(in srgb,var(--terracota) 14%,#fff));
+  box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--terracota) 14%,#fff)}
+.guia-orb svg{width:30px;height:30px}
+.guia-t{font-family:var(--font-impact);text-transform:uppercase;font-size:20px;line-height:1}
+.guia-i{color:var(--muted);font-size:14px;margin-top:4px}
+.guia-pasos{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+.guia-pasos li{display:flex;align-items:center;gap:11px;font-size:14px;color:#3a2f26}
+.guia-pasos .gn{width:24px;height:24px;border-radius:50%;background:var(--terracota);color:#fff;font-weight:800;font-size:12px;display:grid;place-items:center;flex:none}
+.guia-pasos li svg{width:18px;height:18px;color:var(--teal);flex:none}
+.guia-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:22px;flex-wrap:wrap}
+.guia-ok{border:0;cursor:pointer;font-family:var(--font-impact);text-transform:uppercase;letter-spacing:.03em;font-size:15px;color:#fff;background:var(--palma);padding:11px 22px;border-radius:12px}
+.guia-no{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer}
+/* pulso de "trabajando" en orbes de agentes */
+@keyframes orbWork{0%{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--c) 12%,#fff),0 0 0 0 color-mix(in srgb,var(--c) 40%,transparent)}70%{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--c) 12%,#fff),0 0 0 12px transparent}100%{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--c) 12%,#fff),0 0 0 0 transparent}}
+.dashx .agent.working .orb{animation:orbWork 2.2s infinite}
+
+/* ============================================================
+   DASHBOARD "El Corillo" — componentes bold (panel/index.php)
+   Aditivo y namespaced (d-*). No afecta otras pantallas.
+   ============================================================ */
+.disp{font-family:var(--font-impact);font-weight:400;letter-spacing:.5px;text-transform:uppercase;line-height:.95}
+
+.d-hello{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.d-hello h1{font-family:var(--font-impact);text-transform:uppercase;letter-spacing:.5px;line-height:.95;
+  font-size:clamp(32px,5vw,48px);color:var(--tinta)}
+.d-hello h1 span{color:var(--terracota)}
+.d-hello .sub{color:var(--muted);font-size:15px;margin-top:8px;max-width:52ch}
+.plan-sticker{font-family:var(--font-impact);text-transform:uppercase;letter-spacing:.06em;font-size:12.5px;
+  background:var(--gold);color:#3a2a00;padding:8px 14px;border-radius:10px;transform:rotate(-2.5deg);
+  box-shadow:0 10px 24px -10px rgba(251,192,45,.7);white-space:nowrap;align-self:center;
+  display:inline-flex;align-items:center;gap:6px}
+
+.d-sech{display:flex;align-items:center;gap:12px;margin:30px 0 14px}
+.d-sech h2{font-family:var(--font-impact);text-transform:uppercase;letter-spacing:.04em;font-size:17px;color:var(--tinta)}
+.d-sech .ln{flex:1;height:1px;background:var(--line)}
+
+.d-crew{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+.d-agent{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:14px;
+  box-shadow:var(--shadow-sm);transition:transform .18s,box-shadow .18s}
+.d-agent:hover{transform:translateY(-3px);box-shadow:var(--shadow)}
+.d-agent .face{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;font-size:21px;margin-bottom:10px;background:var(--crema-2)}
+.d-agent .role{font-weight:800;font-size:13.5px}
+.d-agent .act{color:var(--muted);font-size:11.5px;margin-top:3px;line-height:1.35;min-height:31px}
+.d-agent .st{font-size:10.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:9px}
+.d-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.d-dot.work{background:var(--teal);box-shadow:0 0 0 3px rgba(0,150,166,.18)}
+.d-dot.done{background:var(--palma)}
+.d-dot.idle{background:var(--muted)}
+
+.d-kpis{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:14px;margin-top:14px}
+.d-kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:20px 22px;
+  position:relative;overflow:hidden;box-shadow:var(--shadow-sm)}
+.d-kpi .lbl{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.d-kpi .num{font-family:var(--font-impact);font-size:54px;line-height:1;margin:6px 0 2px;color:var(--tinta)}
+.d-kpi .num.teal{color:var(--teal)} .d-kpi .num.gold{color:var(--amber-ink)}
+.d-kpi .meta{font-size:12.5px;color:var(--muted)}
+.d-kpi .cta{display:inline-flex;align-items:center;gap:6px;margin-top:14px;font-weight:800;font-size:13px;
+  text-decoration:none;color:#fff;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.45);padding:9px 15px;border-radius:10px}
+.d-kpi.hero{background:linear-gradient(150deg,var(--coral),var(--terracota-700));border-color:transparent;color:#fff}
+.d-kpi.hero .lbl{color:rgba(255,255,255,.85)}
+.d-kpi.hero .num{color:#fff;font-size:64px}
+.d-kpi.hero .meta{color:rgba(255,255,255,.92)}
+.d-kpi.hero::after{content:"";position:absolute;right:-40px;top:-40px;width:170px;height:170px;border-radius:50%;
+  background:radial-gradient(circle,rgba(255,255,255,.18),transparent 70%)}
+.d-pubrow{display:flex;gap:9px;align-items:center;font-size:12.5px;color:var(--muted);padding:7px 0;border-top:1px solid var(--line)}
+.d-pubrow .d{font-family:var(--font-impact);color:var(--teal);font-size:13px;min-width:42px}
+
+.d-row2{display:grid;grid-template-columns:1.3fr 1fr;gap:14px;margin-top:14px}
+.d-actfeed .it{display:flex;gap:11px;padding:11px 0;border-bottom:1px solid var(--line)}
+.d-actfeed .it:last-child{border:0}
+.d-actfeed .av{width:30px;height:30px;border-radius:9px;background:var(--crema);border:1px solid var(--line);
+  display:grid;place-items:center;font-size:15px;flex-shrink:0}
+.d-actfeed .tx{font-size:13px;line-height:1.4}.d-actfeed .tx b{font-weight:800}
+.d-actfeed .tm{font-size:11px;color:var(--muted);margin-top:2px}
+.d-work{display:flex;flex-direction:column;justify-content:center;text-align:center;
+  background:linear-gradient(150deg,rgba(22,184,106,.10),var(--card));border-color:rgba(22,184,106,.3)}
+.d-work h3{font-family:var(--font-impact);text-transform:uppercase;font-size:22px;letter-spacing:.03em;margin-bottom:6px;color:var(--tinta)}
+.d-work p{color:var(--muted);font-size:13px;margin-bottom:16px}
+.d-bigbtn{font-family:var(--font-impact);text-transform:uppercase;letter-spacing:.04em;font-size:16px;
+  background:var(--palma);color:#fff;border:none;padding:14px 22px;border-radius:13px;cursor:pointer;
+  text-decoration:none;display:inline-block;box-shadow:0 12px 28px -12px rgba(22,184,106,.7)}
+.d-bigbtn:hover{background:var(--palma-600)}
+
+@media (max-width:1024px){.d-crew{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:880px){.d-kpis{grid-template-columns:1fr 1fr}.d-row2{grid-template-columns:1fr}}
+@media (max-width:560px){.d-crew{grid-template-columns:repeat(2,1fr)}.d-kpis{grid-template-columns:1fr}}

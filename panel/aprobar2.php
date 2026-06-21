@@ -3,14 +3,18 @@
 //  ENCUÉNTRALO · CRECER — Contenido / Aprobar (dentro del shell)
 //  panel/aprobar2.php
 // ============================================================
+// DEBUG temporal: añade &debug=1 a la URL para ver errores en pantalla.
+if (isset($_GET['debug'])) { ini_set('display_errors','1'); error_reporting(E_ALL); }
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/agentes.php';
+require __DIR__ . '/../includes/suscripcion.php';
 requiere_login();
 $usuario = usuario_actual($pdo);
 $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (int)$_GET['marca'] : null);
 if (!$marca) { header('Location: /crecer/intake.php'); exit; }
 $marca_id = (int)$marca['id'];
+$pagado = marca_es_pagada($pdo, $marca_id);  // no pagado = 1 post de muestra (1 caption + 1 imagen)
 
 // ── Acción POST (PRG) ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -25,23 +29,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $leccion = null;
         if ($id && $nuevo_cap !== '') {
             $pdo->prepare("UPDATE crecer_contenido SET caption=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$nuevo_cap, $id, $marca_id]);
-            $leccion = aprender_de_edicion($pdo, $marca_id, $orig, $nuevo_cap);
+            if ($pagado) $leccion = aprender_de_edicion($pdo, $marca_id, $orig, $nuevo_cap); // aprendizaje = premium
         }
         if (!empty($_POST['ajax'])) { header('Content-Type: application/json'); echo json_encode(['ok'=>true,'id'=>$id,'caption'=>$nuevo_cap,'leccion'=>$leccion], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE); exit; }
         header('Location: ' . $_SERVER['REQUEST_URI']); exit;
     }
     // ── Regenerar caption con la IA ──
     if ($accion === 'regenerar') {
+        if (!$pagado) { header('Content-Type: application/json'); echo json_encode(['ok'=>false,'paywall'=>true]); exit; }
         @set_time_limit(0);
         try { $r = redactar_pieza($pdo, $id); $cap = $r['caption']; }
         catch (Throwable $e) { $cap = null; }
         if (!empty($_POST['ajax'])) { header('Content-Type: application/json'); echo json_encode(['ok'=>(bool)$cap,'id'=>$id,'caption'=>$cap], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE); exit; }
         header('Location: ' . $_SERVER['REQUEST_URI']); exit;
     }
+    // ── Reprogramar (el dueño escoge el día) ──
+    if ($accion === 'fecha') {
+        $f = $_POST['fecha'] ?? '';
+        if ($id && strtotime($f)) {
+            $pdo->prepare("UPDATE crecer_contenido SET fecha_programada=?, updated_at=NOW() WHERE id=? AND marca_id=?")
+                ->execute([date('Y-m-d 10:00:00', strtotime($f)), $id, $marca_id]);
+        }
+        if (!empty($_POST['ajax'])) { header('Content-Type: application/json'); echo json_encode(['ok'=>(bool)strtotime($f)]); exit; }
+        header('Location: ' . $_SERVER['REQUEST_URI']); exit;
+    }
 
     // ── Crear el ARTE del post SIN salir (fábrica de posts) ──
     if ($accion === 'arte') {
         @set_time_limit(0);
+        if (!$pagado && generaciones_usadas($pdo, $marca_id, 'imagen') >= CRECER_FREE['imagen']) {
+            header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'paywall']); exit;
+        }
         $dir_fotos = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/fotos";
         // Tope por post (2 generaciones IA)
         $ai = $pdo->prepare("SELECT arte_intentos FROM crecer_contenido WHERE id=? AND marca_id=?");
@@ -122,6 +140,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ── Pedir un post a la IA (tema sugerido / borrador a pulir / random) ──
     if ($accion === 'pedir_post') {
         @set_time_limit(0);
+        // No pagado: 1 post de muestra. Si ya lo usó → al paywall; si no, forzar 1 sola pieza.
+        if (!$pagado) {
+            if (generaciones_usadas($pdo, $marca_id, 'caption') >= CRECER_FREE['caption']) {
+                header("Location: /crecer/panel/precios.php?marca={$marca_id}&motivo=muestra"); exit;
+            }
+            $pl0 = $_POST['plataformas'] ?? 'instagram';
+            if (is_array($pl0)) $pl0 = $pl0[0] ?? 'instagram';
+            $_POST['plataformas'] = [$pl0];
+            $_POST['n'] = 1;
+        }
         $tema     = trim($_POST['tema'] ?? '');
         $borrador = trim($_POST['borrador'] ?? '');
         // Una o varias plataformas (un post por cada una, adaptado a esa red)
@@ -178,7 +206,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&edit={$nid}#cap-{$nid}"); exit;
     }
 
-    $nuevo  = ['aprobar'=>'aprobado','rechazar'=>'rechazado','reabrir'=>'borrador'][$accion] ?? null;
+    $nuevo  = ['aprobar'=>'aprobado','rechazar'=>'rechazado','reabrir'=>'borrador','marcar_publicado'=>'publicado'][$accion] ?? null;
     if ($id && $nuevo) {
         $pdo->prepare("UPDATE crecer_contenido SET estado=?, updated_at=NOW() WHERE id=? AND marca_id=?")
             ->execute([$nuevo, $id, $marca_id]);
@@ -210,10 +238,12 @@ if ($tab === 'aprobados') {
                           GROUP BY ym ORDER BY ym DESC");
     $mq->execute([$marca_id]); $meses_aprob = $mq->fetchAll();
     $mes_sel = $_GET['mes'] ?? ($meses_aprob[0]['ym'] ?? date('Y-m'));
+    [$yy,$mm] = array_map('intval', array_pad(explode('-', (string)$mes_sel), 2, 0));
     $pq = $pdo->prepare("SELECT * FROM crecer_contenido
-                          WHERE marca_id=? AND estado IN ('aprobado','publicado') AND DATE_FORMAT(fecha_programada,'%Y-%m')=?
+                          WHERE marca_id=? AND estado IN ('aprobado','publicado')
+                            AND YEAR(fecha_programada)=? AND MONTH(fecha_programada)=?
                           ORDER BY fecha_programada");
-    $pq->execute([$marca_id, $mes_sel]); $piezas = $pq->fetchAll();
+    $pq->execute([$marca_id, $yy, $mm]); $piezas = $pq->fetchAll();
 } else {
     $pq = $pdo->prepare("SELECT * FROM crecer_contenido WHERE marca_id=? AND estado='borrador' ORDER BY fecha_programada");
     $pq->execute([$marca_id]); $piezas = $pq->fetchAll();
@@ -239,9 +269,19 @@ $nombre_mes = function($ym) use ($meses_es) { $p=explode('-',$ym); return ($mese
 $plat = ['instagram'=>['Instagram',''], 'facebook'=>['Facebook','fb'], 'whatsapp'=>['WhatsApp','']];
 $pill = ['borrador'=>['Pendiente','wait'],'aprobado'=>['Aprobado','ok'],'rechazado'=>['Rechazado','no'],'publicado'=>['Publicado','pub']];
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+$handle = $marca['instagram'] ?: ('@' . preg_replace('/[^a-z0-9]/', '', mb_strtolower($marca['nombre_negocio'])));
+$avatar = $marca['logo_path'] ?: '/crecer/assets/brand/encuentralo-pin.svg';
 
 $active = 'contenido';
 $page_title = 'Contenido';
+$guia = ['key'=>'contenido','agente'=>'pen','titulo'=>'Tu fábrica de posts',
+  'intro'=>'Aquí La Creativa te prepara los posts. Tú apruebas lo que te guste.',
+  'pasos'=>[
+    ['sparkles','Dale a "Pedir un post a la IA": dile un tema o déjala inventar.'],
+    ['eye','En cada post, "Ver en redes" te muestra cómo se vería en IG/FB.'],
+    ['calendar','Cambia la fecha si quieres publicarlo otro día.'],
+    ['check','Cuando te guste, dale "Aprobar". Editar un post le enseña tu voz a la IA.'],
+  ]];
 require __DIR__ . '/_shell.php';
 ?>
 <style>
@@ -268,9 +308,14 @@ require __DIR__ . '/_shell.php';
   .artph{width:100%;border:0;border-top:1px dashed var(--line);border-bottom:1px dashed var(--line);background:repeating-linear-gradient(45deg,var(--crema),var(--crema) 10px,#fff 10px,#fff 20px);cursor:pointer;font-family:inherit;font-weight:800;font-size:14px;color:var(--terracota);padding:26px 12px;display:flex;flex-direction:column;align-items:center;gap:6px}
   .artph:hover{color:var(--terracota-700)}
   .checklist{display:flex;gap:8px;flex-wrap:wrap;padding:0 17px 10px}
-  .ck-item{font-size:11.5px;font-weight:800;color:var(--muted);background:var(--crema);border:1px solid var(--line);padding:4px 10px;border-radius:99px;opacity:.6}
+  .schedrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 17px 12px;font-size:12.5px;color:var(--muted)}
+  .schedrow .ic{width:15px;height:15px;color:var(--terracota);flex:none}
+  .schedrow .lab{font-weight:700;color:var(--tinta)}
+  .schedrow input[type=date]{font-family:inherit;font-size:12.5px;font-weight:700;border:1.5px solid var(--line);border-radius:8px;padding:5px 9px;background:#fff;color:var(--tinta)}
+  .schedrow .hint{font-size:11px}
+  .ck-item{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:800;color:var(--muted);background:var(--crema);border:1px solid var(--line);padding:4px 10px;border-radius:99px;opacity:.6}
   .ck-item.on{color:var(--okk-ink);background:var(--okk-bg);border-color:transparent;opacity:1}
-  .ck-item.on::before{content:"✓ "}
+  .ckic{width:13px;height:13px;flex:none}
   /* Modal estudio de arte */
   .art-ov{display:none;position:fixed;inset:0;background:rgba(20,12,8,.72);z-index:95;align-items:flex-start;justify-content:center;padding:30px 16px;overflow:auto}
   .art-ov.show{display:flex}
@@ -299,37 +344,80 @@ require __DIR__ . '/_shell.php';
   .art-note{font-size:11.5px;color:var(--muted);margin-top:10px;text-align:center}
   .art-divider{display:flex;align-items:center;gap:10px;margin:18px 0 4px;color:var(--muted);font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
   .art-divider::before,.art-divider::after{content:"";flex:1;height:1px;background:var(--line)}
+  /* Encabezado liderado por La Creativa (look del dashboard) */
+  .cfhead{display:flex;gap:16px;align-items:center;max-width:600px;border-radius:var(--r-lg);padding:18px 20px;
+    background:linear-gradient(180deg,color-mix(in srgb,#ff2d6f 9%,#fff),var(--card));
+    border:1.5px solid color-mix(in srgb,#ff2d6f 26%,#fff);box-shadow:0 16px 34px -22px rgba(255,45,111,.55)}
+  .cf-orb{width:72px;height:72px;border-radius:50%;flex:none;display:grid;place-items:center;
+    background:radial-gradient(circle,#fff 0 42%,color-mix(in srgb,#ff2d6f 14%,#fff));
+    box-shadow:inset 0 0 0 2px color-mix(in srgb,#ff2d6f 12%,#fff),0 0 0 1px color-mix(in srgb,#ff2d6f 20%,#fff)}
+  .cf-orb img{width:48px;height:48px}
+  .cf-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .cf-top h1{font-family:var(--font-impact);text-transform:uppercase;font-size:clamp(26px,5vw,36px);margin:0;line-height:1;letter-spacing:.02em}
+  .cf-pill{font-weight:900;font-size:11px;letter-spacing:.04em;text-transform:uppercase;padding:6px 12px;border-radius:999px;
+    background:color-mix(in srgb,#ff2d6f 16%,#fff);color:color-mix(in srgb,#ff2d6f 80%,#000);border:1px solid color-mix(in srgb,#ff2d6f 30%,#fff)}
+  .cfhead p{margin:6px 0 0;color:var(--muted);font-size:14.5px}
+  @media(max-width:520px){.cf-orb{width:56px;height:56px}.cf-orb img{width:36px;height:36px}}
+  /* Preview "cómo se ve en redes" (igual que Gráficas) */
+  .prev-ov{display:none;position:fixed;inset:0;background:rgba(20,12,8,.7);z-index:96;align-items:flex-start;justify-content:center;padding:28px 16px;overflow:auto}
+  .prev-ov.show{display:flex}
+  .prev-box{background:var(--crema);border-radius:var(--r-xl);padding:18px;max-width:420px;width:100%;position:relative}
+  .prev-x{position:absolute;top:12px;right:14px;border:0;background:none;font-size:20px;cursor:pointer;color:var(--muted)}
+  .prev-tabs{display:flex;gap:8px;justify-content:center;margin-bottom:14px}
+  .ptab{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--line);background:#fff;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;border-radius:99px;padding:7px 14px}
+  .ptab.on{border-color:transparent;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta))}
+  .mock{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;max-width:360px;margin:0 auto;box-shadow:var(--shadow);color:#111}
+  .mock .av{width:34px;height:34px;border-radius:50%;object-fit:cover;background:#eee}
+  .mock .post-img{width:100%;display:block}
+  .ig-head{display:flex;align-items:center;gap:9px;padding:10px 12px;font-size:14px}
+  .ig-head .dots{margin-left:auto;color:#888}
+  .ig-acts{display:flex;gap:14px;padding:10px 12px 4px;font-size:20px}
+  .ig-acts .sp{flex:1}
+  .ig-likes{padding:0 12px;font-size:13px;font-weight:700}
+  .ig-cap{padding:4px 12px 14px;font-size:13.5px;line-height:1.4}
+  .fb-head{display:flex;align-items:center;gap:9px;padding:12px}
+  .fb-meta{font-size:12px;color:#888}
+  .fb-text{padding:0 12px 10px;font-size:14px;line-height:1.4;white-space:pre-wrap}
+  .fb-bar{display:flex;justify-content:space-around;padding:10px;border-top:1px solid #eee;font-size:13px;color:#555}
+  .prev-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:16px}
+  .pa{border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;border-radius:99px;padding:9px 14px;text-decoration:none}
+  .prev-note{font-size:11.5px;color:var(--muted);text-align:center;margin-top:12px}
 </style>
 
-<h1 class="page-h">Contenido</h1>
-<div class="viewtoggle">
-  <a class="vt on" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>">📋 Lista</a>
-  <a class="vt" href="/crecer/panel/calendario.php?marca=<?= $marca_id ?>">📅 Calendario</a>
+<div class="cfhead">
+  <div class="cf-orb"><img src="/crecer/assets/icons/creativa.svg" alt="La Creativa"></div>
+  <div class="cf-body">
+    <div class="cf-top"><h1>Contenido</h1><span class="cf-pill">La Creativa · Ideando</span></div>
+    <p>Te preparé estos posts en tu voz. Aprueba lo que te guste — tú tienes la última palabra.</p>
+  </div>
 </div>
-<p class="page-sub">La IA lo preparó. Aprueba lo que te guste — tú tienes la última palabra. ✋</p>
-<p style="font-size:12.5px;color:var(--muted);margin-top:8px;max-width:600px"><b style="color:var(--amber-ink)">Pendiente</b> = esperando tu OK · <b style="color:var(--okk-ink)">Aprobado</b> = listo para publicar. ✏️ Edita un post y la IA <b>aprende tu vocabulario</b> para los próximos.</p>
+<div class="viewtoggle">
+  <a class="vt on" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>"><?= ico('list') ?> Lista</a>
+  <a class="vt" href="/crecer/panel/calendario.php?marca=<?= $marca_id ?>"><?= ico('calendar') ?> Calendario</a>
+</div>
+<p style="font-size:12.5px;color:var(--muted);margin-top:6px;max-width:600px"><b style="color:var(--amber-ink)">Pendiente</b> = esperando tu OK · <b style="color:var(--okk-ink)">Aprobado</b> = listo. Edita un post y la IA <b>aprende tu vocabulario</b>.</p>
 
 <?php if (!empty($_GET['generados'])): ?><div class="okbar">✨ La IA redactó <?= (int)$_GET['generados'] ?> post(s) — ya quedaron programados en tu calendario. <a href="/crecer/panel/calendario.php?marca=<?= $marca_id ?>" style="color:var(--okk-ink);font-weight:800;text-decoration:underline">Ver en el calendario →</a></div><?php endif; ?>
 <?php if (!empty($_GET['err'])): ?><div class="errbar">⚠️ No se pudo generar (<?= $h($_GET['err']) ?>). Intenta de nuevo en un minuto.</div><?php endif; ?>
 
 <div class="subtabs">
-  <a class="st <?= $tab==='pendientes'?'on':'' ?>" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=pendientes">⏳ Por aprobar <span class="b" id="cnt-pend"><?= $n_pend ?></span></a>
-  <a class="st <?= $tab==='aprobados'?'on':'' ?>" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=aprobados">✅ Aprobados <span class="b" id="cnt-aprob"><?= $n_aprob ?></span></a>
+  <a class="st <?= $tab==='pendientes'?'on':'' ?>" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=pendientes"><?= ico('clock') ?> Por aprobar <span class="b" id="cnt-pend"><?= $n_pend ?></span></a>
+  <a class="st <?= $tab==='aprobados'?'on':'' ?>" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=aprobados"><?= ico('check-circle') ?> Aprobados <span class="b" id="cnt-aprob"><?= $n_aprob ?></span></a>
 </div>
 
 <?php if ($tab === 'pendientes'): ?>
   <div class="factorybar">
-    <button type="button" class="fbgen" onclick="abrirBrief()">✏️ Pedir un post a la IA</button>
+    <button type="button" class="fbgen" onclick="abrirBrief()"><?= ico('sparkles') ?> Pedir un post a la IA</button>
     <form method="post" onsubmit="var b=this.querySelector('button');b.disabled=true;">
       <input type="hidden" name="accion" value="nuevo_manual">
-      <button type="submit" class="fbnew">➕ Escribir uno yo (sin IA)</button>
+      <button type="submit" class="fbnew"><?= ico('plus') ?> Escribir uno yo (sin IA)</button>
     </form>
   </div>
 <?php elseif ($meses_aprob): ?>
   <form method="get" class="mesnav">
     <input type="hidden" name="marca" value="<?= $marca_id ?>">
     <input type="hidden" name="tab" value="aprobados">
-    <label style="font-weight:700;font-size:13.5px;color:var(--muted)">📦 Archivo por mes:</label>
+    <label style="font-weight:700;font-size:13.5px;color:var(--muted);display:inline-flex;align-items:center;gap:6px"><?= ico('calendar') ?> Archivo por mes:</label>
     <select name="mes" onchange="this.form.submit()">
       <?php foreach ($meses_aprob as $m): ?>
         <option value="<?= $h($m['ym']) ?>" <?= $m['ym']===$mes_sel?'selected':'' ?>><?= $h($nombre_mes($m['ym'])) ?> (<?= (int)$m['n'] ?>)</option>
@@ -341,19 +429,19 @@ require __DIR__ . '/_shell.php';
 <div class="feedwrap">
   <?php if (!$total && $tab==='pendientes' && $n_aprob==0): ?>
     <div class="empty">
-      <div class="big">🌱</div>
-      <p style="margin-bottom:18px">Todavía no hay contenido para este negocio.</p>
+      <div class="big"><img src="/crecer/assets/icons/corillo-listo.svg" alt="" style="width:58px;height:58px"></div>
+      <p style="margin-bottom:18px">Todavía no le has dado trabajo al corillo. Dale abajo y metemos mano.</p>
       <form method="post" action="/crecer/panel/generar.php"
             onsubmit="var b=this.querySelector('button');b.textContent='✨ Creando tu mes…';b.disabled=true;">
         <input type="hidden" name="marca" value="<?= $marca_id ?>">
-        <button type="submit" style="border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:15px;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));padding:15px 26px;border-radius:99px;box-shadow:0 12px 28px rgba(255,43,133,.3)">✨ Que la IA prepare mi primer mes</button>
+        <button type="submit" style="border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:15px;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));padding:15px 26px;border-radius:99px;box-shadow:0 12px 28px rgba(255,43,133,.3)">Que la IA prepare mi primer mes</button>
       </form>
       <p style="color:var(--muted);font-size:12.5px;margin-top:12px">Tarda un minutito — la IA está creando tu contenido.</p>
     </div>
   <?php elseif (!$total && $tab==='pendientes'): ?>
-    <div class="empty"><div class="big">🎉</div><p>¡Todo al día! No tienes posts pendientes por aprobar.<br><a href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=aprobados" style="color:var(--terracota);font-weight:800">Ver tus <?= $n_aprob ?> aprobados →</a></p></div>
+    <div class="empty"><div class="big"><img src="/crecer/assets/icons/aprobar.svg" alt="" style="width:54px;height:54px"></div><p>¡Todo al día! No tienes posts pendientes por aprobar.<br><a href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=aprobados" style="color:var(--terracota);font-weight:800">Ver tus <?= $n_aprob ?> aprobados →</a></p></div>
   <?php elseif (!$total): ?>
-    <div class="empty"><div class="big">📭</div><p>No hay posts aprobados<?= $meses_aprob ? ' en este mes' : ' todavía' ?>.</p></div>
+    <div class="empty"><div class="big"><?= ico('inbox-empty') ?></div><p>Aquí caen los posts que apruebes<?= $meses_aprob ? ' este mes' : '' ?>. Aprueba lo que te guste y aparecen aquí.</p></div>
   <?php endif; ?>
 
   <?php foreach ($piezas as $p):
@@ -375,24 +463,31 @@ require __DIR__ . '/_shell.php';
           <img class="zoomable" src="<?= $h($p['grafica_path']) ?>" alt="arte" style="width:100%;display:block">
         <?php else: ?>
           <button type="button" class="artph artbtn" data-id="<?= $p['id'] ?>">
-            <span style="font-size:30px">🎨</span><span>Crear el arte de este post</span>
+            <span><?= ico('image','ic-lg') ?></span><span>Crear el arte de este post</span>
           </button>
         <?php endif; ?>
       </div>
-      <div class="caption" id="cap-<?= $p['id'] ?>"><?= $h($p['caption']) ?: '<span style="color:var(--muted)">Sin texto todavía — toca ✏️ Editar o 🔄 que la IA lo escriba.</span>' ?></div>
+      <div class="caption" id="cap-<?= $p['id'] ?>"><?= $h($p['caption']) ?: '<span style="color:var(--muted)">Sin texto todavía — toca «Editar» o pídele a la IA que lo escriba.</span>' ?></div>
       <div class="checklist" id="chk-<?= $p['id'] ?>">
-        <span class="ck-item <?= $has_cap?'on':'' ?>" data-k="cap">✍️ Copy</span>
-        <span class="ck-item <?= $has_art?'on':'' ?>" data-k="art">🎨 Arte</span>
-        <span class="ck-item <?= $is_ok?'on':'' ?>" data-k="ok">✋ Aprobado</span>
+        <span class="ck-item <?= $has_cap?'on':'' ?>" data-k="cap"><?= ico('pen','ckic') ?> Copy</span>
+        <span class="ck-item <?= $has_art?'on':'' ?>" data-k="art"><?= ico('image','ckic') ?> Arte</span>
+        <span class="ck-item <?= $is_ok?'on':'' ?>" data-k="ok"><?= ico('check','ckic') ?> Aprobado</span>
+      </div>
+      <div class="schedrow">
+        <?= ico('calendar') ?>
+        <span class="lab">El corillo lo programó para</span>
+        <input type="date" class="fecha-in" data-id="<?= $p['id'] ?>" value="<?= date('Y-m-d', strtotime($p['fecha_programada'] ?: 'now')) ?>">
+        <span class="hint">cámbialo si quieres (ej. un día especial)</span>
       </div>
       <div class="toolrow" id="tools-<?= $p['id'] ?>" style="padding:0 17px 12px;display:flex;gap:16px;flex-wrap:wrap;font-size:13px">
-        <a href="#" class="editlink" data-id="<?= $p['id'] ?>" style="font-weight:700;color:var(--terracota);text-decoration:none">✏️ Editar</a>
-        <a href="#" class="artbtn" data-id="<?= $p['id'] ?>" style="font-weight:700;color:var(--terracota);text-decoration:none">🖼️ <?= $has_art ? 'Cambiar arte' : 'Crear arte' ?></a>
-        <a href="#" class="regenlink" data-id="<?= $p['id'] ?>" style="font-weight:700;color:var(--muted);text-decoration:none">🔄 Regenerar texto</a>
+        <a href="#" class="editlink" data-id="<?= $p['id'] ?>" style="font-weight:700;color:var(--terracota);text-decoration:none"><?= ico('edit') ?> Editar</a>
+        <a href="#" class="artbtn" data-id="<?= $p['id'] ?>" style="font-weight:700;color:var(--terracota);text-decoration:none"><?= ico('image') ?> <?= $has_art ? 'Cambiar arte' : 'Crear arte' ?></a>
+        <a href="#" class="regenlink" data-id="<?= $p['id'] ?>" style="font-weight:700;color:var(--muted);text-decoration:none"><?= ico('refresh') ?> Regenerar texto</a>
+        <?php if ($has_art): ?><a href="#" class="prevlink" data-img="<?= $h($p['grafica_path']) ?>" data-copy="<?= $h($p['caption']) ?>" style="font-weight:700;color:var(--teal);text-decoration:none"><?= ico('eye') ?> Ver en redes</a><?php endif; ?>
       </div>
       <form class="editform" data-id="<?= $p['id'] ?>" style="display:none;padding:0 17px 14px">
         <textarea name="caption" style="width:100%;font-family:inherit;font-size:14px;color:var(--tinta);border:1.5px solid var(--line);border-radius:12px;padding:11px 13px;min-height:96px"><?= $h($p['caption']) ?></textarea>
-        <div style="font-size:11.5px;color:var(--muted);margin:6px 0">💡 Corrige el vocabulario y la IA aprende para los próximos posts.</div>
+        <div style="font-size:11.5px;color:var(--muted);margin:6px 0;display:flex;align-items:center;gap:6px"><?= ico('lightbulb') ?> Corrige el vocabulario y la IA aprende para los próximos posts.</div>
         <div style="display:flex;gap:8px">
           <button type="submit" style="border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:13px;color:#fff;background:var(--palma);padding:9px 18px;border-radius:99px">Guardar</button>
           <button type="button" class="cancel" style="border:1.5px solid var(--line);cursor:pointer;font-family:inherit;font-weight:700;font-size:13px;background:#fff;color:var(--muted);padding:9px 16px;border-radius:99px">Cancelar</button>
@@ -403,6 +498,7 @@ require __DIR__ . '/_shell.php';
           <form method="post"><input type="hidden" name="id" value="<?= $p['id'] ?>"><button class="btn btn-ok" name="accion" value="aprobar">✓ Aprobar</button></form>
           <form method="post"><input type="hidden" name="id" value="<?= $p['id'] ?>"><button class="btn btn-no" name="accion" value="rechazar">Rechazar</button></form>
         <?php else: ?>
+          <button type="button" class="btn btn-ok publicarbtn">📲 Publicar</button>
           <form method="post"><input type="hidden" name="id" value="<?= $p['id'] ?>"><button class="btn btn-ghost" name="accion" value="reabrir">↺ Volver a revisar</button></form>
         <?php endif; ?>
       </div>
@@ -414,7 +510,7 @@ require __DIR__ . '/_shell.php';
 <div class="art-ov" id="briefov">
   <form class="art-box" method="post" id="briefform" onsubmit="var b=this.querySelector('.art-go');b.textContent='✨ Redactando… (~10s)';b.disabled=true;">
     <button type="button" class="x" onclick="document.getElementById('briefov').classList.remove('show')">✕</button>
-    <h3>✏️ Pedir un post a la IA</h3>
+    <h3><?= ico('sparkles') ?> Pedir un post a la IA</h3>
     <div class="sub">Sugiere el tema, o escribe un borrador y la IA lo pule respetando tu intención. Déjalo todo en blanco y la IA inventa.</div>
     <input type="hidden" name="accion" value="pedir_post">
 
@@ -426,9 +522,9 @@ require __DIR__ . '/_shell.php';
 
     <label class="fl">Plataformas <span style="color:var(--muted);font-weight:500">(elige todas las que quieras — se crea un post adaptado a cada una)</span></label>
     <div class="chips">
-      <label class="chip-opt"><input type="checkbox" name="plataformas[]" value="instagram" checked><span>📸 Instagram</span></label>
-      <label class="chip-opt"><input type="checkbox" name="plataformas[]" value="facebook" checked><span>👍 Facebook</span></label>
-      <label class="chip-opt"><input type="checkbox" name="plataformas[]" value="whatsapp" checked><span>💬 WhatsApp (Estado)</span></label>
+      <label class="chip-opt"><input type="checkbox" name="plataformas[]" value="instagram" checked><span><?= ico('instagram') ?> Instagram</span></label>
+      <label class="chip-opt"><input type="checkbox" name="plataformas[]" value="facebook" checked><span><?= ico('facebook') ?> Facebook</span></label>
+      <label class="chip-opt"><input type="checkbox" name="plataformas[]" value="whatsapp" checked><span><img src="/crecer/assets/icons/whatsapp.svg" alt="" style="width:18px;height:18px;vertical-align:-.25em"> WhatsApp (Estado)</span></label>
     </div>
 
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px">
@@ -446,7 +542,7 @@ require __DIR__ . '/_shell.php';
       </div>
     </div>
 
-    <button type="submit" class="art-go">✨ Redactar</button>
+    <button type="submit" class="art-go">Redactar</button>
     <div class="art-note">La IA usa el perfil de tu negocio y el vocabulario que le has enseñado.</div>
   </form>
 </div>
@@ -455,13 +551,13 @@ require __DIR__ . '/_shell.php';
 <div class="art-ov" id="artov">
   <form class="art-box" id="artform" enctype="multipart/form-data">
     <button type="button" class="x" onclick="cerrarArte()">✕</button>
-    <h3>🎨 Arte del post</h3>
+    <h3><?= ico('image') ?> Arte del post</h3>
     <div class="sub" id="art-copyprev">La imagen irá acorde a tu copy.</div>
     <input type="hidden" name="accion" value="arte">
     <input type="hidden" name="id" id="art-id" value="">
 
     <?php if ($graficas): ?>
-    <label class="fl" style="margin-top:8px">♻️ Reusar un arte que ya creaste <span style="color:var(--muted);font-weight:500">(tócalo para usarlo — no gasta del límite)</span></label>
+    <label class="fl" style="margin-top:8px;display:inline-flex;align-items:center;gap:6px"><?= ico('refresh') ?> Reusar un arte que ya creaste <span style="color:var(--muted);font-weight:500">(tócalo para usarlo — no gasta del límite)</span></label>
     <div class="reuse-strip">
       <?php foreach ($graficas as $g): ?>
         <img class="reuse-thumb" src="<?= $h($g['archivo']) ?>" data-gid="<?= (int)$g['id'] ?>" alt="arte previo" title="Usar este arte">
@@ -500,20 +596,20 @@ require __DIR__ . '/_shell.php';
     <label class="ck" style="margin-top:14px"><input type="checkbox" name="con_logo" value="1" id="art-logo"> Incluir mi logo</label>
     <div id="art-logoest" style="display:none;margin-top:8px">
       <div class="chips">
-        <label class="chip-opt"><input type="radio" name="logo_estilo" value="watermark" checked><span>💧 Marca de agua</span></label>
-        <label class="chip-opt"><input type="radio" name="logo_estilo" value="esquina"><span>📍 Esquina</span></label>
-        <label class="chip-opt"><input type="radio" name="logo_estilo" value="integrado"><span>🎨 Integrado</span></label>
+        <label class="chip-opt"><input type="radio" name="logo_estilo" value="watermark" checked><span>Marca de agua</span></label>
+        <label class="chip-opt"><input type="radio" name="logo_estilo" value="esquina"><span>En la esquina</span></label>
+        <label class="chip-opt"><input type="radio" name="logo_estilo" value="integrado"><span>Integrado</span></label>
       </div>
     </div>
     <?php endif; ?>
 
     <div id="art-postnote" style="font-size:12px;font-weight:700;margin-top:14px;text-align:center"></div>
-    <button type="submit" class="art-go" id="art-go">✨ Crear el arte (~15s)</button>
+    <button type="submit" class="art-go" id="art-go">Crear el arte (~15s)</button>
     <a href="#" class="art-skip" id="art-skip" style="display:none">Aprobar solo con el texto (sin imagen) →</a>
     <div class="art-note">📅 Te quedan <b id="art-rest" style="color:var(--terracota)"><?= $restantes_sem ?></b> de <?= CRECER_IMG_SEMANA ?> generaciones esta semana<?php if($reset_fecha): ?> · se recargan el <span id="art-reset"><?= $h($reset_fecha) ?></span><?php endif; ?>. Con texto = modelo Pro.</div>
 
     <div class="art-divider"><span>o usa lo tuyo</span></div>
-    <label class="fl" style="margin-top:0">📎 Subir mi propia imagen tal cual <span style="color:var(--muted);font-weight:500">(sin IA, sin gastar límite)</span></label>
+    <label class="fl" style="margin-top:0;display:inline-flex;align-items:center;gap:6px"><?= ico('paperclip') ?> Subir mi propia imagen tal cual <span style="color:var(--muted);font-weight:500">(sin IA, sin gastar límite)</span></label>
     <div style="display:flex;gap:8px;align-items:center">
       <input type="file" id="art-directa-file" accept="image/png,image/jpeg,image/webp" style="flex:1">
       <button type="button" class="fbnew" id="art-directa-btn" style="white-space:nowrap">Usar esta</button>
@@ -521,13 +617,90 @@ require __DIR__ . '/_shell.php';
   </form>
 </div>
 
+<!-- MODAL PREVIEW REDES (cómo se ve en IG/FB) -->
+<div class="prev-ov" id="prevov">
+  <div class="prev-box">
+    <button class="prev-x" onclick="document.getElementById('prevov').classList.remove('show')">✕</button>
+    <div class="prev-tabs">
+      <button class="ptab on" data-net="ig" onclick="setNet('ig')"><?= ico('instagram') ?> Instagram</button>
+      <button class="ptab" data-net="fb" onclick="setNet('fb')"><?= ico('facebook') ?> Facebook</button>
+    </div>
+    <div class="mock ig" id="m-ig">
+      <div class="ig-head"><img class="av" src="<?= $h($avatar) ?>"><b><?= $h($handle) ?></b><span class="dots">•••</span></div>
+      <img class="post-img" id="ig-img" src="">
+      <div class="ig-acts"><span>♡</span><span>💬</span><span>➤</span><span class="sp"></span><span>🔖</span></div>
+      <div class="ig-likes">A 47 personas les gusta esto</div>
+      <div class="ig-cap"><b><?= $h($handle) ?></b> <span id="ig-cap"></span></div>
+    </div>
+    <div class="mock fb" id="m-fb" style="display:none">
+      <div class="fb-head"><img class="av" src="<?= $h($avatar) ?>"><div><b><?= $h($marca['nombre_negocio']) ?></b><div class="fb-meta">Justo ahora · 🌐</div></div></div>
+      <div class="fb-text" id="fb-cap"></div>
+      <img class="post-img" id="fb-img" src="">
+      <div class="fb-bar"><span>👍 Me gusta</span><span>💬 Comentar</span><span>➤ Compartir</span></div>
+    </div>
+    <div class="prev-actions">
+      <button type="button" class="pa" onclick="copiarCopy()"><?= ico('copy') ?> Copiar copy</button>
+      <a class="pa" id="pa-dl" href="" download>⬇ Descargar imagen</a>
+    </div>
+    <div class="prev-note">Así se vería publicado. Copia el texto y descarga la imagen para subirlo, o déjalo programado en tu calendario.</div>
+  </div>
+</div>
+<textarea id="copybuffer" style="position:absolute;left:-9999px"></textarea>
+
+<!-- MODAL: PUBLICAR (device-aware: móvil = un toque · PC = paso a paso) -->
+<div class="art-ov" id="pubov">
+  <div class="art-box" style="max-width:440px">
+    <button type="button" class="x" onclick="document.getElementById('pubov').classList.remove('show')">✕</button>
+    <h3>📲 Publicar tu post</h3>
+    <div class="sub" id="pub-modo-sub">Pásalo a tus redes.</div>
+    <img id="pub-img" src="" alt="" style="width:100%;border-radius:14px;margin:12px 0;display:none">
+    <div id="pub-cap" style="font-size:13.5px;line-height:1.45;white-space:pre-wrap;background:var(--crema);border:1px solid var(--line);border-radius:12px;padding:11px 13px;max-height:140px;overflow:auto"></div>
+
+    <!-- MÓVIL: un toque -->
+    <div id="pub-movil" style="display:none">
+      <button type="button" id="pub-share" class="art-go" style="margin-top:14px">📲 Compartir a mis redes</button>
+      <div class="art-note">Un toque y escoges Facebook, Instagram o WhatsApp.</div>
+    </div>
+
+    <div id="pub-divider" style="display:none;align-items:center;gap:10px;margin:16px 0 4px;color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.05em">
+      <span style="flex:1;height:1px;background:var(--line)"></span>O PÁSALO A MANO<span style="flex:1;height:1px;background:var(--line)"></span>
+    </div>
+
+    <!-- PASO A PASO (siempre disponible; en PC es el camino principal) -->
+    <div id="pub-steps" style="margin-top:14px">
+      <ol style="margin:0;padding-left:22px;font-size:13.5px;line-height:1.5;color:var(--tinta)">
+        <li style="margin-bottom:12px">
+          <b>Descarga la imagen</b><br>
+          <a id="pub-dl" href="" download class="fbnew" style="display:inline-block;margin-top:6px;text-decoration:none">⬇ Descargar imagen</a>
+        </li>
+        <li style="margin-bottom:12px">
+          <b>El texto ya está copiado</b> — pégalo cuando subas el post.<br>
+          <button type="button" id="pub-copy" class="fbnew" style="margin-top:6px">📋 Copiar texto otra vez</button>
+        </li>
+        <li style="margin-bottom:4px">
+          <b>Abre tu red, crea una publicación, sube la imagen y pega el texto:</b><br>
+          <span style="display:inline-flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+            <a href="https://www.facebook.com/" target="_blank" rel="noopener" class="fbnew" style="text-decoration:none"><?= ico('facebook') ?> Facebook</a>
+            <a href="https://www.instagram.com/" target="_blank" rel="noopener" class="fbnew" style="text-decoration:none"><?= ico('instagram') ?> Instagram</a>
+          </span>
+        </li>
+      </ol>
+      <div class="art-note" style="margin-top:12px">💡 En Instagram, publicar desde computadora se hace con el botón <b>＋</b> arriba; en celular es más fácil con "Compartir".</div>
+    </div>
+
+    <button type="button" id="pub-done" class="art-go" style="background:var(--palma);margin-top:16px">✓ Ya lo publiqué</button>
+  </div>
+</div>
+
 <script>
+  var ICO_IMG = <?= json_encode(ico('image'), JSON_UNESCAPED_SLASHES) ?>;
   var PILL = {borrador:['Pendiente','wait'], aprobado:['Aprobado','ok'], rechazado:['Rechazado','no'], publicado:['Publicado','pub']};
   function actionsHTML(id, estado){
     if (estado === 'borrador')
       return '<form method="post"><input type="hidden" name="id" value="'+id+'"><button class="btn btn-ok" name="accion" value="aprobar">✓ Aprobar</button></form>'
            + '<form method="post"><input type="hidden" name="id" value="'+id+'"><button class="btn btn-no" name="accion" value="rechazar">Rechazar</button></form>';
-    return '<form method="post"><input type="hidden" name="id" value="'+id+'"><button class="btn btn-ghost" name="accion" value="reabrir">↺ Volver a revisar</button></form>';
+    return '<button type="button" class="btn btn-ok publicarbtn">📲 Publicar</button>'
+         + '<form method="post"><input type="hidden" name="id" value="'+id+'"><button class="btn btn-ghost" name="accion" value="reabrir">↺ Volver a revisar</button></form>';
   }
   var feed = document.querySelector('.feedwrap');
   function setChk(card, k, on){
@@ -597,6 +770,7 @@ require __DIR__ . '/_shell.php';
       fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
         el.textContent='🔄 Regenerar texto';
         if(d.ok){ card.querySelector('.caption').textContent=d.caption; var ta=card.querySelector('.editform textarea'); if(ta)ta.value=d.caption; setChk(card,'cap',d.caption.trim()!==''); toast('✨ Caption regenerado'); }
+        else if(d.paywall) toast('🔒 Regenerar es premium. Actívate para usarlo.');
         else toast('No se pudo regenerar (¿límite de IA?)');
       }).catch(function(){ el.textContent='🔄 Regenerar'; });
     }
@@ -668,6 +842,7 @@ require __DIR__ . '/_shell.php';
         go.disabled=false; go.textContent='✨ Crear el arte (~15s)';
         if(d.err==='post_limite') toast('⚠️ Ya usaste las <?= CRECER_IMG_POST ?> generaciones de este post. Recicla o sube tu foto.');
         else if(d.err==='limite') toast('🗓️ Usaste tus <?= CRECER_IMG_SEMANA ?> imágenes de la semana'+(d.reset?' (vuelven el '+d.reset+')':'')+'.');
+        else if(d.err==='paywall'){ toast('🔒 Usaste tu imagen de muestra. Actívate para crear más.'); setTimeout(function(){location.href='/crecer/panel/precios.php?marca=<?= $marca_id ?>&motivo=muestra';},1400); }
         else toast('No se pudo crear el arte. Intenta de nuevo.');
         return;
       }
@@ -675,7 +850,7 @@ require __DIR__ . '/_shell.php';
       if(wrap) wrap.innerHTML='<img class="zoomable" src="'+d.img+'?t='+Date.now()+'" alt="arte" style="width:100%;display:block">';
       card.dataset.img='1'; setChk(card,'art',true);
       card.dataset.intentos=d.restantes_post;
-      var tl=card.querySelector('.toolrow .artbtn'); if(tl) tl.innerHTML='🖼️ Cambiar arte';
+      var tl=card.querySelector('.toolrow .artbtn'); if(tl) tl.innerHTML=ICO_IMG+' Cambiar arte';
       document.getElementById('art-rest').textContent=d.restantes;
       cerrarArte();
       if(thenApprove){ enviarAccion(card,'aprobar').then(function(){ toast('✅ Post completo y aprobado'); }); }
@@ -692,7 +867,7 @@ require __DIR__ . '/_shell.php';
       var wrap=card.querySelector('.artwrap');
       if(wrap) wrap.innerHTML='<img class="zoomable" src="'+d.img+'?t='+Date.now()+'" alt="arte" style="width:100%;display:block">';
       card.dataset.img='1'; setChk(card,'art',true);
-      var tl=card.querySelector('.toolrow .artbtn'); if(tl) tl.innerHTML='🖼️ Cambiar arte';
+      var tl=card.querySelector('.toolrow .artbtn'); if(tl) tl.innerHTML=ICO_IMG+' Cambiar arte';
       cerrarArte();
       if(thenApprove){ enviarAccion(card,'aprobar').then(function(){ toast('✅ Post completo y aprobado'); }); }
       else toast('♻️ Arte reutilizado');
@@ -712,7 +887,7 @@ require __DIR__ . '/_shell.php';
       var wrap=card.querySelector('.artwrap');
       if(wrap) wrap.innerHTML='<img class="zoomable" src="'+d.img+'?t='+Date.now()+'" alt="arte" style="width:100%;display:block">';
       card.dataset.img='1'; setChk(card,'art',true);
-      var tl=card.querySelector('.toolrow .artbtn'); if(tl) tl.innerHTML='🖼️ Cambiar arte';
+      var tl=card.querySelector('.toolrow .artbtn'); if(tl) tl.innerHTML=ICO_IMG+' Cambiar arte';
       fileEl.value=''; cerrarArte();
       if(thenApprove){ enviarAccion(card,'aprobar').then(function(){ toast('✅ Post completo y aprobado'); }); }
       else toast('📎 Imagen propia añadida');
@@ -728,6 +903,102 @@ require __DIR__ . '/_shell.php';
     var el=card.querySelector('.editlink'); if(el) el.click();
     card.scrollIntoView({behavior:'smooth',block:'center'});
   })();
+
+  // Preview "cómo se ve en redes"
+  function openPrev(img, copy){
+    document.getElementById('ig-img').src = img;
+    document.getElementById('fb-img').src = img;
+    document.getElementById('ig-cap').textContent = copy || '';
+    document.getElementById('fb-cap').textContent = copy || '';
+    document.getElementById('pa-dl').href = img;
+    document.getElementById('copybuffer').value = copy || '';
+    setNet('ig');
+    document.getElementById('prevov').classList.add('show');
+  }
+  function setNet(n){
+    document.getElementById('m-ig').style.display = n==='ig' ? '' : 'none';
+    document.getElementById('m-fb').style.display = n==='fb' ? '' : 'none';
+    document.querySelectorAll('.ptab').forEach(function(t){ t.classList.toggle('on', t.dataset.net===n); });
+  }
+  function copiarCopy(){
+    var t=document.getElementById('copybuffer');
+    if(navigator.clipboard) navigator.clipboard.writeText(t.value); else { t.select(); document.execCommand('copy'); }
+    event.target.textContent='✓ Copiado';
+  }
+  document.getElementById('prevov').addEventListener('click', function(e){ if(e.target===this) this.classList.remove('show'); });
+  document.querySelectorAll('.prevlink').forEach(function(a){
+    a.addEventListener('click', function(e){ e.preventDefault(); openPrev(a.dataset.img, a.dataset.copy); });
+  });
+
+  // Reprogramar un post (el dueño escoge el día)
+  document.querySelectorAll('.fecha-in').forEach(function(inp){
+    inp.addEventListener('change', function(){
+      var fd=new FormData(); fd.append('accion','fecha'); fd.append('id',inp.dataset.id);
+      fd.append('fecha',inp.value); fd.append('ajax','1');
+      fetch(location.href,{method:'POST',body:fd}).then(function(r){return r.json();})
+        .then(function(d){ if(d.ok){ var lab=inp.closest('.schedrow').querySelector('.lab'); if(lab)lab.textContent='Tú lo programaste para'; toast('📅 Reprogramado'); } });
+    });
+  });
+
+  // ===== Publicar: pasar el post a las redes (compartir nativo o manual) =====
+  var pubov=document.getElementById('pubov'), pubCard=null;
+  pubov.addEventListener('click', function(e){ if(e.target===pubov) pubov.classList.remove('show'); });
+  function pubData(card){
+    var img=card.querySelector('.artwrap img');
+    var imgUrl=img?img.getAttribute('src').split('?')[0]:'';
+    var capEl=card.querySelector('.caption');
+    var cap=capEl?capEl.innerText.trim():'';
+    if(cap.indexOf('Sin texto todavía')===0) cap='';
+    return {imgUrl:imgUrl, cap:cap};
+  }
+  function compartirNativo(imgUrl, cap){
+    if(imgUrl && navigator.canShare){
+      fetch(imgUrl).then(function(r){return r.blob();}).then(function(b){
+        var file=new File([b],'post.png',{type:b.type||'image/png'});
+        var data={files:[file], text:cap};
+        if(navigator.canShare(data)) return navigator.share(data);
+        return navigator.share({text:cap});
+      }).catch(function(){});
+    } else if(navigator.share){
+      navigator.share({text:cap}).catch(function(){});
+    } else {
+      toast('Tu navegador no comparte directo — usa Copiar y Descargar.');
+    }
+  }
+  // ¿El dispositivo puede compartir un ARCHIVO (imagen) nativo? = celular moderno.
+  function puedeCompartirArchivo(){
+    try { return !!(navigator.canShare && navigator.canShare({files:[new File([new Blob([''],{type:'image/png'})],'x.png',{type:'image/png'})]})); }
+    catch(e){ return false; }
+  }
+  function abrirPublicar(card){
+    pubCard=card;
+    var d=pubData(card);
+    var ip=document.getElementById('pub-img'), dl=document.getElementById('pub-dl');
+    if(d.imgUrl){ ip.src=d.imgUrl; ip.style.display='block'; dl.href=d.imgUrl; dl.style.display=''; }
+    else { ip.style.display='none'; if(dl) dl.style.display='none'; }
+    document.getElementById('pub-cap').textContent=d.cap||'(este post no tiene texto)';
+    if(navigator.clipboard && d.cap) navigator.clipboard.writeText(d.cap).catch(function(){});
+    // Móvil (puede compartir archivo) → un toque + paso a paso como respaldo.
+    // PC → directo al paso a paso, sin prometer "un toque".
+    var movil = puedeCompartirArchivo();
+    document.getElementById('pub-movil').style.display   = movil ? 'block' : 'none';
+    document.getElementById('pub-divider').style.display = movil ? 'flex'  : 'none';
+    document.getElementById('pub-modo-sub').textContent  = movil
+      ? 'Un toque para compartir — o pásalo a mano.'
+      : 'Desde la computadora se hace en 3 pasitos:';
+    var sb=document.getElementById('pub-share');
+    sb.onclick=function(){ compartirNativo(d.imgUrl, d.cap); };
+    document.getElementById('pub-copy').onclick=function(){ if(navigator.clipboard) navigator.clipboard.writeText(d.cap); toast('✓ Texto copiado'); };
+    document.getElementById('pub-done').onclick=function(){
+      pubov.classList.remove('show');
+      if(pubCard) enviarAccion(pubCard,'marcar_publicado').then(function(){ toast('🎉 ¡Publicado! Lo marcamos como publicado.'); });
+    };
+    pubov.classList.add('show');
+  }
+  if(feed) feed.addEventListener('click', function(e){
+    var b=e.target.closest('.publicarbtn'); if(!b) return; e.preventDefault();
+    abrirPublicar(b.closest('.post'));
+  });
 </script>
 
 <?php require __DIR__ . '/_shell_foot.php'; ?>

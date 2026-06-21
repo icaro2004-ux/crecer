@@ -130,8 +130,8 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <?php if (!$total): ?>
       <div class="empty">
         <div class="big">🗓️</div>
-        Todavía no hay contenido planificado para este negocio.<br>
-        Corre el planificador y vuelve aquí.
+        El corillo está listo para arrancar — todavía no le has dado trabajo.<br>
+        Pon el corillo a trabajar y vuelve aquí.
       </div>
     <?php endif; ?>
 

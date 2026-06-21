@@ -37,3 +37,18 @@ define('GEMINI_MODEL',   'gemini-2.5-flash'); // 2.0-flash no tiene free tier; 2
 define('STRIPE_SECRET_KEY',      '');
 define('STRIPE_PUBLISHABLE_KEY',  '');
 define('STRIPE_WEBHOOK_SECRET',   '');
+
+// ── Meta (Instagram + Facebook) — publicación automática ──
+// De tu app en developers.facebook.com. Publicar a nombre de clientes
+// requiere App Review con Advanced Access de los permisos en META_SCOPES.
+define('META_APP_ID',       '');
+define('META_APP_SECRET',    '');
+// A dónde regresa Meta tras el login (debe coincidir EXACTO con el que
+// registres en la app de Meta). En prod usa https://tu-dominio/...
+define('META_REDIRECT_URI', BASE_URL . '/panel/conectar.php');
+define('META_GRAPH_VERSION', 'v21.0');
+
+// ── Cron del publicador ──
+// Si corres el cron por URL (no CLI), protégelo con este token:
+//   https://tu-dominio/crecer/scripts/cron_publicar.php?key=XXXX
+define('CRON_TOKEN', '');

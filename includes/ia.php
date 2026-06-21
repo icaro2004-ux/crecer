@@ -85,10 +85,18 @@ function gemini_generar(string $prompt, array $opts = []): array {
         $headers = ['Content-Type: application/json', 'Authorization: Bearer ' . $token];
     }
 
+    // Parts: texto + (opcional) audio de entrada (multimodal — onboarding por voz).
+    $parts = [['text' => $prompt]];
+    if (!empty($opts['audio']['data'])) {
+        $parts[] = ['inlineData' => [
+            'mimeType' => $opts['audio']['mime'] ?? 'audio/webm',
+            'data'     => $opts['audio']['data'],   // base64
+        ]];
+    }
     $payload = [
         'contents' => [[
             'role'  => 'user',
-            'parts' => [['text' => $prompt]],
+            'parts' => $parts,
         ]],
         'generationConfig' => [
             'temperature'     => $temperatura,

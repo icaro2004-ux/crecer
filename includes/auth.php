@@ -54,6 +54,14 @@ function marca_del_usuario(PDO $pdo, int $usuario_id, ?int $preferida = null) {
         $s = $pdo->prepare("SELECT * FROM crecer_marca WHERE id = ? AND usuario_id = ?");
         $s->execute([$preferida, $usuario_id]);
         if ($row = $s->fetch()) return $row;
+        // El admin (operador) puede ver el panel de CUALQUIER negocio.
+        $r = $pdo->prepare("SELECT rol FROM usuarios WHERE id = ?");
+        $r->execute([$usuario_id]);
+        if ($r->fetchColumn() === 'admin') {
+            $s = $pdo->prepare("SELECT * FROM crecer_marca WHERE id = ?");
+            $s->execute([$preferida]);
+            if ($row = $s->fetch()) return $row;
+        }
     }
     $s = $pdo->prepare("SELECT * FROM crecer_marca WHERE usuario_id = ? ORDER BY id LIMIT 1");
     $s->execute([$usuario_id]);

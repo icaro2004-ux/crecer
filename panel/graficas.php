@@ -6,11 +6,13 @@
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/agentes.php';
+require __DIR__ . '/../includes/suscripcion.php';
 requiere_login();
 $usuario = usuario_actual($pdo);
 $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (int)$_GET['marca'] : null);
 if (!$marca) { header('Location: /crecer/intake.php'); exit; }
 $marca_id = (int)$marca['id'];
+$pagado = marca_es_pagada($pdo, $marca_id);  // no pagado = 1 imagen de muestra
 
 $dir_fotos = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/fotos";
 $dir_graf  = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/graficas";
@@ -34,6 +36,9 @@ $wk->execute([$marca_id]); $w = $wk->fetch();
 $usados_sem = (int)$w['c'];
 $restantes_sem = max(0, $LIMITE_SEM - $usados_sem);
 $reset_fecha = $w['oldest'] ? date('d/m', strtotime($w['oldest'] . ' +7 days')) : null;
+// Cuota: pagado usa el límite semanal; no pagado tiene 1 imagen de muestra.
+$perm_img   = puede_generar_tipo($pdo, $marca_id, 'imagen');
+$puede_arte = $pagado ? ($restantes_sem > 0) : $perm_img['ok'];
 
 $err = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -49,7 +54,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             else { @mkdir($dir_fotos, 0775, true); move_uploaded_file($f['tmp_name'], $dir_fotos.'/foto_'.uniqid().'.'.$ext); }
         }
     } elseif ($accion === 'arte') {
-        if ($restantes_sem <= 0) {
+        $perm = puede_generar_tipo($pdo, $marca_id, 'imagen');
+        if (!$perm['ok']) {
+            $err = 'Ya usaste tu imagen de muestra gratis. Activa un plan para crear más arte con IA.';
+        } elseif ($perm['pagado'] && $restantes_sem <= 0) {
             $err = "Usaste tus {$LIMITE_SEM} imágenes de la semana. Se recargan el {$reset_fecha}.";
         } else {
         $nombre = basename($_POST['foto'] ?? '');
@@ -92,6 +100,13 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
 $active = 'graficas';
 $page_title = 'Gráficas';
+$guia = ['key'=>'graficas','agente'=>'image','titulo'=>'Estudio de arte',
+  'intro'=>'El Diseñador convierte tus fotos reales en arte de post profesional.',
+  'pasos'=>[
+    ['camera','Sube una foto real de tu producto (la IA nunca lo inventa).'],
+    ['sparkles','Escoge estilo y dale "Crear el arte" — el Diseñador lo monta.'],
+    ['eye','"Ver en redes" te muestra cómo queda en Instagram y Facebook.'],
+  ]];
 require __DIR__ . '/_shell.php';
 ?>
 <style>
@@ -156,7 +171,7 @@ require __DIR__ . '/_shell.php';
   .prev-note{font-size:11.5px;color:var(--muted);text-align:center;margin-top:12px}
 </style>
 
-<h1 class="page-h">Estudio de arte 🖼️</h1>
+<h1 class="page-h">Estudio de arte</h1>
 <p class="subline">Convierte tus fotos en posts profesionales — la imagen va acorde a tu copy. Tú controlas todo.</p>
 <?php if (!empty($_GET['ok'])): ?><div class="ok-banner">✓ Listo.</div><?php endif; ?>
 <?php if ($err): ?><div class="err-banner">⚠️ <?= $h($err) ?></div><?php endif; ?>
@@ -167,7 +182,7 @@ require __DIR__ . '/_shell.php';
   <div class="d">Sube fotos reales de tus productos (la IA nunca inventa tu producto).</div>
   <form class="card2" method="post" enctype="multipart/form-data">
     <input type="hidden" name="accion" value="subir">
-    <div class="uprow">📷 <input type="file" name="foto" accept="image/png,image/jpeg,image/webp" required>
+    <div class="uprow" style="display:flex;align-items:center;gap:8px"><?= ico('camera') ?> <input type="file" name="foto" accept="image/png,image/jpeg,image/webp" required>
       <button class="btnp" type="submit">Subir</button></div>
   </form>
 </div>
@@ -223,20 +238,28 @@ require __DIR__ . '/_shell.php';
     <div id="logoest" style="margin-top:10px">
       <label class="fl" style="margin-top:0">¿Cómo poner el logo? <span style="color:var(--muted);font-weight:500">(la IA lo adapta, sin fondo blanco)</span></label>
       <div class="chips">
-        <label class="chip-opt"><input type="radio" name="logo_estilo" value="watermark" checked><span>💧 Marca de agua</span></label>
-        <label class="chip-opt"><input type="radio" name="logo_estilo" value="esquina"><span>📍 En la esquina</span></label>
-        <label class="chip-opt"><input type="radio" name="logo_estilo" value="integrado"><span>🎨 Integrado al diseño</span></label>
+        <label class="chip-opt"><input type="radio" name="logo_estilo" value="watermark" checked><span>Marca de agua</span></label>
+        <label class="chip-opt"><input type="radio" name="logo_estilo" value="esquina"><span>En la esquina</span></label>
+        <label class="chip-opt"><input type="radio" name="logo_estilo" value="integrado"><span>Integrado al diseño</span></label>
       </div>
     </div>
     <?php endif; ?>
 
-    <?php if ($restantes_sem > 0): ?>
-      <button class="genbtn" type="submit">✨ Crear el arte</button>
-      <div class="costnote">Te quedan <b style="color:var(--terracota)"><?= $restantes_sem ?> de <?= $LIMITE_SEM ?></b> imágenes esta semana. Sin texto = más barato; con texto = modelo Pro (letras perfectas).</div>
+    <?php if ($puede_arte): ?>
+      <button class="genbtn" type="submit">Crear el arte</button>
+      <?php if ($pagado): ?>
+        <div class="costnote">Te quedan <b style="color:var(--terracota)"><?= $restantes_sem ?> de <?= $LIMITE_SEM ?></b> imágenes esta semana. Sin texto = más barato; con texto = modelo Pro (letras perfectas).</div>
+      <?php else: ?>
+        <div class="costnote" style="display:flex;align-items:center;gap:7px"><?= ico('gift') ?> <span><b style="color:var(--terracota)">1 imagen de muestra gratis.</b> Actívate para crear todas las que necesites.</span></div>
+      <?php endif; ?>
+    <?php elseif ($pagado): ?>
+      <div class="costnote" style="background:var(--amber-bg);color:var(--amber-ink);padding:12px;border-radius:12px;font-weight:600">
+        Usaste tus <?= $LIMITE_SEM ?> imágenes de esta semana. Se recargan el <?= $h($reset_fecha) ?>.
+      </div>
     <?php else: ?>
       <div class="costnote" style="background:var(--amber-bg);color:var(--amber-ink);padding:12px;border-radius:12px;font-weight:600">
-        🗓️ Usaste tus <?= $LIMITE_SEM ?> imágenes de esta semana. Se recargan el <?= $h($reset_fecha) ?>.<br>
-        <span style="font-weight:500">Tip: con 5 imágenes/semana puedes programar tus posts. ¿Necesitas más? Sube de plan.</span>
+        Ya usaste tu imagen de muestra gratis.<br>
+        <a href="/crecer/panel/precios.php?marca=<?= $marca_id ?>" style="color:var(--terracota-700);font-weight:800">⚡ Activa un plan para crear más arte →</a>
       </div>
     <?php endif; ?>
   </form>
@@ -255,7 +278,7 @@ require __DIR__ . '/_shell.php';
           <?php if ($g['publicado']): ?><div style="text-align:center;margin-top:6px"><span style="font-size:11px;font-weight:800;color:var(--okk-ink);background:var(--okk-bg);padding:3px 9px;border-radius:99px">✓ PUBLICADO</span></div><?php endif; ?>
           <button class="prevbtn" type="button"
             onclick="openPrev(<?= (int)$g['id'] ?>, '<?= $h($g['archivo']) ?>', this.dataset.copy)"
-            data-copy="<?= $h($g['copy_text'] ?? '') ?>">📱 Ver en redes (IG/FB)</button>
+            data-copy="<?= $h($g['copy_text'] ?? '') ?>"><?= ico('eye') ?> Ver en redes (IG/FB)</button>
         </div>
       <?php endforeach; ?>
     </div>
@@ -267,8 +290,8 @@ require __DIR__ . '/_shell.php';
   <div class="prev-box">
     <button class="prev-x" onclick="document.getElementById('prevov').classList.remove('show')">✕</button>
     <div class="prev-tabs">
-      <button class="ptab on" data-net="ig" onclick="setNet('ig')">📸 Instagram</button>
-      <button class="ptab" data-net="fb" onclick="setNet('fb')">👍 Facebook</button>
+      <button class="ptab on" data-net="ig" onclick="setNet('ig')"><?= ico('instagram') ?> Instagram</button>
+      <button class="ptab" data-net="fb" onclick="setNet('fb')"><?= ico('facebook') ?> Facebook</button>
     </div>
 
     <!-- Instagram -->
@@ -289,9 +312,9 @@ require __DIR__ . '/_shell.php';
     </div>
 
     <div class="prev-actions">
-      <button type="button" class="pa" onclick="copiarCopy()">📋 Copiar copy</button>
+      <button type="button" class="pa" onclick="copiarCopy()"><?= ico('copy') ?> Copiar copy</button>
       <a class="pa" id="pa-dl" href="" download>⬇ Descargar imagen</a>
-      <form method="post" style="display:inline" id="pubform"><input type="hidden" name="accion" value="publicar"><input type="hidden" name="gid" id="pub-gid"><button class="pa pub" type="submit">🚀 Publicar</button></form>
+      <form method="post" style="display:inline" id="pubform"><input type="hidden" name="accion" value="publicar"><input type="hidden" name="gid" id="pub-gid"><button class="pa pub" type="submit">Publicar</button></form>
     </div>
     <div class="prev-note">Por ahora "Publicar" lo marca como publicado y te da el copy + la imagen para subirla. La publicación automática a IG/FB (conexión con Meta) viene pronto.</div>
   </div>

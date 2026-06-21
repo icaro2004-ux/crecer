@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MOCKUP · El Corillo — Crecer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Knewave&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#16121f; --ink2:#0e0b16; --surface:#221b30; --surface2:#2c2440;
+    --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.14);
+    --coral:#ff5a40; --turq:#1fd6c0; --sun:#ffc63d; --magenta:#ff4d92;
+    --text:#f7f2ea; --muted:#a79bb8; --muted2:#7d7290;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:'Plus Jakarta Sans',system-ui,sans-serif;
+    background:var(--ink);color:var(--text);
+    -webkit-font-smoothing:antialiased;
+  }
+  .disp{font-family:'Anton',sans-serif;font-weight:400;letter-spacing:.5px;text-transform:uppercase;line-height:.95}
+  .layout{display:flex;min-height:100vh}
+
+  /* ── SIDEBAR ── */
+  .side{
+    width:248px;flex-shrink:0;background:var(--ink2);border-right:1px solid var(--line);
+    padding:22px 16px;display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100vh;
+  }
+  .brand{display:flex;align-items:center;gap:9px;padding:4px 8px 18px}
+  .brand .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--coral),var(--magenta));display:grid;place-items:center;font-size:17px}
+  .brand b{font-family:'Knewave',cursive;font-weight:400;font-size:20px;letter-spacing:.3px}
+  .nav a{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:11px;color:var(--muted);
+    text-decoration:none;font-weight:600;font-size:14px;transition:.15s}
+  .nav a .ic{font-size:16px;width:20px;text-align:center}
+  .nav a:hover{background:var(--surface);color:var(--text)}
+  .nav a.on{background:linear-gradient(100deg,rgba(255,90,64,.22),rgba(255,77,146,.12));color:#fff;
+    box-shadow:inset 0 0 0 1px rgba(255,90,64,.35)}
+  .nav a.lock{opacity:.5}
+  .badge{margin-left:auto;font-size:9.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+    padding:3px 7px;border-radius:6px;background:var(--surface2);color:var(--muted)}
+  .badge.desp{background:rgba(31,214,192,.16);color:var(--turq)}
+  .who{margin-top:auto;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:11px;display:flex;gap:10px;align-items:center}
+  .who .av{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--turq),#0fa);display:grid;place-items:center;font-weight:800;color:#06251f}
+  .who .nm{font-weight:800;font-size:14px}
+  .who .tag{font-size:11px;color:var(--sun);font-weight:700;margin-top:1px}
+
+  /* ── MAIN ── */
+  .main{flex:1;min-width:0;position:relative;overflow:hidden}
+  .glow{position:absolute;inset:0;pointer-events:none;
+    background:
+      radial-gradient(620px 320px at 12% -8%, rgba(255,90,64,.20), transparent 60%),
+      radial-gradient(520px 300px at 96% 0%, rgba(31,214,192,.14), transparent 55%);}
+  .content{position:relative;padding:34px 40px 60px;max-width:1180px}
+
+  /* greeting */
+  .hello{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:6px}
+  .hello h1{font-size:46px}
+  .hello h1 span{color:var(--coral)}
+  .hello .sub{color:var(--muted);font-size:15px;margin-top:8px;max-width:520px}
+  .plansticker{font-family:'Anton',sans-serif;text-transform:uppercase;letter-spacing:.06em;font-size:12.5px;
+    background:var(--sun);color:#2a1d00;padding:8px 14px;border-radius:10px;transform:rotate(-2.5deg);
+    box-shadow:0 8px 22px -8px rgba(255,198,61,.6);white-space:nowrap}
+
+  /* CORILLO strip */
+  .sech{display:flex;align-items:center;gap:10px;margin:30px 0 14px}
+  .sech h2{font-family:'Anton',sans-serif;text-transform:uppercase;letter-spacing:.04em;font-size:17px}
+  .sech .ln{flex:1;height:1px;background:var(--line)}
+  .crew{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+  @media(max-width:1024px){.crew{grid-template-columns:repeat(3,1fr)}}
+  @media(max-width:560px){.crew{grid-template-columns:repeat(2,1fr)}}
+  .agent{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;transition:.18s;cursor:default}
+  .agent:hover{transform:translateY(-3px);border-color:var(--line2);background:var(--surface2)}
+  .agent .face{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;font-size:21px;margin-bottom:10px;background:var(--surface2)}
+  .agent .role{font-weight:800;font-size:13.5px}
+  .agent .act{color:var(--muted);font-size:11.5px;margin-top:3px;line-height:1.35;min-height:31px}
+  .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}
+  .dot.work{background:var(--turq);box-shadow:0 0 0 3px rgba(31,214,192,.18)}
+  .dot.done{background:var(--sun)}
+  .dot.idle{background:var(--muted2)}
+  .agent .st{font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:9px}
+
+  /* KPI grid */
+  .kpis{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:14px;margin-top:14px}
+  @media(max-width:880px){.kpis{grid-template-columns:1fr 1fr}}
+  @media(max-width:560px){.kpis{grid-template-columns:1fr}}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:20px 22px;position:relative;overflow:hidden}
+  .card .lbl{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .card .num{font-family:'Anton',sans-serif;font-size:54px;line-height:1;margin:6px 0 2px}
+  .card .meta{font-size:12.5px;color:var(--muted)}
+  .card .cta{display:inline-flex;align-items:center;gap:6px;margin-top:14px;font-weight:800;font-size:13px;
+    text-decoration:none;color:#2a0f08;background:var(--coral);padding:9px 15px;border-radius:10px}
+  .card.hero{grid-row:span 1;background:linear-gradient(155deg,#3a1410,#241b30 60%);border-color:rgba(255,90,64,.35)}
+  .card.hero .num{color:var(--coral);font-size:64px}
+  .card.hero::after{content:"";position:absolute;right:-40px;top:-40px;width:160px;height:160px;border-radius:50%;background:radial-gradient(circle,rgba(255,90,64,.25),transparent 70%)}
+  .card .num.turq{color:var(--turq)} .card .num.sun{color:var(--sun)}
+  .pubrow{display:flex;gap:9px;align-items:center;font-size:12.5px;color:var(--muted);padding:7px 0;border-top:1px solid var(--line)}
+  .pubrow .d{font-family:'Anton',sans-serif;color:var(--turq);font-size:13px;min-width:42px}
+
+  /* feed + cta */
+  .row2{display:grid;grid-template-columns:1.3fr 1fr;gap:14px;margin-top:14px}
+  @media(max-width:880px){.row2{grid-template-columns:1fr}}
+  .feed .it{display:flex;gap:11px;padding:11px 0;border-bottom:1px solid var(--line)}
+  .feed .it:last-child{border:0}
+  .feed . av{width:30px;height:30px;border-radius:9px;background:var(--surface2);display:grid;place-items:center;font-size:15px;flex-shrink:0}
+  .feed .tx{font-size:13px;line-height:1.4}.feed .tx b{font-weight:800}
+  .feed .tm{font-size:11px;color:var(--muted2);margin-top:2px}
+  .work{display:flex;flex-direction:column;justify-content:center;text-align:center;
+    background:linear-gradient(150deg,#10231f,#221b30);border-color:rgba(31,214,192,.3)}
+  .work h3{font-family:'Anton',sans-serif;text-transform:uppercase;font-size:22px;letter-spacing:.03em;margin-bottom:6px}
+  .work p{color:var(--muted);font-size:13px;margin-bottom:16px}
+  .bigbtn{font-family:'Anton',sans-serif;text-transform:uppercase;letter-spacing:.04em;font-size:16px;
+    background:var(--turq);color:#06251f;border:none;padding:14px 22px;border-radius:13px;cursor:pointer;
+    box-shadow:0 12px 30px -10px rgba(31,214,192,.6)}
+  .note{margin-top:30px;font-size:11.5px;color:var(--muted2);text-align:center}
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="side">
+    <div class="brand"><span class="logo">📍</span><b>encuéntralo</b></div>
+    <nav class="nav">
+      <a class="on"><span class="ic">🏠</span> Inicio</a>
+      <a><span class="ic">📅</span> Contenido</a>
+      <a><span class="ic">🖼️</span> Gráficas</a>
+      <a><span class="ic">🎨</span> Marca</a>
+      <a><span class="ic">📦</span> Órdenes &amp; Agenda</a>
+      <a class="lock"><span class="ic">👥</span> Clientela <span class="badge">pronto</span></a>
+      <a class="lock"><span class="ic">💵</span> Cuentas <span class="badge desp">despegar</span></a>
+      <a class="lock"><span class="ic">📊</span> Analítica <span class="badge desp">despegar</span></a>
+    </nav>
+    <div class="who">
+      <div class="av">E</div>
+      <div>
+        <div class="nm">El Palo Dulce</div>
+        <div class="tag">🌿 Crecer · prueba: 7 días</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="glow"></div>
+    <div class="content">
+
+      <div class="hello">
+        <div>
+          <h1 class="disp">¡Wepa,<br><span>El Palo Dulce!</span></h1>
+          <p class="sub">Mientras tú haces lo tuyo, el corillo te trabajó el negocio. Esto es lo que pasó hoy 👇</p>
+        </div>
+        <div class="plansticker">🌿 Plan Crecer · prueba 7 días</div>
+      </div>
+
+      <!-- CORILLO -->
+      <div class="sech"><h2>Tu corillo</h2><div class="ln"></div></div>
+      <div class="crew">
+        <div class="agent"><div class="face">🧠</div><div class="role">Planificador</div><div class="act">Armó tu plan de julio</div><div class="st"><span class="dot done"></span>Listo</div></div>
+        <div class="agent"><div class="face">✍️</div><div class="role">Creativa</div><div class="act">Escribió 5 captions nuevos</div><div class="st"><span class="dot done"></span>Listo</div></div>
+        <div class="agent"><div class="face">🎨</div><div class="role">Diseñador</div><div class="act">Montando arte de 2 posts…</div><div class="st"><span class="dot work"></span>Trabajando</div></div>
+        <div class="agent"><div class="face">🗓️</div><div class="role">Agenda</div><div class="act">4 órdenes en cola esta semana</div><div class="st"><span class="dot work"></span>Al día</div></div>
+        <div class="agent"><div class="face">💬</div><div class="role">Vendedor</div><div class="act">WhatsApp llega con Despegar</div><div class="st"><span class="dot idle"></span>Despegar</div></div>
+        <div class="agent"><div class="face">📈</div><div class="role">Analista</div><div class="act">Métricas llegan con Despegar</div><div class="st"><span class="dot idle"></span>Despegar</div></div>
+      </div>
+
+      <!-- KPIs -->
+      <div class="kpis">
+        <div class="card hero">
+          <div class="lbl">Necesita tu OK</div>
+          <div class="num">5</div>
+          <div class="meta">piezas que el corillo te dejó listas para aprobar</div>
+          <a class="cta" href="#">Revisar ahora →</a>
+        </div>
+        <div class="card">
+          <div class="lbl">Listas para publicar</div>
+          <div class="num turq">2</div>
+          <div class="pubrow"><span class="d">01/07</span> ¡Llegó julio y con él, la mejor excusa…</div>
+          <div class="pubrow"><span class="d">22/07</span> ¡Bájale dos! En El Palo Dulce tenemos…</div>
+        </div>
+        <div class="card">
+          <div class="lbl">Ingresos del mes</div>
+          <div class="num sun">$267</div>
+          <div class="meta">de tus órdenes completadas</div>
+          <div class="pubrow" style="border-top:0;padding-top:10px"><span style="color:var(--turq)">📦 4 órdenes</span>&nbsp; abiertas ahora</div>
+        </div>
+      </div>
+
+      <!-- FEED + CTA -->
+      <div class="row2">
+        <div class="card feed">
+          <div class="lbl" style="margin-bottom:6px">Lo que hizo el corillo hoy</div>
+          <div class="it"><div class="av">✍️</div><div><div class="tx"><b>Creativa</b> escribió 5 captions para julio en tu voz</div><div class="tm">hace 12 min</div></div></div>
+          <div class="it"><div class="av">🧠</div><div><div class="tx"><b>Planificador</b> armó el calendario del mes con quincenas y fines de semana</div><div class="tm">hace 1 h</div></div></div>
+          <div class="it"><div class="av">🎨</div><div><div class="tx"><b>Diseñador</b> convirtió 2 fotos tuyas en arte de post</div><div class="tm">hace 3 h</div></div></div>
+          <div class="it"><div class="av">🗓️</div><div><div class="tx"><b>Agenda</b> te recordó la entrega de mañana</div><div class="tm">hace 5 h</div></div></div>
+        </div>
+        <div class="card work">
+          <h3>Pon el corillo<br>a trabajar</h3>
+          <p>Pídele más contenido, arte o un plan nuevo. Tú decides, ellos ejecutan.</p>
+          <button class="bigbtn">⚡ Dale, corillo →</button>
+        </div>
+      </div>
+
+      <p class="note">MOCKUP de dirección visual · datos reales de El Palo Dulce · no es la página en vivo</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

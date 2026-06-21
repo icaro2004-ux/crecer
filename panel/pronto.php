@@ -19,12 +19,18 @@ $secs = [
   'config'    => ['⚙️','Configuración','Edita tu negocio, tus datos, tu plan y tus redes.','crecer'],
 ];
 $s = $_GET['s'] ?? 'config';
-[$ic,$titulo,$desc,$plan] = $secs[$s] ?? $secs['config'];
+// $plan_req = plan que EXIGE esta sección (no confundir con el plan del
+// usuario, que lo calcula _shell.php en $plan).
+[$ic,$titulo,$desc,$plan_req] = $secs[$s] ?? $secs['config'];
 
 $h = fn($v) => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 $active = $s;
 $page_title = $titulo;
 require __DIR__ . '/_shell.php';
+
+// ¿Hay que ofrecerle subir de plan? Solo si la sección pide despegar Y el
+// usuario NO lo tiene. Si ya lo paga, ve "próximamente" normal (no upsell).
+$necesita_upgrade = ($plan_req === 'despegar') && !marca_puede($plan, 'analitica');
 ?>
 <style>
   .soon-box{max-width:560px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-xl);
@@ -44,10 +50,13 @@ require __DIR__ . '/_shell.php';
   <div class="e"><?= $ic ?></div>
   <h1><?= $h($titulo) ?></h1>
   <p><?= $h($desc) ?></p>
-  <?php if ($plan === 'despegar'): ?>
+  <?php if ($necesita_upgrade): ?>
     <div class="badge-soon badge-up">🚀 Plan Despegar</div>
-    <p style="margin-top:14px;font-size:14px">Esta función viene con el plan <b>Despegar</b>. Pronto la activamos.</p>
-    <a class="up" href="/crecer/crecer.php">Ver plan Despegar →</a>
+    <p style="margin-top:14px;font-size:14px">Esta función viene con el plan <b>Despegar</b>. Súbete para activarla.</p>
+    <a class="up" href="/crecer/panel/precios.php?marca=<?= $marca_id ?>">Ver plan Despegar →</a>
+  <?php elseif ($plan_req === 'despegar'): ?>
+    <div class="badge-soon badge-up">🚀 Plan Despegar</div>
+    <p style="margin-top:14px;font-size:14px">Ya tienes el plan <b>Despegar</b> 🎉 Esta función está en construcción; te avisamos apenas esté lista.</p>
   <?php else: ?>
     <div class="badge-soon">🔧 Próximamente</div>
     <p style="margin-top:14px;font-size:14px">Estamos construyéndola. Te avisamos apenas esté lista.</p>

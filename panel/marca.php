@@ -6,11 +6,13 @@
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/agentes.php';
+require __DIR__ . '/../includes/suscripcion.php';
 requiere_login();
 $usuario = usuario_actual($pdo);
 $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (int)$_GET['marca'] : null);
 if (!$marca) { header('Location: /crecer/intake.php'); exit; }
 $marca_id = (int)$marca['id'];
+$pagado = marca_es_pagada($pdo, $marca_id);  // el LOGO solo se desbloquea pagando
 
 $LIMITE_LOGO = 5;
 $cuenta = $pdo->prepare("SELECT COUNT(*) FROM crecer_logos WHERE marca_id=?");
@@ -22,7 +24,8 @@ $err = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accion = $_POST['accion'] ?? '';
     if ($accion === 'logo') {
-        if ($final)             $err = 'Tu logo ya está finalizado.';
+        if (!$pagado)           $err = 'El logo se desbloquea cuando te suscribes a un plan.';
+        elseif ($final)         $err = 'Tu logo ya está finalizado.';
         elseif ($usados >= $LIMITE_LOGO) $err = "Llegaste a tus {$LIMITE_LOGO} pruebas.";
         else {
             @set_time_limit(0);
@@ -66,6 +69,13 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
 $active = 'marca';
 $page_title = 'Mi Marca';
+$guia = ['key'=>'marca','agente'=>'palette','titulo'=>'Tu marca y logo',
+  'intro'=>'El Diseñador te crea tu logo profesional con IA.',
+  'pasos'=>[
+    ['sparkles','Describe tu negocio y dale "Generar mi primer logo".'],
+    ['image','Genera varios, compáralos y escoge el que más te guste.'],
+    ['download','Descárgalo en todos los formatos que necesites.'],
+  ]];
 require __DIR__ . '/_shell.php';
 ?>
 <style>
@@ -109,12 +119,23 @@ require __DIR__ . '/_shell.php';
   .empty-g{color:var(--muted);font-size:15px;margin-top:22px}
 </style>
 
-<h1 class="page-h">Mi Marca 🎨</h1>
-<p class="subline">Tienes <b><?= $LIMITE_LOGO ?> oportunidades</b> para crear tu logo con IA. Genéralos, compáralos y escoge el que más te guste.</p>
+<h1 class="page-h">Mi Marca</h1>
+<?php if ($pagado): ?>
+  <p class="subline">Tienes <b><?= $LIMITE_LOGO ?> oportunidades</b> para crear tu logo con IA. Genéralos, compáralos y escoge el que más te guste.</p>
+<?php else: ?>
+  <p class="subline">Tu logo profesional con IA — <b>se desbloquea con un plan</b>.</p>
+<?php endif; ?>
 <?php if (!empty($_GET['ok'])): ?><div class="ok-banner">✓ ¡Nuevo logo listo! Mira la galería abajo.</div><?php endif; ?>
 <?php if ($err): ?><div class="err-banner">⚠️ <?= $h($err) ?></div><?php endif; ?>
 
-<?php if (!$final && $restantes > 0): ?>
+<?php if (!$pagado): ?>
+  <div class="genbox" style="text-align:center;background:linear-gradient(135deg,rgba(255,107,61,.07),rgba(255,43,133,.07))">
+    <div style="color:var(--terracota)"><?= ico('lock','ic-xl') ?></div>
+    <div style="font-family:var(--font-impact);text-transform:uppercase;font-size:22px;margin:6px 0">El logo es premium</div>
+    <p style="color:var(--muted);font-size:14px;max-width:430px;margin:0 auto 16px">Tu logo profesional con IA, en los formatos que necesites, se desbloquea con un plan. (Tu post de muestra sí es gratis)</p>
+    <a class="genbtn" href="/crecer/panel/precios.php?marca=<?= $marca_id ?>" style="text-decoration:none;display:inline-block">⚡ Desbloquear mi logo →</a>
+  </div>
+<?php elseif (!$final && $restantes > 0): ?>
   <div class="genbox">
     <form method="post" onsubmit="var b=this.querySelector('.genbtn');b.textContent='✨ Creando… (~15s)';b.disabled=true;">
       <input type="hidden" name="accion" value="logo">
@@ -148,25 +169,25 @@ require __DIR__ . '/_shell.php';
       <label class="fl">Algo más (opcional)</label>
       <textarea name="instrucciones" rows="2" placeholder="&quot;ponle un coquí&quot;, &quot;colores azul y dorado&quot;, &quot;que parezca sello&quot;…"></textarea>
 
-      <button class="genbtn" type="submit" style="margin-top:6px"><?= $usados ? '✨ Generar otro logo' : '✨ Generar mi primer logo' ?></button>
+      <button class="genbtn" type="submit" style="margin-top:6px"><?= $usados ? 'Generar otro logo' : 'Generar mi primer logo' ?></button>
     </form>
     <div class="genline">Te quedan <b style="color:var(--terracota)"><?= $restantes ?> de <?= $LIMITE_LOGO ?></b> pruebas incluidas.</div>
     <div class="policy">Después de las <?= $LIMITE_LOGO ?>: intentos adicionales tienen costo, o pide un logo personalizado por un artista gráfico.</div>
   </div>
 <?php elseif (!$final && $restantes <= 0): ?>
   <div class="genbox" style="background:var(--amber-bg)">
-    <b style="color:var(--amber-ink)">🎨 Usaste tus <?= $LIMITE_LOGO ?> pruebas incluidas.</b>
+    <b style="color:var(--amber-ink)">Usaste tus <?= $LIMITE_LOGO ?> pruebas incluidas.</b>
     <div class="genline">Escoge tu favorito abajo. ¿Quieres más opciones? Compra intentos adicionales o pide un logo personalizado por un artista gráfico.</div>
   </div>
 <?php endif; ?>
 
 <?php if ($final): ?>
-  <div class="ok-banner" style="max-width:620px">🔒 Tu logo final está elegido. Descárgalo cuando quieras en los formatos que necesites.</div>
+  <div class="ok-banner" style="max-width:620px">Tu logo final está elegido. Descárgalo cuando quieras en los formatos que necesites.</div>
 <?php endif; ?>
 
 <!-- GALERÍA -->
 <?php if (!$logos): ?>
-  <p class="empty-g">Aún no has generado ningún logo. Dale a "Generar mi primer logo" arriba. 🎨</p>
+  <p class="empty-g">El Diseñador todavía no te ha montado un logo. Dale a "Generar mi primer logo" arriba y mete mano.</p>
 <?php else: ?>
   <div class="gallery">
     <?php foreach ($logos as $l):
