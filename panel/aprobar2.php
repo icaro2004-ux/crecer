@@ -408,30 +408,30 @@ require __DIR__ . '/_shell.php';
   $CX = '/crecer/assets/crecer-contenido';
   $url = fn($t) => "/crecer/panel/aprobar2.php?marca={$marca_id}".($t?"&tab={$t}":"");
 ?>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
-  .cux{max-width:1080px}
+  .cux{max-width:1080px;overflow-x:clip}
+  .cux img{max-width:100%}
   .cux-hero{position:relative;display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:4px 0 0;padding:8px 0 0}
   .cux-hero-copy{flex:1 1 320px;min-width:0;position:relative;z-index:3}
   .cux-agent{text-transform:uppercase;color:var(--terracota);font-weight:900;font-size:15px;letter-spacing:.06em;margin-bottom:8px}
-  .cux-h1{font-family:var(--font-impact);text-transform:uppercase;font-size:clamp(38px,5.4vw,62px);line-height:.9;letter-spacing:.01em;margin:0;color:var(--tinta)}
+  .cux-h1{font-family:var(--font-impact);text-transform:uppercase;font-size:clamp(44px,6.4vw,78px);line-height:.95;letter-spacing:.6px;margin:0;color:var(--tinta)}
   .cux-h1 .g{background:linear-gradient(120deg,var(--coral),var(--magenta));-webkit-background-clip:text;background-clip:text;color:transparent}
-  .cux-hb{display:block;width:min(380px,82%);margin:2px 0 0;filter:drop-shadow(0 8px 14px rgba(192,57,95,.18))}
   .cux-hero-copy p{font-size:16px;line-height:1.5;color:var(--muted);max-width:44ch;margin-top:14px}
-  .cux-vis{flex:0 0 auto;position:relative;width:230px;align-self:flex-end}
-  .cux-vis .bbg{position:absolute;left:-26px;right:-26px;bottom:-10px;top:-26px;width:auto;height:auto;z-index:1;opacity:.5;object-fit:contain;pointer-events:none}
-  .cux-vis .crea{position:relative;z-index:2;width:100%;display:block;pointer-events:none;filter:drop-shadow(0 20px 26px rgba(40,20,20,.16))}
-  .cux-vis .crown{position:absolute;top:-8px;left:-8px;width:58px;z-index:3;opacity:.85;pointer-events:none}
-  .cux-need{flex:0 0 280px;position:relative;z-index:3;background:var(--card);border:1px solid var(--line);border-radius:24px;box-shadow:var(--shadow);padding:24px}
-  .cux-need h3{font-family:var(--font-impact);text-transform:uppercase;font-size:23px;margin:0 0 9px;color:var(--tinta);letter-spacing:.01em}
-  .cux-need p{font-size:14px;color:var(--muted);margin:0 0 18px}
-  .cux-need button{width:100%;border:0;border-radius:14px;background:linear-gradient(120deg,var(--coral),var(--magenta));color:#fff;font-weight:800;font-size:15px;padding:14px;cursor:pointer;font-family:inherit;box-shadow:0 12px 24px -10px rgba(192,57,95,.5)}
+  .cux-vis{flex:0 0 auto;width:340px;max-width:40vw;align-self:flex-end}
+  .cux-vis .crea{width:100%;max-width:100%;height:auto;display:block;pointer-events:none;filter:drop-shadow(0 24px 32px rgba(40,20,20,.18))}
+  .cux-actions{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap;margin-top:20px}
+  .cux-cta{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:14px;background:linear-gradient(120deg,var(--coral),var(--magenta));color:#fff;font-weight:800;font-size:15px;padding:14px 28px;cursor:pointer;font-family:inherit;box-shadow:0 14px 28px -10px rgba(192,57,95,.5)}
+  .cux-cta2{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:14px;border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-weight:800;font-size:15px;padding:14px 22px;cursor:pointer;font-family:inherit;text-decoration:none}
+  .cux-cta2:hover{border-color:var(--terracota);color:var(--terracota)}
+  .cux-cta2 .ic{width:18px;height:18px}
 
   .cux-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:26px}
   .cux-stat{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow-sm);padding:20px 22px;text-decoration:none;color:inherit;transition:transform .18s,box-shadow .18s}
   .cux-stat:hover{transform:translateY(-4px);box-shadow:0 18px 36px -18px rgba(40,28,12,.3)}
   .cux-si{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;font-size:22px;font-weight:900;margin-bottom:12px}
   .cux-si.yel{background:#fff0bd;color:#c98a00}.cux-si.pnk{background:color-mix(in srgb,var(--terracota) 16%,#fff);color:var(--terracota)}.cux-si.cya{background:#d9fbfd;color:var(--teal)}
-  .cux-stat strong{font-family:var(--font-impact);font-size:44px;line-height:1;color:var(--tinta)}
+  .cux-stat strong{font-weight:800;font-size:44px;line-height:1;color:var(--tinta)}
   .cux-stat h4{text-transform:uppercase;font-size:13px;letter-spacing:.03em;margin:6px 0 4px;color:var(--tinta)}
   .cux-stat .sub{color:var(--muted);font-size:13px;margin:0 0 12px}
   .cux-stat .lk{color:var(--terracota);font-weight:800;font-size:13.5px}
@@ -460,7 +460,6 @@ require __DIR__ . '/_shell.php';
   .cux-done{background:linear-gradient(135deg,var(--terracota),var(--magenta));color:#fff;position:relative;overflow:hidden}
   .cux-done h2{font-family:var(--font-impact);text-transform:uppercase;font-size:30px;margin:0 0 12px;letter-spacing:.01em}
   .cux-done p{font-size:15.5px;line-height:1.45;opacity:.95;margin:0;max-width:34ch}
-  .cux-badge{position:absolute;right:-10px;top:-6px;width:120px;opacity:.9;pointer-events:none}
   .cux-done-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
   .cux-done-actions a,.cux-done-actions button{border:0;cursor:pointer;font-family:inherit;background:#fff;color:var(--terracota);font-weight:800;font-size:13.5px;border-radius:12px;padding:11px 16px;text-decoration:none}
   .cux-idea{background:#fff;border:1px solid var(--line);border-radius:14px;padding:13px 15px;margin-bottom:10px}
@@ -468,7 +467,19 @@ require __DIR__ . '/_shell.php';
   .cux-idea em{display:inline-block;margin-top:8px;font-style:normal;background:#fff0bd;color:#c18400;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:800}
   .cux-ideas a{color:var(--terracota);font-weight:800;font-size:13.5px;text-decoration:none}
   @media(max-width:1100px){.cux-lower{grid-template-columns:1fr}.cux-qgrid{grid-template-columns:repeat(2,1fr)}}
-  @media(max-width:720px){.cux-stats{grid-template-columns:1fr}.cux-qgrid{grid-template-columns:1fr}.cux-vis{order:-1;width:200px;margin:0 auto}.cux-need{flex:1 1 100%}}
+  @media(max-width:720px){
+    .cux-hero{flex-direction:column;align-items:stretch;text-align:center;gap:6px}
+    .cux-hero-copy{flex:1 1 100%;width:100%}
+    .cux-h1{font-size:clamp(27px,7vw,44px);letter-spacing:.2px}
+    .cux-hero-copy p{margin-left:auto;margin-right:auto}
+    .cux-actions{flex-direction:column}
+    .cux-cta,.cux-cta2{width:100%;justify-content:center}
+    .cux-vis{order:-1;width:min(92vw,420px);max-width:none;margin:-4px auto 2px}
+    .cux-stats{grid-template-columns:1fr}
+    .cux-qgrid{grid-template-columns:1fr}
+  }
+  /* Tipografía: headings en Oswald 700 (consistente con el dashboard) */
+  .cux-h1,.cux-quick h3,.cux-card h3,.cux-done h2{font-family:'Oswald',sans-serif;font-weight:700;letter-spacing:.4px;line-height:1.0}
 </style>
 
 <div class="cux">
@@ -476,18 +487,14 @@ require __DIR__ . '/_shell.php';
     <div class="cux-hero-copy">
       <div class="cux-agent">La Creativa</div>
       <h1 class="cux-h1">Tu contenido,<br><span class="g">en buenas manos</span></h1>
-      <img class="cux-hb" src="<?= $CX ?>/headline_brush.png" alt="">
       <p>La Creativa está ideando, escribiendo y preparando contenido pa' hacer crecer tu negocio.</p>
+      <div class="cux-actions">
+        <button type="button" class="cux-cta" onclick="abrirBrief()">＋ Pedir contenido</button>
+        <a class="cux-cta2" href="/crecer/panel/calendario.php?marca=<?= $marca_id ?>"><?= ico('calendar') ?> Ver calendario</a>
+      </div>
     </div>
     <div class="cux-vis">
-      <img class="bbg" src="<?= $CX ?>/hero_pink_brush.png" alt="">
-      <img class="crown" src="<?= $CX ?>/tiny_crown.png" alt="">
-      <img class="crea" src="<?= $CX ?>/creativa_character.png" alt="La Creativa">
-    </div>
-    <div class="cux-need">
-      <h3>¿Qué necesitas hoy?</h3>
-      <p>Pídele a La Creativa lo que tu negocio necesita.</p>
-      <button type="button" onclick="abrirBrief()">＋ Pedir contenido</button>
+      <img class="crea" src="<?= $CX ?>/creativa_character_clean.png" alt="La Creativa">
     </div>
   </section>
 
@@ -511,7 +518,7 @@ require __DIR__ . '/_shell.php';
 
   <section class="cux-lower">
     <article class="cux-card">
-      <h3>Actividad reciente del corillo</h3>
+      <h3>Lo que hizo el corillo hoy</h3>
       <?php if (!$timeline): ?>
         <p class="cux-soft">Todavía no hay actividad. Pídele algo a La Creativa y aquí verás lo que hace el corillo. 👇</p>
       <?php else: ?>
@@ -525,7 +532,6 @@ require __DIR__ . '/_shell.php';
     </article>
 
     <article class="cux-card cux-done">
-      <img class="cux-badge" src="<?= $CX ?>/todo_al_dia_badge.png" alt="">
       <?php if ($n_pend == 0): ?>
         <h2>¡Todo al día! 🔥</h2>
         <p>No tienes nada pendiente de aprobar. La Creativa y el corillo están trabajando en lo próximo.</p>
