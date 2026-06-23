@@ -11,9 +11,24 @@
 //  o en variables de entorno. NUNCA hardcodear aquí.
 // ============================================================
 
-// ── 1) Cargar config local si existe ─────────────────────────
-if (file_exists(__DIR__ . '/config.local.php')) {
-    require_once __DIR__ . '/config.local.php';
+// ── 1) Cargar config ─────────────────────────────────────────
+//  Orden de búsqueda (la PRIMERA que exista, gana):
+//    a) Ruta explícita en la variable de entorno CRECER_CONFIG.
+//    b) includes/config.local.php  → desarrollo local (XAMPP). Gitignored.
+//    c) Rutas FUERA del repo → producción. Sobreviven al git deploy porque el
+//       deploy solo limpia la carpeta del repo (public_html/crecer). Colocar el
+//       archivo en la carpeta `home` (sobre public_html) lo deja además fuera
+//       del alcance web. Crear una sola vez por el File Manager de hPanel.
+//       En Hostinger __DIR__ = /home/USER/public_html/crecer/includes, así que
+//       dirname(__DIR__, 3) = /home/USER  (la carpeta home).
+$config_candidates = [
+    getenv('CRECER_CONFIG') ?: null,
+    __DIR__ . '/config.local.php',
+    dirname(__DIR__, 3) . '/crecer-config.local.php',   // /home/USER/crecer-config.local.php
+    dirname(__DIR__, 2) . '/crecer-config.local.php',   // un nivel sobre public_html como respaldo
+];
+foreach ($config_candidates as $cfg) {
+    if ($cfg && is_file($cfg)) { require_once $cfg; break; }
 }
 
 // ── 2) Fallback a variables de entorno ───────────────────────
