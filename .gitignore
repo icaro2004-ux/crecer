@@ -3,11 +3,16 @@ config.local.php
 includes/config.local.php
 includes/config.local.PROD-LISTO.php
 _deploy/config.local.php
+_deploy/crecer-config.local.php
+_deploy/*config*.php
 includes/config.smtp.php
 .env
 *.key
 *-credentials.json
 service-account*.json
+
+# === Config de Claude Code (local) ===
+.claude/
 
 # === Dependencias ===
 /vendor/

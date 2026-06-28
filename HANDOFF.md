@@ -72,16 +72,61 @@ Login local: `jmp.arch.eng@gmail.com` (es admin). XAMPP corriendo. La BD local t
 propio `includes/config.local.php` (funciona).
 
 ## PRÓXIMA SESIÓN (lo primero)
-- **TARIFARIO / precios del paquete** — Manuel quiere hablarlo. Definir oferta y precio
-  (sigue "por definir" en CLAUDE.md). Es lo primero que retomamos.
-- Los cambios de esta sesión siguen **SIN COMMIT** (regla de Manuel: no commitear hasta
-  aprobar). `git status`: `panel/aprobar2.php` modificado + assets. Cuando apruebe, juntar
-  todo en un commit (fix móvil + Oswald + nena responsive + badge roto + botón calendario).
+- **Cerrar el TARIFARIO y montarlo** (ver decisiones abajo) → configurar planes en
+  `crecer_planes` + price ids en Stripe.
+
+## ⏰ META — EN PROGRESO (arrancado 2026-06-23)
+La App de Meta es el cuello de botella de auto-publicar a redes Y de WhatsApp con IA
+(Cloud API). Manuel compró línea móvil nueva (2026-06-23) para WhatsApp.
+
+**Estado del código:** auto-publicar IG/FB YA está completo (`includes/meta.php`,
+`includes/publicador.php`, `panel/conectar.php` — OAuth + publicar 2 pasos IG + FB).
+**Páginas legales: HECHAS y pusheadas** (commit `e016152`) — requisito del App Review:
+`/crecer/privacidad.php`, `/crecer/terminos.php`, `/crecer/eliminar-datos.php`
+(contacto info@encuentraloahora.com). Falta que Manuel haga DEPLOY para que queden vivas.
+
+**Lo que falta (lado de Manuel, en el dashboard de Meta):** 1) Verificación de Negocio en
+business.facebook.com (lo más lento — empezar ya). 2) Crear App tipo Business + añadir
+Facebook Login e Instagram. 3) Settings→Basic: icono, las 3 URLs legales, App Domain. 4)
+FB Login redirect URI = `https://encuentraloahora.com/crecer/panel/conectar.php`. 5) Copiar
+App ID/Secret → `crecer-config.local.php` del server (META_APP_ID/SECRET). 6) Probar en dev
+mode con su FB/IG. 7) Grabar screencast + enviar App Review (6 permisos, Advanced Access).
+Requisito: su IG debe ser Business/Creator enlazado a una Página de FB.
+WhatsApp Cloud API = fase aparte después. **Seguir recordándoselo cada sesión.**
+
+## Decisiones de tarifario (2026-06-23, semi-cerradas — falta visto final de Manuel)
+- **Colapsar a UN solo plan** "Crecer" (Despegar se congela como upsell futuro: vende
+  features no-vivas como auto-publicación → no venderlo aún). Hoy en BD: crecer $49 /
+  despegar $89 (`migrations/2026-06-14_crecer_billing.sql`).
+- **Sin mes gratis** (cada corrida de agente cuesta $). En su lugar: **fee de activación
+  único ~$29** (cubre logo + aprender marca + 1er calendario) → protege el costo upfront.
+- **Mensual $39 · Fundador $25/mes (congelado) · Anual $300** (= fundador asegurado/año;
+  NO venderlo como "X meses gratis"). Alt conservadora del anual: $429 (1 mes gratis).
+- Tarjeta obligatoria día 1. Cancelar = al final del ciclo (Stripe `cancel_at_period_end`,
+  sin reembolso). Gancho gratis = 1 post de muestra antes de registrarse (ya existe).
+- **Posts: 4/semana (hasta 16/mes)**, NO diario (cansa audiencia + dispara costo IA).
+
+## Backlog de features (brainstorm 2026-06-23)
+- **Sliders/presets de tono de voz** en Marca: Cercano-Boricua / Profesional / Premium /
+  Divertido + sliders (formalidad, sabor boricua, energía de venta, emojis). Se guarda en
+  `crecer_marca`, se inyecta al prompt de Gemini. Abre mercado a negocios "refinados".
+- **Sección Pro Tips**: carrusel descartable arriba de contenido, voz coach boricua (no
+  postear diario, contestar comentarios la 1ra hora, reels para alcance, siempre CTA, etc).
+- **WhatsApp con IA** (depende de Meta Cloud API): contestar FAQs, capturar pedidos/leads,
+  follow-up/retención, confirmar citas, pasar a humano. 1 número = 1 negocio; con Cloud API
+  varios números bajo 1 Meta Business → Crecer + bienes raíces de Manuel (dogfooding = gran
+  historia para el jurado). Un número en Cloud API ya no sirve en la app normal de WhatsApp.
+
+## Estado al día (2026-06-23)
+- Todo commiteado y pusheado a `origin/main`. Últimos: `9b9e780` (hub La Creativa móvil +
+  botón calendario), `ae0675d` (fix config deploy). Working tree limpio (solo `.claude/`).
+- **Config en deploy: RESUELTO.** `db.php` lee el config de fuera del repo y Manuel ya
+  colocó `crecer-config.local.php` en el server (en `public_html/` al lado de `crecer`, por
+  el File Manager — su IP está blacklisteada para FTP). Los deploys ya no rompen el sitio.
 
 ## Pendientes mayores
 - Stripe LIVE (cuenta activar → product/price ids → webhook secret).
 - App de Meta para auto-publicar (falta App ID/Secret + App Review).
-- Fix permanente del config en deploy.
 
 ## Reglas de Manuel
 Tono directo, sin floritura. Refinar incremental, no rediscñar. Boricua auténtico. Ver

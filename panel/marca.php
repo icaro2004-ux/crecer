@@ -23,6 +23,39 @@ $final = (int)$marca['logo_final'] === 1;
 $err = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accion = $_POST['accion'] ?? '';
+
+    if ($accion === 'tono') {
+        $vals = [];
+        foreach (['boricua','formal','venta','ingenio'] as $k) $vals[$k] = max(0, min(100, (int)($_POST['t_'.$k] ?? 50)));
+        $preset = substr(trim((string)($_POST['preset'] ?? '')), 0, 20);
+        $pdo->prepare("UPDATE crecer_marca SET tono_boricua=?, tono_formal=?, tono_venta=?, tono_ingenio=?, tono_preset=? WHERE id=?")
+            ->execute([$vals['boricua'], $vals['formal'], $vals['venta'], $vals['ingenio'], $preset ?: null, $marca_id]);
+        header("Location: /crecer/panel/marca.php?marca={$marca_id}&tono=1"); exit;
+    }
+
+    if ($accion === 'tono_preview') {
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            $m = leer_marca($pdo, $marca_id);
+            foreach (['boricua','formal','venta','ingenio'] as $k)
+                $m['tono_'.$k] = max(0, min(100, (int)($_POST['t_'.$k] ?? ($m['tono_'.$k] ?? 50))));
+            $ctx = marca_contexto($m);
+            $sistema = "Eres el CREADOR de contenido de Crecer. Escribes captions cortos para redes sociales de microempresas boricuas. Español puertorriqueño AUTÉNTICO, nunca traducido ni \"AI slop\". Vocabulario local. Llamado a la acción por WhatsApp. Máximo 45 palabras por caption." . tono_instruccion($m);
+            $prompt = "Perfil del negocio:\n{$ctx}\n\nEscribe TRES (3) captions DISTINTOS para un post que promociona el negocio o su producto principal, los tres en EXACTAMENTE el mismo tono indicado arriba. Sepáralos con una línea que diga solo: ===\nNo los numeres, no pongas títulos, no expliques nada.";
+            $r = ia_ejecutar($pdo, 'creador', 'Vista previa de tono', $prompt, [
+                'marca_id' => $marca_id, 'sistema' => $sistema,
+                'temperatura' => 1.0, 'max_tokens' => 600, 'thinking_budget' => 0,
+                'mock_texto' => "¡Wepa! Llegó bizcocho fresco hoy 🔥 Escríbenos por WhatsApp 📲\n===\nDate el gusto: tres leches cremosito como te gusta 😋\n===\nOrdena hoy por WhatsApp y te lo apartamos, mi gente 💛",
+            ]);
+            $parts = preg_split('/\n?\s*={2,}\s*\n?/', trim((string)$r['texto']));
+            $parts = array_values(array_filter(array_map('trim', $parts), fn($x) => $x !== ''));
+            echo json_encode(['ok' => true, 'variaciones' => array_slice($parts, 0, 3)], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => substr($e->getMessage(), 0, 160)], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
     if ($accion === 'logo') {
         if (!$pagado)           $err = 'El logo se desbloquea cuando te suscribes a un plan.';
         elseif ($final)         $err = 'Tu logo ya está finalizado.';
@@ -66,6 +99,15 @@ $logos = $pdo->prepare("SELECT * FROM crecer_logos WHERE marca_id=? ORDER BY id"
 $logos->execute([$marca_id]); $logos = $logos->fetchAll();
 $elegido = null; foreach ($logos as $l) if ($l['elegido']) $elegido = $l;
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+
+// Valores actuales del tono (para precargar los sliders)
+$T = [
+  'boricua' => (int)($marca['tono_boricua'] ?? 80),
+  'formal'  => (int)($marca['tono_formal']  ?? 30),
+  'venta'   => (int)($marca['tono_venta']   ?? 55),
+  'ingenio' => (int)($marca['tono_ingenio'] ?? 60),
+];
+$Tpreset = (string)($marca['tono_preset'] ?? '');
 
 $active = 'marca';
 $page_title = 'Mi Marca';
@@ -120,6 +162,13 @@ require __DIR__ . '/_shell.php';
 </style>
 
 <h1 class="page-h">Mi Marca</h1>
+<?php if (!empty($_GET['tono'])): ?><div class="ok-banner" style="max-width:680px">✓ Tu tono quedó guardado. La Creativa escribirá así de ahora en adelante.</div><?php endif; ?>
+
+<h2 class="sec-h">🎙️ Tu tono de voz</h2>
+<p class="subline">Define cómo te escribe La Creativa: mueve los controles, genera ejemplos y guárdalo. Así suena <b>todo tu contenido</b>.</p>
+<?php include __DIR__ . '/_tono_panel.php'; ?>
+
+<h2 class="sec-h" style="margin-top:44px">🎨 Tu logo</h2>
 <?php if ($pagado): ?>
   <p class="subline">Tienes <b><?= $LIMITE_LOGO ?> oportunidades</b> para crear tu logo con IA. Genéralos, compáralos y escoge el que más te guste.</p>
 <?php else: ?>

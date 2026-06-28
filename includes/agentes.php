@@ -289,6 +289,42 @@ function marca_contexto(array $m): string {
 }
 
 /**
+ * Bloque de instrucción de TONO para el prompt del creador, a partir de los
+ * 4 ejes (0-100) que el dueño definió en la pantalla de Marca. Degrada con
+ * gracia: si la marca no tiene columnas de tono, devuelve "".
+ */
+function tono_instruccion(array $m): string {
+    if (!isset($m['tono_boricua'])) return '';
+    $bk = fn($x) => $x < 34 ? 0 : ($x < 67 ? 1 : 2);
+    $b = $bk((int)$m['tono_boricua']); $f = $bk((int)$m['tono_formal']);
+    $v = $bk((int)$m['tono_venta']);   $g = $bk((int)$m['tono_ingenio']);
+    $B = [
+        'Español neutral, sin regionalismos marcados.',
+        'Español con sabor boricua moderado.',
+        'Bien boricua: usa expresiones de la isla (wepa, mi gente, brutal, chévere, "pa\'", nene/nena) con naturalidad.',
+    ][$b];
+    $F = [
+        'Bien casual y relajado, como un mensaje de WhatsApp a un pana.',
+        'Equilibrado: cercano pero pulido.',
+        'Formal y profesional; cuida la gramática y evita la jerga.',
+    ][$f];
+    $V = [
+        'Informativo, sin presión de venta.',
+        'Invita suavemente a la acción.',
+        'Vendedor: llamado a la acción claro y urgencia honesta (sin exagerar ni mentir).',
+    ][$v];
+    $G = [
+        'Sobrio y directo, sin chistes.',
+        'Con una chispa ligera de gracia.',
+        'Jocoso: mete humor boricua y algún juego de palabras, sin perder el mensaje.',
+    ][$g];
+    $emoji = ((int)$m['tono_boricua'] + (int)$m['tono_ingenio']) / 2;
+    $E = $emoji < 28 ? 'Casi sin emojis.' : ($emoji > 66 ? 'Emojis con libertad (2-4).' : '1-2 emojis.');
+    return "\n\nTONO DE VOZ (el dueño lo definió con los controles — RESPÉTALO por encima de la regla genérica de tono):\n"
+         . "- Sabor: {$B}\n- Formalidad: {$F}\n- Venta: {$V}\n- Humor: {$G}\n- Emojis: {$E}";
+}
+
+/**
  * AGENTE PLANIFICADOR. Le pide a Gemini un plan de contenido para el
  * mes y lo materializa: crea/actualiza crecer_calendario + N borradores
  * en crecer_contenido. Devuelve [calendario_id, piezas[], ia_log_id].
@@ -425,6 +461,7 @@ SYS;
     if (!empty($m['glosario'])) {
         $sistema .= "\n\nVOCABULARIO DEL NEGOCIO (el dueño lo corrigió — RESPÉTALO SIEMPRE, no repitas los errores):\n" . $m['glosario'];
     }
+    $sistema .= tono_instruccion($m);
 
     $prompt = "Perfil del negocio:\n{$ctx}\n\n"
         . "Plataforma: {$pieza['plataforma']} | Tipo: {$pieza['tipo']}\n"
@@ -473,6 +510,7 @@ SYS;
     if (!empty($m['glosario'])) {
         $sistema .= "\n\nVOCABULARIO DEL NEGOCIO (el dueño lo corrigió — RESPÉTALO SIEMPRE, no repitas los errores):\n" . $m['glosario'];
     }
+    $sistema .= tono_instruccion($m);
 
     $prompt = "Perfil del negocio:\n{$ctx}\n\n"
         . "Plataforma: {$pieza['plataforma']} | Tipo: {$pieza['tipo']}\n";
@@ -564,6 +602,7 @@ SYS;
     if (!empty($m['glosario'])) {
         $sistema .= "\n\nVocabulario propio de este negocio (respétalo):\n" . $m['glosario'];
     }
+    $sistema .= tono_instruccion($m);
 
     // Compactar el historial reciente (últimos 6 turnos) dentro del prompt.
     $hist = '';
