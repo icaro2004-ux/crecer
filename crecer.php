@@ -11,6 +11,7 @@ require __DIR__ . '/includes/iconos.php';
 
 // ── Prueba social viva (defensiva: nunca tumba la página) ──
 $acciones = 113; $negocios = 7;
+$precio_crecer = 49;   // fallback; el real se lee de crecer_planes (dato configurable)
 try {
     if (is_file(__DIR__ . '/includes/config.local.php')) require_once __DIR__ . '/includes/config.local.php';
     if (defined('DB_NAME') && DB_NAME !== '') {
@@ -18,6 +19,8 @@ try {
             DB_USER, DB_PASS, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
         $r = $pdo->query("SELECT COUNT(*) a, COUNT(DISTINCT marca_id) n FROM crecer_ia_log WHERE estado='ok'")->fetch(PDO::FETCH_ASSOC);
         if ($r) { $acciones = max($acciones, (int)$r['a']); $negocios = max($negocios, (int)$r['n']); }
+        $pp = $pdo->query("SELECT precio_mensual FROM crecer_planes WHERE slug='crecer' AND activo=1")->fetchColumn();
+        if ($pp !== false && $pp !== null) $precio_crecer = (int)$pp;
     }
 } catch (Throwable $e) { /* usa el fallback */ }
 $nf = fn($n) => number_format($n);
@@ -27,8 +30,8 @@ $nf = fn($n) => number_format($n);
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Crecer · Tu departamento de marketing con IA — Encuéntralo</title>
-<meta name="description" content="La IA te corre el marketing del negocio — contenido, redes y clientela — y tú solo apruebas desde el celular. Hecho en y para Puerto Rico.">
+<title>Crecer · El contenido de tus redes, hecho por IA — Encuéntralo</title>
+<meta name="description" content="Crecer te prepara cada semana los posts de tus redes, en tu propia voz. Tú solo los apruebas desde el celular. Hecho en y para Puerto Rico.">
 <link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/encuentralo-pin.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -105,7 +108,7 @@ $nf = fn($n) => number_format($n);
   /* Tira "el corillo" */
   .band{margin-top:46px}
   .band .lab{text-align:center;font-weight:800;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
-  .agents{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-top:18px;position:relative;perspective:900px}
+  .agents{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:18px;position:relative;perspective:900px}
   .ag{background:var(--card,#fff);border:1px solid var(--line);border-radius:16px;padding:16px 10px;text-align:center;
     transition:transform .18s,box-shadow .18s}
   .ag{position:relative;transform-style:preserve-3d;transition:transform .1s ease-out,box-shadow .2s}
@@ -136,13 +139,13 @@ $nf = fn($n) => number_format($n);
   .cell .ic{font-size:30px}
   .cell h3{font-family:'Anton',sans-serif;font-size:24px;text-transform:uppercase;letter-spacing:.02em;margin:12px 0 6px}
   .cell p{font-size:14.5px;color:var(--muted);margin:0;line-height:1.55;max-width:44ch}
-  .cell.hero-cell{background:linear-gradient(135deg,#241633,#0e0a16);color:#fff}
+  .cell.hero-cell{grid-column:1/-1;background:linear-gradient(135deg,#241633,#0e0a16);color:#fff}
   .cell.hero-cell h3{color:#fff}.cell.hero-cell p{color:#ccc4d6}
   .cell.hero-cell .tagm{display:inline-block;margin-top:14px;font-size:12px;font-weight:800;color:#c9b8ff;
     background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);padding:6px 12px;border-radius:99px}
 
   /* Niveles */
-  .plans{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;align-items:start}
+  .plans{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;align-items:start;max-width:760px;margin:0 auto}
   .plan{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:28px 24px;position:relative}
   .plan.pop{border:2px solid transparent;transform:translateY(-10px);
     background:linear-gradient(var(--card),var(--card)) padding-box,var(--grad) border-box;
@@ -265,12 +268,13 @@ $nf = fn($n) => number_format($n);
 
   @media(max-width:960px){
     .hero .in{grid-template-columns:1fr;gap:30px}.phone{order:-1}
-    .agents{grid-template-columns:repeat(3,1fr)}
+    .agents{grid-template-columns:repeat(2,1fr)}
     .steps{grid-template-columns:1fr 1fr}
     .bento{grid-template-columns:1fr}.cell.big,.cell.sm{grid-column:auto}
     .plans{grid-template-columns:1fr;max-width:440px;margin:0 auto}.plan.pop{transform:none}
   }
-  @media(max-width:520px){.agents{grid-template-columns:repeat(2,1fr)}.steps{grid-template-columns:1fr}.ev{padding:30px 20px}}
+  @media(max-width:520px){.agents{grid-template-columns:repeat(2,1fr)}.steps{grid-template-columns:1fr}.ev{padding:30px 20px}
+    .nav .cta{display:none}}
   @media(prefers-reduced-motion:reduce){.rv{opacity:1;transform:none}.float{animation:none}}
 </style>
 </head>
@@ -282,7 +286,7 @@ $nf = fn($n) => number_format($n);
       <img class="mark" src="/crecer/assets/brand/encuentralo-pin.svg" alt=""><span class="bn">encuéntralo</span></a>
     <span class="sp"></span>
     <a class="enter" href="/crecer/login.php">Entrar</a>
-    <a class="cta" href="/crecer/registro.php">Empezar gratis</a>
+    <a class="cta" href="/crecer/registro.php">Crea mi primer post</a>
   </div>
 </nav>
 
@@ -291,10 +295,10 @@ $nf = fn($n) => number_format($n);
   <div class="in wrap">
     <div>
       <span class="eyebrow">🇵🇷 Pa'l boricua que lo da todo en su negocio</span>
-      <h1 class="disp">Tú haces lo tuyo. <span class="g">El corillo hace el resto.</span></h1>
-      <p class="sub">Trabajas como un mulo y al final del día no te quedan fuerzas pa' pensar qué postear. Tranqui — desde hoy tienes un corillo que te trabaja las redes completas. Tú solo le das el OK desde el celular.</p>
+      <h1 class="disp">Tú sigues <span class="g">en lo tuyo.</span></h1>
+      <p class="sub">Crecer te prepara cada semana los posts de tus redes, en tu propia voz. Tú solo los apruebas desde el celular.</p>
       <div class="actions">
-        <a class="btn-primary" href="/crecer/registro.php">Empezar gratis →</a>
+        <a class="btn-primary" href="/crecer/registro.php">Crea mi primer post →</a>
         <a class="btn-ghost" href="#planes">Ver los planes</a>
       </div>
       <div class="proof">
@@ -325,8 +329,6 @@ $nf = fn($n) => number_format($n);
       <div class="ag" style="--c:#7928ff"><div class="ag-in"><div class="o"><?= ico('list') ?></div><h4>El Estratega</h4><p>Planifica el mes</p><div class="q">"Estoy cuadrando el plan pa' que no publiques a lo loco."</div></div></div>
       <div class="ag" style="--c:#ff2d6f"><div class="ag-in"><div class="o"><?= ico('pen') ?></div><h4>La Creativa</h4><p>Escribe los posts</p><div class="q">"Déjame cocinar algo brutal pa' tu marca."</div></div></div>
       <div class="ag" style="--c:#ff7900"><div class="ag-in"><div class="o"><?= ico('palette') ?></div><h4>El Diseñador</h4><p>Crea las gráficas</p><div class="q">"Quiero que esto se vea premium, con cariño en cada detalle."</div></div></div>
-      <div class="ag" style="--c:#00a5a8"><div class="ag-in"><div class="o"><?= ico('calendar') ?></div><h4>La Agenda</h4><p>Órdenes y citas</p><div class="q">"Tengo el calendario tranquilo y sin revoluces."</div></div></div>
-      <div class="ag" style="--c:#33b617"><div class="ag-in"><div class="o"><?= ico('users') ?></div><h4>El Vendedor</h4><p>Cuida tu clientela</p><div class="q">"Estoy buscando dónde hay chavos en la mesa."</div></div></div>
       <div class="ag" style="--c:#1e69ff"><div class="ag-in"><div class="o"><?= ico('chart') ?></div><h4>El Analista</h4><p>Mide y aconseja</p><div class="q">"Vi tus números y hay una oportunidad aquí."</div></div></div>
     </div>
   </div>
@@ -362,14 +364,13 @@ $nf = fn($n) => number_format($n);
   <div class="sec-head"><h2 class="disp">Todo un equipo de marketing, <span class="g">por menos que un almuerzo al día.</span></h2></div>
   <div class="bento">
     <div class="cell hero-cell big">
-      <div class="ic">🌙</div>
-      <h3>El corillo trabaja solo</h3>
-      <p>Con el piloto automático, la IA te prepara los posts de la semana sin que se lo pidas. Te despiertas con el trabajo hecho, listo para aprobar.</p>
+      <div class="ic">🗓️</div>
+      <h3>El corillo te prepara la semana</h3>
+      <p>Cada semana el corillo te deja listos los posts de tus redes, en tu voz. Te despiertas con el trabajo hecho — tú solo das el OK desde el celular.</p>
       <span class="tagm">Operado por agentes de IA, con evidencia real</span>
     </div>
     <div class="cell sm"><div class="ic">✍️</div><h3>Voz boricua</h3><p>Captions auténticos, nunca traducidos ni genéricos. La IA aprende cómo hablas tú.</p></div>
     <div class="cell sm"><div class="ic">🎨</div><h3>Arte premium</h3><p>Tus fotos reales convertidas en gráficas de agencia. El producto siempre real.</p></div>
-    <div class="cell sm"><div class="ic">🤝</div><h3>Clientela</h3><p>Tus clientes se arman solos de tus órdenes y el corillo los reactiva.</p></div>
     <div class="cell sm"><div class="ic">📲</div><h3>Publica fácil</h3><p>Pasa el post completo a Facebook e Instagram en un solo toque.</p></div>
   </div>
 </section>
@@ -392,60 +393,34 @@ $nf = fn($n) => number_format($n);
       <a class="cta" href="/crecer/registro.php">Empezar gratis</a>
     </div>
     <div class="plan pop">
-      <span class="pop-tag">★ El más popular</span>
+      <span class="pop-tag">★ Tu corillo</span>
       <div class="lvl"><?= ico('leaf') ?> Mensual</div>
       <div class="name">Crecer</div>
-      <div class="promise">El corillo te corre el marketing. Tú apruebas.</div>
-      <div class="price">$49<small>/mes</small></div>
+      <div class="promise">Contenido nuevo cada semana, en tu voz. Tú apruebas.</div>
+      <div class="price">$<?= (int)$precio_crecer ?><small>/mes</small></div>
       <ul>
-        <li>Marca y logo con IA</li>
-        <li>Fábrica de posts (captions boricuas + arte)</li>
+        <li>Contenido nuevo cada semana (captions boricuas + arte)</li>
+        <li>Tu marca y logo con IA</li>
         <li>Calendario + aprobación desde el celular</li>
-        <li>Órdenes y agenda + página pública con QR</li>
-        <li>~10 imágenes IA por semana</li>
+        <li>Gráficas con tus fotos reales</li>
+        <li>Publicación a IG/FB al conectar tus redes</li>
       </ul>
       <a class="cta" href="/crecer/registro.php?plan=crecer">Activar Crecer</a>
     </div>
-    <div class="plan">
-      <div class="lvl"><?= ico('rocket') ?> Mensual</div>
-      <div class="name">Despegar</div>
-      <div class="promise">El corillo además te ayuda a vender y crecer.</div>
-      <div class="price">$89<small>/mes</small></div>
-      <ul>
-        <li>Todo lo de Crecer</li>
-        <li>Piloto automático (posts solos cada semana)</li>
-        <li>Clientela con retención por IA</li>
-        <li>Analítica de impacto</li>
-        <li>Publicación a IG/FB</li>
-      </ul>
-      <a class="cta" href="/crecer/registro.php?plan=despegar">Activar Despegar</a>
-    </div>
   </div>
-  <p class="note">Precios accesibles a propósito — hechos para el microempresario boricua 🇵🇷</p>
+  <p class="note">Precio accesible a propósito — hecho para el microempresario boricua 🇵🇷</p>
 </section>
 
 <!-- EVIDENCIA / PRUEBA -->
 <section class="wrap rv">
   <div class="ev">
     <h2>Esto no es promesa. La IA opera de verdad.</h2>
-    <p>Cada decisión del corillo queda registrada — planificó, escribió, diseñó, contestó. Transparencia total, datos reales.</p>
+    <p>Cada decisión del corillo queda registrada — planificó, escribió y diseñó. Transparencia total, datos reales.</p>
     <div class="stats">
       <div class="stat"><b class="g count" data-to="<?= $acciones ?>">0</b><span>ACCIONES DE IA EJECUTADAS</span></div>
       <div class="stat"><b class="g count" data-to="<?= $negocios ?>">0</b><span>NEGOCIOS OPERADOS</span></div>
       <div class="stat"><b class="g">24/7</b><span>EL CORILLO NO PARA</span></div>
     </div>
-  </div>
-</section>
-
-<!-- FLYWHEEL -->
-<section class="wrap rv">
-  <div class="sec-head"><h2 class="disp">La rueda que te hace crecer</h2><p>Cada orden que completas te trae la próxima.</p></div>
-  <div class="ring">
-    <span class="node">📥 Entra una orden</span><span class="arr">→</span>
-    <span class="node">✅ La completas</span><span class="arr">→</span>
-    <span class="node">⭐ El cliente te reseña</span><span class="arr">→</span>
-    <span class="node">📈 Subes en el directorio</span><span class="arr">→</span>
-    <span class="node">🔁 Más clientes</span>
   </div>
 </section>
 
@@ -458,7 +433,7 @@ $nf = fn($n) => number_format($n);
 <!-- CTA FINAL -->
 <section class="wrap final rv">
   <h2 class="disp">Tu negocio merece <span class="g">un corillo que lo trabaje.</span></h2>
-  <a class="big-cta" href="/crecer/registro.php">Crear mi negocio gratis →</a>
+  <a class="big-cta" href="/crecer/registro.php">Crea mi primer post →</a>
   <p style="color:var(--muted);font-size:14px;margin-top:14px">Gratis · sin tarjeta · en 2 minutos lo tienes corriendo</p>
 </section>
 

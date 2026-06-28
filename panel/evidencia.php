@@ -18,6 +18,14 @@ $USUARIO_ID = (int)$usuario['id'];
 $marca = marca_del_usuario($pdo, $USUARIO_ID, isset($_GET['marca']) ? (int)$_GET['marca'] : null);
 if (!$marca) { header('Location: /crecer/onboarding.php'); exit; }
 $marca_id = (int)$marca['id'];
+
+// EVIDENCIA TÉCNICA — protegida (tokens, costos, modelos, agregados del
+// sistema). Es la prueba del criterio #2 del XPRIZE, para admin/jurado.
+// El cliente ve la versión humana en actividad.php.
+if (($usuario['rol'] ?? '') !== 'admin') {
+    header('Location: /crecer/panel/actividad.php?marca=' . $marca_id);
+    exit;
+}
 $BASE = '/crecer/panel';
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 $ago = function($ts){

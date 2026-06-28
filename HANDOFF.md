@@ -1,16 +1,38 @@
 # HANDOFF — Estado actual (para continuar en VS Code)
 
 > Lee este archivo primero. Resume dónde quedamos para seguir sin perder contexto.
-> Última actualización: 2026-06-21.
+> Última actualización: 2026-06-28.
 
-## En qué estamos ahora mismo
-Refinando la **página de "La Creativa"** = el **hub/portada de Contenido**, que vive en
-**`panel/aprobar2.php`** (bloque `if ($es_hub)`, clases con prefijo `.cux`).
+## En qué estamos ahora mismo — FASE 1 UX (rediseño de flujo) HECHA
+Limpieza de flujo discutida y cerrada entre Manuel + Claude + Codex (ver
+`_DISCUSION-FLUJO.md` y `_WIREFRAME-FLUJO.md`). Tesis: *el pitch era bueno pero el
+producto no caminaba el pitch* (promesa lineal vs panel-tablero). Implementado y
+verificado a 360px. **El producto ahora vende UNA cosa: contenido recurrente para redes.**
 
-- `aprobar2.php?marca=X` (sin `tab`) → **HUB** (portada: hero La Creativa, métricas, quick
-  actions, timeline "Lo que hizo el corillo hoy", "todo al día", ideas).
-- `aprobar2.php?marca=X&tab=pendientes|aprobados` → **fábrica de posts** (tarjetas, aprobar,
-  publicar, estudio de arte). NO tocar esta parte.
+Cambios de esta sesión (commit Fase 1):
+1. **Landing `crecer.php`**: hero "Tú sigues en lo tuyo" + "Crecer te prepara cada semana
+   los posts de tus redes, en tu propia voz"; CTA "Crea mi primer post"; corillo 6→4
+   agentes (fuera La Agenda/El Vendedor); fuera la sección flywheel de órdenes/directorio;
+   planes 3→2 (Despegar fuera); precio leído de `crecer_planes` (configurable).
+2. **Registro mínimo** (`registro.php`): nombre·email·contraseña. WhatsApp y municipio
+   salieron (municipio es del NEGOCIO → vive en onboarding). Migración:
+   `usuarios.telefono`/`municipio_id` → NULLABLE.
+3. **Activación**: `bienvenida.php` + `precios.php` venden "Activar Crecer" (un producto);
+   se quitó "ilimitado" → "contenido nuevo cada semana, en tu voz". Despegar congelado
+   por dato (`activo=0`, reversible).
+4. **Nav (`_shell.php`)**: 10→3 (Inicio·Contenido·Mi marca) + grupo perfil
+   (Config·Facturación·Soporte·Salir). Móvil (`_shell_foot.php`): botnav 4 ítems, SIN FAB
+   central (la acción vive en Inicio); asistente = único flotante discreto.
+5. **Inicio (`panel/index.php`)**: máquina de estados REAL A–F (mapeada a hechos de BD,
+   sin estados fingidos) + tira de pipeline + feed "Lo que hizo el corillo".
+6. **Actividad vs Evidencia**: `panel/actividad.php` (NUEVO) = vista humana del cliente;
+   `evidencia.php` ahora es solo-admin (técnica: tokens/costos/modelos = jurado XPRIZE).
+
+Migraciones a correr en PROD tras deploy: `2026-06-28_usuarios_registro_minimo.sql` y
+`2026-06-28_congelar_despegar.sql`.
+
+**La fábrica de posts** sigue en `panel/aprobar2.php` (`?tab=pendientes|aprobados`) — el
+loop de aprobar/publicar NO se tocó; "Contenido" en la nav apunta a su hub (`es_hub`).
 
 ## ✅ BUG RESUELTO (verificado a 360/390/414px con CDP/puppeteer)
 **El hub ya no se rompe en móvil.** Verificado: `docSW == vw` (sin scroll horizontal),

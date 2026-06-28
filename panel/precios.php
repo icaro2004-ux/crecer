@@ -44,6 +44,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .trialnote{display:inline-flex;align-items:center;gap:8px;background:#eafaf0;color:#0d7a44;font-weight:700;
     font-size:13.5px;border:1px solid #b9eccf;border-radius:999px;padding:7px 13px;margin:14px 0 26px}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .grid.one{grid-template-columns:1fr;max-width:430px;margin:0 auto}
   @media(max-width:680px){.grid{grid-template-columns:1fr}}
   .card{background:#fff;border:1.5px solid #ececf2;border-radius:20px;padding:24px 22px;position:relative;display:flex;flex-direction:column}
   .card.reco{border-color:#1a1a24;box-shadow:0 14px 40px -18px rgba(0,0,0,.35)}
@@ -68,11 +69,11 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <div class="wrap">
   <div class="top"><img src="/crecer/assets/brand/encuentralo-pin.svg" alt=""><b>encuéntralo</b></div>
   <h1>Pon el corillo a trabajar tu negocio<?php if ($activa): ?> <span class="cur"><?= $h(suscripcion_etiqueta($su)) ?></span><?php endif; ?></h1>
-  <p class="sub">Un equipo digital que te planifica, redacta, diseña y agenda — en boricua de verdad.</p>
+  <p class="sub">Un equipo digital que te planifica, redacta y diseña el contenido — en boricua de verdad.</p>
   <div class="trialnote"><?= ico('gift') ?> Tu primer post va por la casa · suscríbete para desbloquear el logo y todo lo demás · cancela cuando quieras</div>
 
   <?php if (($_GET['motivo'] ?? '') === 'muestra'): ?>
-    <div class="err" style="background:#eafaf0;color:#0d7a44;border-color:#b9eccf"><?= ico('gift') ?> Usaste tu post de muestra gratis. Activa un plan y crea todo lo que quieras — más tu logo.</div>
+    <div class="err" style="background:#eafaf0;color:#0d7a44;border-color:#b9eccf"><?= ico('gift') ?> Usaste tu post de muestra gratis. Activa Crecer y recibe contenido nuevo cada semana — más tu logo.</div>
   <?php endif; ?>
   <?php if (!empty($_GET['cancelado'])): ?>
     <div class="err">No se completó el checkout. Cuando quieras, aquí estamos. 👇</div>
@@ -81,7 +82,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <div class="err"><?= $h($_GET['error']) ?></div>
   <?php endif; ?>
 
-  <div class="grid">
+  <div class="grid <?= count($planes) <= 1 ? 'one' : '' ?>">
     <?php foreach ($planes as $i => $p):
       $reco = ($p['slug'] === 'crecer');
       $feats = json_decode($p['features'] ?? '[]', true) ?: [];

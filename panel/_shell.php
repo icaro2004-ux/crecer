@@ -15,18 +15,19 @@ $plan_etq = suscripcion_etiqueta($susc);
 $u_actual = usuario_actual($pdo);
 $es_admin = (($u_actual['rol'] ?? '') === 'admin');
 $viendo_como_admin = ($es_admin && (int)$marca['usuario_id'] !== (int)($u_actual['id'] ?? 0));
+// Navegación PRINCIPAL — solo el loop del producto (contenido para redes).
+// Gráficas, Órdenes, Clientela, Cuentas, Analítica y Evidencia salieron del
+// menú (siguen accesibles por URL / por el perfil; reversible).
 $nav = [
-  ['key'=>'inicio',   'ic'=>'home',    'lb'=>'Inicio',          'hr'=>"$BASE/index.php?marca=$marca_id",   'st'=>''],
-  ['key'=>'contenido','ic'=>'calendar','lb'=>'Contenido',       'hr'=>"$BASE/aprobar2.php?marca=$marca_id",'st'=>''],
-  ['key'=>'graficas', 'ic'=>'image',   'lb'=>'Gráficas',        'hr'=>"$BASE/graficas.php?marca=$marca_id",          'st'=>''],
-  ['key'=>'marca',    'ic'=>'palette', 'lb'=>'Marca',           'hr'=>"$BASE/marca.php?marca=$marca_id",             'st'=>''],
-  ['key'=>'ordenes',  'ic'=>'package', 'lb'=>'Órdenes & Agenda','hr'=>"$BASE/ordenes.php?marca=$marca_id",          'st'=>''],
-  ['key'=>'clientela','ic'=>'users',   'lb'=>'Clientela',       'hr'=>"$BASE/clientela.php?marca=$marca_id",         'st'=>''],
-  ['key'=>'cuentas',  'ic'=>'wallet',  'lb'=>'Cuentas',         'hr'=>"$BASE/pronto.php?s=cuentas&marca=$marca_id",  'st'=>'despegar'],
-  ['key'=>'analitica','ic'=>'chart',   'lb'=>'Analítica',       'hr'=>"$BASE/analitica.php?marca=$marca_id",         'st'=>'despegar'],
-  ['key'=>'evidencia','ic'=>'sparkles','lb'=>'Evidencia',       'hr'=>"$BASE/evidencia.php?marca=$marca_id",         'st'=>''],
-  ['key'=>'config',   'ic'=>'settings','lb'=>'Configuración',    'hr'=>"$BASE/configuracion.php?marca=$marca_id",     'st'=>''],
-  ['key'=>'soporte',  'ic'=>'chat',    'lb'=>'Soporte',          'hr'=>"$BASE/soporte.php?marca=$marca_id",           'st'=>''],
+  ['key'=>'inicio',   'ic'=>'home',    'lb'=>'Inicio',    'hr'=>"$BASE/index.php?marca=$marca_id"],
+  ['key'=>'contenido','ic'=>'calendar','lb'=>'Contenido', 'hr'=>"$BASE/aprobar2.php?marca=$marca_id"],
+  ['key'=>'marca',    'ic'=>'palette', 'lb'=>'Mi marca',  'hr'=>"$BASE/marca.php?marca=$marca_id"],
+];
+// Perfil (secundario, abajo): config, facturación, soporte.
+$nav_perfil = [
+  ['key'=>'config',      'ic'=>'settings','lb'=>'Configuración','hr'=>"$BASE/configuracion.php?marca=$marca_id"],
+  ['key'=>'facturacion', 'ic'=>'wallet',  'lb'=>'Facturación',  'hr'=>"$BASE/precios.php?marca=$marca_id"],
+  ['key'=>'soporte',     'ic'=>'chat',    'lb'=>'Soporte',      'hr'=>"$BASE/soporte.php?marca=$marca_id"],
 ];
 ?>
 <!DOCTYPE html>
@@ -46,16 +47,9 @@ $nav = [
   <aside class="side" id="side">
     <a class="sbrand" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="text-decoration:none;color:inherit"><img src="/crecer/assets/brand/encuentralo-pin.svg" alt="Inicio"><b>encuéntralo</b></a>
     <nav>
-      <?php foreach ($nav as $n):
-        $es_pronto = $n['st']==='pronto';
-        $req_desp  = $n['st']==='despegar';
-        $locked    = $es_pronto || ($req_desp && !marca_puede($plan, 'analitica'));
-        $href      = ($req_desp && $locked) ? "$BASE/precios.php?marca=$marca_id" : $n['hr'];
-      ?>
-        <a href="<?= $href ?>" class="<?= $n['key']===$active?'on':'' ?> <?= $locked?'locked':'' ?>">
+      <?php foreach ($nav as $n): ?>
+        <a href="<?= $n['hr'] ?>" class="<?= $n['key']===$active?'on':'' ?>">
           <?= ico($n['ic']) ?><?= $n['lb'] ?>
-          <?php if ($es_pronto): ?><span class="badge">pronto</span>
-          <?php elseif ($req_desp): ?><span class="badge">despegar</span><?php endif; ?>
         </a>
       <?php endforeach; ?>
     </nav>
@@ -83,6 +77,13 @@ $nav = [
         <?php endif; ?>
       </div>
     </div>
+    <nav class="nav-perfil" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
+      <?php foreach ($nav_perfil as $n): ?>
+        <a href="<?= $n['hr'] ?>" class="<?= $n['key']===$active?'on':'' ?>">
+          <?= ico($n['ic']) ?><?= $n['lb'] ?>
+        </a>
+      <?php endforeach; ?>
+    </nav>
     <?php if ($es_admin): ?>
       <a href="<?= $BASE ?>/admin.php" style="display:flex;align-items:center;gap:10px;padding:10px 12px;margin-top:6px;border-radius:12px;text-decoration:none;color:#fff;background:var(--tinta);font-weight:800;font-size:13.5px">⚙️ Centro de Operaciones</a>
     <?php endif; ?>

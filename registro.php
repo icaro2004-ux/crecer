@@ -12,14 +12,14 @@ if (!empty($_GET['plan']) && in_array($_GET['plan'], ['crecer','despegar'], true
 
 if (esta_logueado()) { header('Location: /crecer/panel/index.php'); exit; }
 
-$err = ''; $val = ['nombre'=>'','email'=>'','telefono'=>'','municipio_id'=>''];
+$err = ''; $val = ['nombre'=>'','email'=>''];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     foreach ($val as $k=>$_) $val[$k] = trim($_POST[$k] ?? '');
     $pass  = $_POST['password'] ?? '';
     $pass2 = $_POST['password2'] ?? '';
 
     if (!csrf_ok())                       $err = 'La sesión expiró. Recarga e intenta otra vez.';
-    elseif ($val['nombre']==='' || $val['email']==='' || $val['telefono']==='' || $val['municipio_id']==='')
+    elseif ($val['nombre']==='' || $val['email']==='')
                                           $err = 'Completa todos los campos.';
     elseif (!filter_var($val['email'], FILTER_VALIDATE_EMAIL))
                                           $err = 'Ese email no se ve válido.';
@@ -31,12 +31,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($dup->fetchColumn()) {
             $err = 'Ya hay una cuenta con ese email. ¿Quieres <a href="/crecer/login.php" style="color:var(--terracota);font-weight:700">entrar</a>?';
         } else {
-            $ins = $pdo->prepare("INSERT INTO usuarios (nombre, email, password, telefono, municipio_id, rol)
-                                  VALUES (?,?,?,?,?, 'proveedor')");
-            $ins->execute([
-                $val['nombre'], $val['email'], password_hash($pass, PASSWORD_DEFAULT),
-                $val['telefono'], (int)$val['municipio_id'],
-            ]);
+            // Registro mínimo: telefono/municipio quedan NULL (se piden luego —
+            // el municipio del negocio va en el onboarding, el WhatsApp en activación).
+            $ins = $pdo->prepare("INSERT INTO usuarios (nombre, email, password, rol)
+                                  VALUES (?,?,?, 'proveedor')");
+            $ins->execute([$val['nombre'], $val['email'], password_hash($pass, PASSWORD_DEFAULT)]);
             $uid = (int)$pdo->lastInsertId();
             login_usuario(['id'=>$uid, 'nombre'=>$val['nombre'], 'rol'=>'proveedor']);
             header('Location: /crecer/onboarding.php');  // onboarding wow por voz + foto
@@ -45,7 +44,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$municipios = $pdo->query("SELECT id, nombre FROM municipios ORDER BY nombre")->fetchAll();
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
 // Prueba viva (defensiva) + plan que venía del landing
@@ -173,18 +171,6 @@ $plan_lbl = ['crecer'=>'Crecer','despegar'=>'Despegar'][$plan_intent] ?? '';
 
       <label>Email *</label>
       <input type="email" name="email" required value="<?= $h($val['email']) ?>" placeholder="tu@email.com">
-
-      <div class="r2">
-        <div><label>WhatsApp / teléfono *</label><input name="telefono" required value="<?= $h($val['telefono']) ?>" placeholder="787-555-0000"></div>
-        <div><label>Municipio *</label>
-          <select name="municipio_id" required>
-            <option value="">Escoge…</option>
-            <?php foreach ($municipios as $m): ?>
-              <option value="<?= $m['id'] ?>" <?= (string)$val['municipio_id']===(string)$m['id']?'selected':'' ?>><?= $h($m['nombre']) ?></option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-      </div>
 
       <div class="r2">
         <div><label>Contraseña *</label><input type="password" name="password" required placeholder="Mín. 8 caracteres"></div>

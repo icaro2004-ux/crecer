@@ -94,21 +94,21 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       <input type="hidden" name="marca" value="<?= $marca_id ?>">
       <input type="hidden" name="plan" value="<?= $h($planRow['slug']) ?>">
       <button type="submit" class="cta">
-        Activa <?= $h($planRow['nombre']) ?> · $<?= number_format((float)$planRow['precio_mensual'],0) ?>/mes
-        <span class="small">Suelta todo el corillo: tu logo, posts ilimitados y más</span>
+        Activar Crecer · $<?= number_format((float)$planRow['precio_mensual'],0) ?>/mes
+        <span class="small">Contenido nuevo cada semana, en tu voz</span>
       </button>
     </form>
   <?php else: ?>
     <!-- Vino gratis → invitar a activar -->
     <a class="cta" href="/crecer/panel/precios.php?marca=<?= $marca_id ?>">
-      Activa un plan → suelta el corillo
-      <span class="small">Tu logo, posts ilimitados, gráficas y más</span>
+      Activar Crecer
+      <span class="small">Contenido nuevo cada semana, en tu voz</span>
     </a>
   <?php endif; ?>
 
   <div class="feat">
     <div><?= ico('check','ic') ?> Tu logo profesional con IA</div>
-    <div><?= ico('check','ic') ?> Posts y captions ilimitados en tu voz</div>
+    <div><?= ico('check','ic') ?> Contenido nuevo cada semana, en tu voz</div>
     <div><?= ico('check','ic') ?> Gráficas con tus fotos + calendario</div>
   </div>
 

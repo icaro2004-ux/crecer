@@ -2,17 +2,13 @@
   </div><!-- /.main -->
 </div><!-- /.layout -->
 
-<!-- Bottom nav + FAB (solo móvil) · íconos flat del set central (iconos.php) -->
-<nav class="botnav">
+<!-- Bottom nav (solo móvil) · 4 destinos, sin FAB central · la acción principal vive en Inicio -->
+<nav class="botnav botnav-4">
   <a href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='inicio'?'on':'' ?>"><?= ico('home') ?>Inicio</a>
   <a href="<?= $BASE ?>/aprobar2.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='contenido'?'on':'' ?>"><?= ico('calendar') ?>Contenido</a>
-  <span class="slot-fab"></span>
-  <a href="<?= $BASE ?>/graficas.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='graficas'?'on':'' ?>"><?= ico('image') ?>Gráficas</a>
-  <a href="<?= $BASE ?>/ordenes.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='ordenes'?'on':'' ?>"><?= ico('package') ?>Órdenes</a>
+  <a href="<?= $BASE ?>/marca.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='marca'?'on':'' ?>"><?= ico('palette') ?>Mi marca</a>
+  <a href="<?= $BASE ?>/configuracion.php?marca=<?= $marca_id ?>" class="<?= in_array(($active ?? ''),['config','facturacion','soporte'],true)?'on':'' ?>"><?= ico('settings') ?>Perfil</a>
 </nav>
-<a class="fab-corillo" href="<?= $BASE ?>/aprobar2.php?marca=<?= $marca_id ?>" aria-label="Pon el corillo a trabajar">
-  <svg viewBox="0 0 24 24" fill="currentColor" width="26" height="26"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>
-</a>
 
 <div class="lightbox-ov" id="lightbox"><img src="" alt=""></div>
 
