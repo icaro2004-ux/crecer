@@ -3,6 +3,12 @@
 //  ENCUÉNTRALO — Hub / index público (hero premium con PNG assets)
 //  index.php  ·  assets en /crecer/assets/encuentralo-hero/
 // ============================================================
+// Crecer es el producto activo (fase 1) y el del concurso. El root entra
+// DIRECTO a la landing de Crecer — una sola puerta, sin el hub de dos puertas
+// (el directorio es fase 2 y no debe competir en la entrada). El hub de dos
+// puertas sigue abajo, parqueado; para restaurarlo, borra esta línea.
+header('Location: /crecer/crecer.php', true, 302); exit;
+
 $acciones = 113; $negocios = 7;
 try {
     if (is_file(__DIR__ . '/includes/config.local.php')) require_once __DIR__ . '/includes/config.local.php';
