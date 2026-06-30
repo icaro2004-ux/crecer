@@ -24,6 +24,16 @@ $err = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accion = $_POST['accion'] ?? '';
 
+    // El Cerebro: el dueño controla su conocimiento (corregir / descartar).
+    if ($accion === 'memoria_descartar' && function_exists('memoria_descartar')) {
+        memoria_descartar($pdo, $marca_id, (int)($_POST['mid'] ?? 0));
+        header("Location: /crecer/panel/marca.php?marca={$marca_id}#cerebro"); exit;
+    }
+    if ($accion === 'memoria_editar' && function_exists('memoria_editar')) {
+        memoria_editar($pdo, $marca_id, (int)($_POST['mid'] ?? 0), (string)($_POST['detalle'] ?? ''));
+        header("Location: /crecer/panel/marca.php?marca={$marca_id}#cerebro"); exit;
+    }
+
     if ($accion === 'tono') {
         $vals = [];
         foreach (['boricua','formal','venta','ingenio'] as $k) $vals[$k] = max(0, min(100, (int)($_POST['t_'.$k] ?? 50)));
@@ -159,6 +169,19 @@ require __DIR__ . '/_shell.php';
   .dl button:hover{border-color:var(--terracota);color:var(--terracota-700)}
   .warn{font-size:12px;color:var(--muted);margin-top:8px}
   .empty-g{color:var(--muted);font-size:15px;margin-top:22px}
+  /* El Cerebro — tarjetas de aprendizaje */
+  .cer-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;max-width:920px;margin-top:14px}
+  .cer-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px 16px;box-shadow:var(--shadow-sm)}
+  .cer-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .cer-tag{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--terracota);background:color-mix(in srgb,var(--terracota) 10%,#fff);border-radius:99px;padding:3px 10px}
+  .cer-conf{font-size:11px;color:var(--muted);font-weight:700}
+  .cer-det{margin:0;font-size:14px;color:var(--tinta);line-height:1.45}
+  .cer-why{margin:7px 0 0;font-size:12px;color:var(--muted);font-style:italic}
+  .cer-acts{display:flex;gap:14px;margin-top:11px}
+  .cer-link{background:none;border:0;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;color:var(--terracota);padding:0}
+  .cer-link.danger{color:var(--muted)}
+  .cer-editform textarea{width:100%;font-family:inherit;font-size:13.5px;border:1.5px solid var(--line);border-radius:10px;padding:8px;margin:8px 0}
+  .cer-editform .btn-save{background:var(--terracota);color:#fff;border:0;border-radius:9px;padding:7px 14px;font-weight:800;cursor:pointer;font-size:12.5px}
 </style>
 
 <h1 class="page-h">Mi Marca</h1>
@@ -167,6 +190,43 @@ require __DIR__ . '/_shell.php';
 <h2 class="sec-h">🎙️ Tu tono de voz</h2>
 <p class="subline">Define cómo te escribe La Creativa: mueve los controles, genera ejemplos y guárdalo. Así suena <b>todo tu contenido</b>.</p>
 <?php include __DIR__ . '/_tono_panel.php'; ?>
+
+<?php
+if (function_exists('memoria_consolidar')) memoria_consolidar($pdo, $marca_id);
+$memorias = function_exists('memoria_listar') ? memoria_listar($pdo, $marca_id) : [];
+$tipo_lbl = ['patron'=>'Patrón detectado','preferencia'=>'Preferencia','decision'=>'Decisión','tono'=>'Voz de marca','marca'=>'Identidad','conversacion'=>'De una conversación','hito'=>'Hito'];
+?>
+<h2 class="sec-h" style="margin-top:44px" id="cerebro">🧠 Lo que he aprendido de tu negocio</h2>
+<p class="subline">El corillo aprende de lo que apruebas, editas y rechazas, y lo usa para escribir mejor. Esto es tuyo: <b>corrígelo o descártalo</b> cuando quieras.</p>
+<?php if (!$memorias): ?>
+  <div class="empty-g" style="max-width:680px">Todavía no he aprendido nada específico. Aprueba, edita o rechaza unos posts y aquí verás lo que voy captando de tu negocio.</div>
+<?php else: ?>
+  <div class="cer-grid">
+    <?php foreach ($memorias as $mm): ?>
+      <div class="cer-card">
+        <div class="cer-top"><span class="cer-tag"><?= $h($tipo_lbl[$mm['tipo']] ?? 'Aprendizaje') ?></span><span class="cer-conf">confianza <?= (int)$mm['confianza'] ?>%</span></div>
+        <p class="cer-det"><?= $h($mm['detalle']) ?></p>
+        <?php if (!empty($mm['porque'])): ?><p class="cer-why"><?= $h($mm['porque']) ?></p><?php endif; ?>
+        <div class="cer-acts">
+          <button type="button" class="cer-link" onclick="cerEdit(<?= (int)$mm['id'] ?>)">Corregir</button>
+          <form method="post" onsubmit="return confirm('¿Descartar este aprendizaje? El corillo dejará de usarlo.')" style="display:inline">
+            <input type="hidden" name="accion" value="memoria_descartar"><input type="hidden" name="mid" value="<?= (int)$mm['id'] ?>">
+            <button type="submit" class="cer-link danger">Descartar</button>
+          </form>
+        </div>
+        <form method="post" class="cer-editform" id="cerf-<?= (int)$mm['id'] ?>" style="display:none">
+          <input type="hidden" name="accion" value="memoria_editar"><input type="hidden" name="mid" value="<?= (int)$mm['id'] ?>">
+          <textarea name="detalle" rows="2"><?= $h($mm['detalle']) ?></textarea>
+          <div><button type="submit" class="btn-save">Guardar</button> &nbsp;<button type="button" class="cer-link" onclick="cerCancel(<?= (int)$mm['id'] ?>)">Cancelar</button></div>
+        </form>
+      </div>
+    <?php endforeach; ?>
+  </div>
+<?php endif; ?>
+<script>
+function cerEdit(id){var f=document.getElementById('cerf-'+id);if(f)f.style.display='block';}
+function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.display='none';}
+</script>
 
 <h2 class="sec-h" style="margin-top:44px">🎨 Tu logo</h2>
 <?php if ($pagado): ?>

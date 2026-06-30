@@ -9,6 +9,7 @@
 // ============================================================
 
 require_once __DIR__ . '/ia.php';
+require_once __DIR__ . '/memoria.php';   // El Cerebro del Negocio (RAG + escritura)
 
 // Límites de generación de imágenes (control de costos)
 if (!defined('CRECER_IMG_SEMANA')) define('CRECER_IMG_SEMANA', 10); // máximo por semana (ventana 7 días)
@@ -31,6 +32,26 @@ function slugify(string $s): string {
  *                  instagram, whatsapp
  * @return int  id de la marca
  */
+/**
+ * Instrucción para que el agente de INTAKE elija el TONO de voz inicial
+ * (4 ejes 0–100) según el TIPO de negocio. Es lo que hace que el POST DE
+ * MUESTRA salga en el tono correcto desde la primera vez — sin que el dueño
+ * toque un solo slider. El dueño lo puede afinar luego en Mi marca.
+ */
+function tono_prompt_intake(): string {
+    return "- tono_boricua: 0-100, qué tan boricua suena (0=español neutro/profesional, 100=bien de la isla).\n"
+         . "- tono_formal: 0-100, formalidad (0=casual y relajado, 100=formal y profesional).\n"
+         . "- tono_venta: 0-100, energía de venta (0=informativo, 100=vendedor con llamado fuerte).\n"
+         . "- tono_ingenio: 0-100, humor (0=sobrio y serio, 100=jocoso).\n"
+         . "ESOS 4 NÚMEROS los eliges TÚ según el TIPO de negocio, aunque el dueño no lo diga — es CRÍTICO:\n"
+         . "  · Servicios serios/profesionales (psicología, terapia, salud, médico, legal, finanzas, "
+         . "consultoría, dental, óptica): tono_boricua ~25, tono_formal ~82, tono_venta ~45, tono_ingenio ~12.\n"
+         . "  · Comida, repostería, belleza, barbería, retail, fiestas, food trucks: tono_boricua ~80, "
+         . "tono_formal ~30, tono_venta ~60, tono_ingenio ~58.\n"
+         . "  · Casos intermedios (fitness, fotografía, eventos): usa criterio, algo en el medio.\n"
+         . "  · Un negocio serio NUNCA debe sonar 'wepa mi gente'. SIEMPRE devuelve los 4 números.\n";
+}
+
 function crear_marca(PDO $pdo, array $d): int {
     $existe = $pdo->prepare(
         "SELECT id FROM crecer_marca WHERE usuario_id = ? AND nombre_negocio = ?");
@@ -61,6 +82,18 @@ function crear_marca(PDO $pdo, array $d): int {
     // slug único para el link público (nombre + id garantiza unicidad)
     $slug = slugify($d['nombre_negocio']) . '-' . $id;
     $pdo->prepare("UPDATE crecer_marca SET slug=? WHERE id=?")->execute([$slug, $id]);
+
+    // TONO INICIAL sugerido por la IA según el tipo de negocio (un centro de
+    // psicología arranca formal; una repostería, boricua). Así el POST DE
+    // MUESTRA ya sale en el tono correcto — es la única bala para vender.
+    // A prueba de migración: si las columnas de tono no existen aún, se ignora.
+    if (isset($d['tono_boricua'], $d['tono_formal'], $d['tono_venta'], $d['tono_ingenio'])) {
+        $c = fn($x) => max(0, min(100, (int)$x));
+        try {
+            $pdo->prepare("UPDATE crecer_marca SET tono_boricua=?, tono_formal=?, tono_venta=?, tono_ingenio=? WHERE id=?")
+                ->execute([$c($d['tono_boricua']), $c($d['tono_formal']), $c($d['tono_venta']), $c($d['tono_ingenio']), $id]);
+        } catch (Throwable $e) { /* columnas de tono aún no migradas: usa el default */ }
+    }
     return $id;
 }
 
@@ -86,8 +119,9 @@ SYS;
         . "- ofertas: promo o algo especial que mencione (o \"\").\n"
         . "- instagram: handle si lo dice (o \"\").\n"
         . "- whatsapp: número si lo dice (o \"\").\n"
+        . tono_prompt_intake()
         . ($nombre_negocio !== '' ? "El negocio se llama: {$nombre_negocio}.\n" : "")
-        . "Si algo no lo menciona, deja \"\" o lista vacía. NO inventes.";
+        . "Si algo no lo menciona, deja \"\" o lista vacía. NO inventes (salvo el tono, que SÍ debes elegir).";
 
     $r = ia_ejecutar($pdo, 'intake', 'Extraer perfil desde voz', $prompt, [
         'marca_id'        => $marca_id,
@@ -97,7 +131,7 @@ SYS;
         'temperatura'     => 0.4,
         'max_tokens'      => 900,
         'audio'           => ['data' => $audio_b64, 'mime' => $audio_mime],
-        'mock_texto'      => '{"descripcion":"[MOCK] negocio boricua de comida","voz":"cercano y alegre, usa nene/nena","productos":["bizcocho","quesitos"],"publico_objetivo":"familias del pueblo","ofertas":"","instagram":"","whatsapp":""}',
+        'mock_texto'      => '{"descripcion":"[MOCK] negocio boricua de comida","voz":"cercano y alegre, usa nene/nena","productos":["bizcocho","quesitos"],"publico_objetivo":"familias del pueblo","ofertas":"","instagram":"","whatsapp":"","tono_boricua":80,"tono_formal":30,"tono_venta":60,"tono_ingenio":55}',
     ]);
 
     $j = json_decode(trim($r['texto']), true);
@@ -126,8 +160,9 @@ SYS;
         . "- ofertas: promo o algo especial que mencione (o \"\").\n"
         . "- instagram: handle si lo dice (o \"\").\n"
         . "- whatsapp: número si lo dice (o \"\").\n"
+        . tono_prompt_intake()
         . ($nombre_negocio !== '' ? "El negocio se llama: {$nombre_negocio}.\n" : "")
-        . "Si algo no lo menciona, deja \"\" o lista vacía. NO inventes.\n\n"
+        . "Si algo no lo menciona, deja \"\" o lista vacía. NO inventes (salvo el tono, que SÍ debes elegir).\n\n"
         . "LO QUE ESCRIBIÓ:\n{$texto}";
 
     $r = ia_ejecutar($pdo, 'intake', 'Extraer perfil desde texto', $prompt, [
@@ -137,7 +172,7 @@ SYS;
         'thinking_budget' => 0,
         'temperatura'     => 0.4,
         'max_tokens'      => 900,
-        'mock_texto'      => '{"descripcion":"[MOCK] negocio boricua de comida","voz":"cercano y alegre","productos":["bizcocho","quesitos"],"publico_objetivo":"familias del pueblo","ofertas":"","instagram":"","whatsapp":""}',
+        'mock_texto'      => '{"descripcion":"[MOCK] negocio boricua de comida","voz":"cercano y alegre","productos":["bizcocho","quesitos"],"publico_objetivo":"familias del pueblo","ofertas":"","instagram":"","whatsapp":"","tono_boricua":80,"tono_formal":30,"tono_venta":60,"tono_ingenio":55}',
     ]);
 
     $j = json_decode(trim($r['texto']), true);
@@ -435,6 +470,20 @@ function aprender_de_edicion(PDO $pdo, int $marca_id, string $original, string $
         $actual = (string)$g->fetchColumn();
         $nuevo = trim($actual . "\n" . $leccion);
         $pdo->prepare("UPDATE crecer_marca SET glosario=? WHERE id=?")->execute([$nuevo, $marca_id]);
+        // El Cerebro: la edición es la señal de oro → memoria de preferencia con
+        // peso alto (corrección > aprobación). Cada viñeta = una preferencia.
+        if (function_exists('memoria_escribir')) {
+            foreach (preg_split('/\n+/', $leccion) as $ln) {
+                $ln = trim(ltrim($ln, "-•* \t"));
+                if ($ln === '') continue;
+                memoria_escribir($pdo, $marca_id, [
+                    'tipo'=>'preferencia', 'titulo'=>mb_strimwidth($ln,0,120,'…'), 'detalle'=>$ln,
+                    'porque'=>'Lo aprendí de una edición que le hiciste a un caption.',
+                    'fuente'=>'edicion', 'confianza'=>70, 'peso'=>80,
+                ]);
+            }
+            memoria_consolidar($pdo, $marca_id);
+        }
         return $leccion;
     } catch (Throwable $e) { return null; }
 }
@@ -462,6 +511,7 @@ SYS;
         $sistema .= "\n\nVOCABULARIO DEL NEGOCIO (el dueño lo corrigió — RESPÉTALO SIEMPRE, no repitas los errores):\n" . $m['glosario'];
     }
     $sistema .= tono_instruccion($m);
+    if (function_exists('memoria_para_prompt')) $sistema .= memoria_para_prompt($pdo, (int)$m['id']);
 
     $prompt = "Perfil del negocio:\n{$ctx}\n\n"
         . "Plataforma: {$pieza['plataforma']} | Tipo: {$pieza['tipo']}\n"
@@ -511,6 +561,7 @@ SYS;
         $sistema .= "\n\nVOCABULARIO DEL NEGOCIO (el dueño lo corrigió — RESPÉTALO SIEMPRE, no repitas los errores):\n" . $m['glosario'];
     }
     $sistema .= tono_instruccion($m);
+    if (function_exists('memoria_para_prompt')) $sistema .= memoria_para_prompt($pdo, (int)$m['id']);
 
     $prompt = "Perfil del negocio:\n{$ctx}\n\n"
         . "Plataforma: {$pieza['plataforma']} | Tipo: {$pieza['tipo']}\n";
@@ -603,6 +654,17 @@ SYS;
         $sistema .= "\n\nVocabulario propio de este negocio (respétalo):\n" . $m['glosario'];
     }
     $sistema .= tono_instruccion($m);
+    if (function_exists('memoria_para_prompt')) $sistema .= memoria_para_prompt($pdo, (int)$m['id']);
+    // El Cerebro: el asistente conoce todo lo aprendido del negocio (para
+    // responder "¿qué has aprendido?", "¿qué prefiero?", "¿cómo cambió mi marca?").
+    if (function_exists('memoria_listar')) {
+        $mems = memoria_listar($pdo, $marca_id);
+        if ($mems) {
+            $lst = '';
+            foreach (array_slice($mems, 0, 12) as $mm) $lst .= "- " . trim((string)$mm['detalle']) . "\n";
+            $sistema .= "\n\nLO QUE EL CORILLO HA APRENDIDO DE ESTE NEGOCIO (úsalo si el dueño pregunta qué has aprendido, qué prefiere o cómo ha cambiado su marca):\n" . $lst;
+        }
+    }
 
     // Compactar el historial reciente (últimos 6 turnos) dentro del prompt.
     $hist = '';

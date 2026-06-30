@@ -59,6 +59,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'ofertas'          => $perfil['ofertas'] ?? '',
         'instagram'        => $perfil['instagram'] ?? '',
         'whatsapp'         => $perfil['whatsapp'] ?? '',
+        // Tono inicial elegido por la IA según el tipo de negocio (si lo devolvió).
+        'tono_boricua'     => $perfil['tono_boricua'] ?? null,
+        'tono_formal'      => $perfil['tono_formal']  ?? null,
+        'tono_venta'       => $perfil['tono_venta']   ?? null,
+        'tono_ingenio'     => $perfil['tono_ingenio'] ?? null,
     ]);
 
     // 3) Guardar la foto (será la imagen del post de muestra)
