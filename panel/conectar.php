@@ -137,22 +137,8 @@ $paginas = $_SESSION['meta_paginas'][$marca_id] ?? [];
   <?php if ($err): ?><div class="msg err">⚠️ <?= $err ?></div><?php endif; ?>
   <?php if ($info): ?><div class="msg ok">✅ <?= $h($info) ?></div><?php endif; ?>
 
-  <?php if ($conx && $conx['estado'] === 'activa'): ?>
-    <!-- YA CONECTADO -->
-    <div class="card">
-      <div style="font-weight:800;font-size:16px;color:var(--tinta);margin-bottom:8px">🟢 Redes conectadas</div>
-      <div class="reqs">
-        <?php if ($conx['ig_username']): ?><div>📸 Instagram: <b>@<?= $h($conx['ig_username']) ?></b></div><?php else: ?><div>📸 Instagram: <i>sin cuenta IG Business conectada a esta página</i></div><?php endif; ?>
-        <div>👍 Página de Facebook: <b><?= $h($conx['fb_page_nombre']) ?></b></div>
-      </div>
-      <form method="post" action="?action=desconectar&marca=<?= $marca_id ?>" style="margin-top:14px" onsubmit="return confirm('¿Seguro que quieres desconectar? El corillo dejará de publicar automático.')">
-        <?= csrf_field() ?>
-        <button class="btn ghost" type="submit">Desconectar</button>
-      </form>
-    </div>
-
-  <?php elseif ($paginas): ?>
-    <!-- PASO 3: ELEGIR PÁGINA -->
+  <?php if ($paginas): ?>
+    <!-- PASO 3: ELEGIR PÁGINA (también sirve para reconectar / activar Instagram) -->
     <div class="card">
       <div style="font-weight:800;font-size:16px;color:var(--tinta);margin-bottom:10px">¿En cuál página publicamos?</div>
       <form method="post" action="?marca=<?= $marca_id ?>">
@@ -168,6 +154,31 @@ $paginas = $_SESSION['meta_paginas'][$marca_id] ?? [];
           </label>
         <?php endforeach; ?>
         <button class="btn green" type="submit" style="margin-top:6px">Usar esta página</button>
+      </form>
+    </div>
+
+  <?php elseif ($conx && $conx['estado'] === 'activa'): ?>
+    <!-- YA CONECTADO -->
+    <div class="card">
+      <div style="font-weight:800;font-size:16px;color:var(--tinta);margin-bottom:8px">🟢 Redes conectadas</div>
+      <div class="reqs">
+        <?php if ($conx['ig_username']): ?><div>📸 Instagram: <b>@<?= $h($conx['ig_username']) ?></b></div><?php else: ?><div>📸 Instagram: <i>sin cuenta IG Business conectada a esta página</i></div><?php endif; ?>
+        <div>👍 Página de Facebook: <b><?= $h($conx['fb_page_nombre']) ?></b></div>
+      </div>
+
+      <?php if (empty($conx['ig_username'])): ?>
+        <div class="msg" style="margin:14px 0 0;background:#fff7e6;color:#8a5a00">
+          <b>Para publicar a Instagram</b> tu IG tiene que estar en modo <b>Business o Creator</b> y <b>enlazado a esta Página</b> (<?= $h($conx['fb_page_nombre']) ?>).
+          <div style="margin-top:6px;font-weight:500">Cómo: app de Instagram → ⚙️ Configuración → Cuenta → <b>Cambiar a cuenta profesional</b>; luego enlázalo a tu Página de Facebook. Cuando termines, dale <b>"Volver a conectar"</b> aquí abajo y el corillo agarra tu Instagram.</div>
+        </div>
+        <a class="btn" href="?action=iniciar&marca=<?= $marca_id ?>" style="margin-top:14px">🔄 Volver a conectar (activar Instagram)</a>
+      <?php else: ?>
+        <a class="btn ghost" href="?action=iniciar&marca=<?= $marca_id ?>" style="margin-top:14px">🔄 Volver a conectar / actualizar</a>
+      <?php endif; ?>
+
+      <form method="post" action="?action=desconectar&marca=<?= $marca_id ?>" style="margin-top:10px" onsubmit="return confirm('¿Seguro que quieres desconectar? El corillo dejará de publicar automático.')">
+        <?= csrf_field() ?>
+        <button class="btn ghost" type="submit">Desconectar</button>
       </form>
     </div>
 
