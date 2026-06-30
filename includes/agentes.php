@@ -237,6 +237,34 @@ function generar_logo(PDO $pdo, int $marca_id, array $opts = []): array {
  * AGENTE CREADOR (visual) — convierte la FOTO REAL del negocio en un post
  * profesional para redes (mantiene el producto real; regla de IP).
  */
+/**
+ * DIRECTOR DE ARTE — lee el caption + el negocio + el tono y propone, en
+ * español sencillo, QUÉ debe mostrar la imagen para que PEGUE con el post.
+ * El dueño lee y aprueba la idea (no escribe prompts). Se le pasa luego a
+ * generar_grafica como 'instrucciones' → el arte coincide con lo prometido.
+ * Es una llamada de TEXTO (barata): sugerir ideas no quema generaciones de imagen.
+ */
+function sugerir_arte(PDO $pdo, int $marca_id, string $caption, string $ajuste = ''): string {
+    $m = leer_marca($pdo, $marca_id);
+    $ctx = marca_contexto($m);
+    $sistema = "Eres el DIRECTOR DE ARTE de Crecer. Propones, en español sencillo y CORTO, "
+        . "QUÉ debe mostrar la imagen de un post para que pegue con el texto y el negocio. "
+        . "Es para que el DUEÑO (que no sabe de diseño) lea y apruebe la idea.\n"
+        . "Devuelve UNA sola descripción visual concreta de 1-2 frases: qué se ve, el ambiente "
+        . "y la luz. Realista y apetitoso. Sin jerga técnica, sin la palabra \"prompt\", sin "
+        . "texto dentro de la imagen salvo que ayude. Deja espacio para poner texto encima si aplica.";
+    if (function_exists('tono_instruccion')) $sistema .= tono_instruccion($m);
+    $prompt = "Perfil del negocio:\n{$ctx}\n\nTexto del post (la imagen TIENE que pegar con esto):\n\"{$caption}\"\n";
+    if (trim($ajuste) !== '') $prompt .= "\nEl dueño pide este ajuste — priorízalo: {$ajuste}\n";
+    $prompt .= "\nDescribe en 1-2 frases qué va a mostrar la imagen.";
+    $r = ia_ejecutar($pdo, 'diseñador', 'Sugerir idea de arte', $prompt, [
+        'marca_id' => $marca_id, 'sistema' => $sistema,
+        'temperatura' => 0.85, 'max_tokens' => 180, 'thinking_budget' => 0,
+        'mock_texto' => 'Un bizcocho de guayaba en primer plano sobre una mesa de madera, con luz cálida de tarde y un fondo simple; se ve fresco y apetitoso, con espacio arriba por si le quieres poner texto.',
+    ]);
+    return trim((string)$r['texto']);
+}
+
 function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts = []): array {
     $m = leer_marca($pdo, $marca_id);
     $copy      = trim($opts['copy'] ?? '');         // el texto del post (coherencia)

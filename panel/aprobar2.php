@@ -50,6 +50,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    // ── Director de Arte: sugerir la idea del arte (texto, barato) ──
+    if ($accion === 'sugerir_arte') {
+        header('Content-Type: application/json');
+        $c = $pdo->prepare("SELECT caption FROM crecer_contenido WHERE id=? AND marca_id=?");
+        $c->execute([$id, $marca_id]);
+        $cap = $c->fetchColumn();
+        if ($cap === false) { echo json_encode(['ok'=>false,'err'=>'Post no encontrado.']); exit; }
+        $ajuste = trim((string)($_POST['ajuste'] ?? ''));
+        try {
+            $idea = sugerir_arte($pdo, $marca_id, (string)$cap, $ajuste);
+            echo json_encode(['ok'=>true, 'idea'=>$idea], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['ok'=>false, 'err'=>substr($e->getMessage(),0,160)], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
     // ── Editar caption (+ el bot aprende) ──
     if ($accion === 'editar') {
         $nuevo_cap = trim($_POST['caption'] ?? '');
@@ -846,8 +863,11 @@ require __DIR__ . '/_shell.php';
       <?php endforeach; ?>
     </div>
 
-    <label class="fl">Instrucciones a la IA <span style="color:var(--muted);font-weight:500">(opcional)</span></label>
-    <textarea name="instrucciones" rows="2" placeholder='Ej. "ponlo sobre mesa de madera", "añade confeti", "estilo navideño"…'></textarea>
+    <label class="fl" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      <span>✍️ Qué va a mostrar el arte <span style="color:var(--muted);font-weight:500">(el Diseñador lo sugiere — cámbialo en tus palabras)</span></span>
+      <button type="button" id="art-sug" class="fbnew" style="white-space:nowrap;font-size:12px;padding:6px 10px">✨ Sugerir otra</button>
+    </label>
+    <textarea name="instrucciones" id="art-instr" rows="3" placeholder='El Diseñador te propone una idea aquí cuando abres el arte… o escríbela tú: "bizcocho sobre mesa de madera, luz cálida".'></textarea>
 
     <?php if ($tiene_logo): ?>
     <label class="ck" style="margin-top:14px"><input type="checkbox" name="con_logo" value="1" id="art-logo"> Incluir mi logo</label>
@@ -1066,7 +1086,22 @@ require __DIR__ . '/_shell.php';
     document.getElementById('art-copyprev').textContent = txt ? ('"'+txt.slice(0,90)+(txt.length>90?'…':'')+'"') : 'La imagen irá acorde a tu copy.';
     document.getElementById('art-skip').style.display = thenApprove ? 'block' : 'none';
     actualizarLimitePost(card);
+    var instr=document.getElementById('art-instr');
+    if(instr && !instr.value.trim()) sugerirArte('');   // Director de Arte propone la idea
     artov.classList.add('show');
+  }
+  // Director de Arte: pide una idea de arte alineada al caption y la pone en la caja.
+  function sugerirArte(ajuste){
+    var id=document.getElementById('art-id').value; if(!id) return;
+    var ta=document.getElementById('art-instr'), btn=document.getElementById('art-sug');
+    if(!ta) return;
+    var oldph=ta.placeholder; ta.placeholder='✍️ El Diseñador está pensando una idea…';
+    if(btn) btn.disabled=true;
+    var fd=new FormData(); fd.append('accion','sugerir_arte'); fd.append('id',id); if(ajuste) fd.append('ajuste',ajuste);
+    fetch(location.pathname+location.search,{method:'POST',body:fd})
+      .then(function(r){return r.json();})
+      .then(function(d){ if(btn) btn.disabled=false; ta.placeholder=oldph; if(d.ok && d.idea){ ta.value=d.idea; } })
+      .catch(function(){ if(btn) btn.disabled=false; ta.placeholder=oldph; });
   }
   function actualizarLimitePost(card){
     var rest=parseInt(card.dataset.intentos||'2',10);
@@ -1087,6 +1122,8 @@ require __DIR__ . '/_shell.php';
     var b=e.target.closest('.artbtn'); if(!b) return; e.preventDefault();
     abrirArte(b.closest('.post'), false);
   });
+  var artSug=document.getElementById('art-sug');
+  if(artSug) artSug.addEventListener('click', function(){ sugerirArte(''); });
   var artLogo=document.getElementById('art-logo');
   if(artLogo) artLogo.addEventListener('change', function(){ document.getElementById('art-logoest').style.display=this.checked?'block':'none'; });
   artform.addEventListener('submit', function(e){
