@@ -15,11 +15,40 @@ $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (i
 if (!$marca) { header('Location: /crecer/intake.php'); exit; }
 $marca_id = (int)$marca['id'];
 $pagado = marca_es_pagada($pdo, $marca_id);  // no pagado = 1 post de muestra (1 caption + 1 imagen)
+// ¿Redes conectadas? Si sí, "Publicar" va por la Graph API a la Página conectada
+// (un botón). Si no, cae al flujo manual de compartir.
+$redes_ok = false;
+try { $redes_ok = (bool)$pdo->query("SELECT 1 FROM crecer_conexiones WHERE marca_id={$marca_id} AND estado='activa' LIMIT 1")->fetchColumn(); } catch (Throwable $e) {}
 
 // ── Acción POST (PRG) ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id     = (int)($_POST['id'] ?? 0);
     $accion = $_POST['accion'] ?? '';
+
+    // ── Publicar por la Graph API a las redes CONECTADAS ──
+    // Un botón → publica server-side a la Página/IG conectados (NO al perfil
+    // personal del teléfono). Solo si la marca tiene conexión activa.
+    if ($accion === 'publicar_api') {
+        header('Content-Type: application/json');
+        require_once __DIR__ . '/../includes/meta.php';
+        require_once __DIR__ . '/../includes/publicador.php';
+        if (!$id) { echo json_encode(['ok'=>false,'err'=>'Falta el post.']); exit; }
+        $chk = $pdo->prepare("SELECT 1 FROM crecer_contenido WHERE id=? AND marca_id=?");
+        $chk->execute([$id, $marca_id]);
+        if (!$chk->fetchColumn()) { echo json_encode(['ok'=>false,'err'=>'Post no encontrado.']); exit; }
+        if (!marca_conectada($pdo, $marca_id)) { echo json_encode(['ok'=>false,'err'=>'no_conectado']); exit; }
+        try {
+            $r = publicar_pieza($pdo, $id);
+            if (!empty($r['ok'])) {
+                echo json_encode(['ok'=>true, 'resultados'=>$r['resultados'] ?? []], JSON_UNESCAPED_UNICODE);
+            } else {
+                echo json_encode(['ok'=>false, 'err'=> ($r['motivo'] ?? '') ?: 'No se pudo publicar.'], JSON_UNESCAPED_UNICODE);
+            }
+        } catch (Throwable $e) {
+            echo json_encode(['ok'=>false, 'err'=> substr($e->getMessage(),0,160)], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
 
     // ── Editar caption (+ el bot aprende) ──
     if ($accion === 'editar') {
@@ -208,8 +237,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $nuevo  = ['aprobar'=>'aprobado','rechazar'=>'rechazado','reabrir'=>'borrador','marcar_publicado'=>'publicado'][$accion] ?? null;
     if ($id && $nuevo) {
-        $pdo->prepare("UPDATE crecer_contenido SET estado=?, updated_at=NOW() WHERE id=? AND marca_id=?")
-            ->execute([$nuevo, $id, $marca_id]);
+        if ($nuevo === 'publicado') {
+            // Al marcar publicado, SIEMPRE completar publicado_at (la analítica
+            // de "publicados este mes" depende de esta fecha, no de updated_at).
+            $pdo->prepare("UPDATE crecer_contenido SET estado='publicado', publicado_at=NOW(), updated_at=NOW() WHERE id=? AND marca_id=?")
+                ->execute([$id, $marca_id]);
+        } else {
+            $pdo->prepare("UPDATE crecer_contenido SET estado=?, updated_at=NOW() WHERE id=? AND marca_id=?")
+                ->execute([$nuevo, $id, $marca_id]);
+        }
+        // El Cerebro: el rechazo CON razón es señal correctiva (pesa más que un OK).
+        if ($accion === 'rechazar' && function_exists('memoria_escribir')) {
+            $razones = [
+              'formal' => 'Prefiere un tono menos formal y más conversacional.',
+              'largo'  => 'Prefiere captions más cortos y directos.',
+              'voz'    => 'Cuida que el caption suene a su voz y estilo de negocio.',
+            ];
+            $rz = $_POST['razon'] ?? '';
+            if (isset($razones[$rz])) {
+                memoria_escribir($pdo, $marca_id, [
+                    'tipo'=>'preferencia', 'titulo'=>$razones[$rz], 'detalle'=>$razones[$rz],
+                    'porque'=>'Lo aprendí de un post que rechazaste.', 'fuente'=>'rechazo',
+                    'confianza'=>55, 'peso'=>72, 'fuente_id'=>$id,
+                ]);
+                memoria_consolidar($pdo, $marca_id);
+            }
+        }
     }
     if (!empty($_POST['ajax'])) {
         $c = ['borrador'=>0,'aprobado'=>0,'rechazado'=>0,'publicado'=>0];
@@ -233,7 +286,7 @@ $n_pend  = $cnt['borrador'];
 $n_aprob = $cnt['aprobado'] + $cnt['publicado'];
 
 // ── Datos de la PORTADA (hub) ──
-$publicados_mes = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$marca_id} AND estado='publicado' AND YEAR(COALESCE(publicado_at,updated_at))=YEAR(NOW()) AND MONTH(COALESCE(publicado_at,updated_at))=MONTH(NOW())")->fetchColumn();
+$publicados_mes = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$marca_id} AND estado='publicado' AND publicado_at IS NOT NULL AND YEAR(publicado_at)=YEAR(NOW()) AND MONTH(publicado_at)=MONTH(NOW())")->fetchColumn();
 $feed_map = [
   'planificador'=>['estratega','El Estratega','cuadró el plan'],
   'creador'     =>['creativa','La Creativa','escribió contenido'],
@@ -410,6 +463,16 @@ require __DIR__ . '/_shell.php';
 ?>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
+  /* Menú de rechazo con razón (El Cerebro aprende del rechazo) */
+  .rzrej{position:relative;display:inline-block}
+  .rzrej summary{list-style:none;cursor:pointer}
+  .rzrej summary::-webkit-details-marker{display:none}
+  .rzrej .rzmenu{position:absolute;z-index:20;top:calc(100% + 4px);left:0;min-width:200px;background:#fff;
+    border:1px solid var(--line);border-radius:12px;padding:9px;box-shadow:0 16px 36px -16px rgba(27,22,34,.4);
+    display:flex;flex-direction:column;gap:6px}
+  .rzrej .rzmenu .rzh{font-size:12px;color:var(--muted);font-weight:700;padding:2px 2px 4px}
+  .rzrej .rzmenu .rzh small{font-weight:500}
+  .rzrej .rzmenu .btn{font-size:12.5px;padding:8px 10px;text-align:left}
   .cux{max-width:1080px;overflow-x:clip}
   .cux img{max-width:100%}
   .cux-hero{position:relative;display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:4px 0 0;padding:8px 0 0}
@@ -501,7 +564,7 @@ require __DIR__ . '/_shell.php';
   <section class="cux-stats">
     <a class="cux-stat" href="<?= $url('pendientes') ?>"><div class="cux-si yel"><?= ico('clock') ?></div><strong><?= $n_pend ?></strong><h4>Esperando tu OK</h4><p class="sub">Pendientes de aprobar</p><span class="lk">Ver por aprobar →</span></a>
     <a class="cux-stat" href="<?= $url('aprobados') ?>"><div class="cux-si pnk"><?= ico('check-circle') ?></div><strong><?= (int)$cnt['aprobado'] ?></strong><h4>Listos para publicar</h4><p class="sub">Aprobados</p><span class="lk">Ver aprobados →</span></a>
-    <a class="cux-stat" href="/crecer/panel/analitica.php?marca=<?= $marca_id ?>"><div class="cux-si cya"><?= ico('chart') ?></div><strong><?= $publicados_mes ?></strong><h4>Publicados</h4><p class="sub">Este mes</p><span class="lk cya">Ver analítica →</span></a>
+    <a class="cux-stat" href="/crecer/panel/resultados.php?marca=<?= $marca_id ?>"><div class="cux-si cya"><?= ico('chart') ?></div><strong><?= $publicados_mes ?></strong><h4>Publicados</h4><p class="sub">Este mes</p><span class="lk cya">Ver resultados →</span></a>
   </section>
 
   <section class="cux-quick">
@@ -678,7 +741,18 @@ require __DIR__ . '/_shell.php';
       <div class="post-actions">
         <?php if ($p['estado']==='borrador'): ?>
           <form method="post"><input type="hidden" name="id" value="<?= $p['id'] ?>"><button class="btn btn-ok" name="accion" value="aprobar">✓ Aprobar</button></form>
-          <form method="post"><input type="hidden" name="id" value="<?= $p['id'] ?>"><button class="btn btn-no" name="accion" value="rechazar">Rechazar</button></form>
+          <details class="rzrej">
+            <summary class="btn btn-no">Rechazar</summary>
+            <form method="post" class="rzmenu">
+              <input type="hidden" name="id" value="<?= $p['id'] ?>">
+              <input type="hidden" name="accion" value="rechazar">
+              <span class="rzh">¿Por qué? <small>(opcional, ayuda al corillo a aprender)</small></span>
+              <button class="btn btn-ghost" name="razon" value="formal">Muy formal</button>
+              <button class="btn btn-ghost" name="razon" value="largo">Muy largo</button>
+              <button class="btn btn-ghost" name="razon" value="voz">No es mi voz</button>
+              <button class="btn btn-no" name="razon" value="">Solo rechazar</button>
+            </form>
+          </details>
         <?php else: ?>
           <button type="button" class="btn btn-ok publicarbtn">📲 Publicar</button>
           <form method="post"><input type="hidden" name="id" value="<?= $p['id'] ?>"><button class="btn btn-ghost" name="accion" value="reabrir">↺ Volver a revisar</button></form>
@@ -1178,9 +1252,28 @@ require __DIR__ . '/_shell.php';
     };
     pubov.classList.add('show');
   }
+  var REDES_OK = <?= $redes_ok ? 'true' : 'false' ?>;
+  // Publicación REAL por la Graph API a la Página/IG conectados (un botón).
+  function publicarPorAPI(card, btn){
+    var id = card.dataset.id;
+    if(!confirm('¿Publicar este post a tus redes conectadas (Instagram/Facebook)?')) return;
+    var old = btn.textContent; btn.disabled = true; btn.textContent = 'Publicando…';
+    var fd = new FormData(); fd.append('accion','publicar_api'); fd.append('id', id); fd.append('ajax','1');
+    fetch(location.pathname + location.search, {method:'POST', body:fd})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        btn.disabled = false; btn.textContent = old;
+        if(d.ok){ toast('🎉 ¡Publicado en tus redes!'); setTimeout(function(){ location.reload(); }, 1300); }
+        else if(d.err === 'no_conectado'){ abrirPublicar(card); }   // sin conexión → flujo manual
+        else { toast('⚠️ ' + (d.err || 'No se pudo publicar')); }
+      })
+      .catch(function(){ btn.disabled = false; btn.textContent = old; toast('⚠️ Error de conexión. Intenta de nuevo.'); });
+  }
   if(feed) feed.addEventListener('click', function(e){
     var b=e.target.closest('.publicarbtn'); if(!b) return; e.preventDefault();
-    abrirPublicar(b.closest('.post'));
+    var card=b.closest('.post');
+    if(REDES_OK){ publicarPorAPI(card, b); }   // un botón → va a la Página conectada
+    else { abrirPublicar(card); }              // sin redes → compartir a mano
   });
 </script>
 
