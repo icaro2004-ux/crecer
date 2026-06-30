@@ -7,6 +7,7 @@
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/suscripcion.php';
+require __DIR__ . '/../includes/metricas.php';
 requiere_login();
 $usuario = usuario_actual($pdo);
 $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (int)$_GET['marca'] : null);
@@ -19,6 +20,12 @@ $cuenta = ['borrador'=>0,'aprobado'=>0,'programado'=>0,'publicando'=>0,'publicad
 $cq = $pdo->prepare("SELECT estado, COUNT(*) n FROM crecer_contenido WHERE marca_id=? GROUP BY estado");
 $cq->execute([$marca_id]);
 foreach ($cq->fetchAll() as $r) { if (isset($cuenta[$r['estado']])) $cuenta[$r['estado']] = (int)$r['n']; }
+
+// Métricas del centro de mando (definiciones exactas en includes/metricas.php).
+$prod     = metricas_produccion($pdo, $marca_id);   // creados/esperando/listos/publicados del mes
+$racha    = metricas_racha($pdo, $marca_id);         // semanas consecutivas publicando
+$proximos = metricas_proximos($pdo, $marca_id, 3);   // próximos posts programados
+$obs      = metrica_observacion($prod, $racha);      // observación (solo hechos)
 
 // Plan activo de la marca.
 $susc = suscripcion_de_marca($pdo, $marca_id);
@@ -178,6 +185,25 @@ $nodos = ['Negocio','Contenido','Tu OK','Publicado'];
   .ix-feed img.ic{width:24px;height:24px;flex:none}
   .ix-feed .m{font-size:14px;color:#473b46;line-height:1.35}
   .ix-feed .more{display:inline-block;margin-top:14px;color:var(--terracota);font-weight:800;font-size:13.5px;text-decoration:none}
+
+  /* 3 KPIs de pulso */
+  .ix-kpis{display:flex;gap:10px;margin-top:18px;overflow-x:auto;padding-bottom:2px}
+  .ix-kpi{flex:1;min-width:118px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow-sm)}
+  .ix-kpi b{font-family:'Oswald',sans-serif;font-weight:700;font-size:26px;color:var(--terracota);display:block;line-height:1}
+  .ix-kpi span{font-size:12.5px;color:var(--muted);font-weight:600}
+  /* observación (solo hechos) */
+  .ix-obs{margin-top:16px;padding:12px 16px;border-radius:12px;font-size:14px;line-height:1.45;color:#0a5a5c;
+    background:color-mix(in srgb,var(--teal) 8%,#fff);border:1px solid color-mix(in srgb,var(--teal) 20%,#fff)}
+  /* próximos posts */
+  .ix-next{margin-top:18px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 20px;box-shadow:var(--shadow-sm)}
+  .ix-next h3{font-family:'Oswald',sans-serif;font-weight:700;text-transform:uppercase;font-size:15px;letter-spacing:.3px;margin:0 0 10px}
+  .ix-next ul{list-style:none;margin:0;padding:0}
+  .ix-next li{display:flex;gap:12px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px;align-items:baseline}
+  .ix-next li:last-child{border-bottom:0}
+  .ix-next .d{color:var(--terracota);font-weight:700;flex:none;min-width:140px}
+  .ix-next .c{color:#473b46}
+  .ix-next .more{display:inline-block;margin-top:10px;color:var(--terracota);font-weight:800;font-size:13px;text-decoration:none}
+  @media(max-width:560px){.ix-next li{flex-direction:column;gap:1px}.ix-next .d{min-width:0;font-size:12.5px}}
 </style>
 
 <section class="ix-hi">
@@ -202,6 +228,32 @@ $nodos = ['Negocio','Contenido','Tu OK','Publicado'];
     <?php if ($i < count($nodos)-1): ?><span class="ix-sep">→</span><?php endif; ?>
   <?php endforeach; ?>
 </div>
+
+<!-- 3 KPIs de pulso (reales, sin Meta) -->
+<div class="ix-kpis">
+  <div class="ix-kpi"><b><?= $prod['publicados_mes'] ?></b><span>publicados este mes</span></div>
+  <div class="ix-kpi"><b><?= $prod['esperando_ok'] ?></b><span>esperan tu OK</span></div>
+  <div class="ix-kpi"><b><?= $racha ?></b><span>semana<?= $racha==1?'':'s' ?> de racha</span></div>
+</div>
+
+<?php if ($obs): ?>
+<div class="ix-obs">💡 <?= $h($obs) ?></div>
+<?php endif; ?>
+
+<?php if ($proximos): ?>
+<div class="ix-next">
+  <h3>Próximos posts</h3>
+  <ul>
+    <?php foreach ($proximos as $p): ?>
+      <li>
+        <span class="d"><?= $h(_fecha_humana($p['fecha_programada'])) ?></span>
+        <span class="c"><?= $h(mb_strimwidth(trim((string)$p['caption']) ?: '(sin texto)', 0, 52, '…')) ?></span>
+      </li>
+    <?php endforeach; ?>
+  </ul>
+  <a class="more" href="<?= $BASE ?>/calendario.php?marca=<?= $marca_id ?>">Ver calendario →</a>
+</div>
+<?php endif; ?>
 
 <!-- ACTIVIDAD DEL CORILLO (humana, sin tecnicismos) -->
 <div class="ix-feed">

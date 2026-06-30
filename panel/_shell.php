@@ -19,9 +19,10 @@ $viendo_como_admin = ($es_admin && (int)$marca['usuario_id'] !== (int)($u_actual
 // Gráficas, Órdenes, Clientela, Cuentas, Analítica y Evidencia salieron del
 // menú (siguen accesibles por URL / por el perfil; reversible).
 $nav = [
-  ['key'=>'inicio',   'ic'=>'home',    'lb'=>'Inicio',    'hr'=>"$BASE/index.php?marca=$marca_id"],
-  ['key'=>'contenido','ic'=>'calendar','lb'=>'Contenido', 'hr'=>"$BASE/aprobar2.php?marca=$marca_id"],
-  ['key'=>'marca',    'ic'=>'palette', 'lb'=>'Mi marca',  'hr'=>"$BASE/marca.php?marca=$marca_id"],
+  ['key'=>'inicio',    'ic'=>'home',    'lb'=>'Inicio',     'hr'=>"$BASE/index.php?marca=$marca_id"],
+  ['key'=>'contenido', 'ic'=>'calendar','lb'=>'Contenido',  'hr'=>"$BASE/aprobar2.php?marca=$marca_id"],
+  ['key'=>'resultados','ic'=>'chart',   'lb'=>'Resultados', 'hr'=>"$BASE/resultados.php?marca=$marca_id"],
+  ['key'=>'marca',     'ic'=>'palette', 'lb'=>'Mi marca',   'hr'=>"$BASE/marca.php?marca=$marca_id"],
 ];
 // Perfil (secundario, abajo): config, facturación, soporte.
 $nav_perfil = [
@@ -95,7 +96,12 @@ $nav_perfil = [
     <div class="ptop">
       <a href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit">
         <img src="/crecer/assets/brand/encuentralo-pin.svg" alt="Inicio"><b>encuéntralo</b></a>
-      <button class="burger" id="burger" aria-label="Menú">☰</button>
+      <button id="burger" aria-label="Perfil y ajustes"
+        style="margin-left:auto;width:38px;height:38px;border-radius:50%;border:0;cursor:pointer;
+        background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;font-weight:800;font-size:15px;
+        display:grid;place-items:center;font-family:inherit;flex:none">
+        <?= $h(mb_strtoupper(mb_substr($marca['nombre_negocio'],0,1))) ?>
+      </button>
     </div>
     <div class="content">
     <?php if (!empty($viendo_como_admin)): ?>

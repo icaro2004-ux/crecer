@@ -2,12 +2,12 @@
   </div><!-- /.main -->
 </div><!-- /.layout -->
 
-<!-- Bottom nav (solo móvil) · 4 destinos, sin FAB central · la acción principal vive en Inicio -->
+<!-- Bottom nav (solo móvil) · EXACTAMENTE 4 destinos, sin FAB central · Perfil vive en el avatar del top-bar -->
 <nav class="botnav botnav-4">
   <a href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='inicio'?'on':'' ?>"><?= ico('home') ?>Inicio</a>
   <a href="<?= $BASE ?>/aprobar2.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='contenido'?'on':'' ?>"><?= ico('calendar') ?>Contenido</a>
+  <a href="<?= $BASE ?>/resultados.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='resultados'?'on':'' ?>"><?= ico('chart') ?>Resultados</a>
   <a href="<?= $BASE ?>/marca.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='marca'?'on':'' ?>"><?= ico('palette') ?>Mi marca</a>
-  <a href="<?= $BASE ?>/configuracion.php?marca=<?= $marca_id ?>" class="<?= in_array(($active ?? ''),['config','facturacion','soporte'],true)?'on':'' ?>"><?= ico('settings') ?>Perfil</a>
 </nav>
 
 <div class="lightbox-ov" id="lightbox"><img src="" alt=""></div>
