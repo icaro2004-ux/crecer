@@ -148,10 +148,13 @@ function publicar_pieza(PDO $pdo, int $contenido_id, array $override_plataformas
         } catch (Throwable $e) {
             $lat = (int)round((microtime(true) - $t0) * 1000);
             $msg = $e->getMessage();
+            // Diagnóstico: adjuntar la URL de imagen que se intentó (para ver si
+            // es correcta o si el fix de la URL no está desplegado en el server).
+            $msg_diag = $msg . ($image_url !== '' ? "  ·  imagen: {$image_url}" : '  ·  (sin imagen)');
             log_publicacion($pdo, $contenido_id, $marca_id, $pl, 'error', [
-                'intento' => $intento, 'error_msg' => $msg, 'latencia_ms' => $lat,
+                'intento' => $intento, 'error_msg' => $msg_diag, 'latencia_ms' => $lat,
             ]);
-            $errores[$pl] = $msg;
+            $errores[$pl] = $msg_diag;
         }
     }
 
