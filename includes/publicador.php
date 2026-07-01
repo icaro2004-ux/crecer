@@ -25,8 +25,15 @@ function imagen_url_publica(?string $grafica_path): string {
     $p = trim((string)$grafica_path);
     if ($p === '') return '';
     if (preg_match('#^https?://#i', $p)) return $p;            // ya es absoluta
-    $base = rtrim(BASE_URL, '/');
-    return $base . '/' . ltrim($p, '/');                       // BASE_URL + ruta relativa
+    if ($p[0] === '/') {
+        // La ruta guardada (UPLOADS_URL) ya es ABSOLUTA desde la raíz del dominio
+        // (ej. /crecer/uploads/...). Prefijar SOLO el origen (scheme://host).
+        // Usar BASE_URL completo duplicaba el /crecer (/crecer/crecer/uploads/…)
+        // y Meta no podía bajar la imagen → "missing or invalid image file".
+        $origin = preg_replace('#^(https?://[^/]+).*$#i', '$1', rtrim(BASE_URL, '/'));
+        return $origin . $p;
+    }
+    return rtrim(BASE_URL, '/') . '/' . $p;                    // ruta relativa a la app
 }
 
 /** Plataformas destino de una pieza (csv 'plataformas' o el enum 'plataforma'). */
