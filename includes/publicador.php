@@ -81,7 +81,7 @@ function log_publicacion(PDO $pdo, int $contenido_id, int $marca_id, string $pla
  *
  * @return array ['ok'=>bool, 'estado'=>string, 'resultados'=>[plataforma=>...], 'motivo'=>string]
  */
-function publicar_pieza(PDO $pdo, int $contenido_id): array {
+function publicar_pieza(PDO $pdo, int $contenido_id, array $override_plataformas = []): array {
     // 1) LOCK atómico: solo procede si está apto y nadie más lo agarró.
     //    Reclama también locks viejos (>10 min) por si un cron murió a medias.
     $tok = bin2hex(random_bytes(8));
@@ -115,7 +115,11 @@ function publicar_pieza(PDO $pdo, int $contenido_id): array {
 
     $caption   = (string)($pieza['caption'] ?? '');
     $image_url = imagen_url_publica($pieza['grafica_path'] ?? null);
-    $destinos  = plataformas_de_pieza($pieza);
+    // Plataformas: el override (elegido por el dueño en el preview: IG/FB/ambas)
+    // manda; si no viene, se usan las de la pieza.
+    $destinos  = $override_plataformas
+        ? array_values(array_intersect($override_plataformas, ['instagram', 'facebook']))
+        : plataformas_de_pieza($pieza);
     if (!$destinos) {
         return finalizar_pieza($pdo, $contenido_id, $tok, false,
             ['_plataforma' => 'La pieza no tiene plataforma válida (IG/FB).'], []);

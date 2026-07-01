@@ -37,8 +37,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $chk->execute([$id, $marca_id]);
         if (!$chk->fetchColumn()) { echo json_encode(['ok'=>false,'err'=>'Post no encontrado.']); exit; }
         if (!marca_conectada($pdo, $marca_id)) { echo json_encode(['ok'=>false,'err'=>'no_conectado']); exit; }
+        // Plataformas elegidas (IG / FB / ambas). Si no vienen, publicar_pieza usa las de la pieza.
+        $plat = [];
+        foreach (explode(',', (string)($_POST['plataformas'] ?? '')) as $x) {
+            $x = trim(strtolower($x));
+            if (in_array($x, ['instagram','facebook'], true)) $plat[] = $x;
+        }
         try {
-            $r = publicar_pieza($pdo, $id);
+            $r = publicar_pieza($pdo, $id, $plat);
             if (!empty($r['ok'])) {
                 echo json_encode(['ok'=>true, 'resultados'=>$r['resultados'] ?? []], JSON_UNESCAPED_UNICODE);
             } else {
@@ -454,6 +460,16 @@ require __DIR__ . '/_shell.php';
   .prev-box{background:var(--crema);border-radius:var(--r-xl);padding:18px;max-width:420px;width:100%;position:relative}
   .prev-x{position:absolute;top:12px;right:14px;border:0;background:none;font-size:20px;cursor:pointer;color:var(--muted)}
   .prev-tabs{display:flex;gap:8px;justify-content:center;margin-bottom:14px}
+  .prev-pub{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+  .prev-pub-h{font-size:12.5px;font-weight:800;color:var(--tinta);text-align:center;margin-bottom:10px}
+  .prev-pub-btns{display:flex;gap:8px;flex-wrap:wrap}
+  .prev-pub-btns .ppub{flex:1;min-width:96px;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+    border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-family:inherit;font-weight:800;font-size:13px;
+    padding:11px 10px;border-radius:12px;cursor:pointer}
+  .prev-pub-btns .ppub svg{width:16px;height:16px}
+  .prev-pub-btns .ppub:hover{border-color:var(--terracota);color:var(--terracota)}
+  .prev-pub-btns .ppub.both{border-color:transparent;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta))}
+  .prev-pub-btns .ppub:disabled{opacity:.6;cursor:default}
   .ptab{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--line);background:#fff;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;border-radius:99px;padding:7px 14px}
   .ptab.on{border-color:transparent;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta))}
   .mock{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;max-width:360px;margin:0 auto;box-shadow:var(--shadow);color:#111}
@@ -919,7 +935,19 @@ require __DIR__ . '/_shell.php';
       <button type="button" class="pa" onclick="copiarCopy()"><?= ico('copy') ?> Copiar copy</button>
       <a class="pa" id="pa-dl" href="" download>⬇ Descargar imagen</a>
     </div>
-    <div class="prev-note">Así se vería publicado. Copia el texto y descarga la imagen para subirlo, o déjalo programado en tu calendario.</div>
+    <?php if ($redes_ok): ?>
+    <div class="prev-pub">
+      <div class="prev-pub-h">📲 Publicar ahora a tus redes conectadas</div>
+      <div class="prev-pub-btns">
+        <button type="button" class="ppub" onclick="publicarPrev('instagram',this)"><?= ico('instagram') ?> Instagram</button>
+        <button type="button" class="ppub" onclick="publicarPrev('facebook',this)"><?= ico('facebook') ?> Facebook</button>
+        <button type="button" class="ppub both" onclick="publicarPrev('instagram,facebook',this)">✨ Ambas</button>
+      </div>
+    </div>
+    <div class="prev-note">Se publica en la Página/IG que conectaste. Instagram necesita imagen (este post la tiene).</div>
+    <?php else: ?>
+    <div class="prev-note" style="text-align:center">Conecta tus redes para publicar con un toque · <a href="/crecer/panel/conectar.php?marca=<?= $marca_id ?>" style="color:var(--terracota);font-weight:800;text-decoration:none">Conectar redes →</a><br>o copia el texto y descarga la imagen para subirlo a mano.</div>
+    <?php endif; ?>
   </div>
 </div>
 <textarea id="copybuffer" style="position:absolute;left:-9999px"></textarea>
@@ -1199,7 +1227,9 @@ require __DIR__ . '/_shell.php';
   })();
 
   // Preview "cómo se ve en redes"
-  function openPrev(img, copy){
+  var prevId=null;
+  function openPrev(img, copy, id){
+    prevId = id || null;
     document.getElementById('ig-img').src = img;
     document.getElementById('fb-img').src = img;
     document.getElementById('ig-cap').textContent = copy || '';
@@ -1208,6 +1238,25 @@ require __DIR__ . '/_shell.php';
     document.getElementById('copybuffer').value = copy || '';
     setNet('ig');
     document.getElementById('prevov').classList.add('show');
+  }
+  // Publicar desde el preview: IG / FB / ambas → Graph API a las redes conectadas.
+  function publicarPrev(plataformas, btn){
+    if(!prevId) return;
+    var esAmbas = plataformas.indexOf(',')>=0;
+    var label = esAmbas ? 'ambas redes' : (plataformas==='instagram' ? 'Instagram' : 'Facebook');
+    if(!confirm('¿Publicar este post en '+label+'?')) return;
+    var old=btn.innerHTML, btns=document.querySelectorAll('.prev-pub .ppub');
+    btns.forEach(function(b){b.disabled=true;}); btn.textContent='Publicando…';
+    var fd=new FormData(); fd.append('accion','publicar_api'); fd.append('id',prevId); fd.append('plataformas',plataformas); fd.append('ajax','1');
+    fetch(location.pathname+location.search,{method:'POST',body:fd})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        btns.forEach(function(b){b.disabled=false;}); btn.innerHTML=old;
+        if(d.ok){ toast('🎉 ¡Publicado en '+label+'!'); document.getElementById('prevov').classList.remove('show'); setTimeout(function(){location.reload();},1300); }
+        else if(d.err==='no_conectado'){ toast('⚠️ No tienes redes conectadas.'); }
+        else { toast('⚠️ '+(d.err||'No se pudo publicar')); }
+      })
+      .catch(function(){ btns.forEach(function(b){b.disabled=false;}); btn.innerHTML=old; toast('⚠️ Error de conexión. Intenta de nuevo.'); });
   }
   function setNet(n){
     document.getElementById('m-ig').style.display = n==='ig' ? '' : 'none';
@@ -1221,7 +1270,7 @@ require __DIR__ . '/_shell.php';
   }
   document.getElementById('prevov').addEventListener('click', function(e){ if(e.target===this) this.classList.remove('show'); });
   document.querySelectorAll('.prevlink').forEach(function(a){
-    a.addEventListener('click', function(e){ e.preventDefault(); openPrev(a.dataset.img, a.dataset.copy); });
+    a.addEventListener('click', function(e){ e.preventDefault(); var c=a.closest('.post'); openPrev(a.dataset.img, a.dataset.copy, c?c.dataset.id:null); });
   });
 
   // Reprogramar un post (el dueño escoge el día)
