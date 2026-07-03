@@ -688,18 +688,28 @@ require __DIR__ . '/_shell.php';
   }
 </script>
 <?php else: ?>
+<?php
+// Encabezado adaptado a la vista actual (§5.4: título + estado + acción).
+$cf = [
+  'revisar'    => ['La Creativa · Ideando', 'Te preparé estos posts en tu voz. Aprueba lo que te guste — tú tienes la última palabra.'],
+  'listos'     => ['Listos para publicar',  'Estos ya los aprobaste. Publícalos a tus redes — o reintenta los que fallaron.'],
+  'biblioteca' => ['Historial',             'Todo lo que ya publicaste, mes por mes.'],
+][$tab] ?? ['La Creativa · Ideando', ''];
+?>
 <div class="cfhead">
   <div class="cf-orb"><img src="/crecer/assets/icons/creativa.svg" alt="La Creativa"></div>
   <div class="cf-body">
-    <div class="cf-top"><h1>Contenido</h1><span class="cf-pill">La Creativa · Ideando</span></div>
-    <p>Te preparé estos posts en tu voz. Aprueba lo que te guste — tú tienes la última palabra.</p>
+    <div class="cf-top"><h1>Contenido</h1><span class="cf-pill"><?= $h($cf[0]) ?></span></div>
+    <p><?= $h($cf[1]) ?></p>
   </div>
 </div>
 <div class="viewtoggle">
-  <a class="vt on" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>"><?= ico('list') ?> Lista</a>
+  <a class="vt on" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=<?= $h($tab) ?>"><?= ico('list') ?> Lista</a>
   <a class="vt" href="/crecer/panel/calendario.php?marca=<?= $marca_id ?>"><?= ico('calendar') ?> Calendario</a>
 </div>
-<p style="font-size:12.5px;color:var(--muted);margin-top:6px;max-width:600px"><b style="color:var(--amber-ink)">Pendiente</b> = esperando tu OK · <b style="color:var(--okk-ink)">Aprobado</b> = listo. Edita un post y la IA <b>aprende tu vocabulario</b>.</p>
+<?php if ($tab==='revisar'): ?>
+<p style="font-size:12.5px;color:var(--muted);margin-top:6px;max-width:600px">Edita un post y la IA <b>aprende tu vocabulario</b> para los próximos.</p>
+<?php endif; ?>
 
 <?php if (!empty($_GET['generados'])): ?><div class="okbar">✨ La IA redactó <?= (int)$_GET['generados'] ?> post(s) — ya quedaron programados en tu calendario. <a href="/crecer/panel/calendario.php?marca=<?= $marca_id ?>" style="color:var(--okk-ink);font-weight:800;text-decoration:underline">Ver en el calendario →</a></div><?php endif; ?>
 <?php if (!empty($_GET['err'])): ?><div class="errbar">⚠️ No se pudo generar (<?= $h($_GET['err']) ?>). Intenta de nuevo en un minuto.</div><?php endif; ?>
@@ -1080,8 +1090,14 @@ require __DIR__ . '/_shell.php';
                  || (TAB==='listos' && (d.estado==='aprobado'||d.estado==='programado'||d.estado==='fallido'))
                  || (TAB==='biblioteca' && d.estado==='publicado');
         if(!enTab){
+          // Cola: la pieza decidida sale y la interfaz avanza a la siguiente.
           card.style.transition='opacity .3s, transform .3s'; card.style.opacity='0'; card.style.transform='translateX(24px)';
-          setTimeout(function(){ card.remove(); if(!document.querySelector('.feedwrap .post')) location.reload(); }, 320);
+          setTimeout(function(){
+            card.remove();
+            var next=document.querySelector('.feedwrap .post');
+            if(!next){ location.reload(); return; }
+            if(window.innerWidth<760) next.scrollIntoView({behavior:'smooth', block:'start'});
+          }, 320);
           return;
         }
         var pill = card.querySelector('.pill');
