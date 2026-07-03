@@ -227,7 +227,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 try { redactar_sugerido($pdo, $nid, $tema, $borrador); }
                 catch (Throwable $e) { /* queda el borrador con la idea para editar */ }
             }
-            header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&tab=pendientes&generados=".count($plats)."#cap-{$first}"); exit;
+            header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&tab=revisar&generados=".count($plats)."#cap-{$first}"); exit;
         }
         // ── Sin tema: la IA inventa N (planificador) ──
         $n = max(1, min(6, (int)($_POST['n'] ?? 3)));
@@ -241,7 +241,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (Throwable $e) {
             header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&err=".urlencode(substr($e->getMessage(),0,100))); exit;
         }
-        header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&tab=pendientes&generados={$n}"); exit;
+        header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&tab=revisar&generados={$n}"); exit;
     }
     // ── Escribir un post yo mismo (borrador vacío para editar) ──
     if ($accion === 'nuevo_manual') {
@@ -288,35 +288,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     if (!empty($_POST['ajax'])) {
-        $c = ['borrador'=>0,'aprobado'=>0,'rechazado'=>0,'publicado'=>0];
-        foreach ($pdo->query("SELECT estado, COUNT(*) n FROM crecer_contenido WHERE marca_id={$marca_id} GROUP BY estado") as $r) $c[$r['estado']] = (int)$r['n'];
+        $c = ['borrador'=>0,'aprobado'=>0,'rechazado'=>0,'publicado'=>0,'programado'=>0,'fallido'=>0];
+        foreach ($pdo->query("SELECT estado, COUNT(*) n FROM crecer_contenido WHERE marca_id={$marca_id} GROUP BY estado") as $r) { if (isset($c[$r['estado']])) $c[$r['estado']] = (int)$r['n']; }
         header('Content-Type: application/json');
-        echo json_encode(['ok'=>true, 'id'=>$id, 'estado'=>$nuevo, 'pend'=>$c['borrador'], 'aprob'=>$c['aprobado']+$c['publicado']]);
+        echo json_encode(['ok'=>true, 'id'=>$id, 'estado'=>$nuevo,
+            'revisar'=>$c['borrador'],
+            'listos'=>$c['aprobado']+$c['programado']+$c['fallido'],
+            'biblioteca'=>$c['publicado'],
+            'pend'=>$c['borrador'], 'aprob'=>$c['aprobado']+$c['publicado']]);   // aliases legacy
         exit;
     }
     header('Location: ' . $_SERVER['REQUEST_URI']); exit;
 }
 
-// ── Vista: '' = portada (hub) · pendientes · aprobados (fábrica) ──
+// ── Vista (§8.3): revisar (cola) · listos (a publicar/reintentar) · biblioteca (historial) ──
 $tab = $_GET['tab'] ?? '';
-if ($tab !== 'aprobados' && $tab !== '') $tab = 'pendientes';
+$tab = ['pendientes'=>'revisar', 'aprobados'=>'listos'][$tab] ?? $tab;   // compat nombres viejos
+if ($tab !== '' && !in_array($tab, ['revisar','listos','biblioteca'], true)) $tab = 'revisar';
 $es_hub = ($tab === '');
 
 // Conteos globales para los tabs
 $cnt = ['borrador'=>0,'aprobado'=>0,'rechazado'=>0,'publicado'=>0,'programado'=>0,'fallido'=>0];
 foreach ($pdo->query("SELECT estado, COUNT(*) n FROM crecer_contenido WHERE marca_id={$marca_id} GROUP BY estado") as $r) { if (isset($cnt[$r['estado']])) $cnt[$r['estado']] = (int)$r['n']; }
+$n_revisar    = $cnt['borrador'];                                          // por revisar (decisión)
+$n_listos     = $cnt['aprobado'] + $cnt['programado'] + $cnt['fallido'];   // listos: publicar/reintentar
+$n_biblioteca = $cnt['publicado'];                                         // historial
+$n_pend = $n_revisar; $n_aprob = $n_listos;                                // aliases legacy
 
-// §8.2 — Contenido entra DIRECTO a la revisión, sin hub duplicado (las stats y la
-// actividad ya viven en Inicio y Resultados). Al estado más útil según lo real:
-// hay borradores → revisar; si no, hay listos/publicados → esos; si no, revisar (vacío).
+// §8.2 — Contenido entra DIRECTO al estado más útil, sin hub duplicado.
 if ($es_hub) {
-    $dest = ($cnt['borrador'] > 0) ? 'pendientes'
-          : ((($cnt['aprobado'] + $cnt['programado'] + $cnt['publicado'] + $cnt['fallido']) > 0) ? 'aprobados' : 'pendientes');
+    $dest = ($n_revisar > 0) ? 'revisar' : (($n_listos > 0) ? 'listos' : (($n_biblioteca > 0) ? 'biblioteca' : 'revisar'));
     header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&tab={$dest}"); exit;
     // (el bloque HTML del hub de abajo queda inalcanzable a propósito)
 }
-$n_pend  = $cnt['borrador'];
-$n_aprob = $cnt['aprobado'] + $cnt['publicado'];
 
 // ── Datos de la PORTADA (hub) ──
 $publicados_mes = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$marca_id} AND estado='publicado' AND publicado_at IS NOT NULL AND YEAR(publicado_at)=YEAR(NOW()) AND MONTH(publicado_at)=MONTH(NOW())")->fetchColumn();
@@ -337,25 +341,32 @@ $idq = $pdo->prepare("SELECT caption FROM crecer_contenido WHERE marca_id=? AND 
 $idq->execute([$marca_id]); $ideas = $idq->fetchAll();
 
 $meses_aprob = []; $mes_sel = '';
-if ($tab === 'aprobados') {
-    // Meses que tienen posts aprobados (para cargar uno a la vez)
-    $mq = $pdo->prepare("SELECT DATE_FORMAT(fecha_programada,'%Y-%m') ym, COUNT(*) n FROM crecer_contenido
-                          WHERE marca_id=? AND estado IN ('aprobado','publicado') AND fecha_programada IS NOT NULL
+$permsub = "(SELECT p.permalink FROM crecer_publicaciones p
+              WHERE p.contenido_id=c.id AND p.estado='ok'
+                AND p.permalink IS NOT NULL AND p.permalink<>''
+              ORDER BY p.id DESC LIMIT 1) AS permalink";
+if ($tab === 'biblioteca') {
+    // Historial de lo publicado, por mes.
+    $mq = $pdo->prepare("SELECT DATE_FORMAT(COALESCE(publicado_at,fecha_programada),'%Y-%m') ym, COUNT(*) n
+                          FROM crecer_contenido WHERE marca_id=? AND estado='publicado'
                           GROUP BY ym ORDER BY ym DESC");
     $mq->execute([$marca_id]); $meses_aprob = $mq->fetchAll();
     $mes_sel = $_GET['mes'] ?? ($meses_aprob[0]['ym'] ?? date('Y-m'));
     [$yy,$mm] = array_map('intval', array_pad(explode('-', (string)$mes_sel), 2, 0));
-    $pq = $pdo->prepare("SELECT c.*,
-                            (SELECT p.permalink FROM crecer_publicaciones p
-                              WHERE p.contenido_id=c.id AND p.estado='ok'
-                                AND p.permalink IS NOT NULL AND p.permalink<>''
-                              ORDER BY p.id DESC LIMIT 1) AS permalink
+    $pq = $pdo->prepare("SELECT c.*, {$permsub}
                           FROM crecer_contenido c
-                          WHERE c.marca_id=? AND c.estado IN ('aprobado','publicado')
-                            AND YEAR(c.fecha_programada)=? AND MONTH(c.fecha_programada)=?
-                          ORDER BY c.fecha_programada");
+                          WHERE c.marca_id=? AND c.estado='publicado'
+                            AND YEAR(COALESCE(c.publicado_at,c.fecha_programada))=? AND MONTH(COALESCE(c.publicado_at,c.fecha_programada))=?
+                          ORDER BY COALESCE(c.publicado_at,c.fecha_programada) DESC");
     $pq->execute([$marca_id, $yy, $mm]); $piezas = $pq->fetchAll();
-} else {
+} elseif ($tab === 'listos') {
+    // Aprobados/programados/fallidos que necesitan acción (publicar/reintentar).
+    $pq = $pdo->prepare("SELECT c.*, {$permsub}
+                          FROM crecer_contenido c
+                          WHERE c.marca_id=? AND c.estado IN ('aprobado','programado','fallido')
+                          ORDER BY FIELD(c.estado,'fallido','aprobado','programado'), c.fecha_programada");
+    $pq->execute([$marca_id]); $piezas = $pq->fetchAll();
+} else { // revisar (cola de borradores)
     $pq = $pdo->prepare("SELECT * FROM crecer_contenido WHERE marca_id=? AND estado='borrador' ORDER BY fecha_programada");
     $pq->execute([$marca_id]); $piezas = $pq->fetchAll();
 }
@@ -694,11 +705,12 @@ require __DIR__ . '/_shell.php';
 <?php if (!empty($_GET['err'])): ?><div class="errbar">⚠️ No se pudo generar (<?= $h($_GET['err']) ?>). Intenta de nuevo en un minuto.</div><?php endif; ?>
 
 <div class="subtabs">
-  <a class="st <?= $tab==='pendientes'?'on':'' ?>" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=pendientes"><?= ico('clock') ?> Por aprobar <span class="b" id="cnt-pend"><?= $n_pend ?></span></a>
-  <a class="st <?= $tab==='aprobados'?'on':'' ?>" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=aprobados"><?= ico('check-circle') ?> Aprobados <span class="b" id="cnt-aprob"><?= $n_aprob ?></span></a>
+  <a class="st <?= $tab==='revisar'?'on':'' ?>" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=revisar"><?= ico('clock') ?> Revisar <span class="b" id="cnt-pend"><?= $n_revisar ?></span></a>
+  <a class="st <?= $tab==='listos'?'on':'' ?>" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=listos"><?= ico('check-circle') ?> Listos <span class="b" id="cnt-aprob"><?= $n_listos ?></span></a>
+  <a class="st <?= $tab==='biblioteca'?'on':'' ?>" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=biblioteca"><?= ico('image') ?> Biblioteca <span class="b" id="cnt-bib"><?= $n_biblioteca ?></span></a>
 </div>
 
-<?php if ($tab === 'pendientes'): ?>
+<?php if ($tab === 'revisar'): ?>
   <div class="factorybar">
     <button type="button" class="fbgen" onclick="abrirBrief()"><?= ico('sparkles') ?> Pedir un post a la IA</button>
     <form method="post" onsubmit="var b=this.querySelector('button');b.disabled=true;">
@@ -706,11 +718,11 @@ require __DIR__ . '/_shell.php';
       <button type="submit" class="fbnew"><?= ico('plus') ?> Escribir uno yo (sin IA)</button>
     </form>
   </div>
-<?php elseif ($meses_aprob): ?>
+<?php elseif ($tab === 'biblioteca' && $meses_aprob): ?>
   <form method="get" class="mesnav">
     <input type="hidden" name="marca" value="<?= $marca_id ?>">
-    <input type="hidden" name="tab" value="aprobados">
-    <label style="font-weight:700;font-size:13.5px;color:var(--muted);display:inline-flex;align-items:center;gap:6px"><?= ico('calendar') ?> Archivo por mes:</label>
+    <input type="hidden" name="tab" value="biblioteca">
+    <label style="font-weight:700;font-size:13.5px;color:var(--muted);display:inline-flex;align-items:center;gap:6px"><?= ico('calendar') ?> Historial por mes:</label>
     <select name="mes" onchange="this.form.submit()">
       <?php foreach ($meses_aprob as $m): ?>
         <option value="<?= $h($m['ym']) ?>" <?= $m['ym']===$mes_sel?'selected':'' ?>><?= $h($nombre_mes($m['ym'])) ?> (<?= (int)$m['n'] ?>)</option>
@@ -720,7 +732,7 @@ require __DIR__ . '/_shell.php';
 <?php endif; ?>
 
 <div class="feedwrap">
-  <?php if (!$total && $tab==='pendientes' && $n_aprob==0): ?>
+  <?php if (!$total && $tab==='revisar' && $n_listos==0 && $n_biblioteca==0): ?>
     <div class="empty">
       <div class="big"><img src="/crecer/assets/icons/corillo-listo.svg" alt="" style="width:58px;height:58px"></div>
       <p style="margin-bottom:18px">Todavía no le has dado trabajo al corillo. Dale abajo y metemos mano.</p>
@@ -731,10 +743,12 @@ require __DIR__ . '/_shell.php';
       </form>
       <p style="color:var(--muted);font-size:12.5px;margin-top:12px">Tarda un minutito — la IA está creando tu contenido.</p>
     </div>
-  <?php elseif (!$total && $tab==='pendientes'): ?>
-    <div class="empty"><div class="big"><img src="/crecer/assets/icons/aprobar.svg" alt="" style="width:54px;height:54px"></div><p>¡Todo al día! No tienes posts pendientes por aprobar.<br><a href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=aprobados" style="color:var(--terracota);font-weight:800">Ver tus <?= $n_aprob ?> aprobados →</a></p></div>
-  <?php elseif (!$total): ?>
-    <div class="empty"><div class="big"><?= ico('inbox-empty') ?></div><p>Aquí caen los posts que apruebes<?= $meses_aprob ? ' este mes' : '' ?>. Aprueba lo que te guste y aparecen aquí.</p></div>
+  <?php elseif (!$total && $tab==='revisar'): ?>
+    <div class="empty"><div class="big"><img src="/crecer/assets/icons/aprobar.svg" alt="" style="width:54px;height:54px"></div><p>¡Todo al día! No hay nada por revisar.<?php if ($n_listos): ?><br><a href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=listos" style="color:var(--terracota);font-weight:800">Ver tus <?= $n_listos ?> listos para publicar →</a><?php endif; ?></p></div>
+  <?php elseif (!$total && $tab==='listos'): ?>
+    <div class="empty"><div class="big"><?= ico('check-circle') ?></div><p>No tienes posts listos para publicar ahora. Aprueba en <a href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=revisar" style="color:var(--terracota);font-weight:800">Revisar</a> y aparecen aquí.</p></div>
+  <?php elseif (!$total && $tab==='biblioteca'): ?>
+    <div class="empty"><div class="big"><?= ico('inbox-empty') ?></div><p>Aquí queda el historial de lo que publiques. Todavía no hay nada publicado.</p></div>
   <?php endif; ?>
 
   <?php foreach ($piezas as $p):
@@ -1059,10 +1073,12 @@ require __DIR__ . '/_shell.php';
       .then(function(r){return r.json();})
       .then(function(d){
         if(!d.ok) return;
-        var cp=document.getElementById('cnt-pend'), ca=document.getElementById('cnt-aprob');
-        if(cp) cp.textContent=d.pend; if(ca) ca.textContent=d.aprob;
+        var cp=document.getElementById('cnt-pend'), ca=document.getElementById('cnt-aprob'), cb=document.getElementById('cnt-bib');
+        if(cp) cp.textContent=d.revisar; if(ca) ca.textContent=d.listos; if(cb) cb.textContent=d.biblioteca;
         var TAB='<?= $tab ?>';
-        var enTab = (TAB==='pendientes' && d.estado==='borrador') || (TAB==='aprobados' && (d.estado==='aprobado'||d.estado==='publicado'));
+        var enTab = (TAB==='revisar' && d.estado==='borrador')
+                 || (TAB==='listos' && (d.estado==='aprobado'||d.estado==='programado'||d.estado==='fallido'))
+                 || (TAB==='biblioteca' && d.estado==='publicado');
         if(!enTab){
           card.style.transition='opacity .3s, transform .3s'; card.style.opacity='0'; card.style.transform='translateX(24px)';
           setTimeout(function(){ card.remove(); if(!document.querySelector('.feedwrap .post')) location.reload(); }, 320);
