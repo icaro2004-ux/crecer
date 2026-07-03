@@ -182,21 +182,39 @@ require __DIR__ . '/_shell.php';
   .cer-link.danger{color:var(--muted)}
   .cer-editform textarea{width:100%;font-family:inherit;font-size:13.5px;border:1.5px solid var(--line);border-radius:10px;padding:8px;margin:8px 0}
   .cer-editform .btn-save{background:var(--terracota);color:#fff;border:0;border-radius:9px;padding:7px 14px;font-weight:800;cursor:pointer;font-size:12.5px}
+  /* §8.4 — Mi marca en 3 vistas (Voz / Identidad / Lo aprendido) */
+  .mk-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 20px;max-width:680px}
+  .mk-tab{border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:10px 16px;cursor:pointer;font-family:inherit;font-weight:800;font-size:13.5px;color:var(--muted);transition:.15s}
+  .mk-tab.on{border-color:transparent;background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;box-shadow:0 8px 20px -10px rgba(255,43,133,.5)}
+  .mk-pane{display:none;animation:mkin .25s ease both}
+  .mk-pane.on{display:block}
+  @keyframes mkin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .mk-pane .sec-h:first-child{margin-top:0}
 </style>
 
 <h1 class="page-h">Mi Marca</h1>
+<p class="subline" style="max-width:640px;margin-top:2px">Esto es lo que Crecer sabe de tu negocio y cómo lo representa. Ajústalo cuando quieras.</p>
 <?php if (!empty($_GET['tono'])): ?><div class="ok-banner" style="max-width:680px">✓ Tu tono quedó guardado. La Creativa escribirá así de ahora en adelante.</div><?php endif; ?>
 
+<div class="mk-tabs" role="tablist">
+  <button type="button" class="mk-tab on" data-pane="voz" role="tab">🎙️ Voz</button>
+  <button type="button" class="mk-tab" data-pane="identidad" role="tab">🎨 Identidad</button>
+  <button type="button" class="mk-tab" data-pane="aprendido" role="tab">🧠 Lo aprendido</button>
+</div>
+
+<section class="mk-pane on" id="mk-voz">
 <h2 class="sec-h">🎙️ Tu tono de voz</h2>
 <p class="subline">Define cómo te escribe La Creativa: mueve los controles, genera ejemplos y guárdalo. Así suena <b>todo tu contenido</b>.</p>
 <?php include __DIR__ . '/_tono_panel.php'; ?>
+</section>
 
 <?php
 if (function_exists('memoria_consolidar')) memoria_consolidar($pdo, $marca_id);
 $memorias = function_exists('memoria_listar') ? memoria_listar($pdo, $marca_id) : [];
 $tipo_lbl = ['patron'=>'Patrón detectado','preferencia'=>'Preferencia','decision'=>'Decisión','tono'=>'Voz de marca','marca'=>'Identidad','conversacion'=>'De una conversación','hito'=>'Hito'];
 ?>
-<h2 class="sec-h" style="margin-top:44px" id="cerebro">🧠 Lo que he aprendido de tu negocio</h2>
+<section class="mk-pane" id="mk-aprendido">
+<h2 class="sec-h" id="cerebro">🧠 Lo que he aprendido de tu negocio</h2>
 <p class="subline">El corillo aprende de lo que apruebas, editas y rechazas, y lo usa para escribir mejor. Esto es tuyo: <b>corrígelo o descártalo</b> cuando quieras.</p>
 <?php if (!$memorias): ?>
   <div class="empty-g" style="max-width:680px">Todavía no he aprendido nada específico. Aprueba, edita o rechaza unos posts y aquí verás lo que voy captando de tu negocio.</div>
@@ -227,8 +245,10 @@ $tipo_lbl = ['patron'=>'Patrón detectado','preferencia'=>'Preferencia','decisio
 function cerEdit(id){var f=document.getElementById('cerf-'+id);if(f)f.style.display='block';}
 function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.display='none';}
 </script>
+</section>
 
-<h2 class="sec-h" style="margin-top:44px">🎨 Tu logo</h2>
+<section class="mk-pane" id="mk-identidad">
+<h2 class="sec-h">🎨 Tu logo</h2>
 <?php if ($pagado): ?>
   <p class="subline">Tienes <b><?= $LIMITE_LOGO ?> oportunidades</b> para crear tu logo con IA. Genéralos, compáralos y escoge el que más te guste.</p>
 <?php else: ?>
@@ -363,6 +383,23 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
     };
     img.src = document.getElementById('logoimg').src;
   }
+</script>
+</section>
+
+<script>
+// §8.4 — Tabs de Mi marca (Voz / Identidad / Lo aprendido).
+(function(){
+  var tabs=document.querySelectorAll('.mk-tab');
+  function show(name){
+    tabs.forEach(function(t){ t.classList.toggle('on', t.dataset.pane===name); });
+    document.querySelectorAll('.mk-pane').forEach(function(p){ p.classList.toggle('on', p.id==='mk-'+name); });
+  }
+  tabs.forEach(function(t){ t.addEventListener('click', function(){ show(t.dataset.pane); }); });
+  var init='voz';
+  if(location.hash==='#cerebro') init='aprendido';               // volver de corregir/descartar memoria
+  else if(/[?&]ok=/.test(location.search)) init='identidad';     // volver de generar logo
+  show(init);
+})();
 </script>
 
 <?php require __DIR__ . '/_shell_foot.php'; ?>
