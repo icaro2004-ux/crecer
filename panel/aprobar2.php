@@ -335,10 +335,15 @@ if ($tab === 'aprobados') {
     $mq->execute([$marca_id]); $meses_aprob = $mq->fetchAll();
     $mes_sel = $_GET['mes'] ?? ($meses_aprob[0]['ym'] ?? date('Y-m'));
     [$yy,$mm] = array_map('intval', array_pad(explode('-', (string)$mes_sel), 2, 0));
-    $pq = $pdo->prepare("SELECT * FROM crecer_contenido
-                          WHERE marca_id=? AND estado IN ('aprobado','publicado')
-                            AND YEAR(fecha_programada)=? AND MONTH(fecha_programada)=?
-                          ORDER BY fecha_programada");
+    $pq = $pdo->prepare("SELECT c.*,
+                            (SELECT p.permalink FROM crecer_publicaciones p
+                              WHERE p.contenido_id=c.id AND p.estado='ok'
+                                AND p.permalink IS NOT NULL AND p.permalink<>''
+                              ORDER BY p.id DESC LIMIT 1) AS permalink
+                          FROM crecer_contenido c
+                          WHERE c.marca_id=? AND c.estado IN ('aprobado','publicado')
+                            AND YEAR(c.fecha_programada)=? AND MONTH(c.fecha_programada)=?
+                          ORDER BY c.fecha_programada");
     $pq->execute([$marca_id, $yy, $mm]); $piezas = $pq->fetchAll();
 } else {
     $pq = $pdo->prepare("SELECT * FROM crecer_contenido WHERE marca_id=? AND estado='borrador' ORDER BY fecha_programada");
@@ -773,6 +778,7 @@ require __DIR__ . '/_shell.php';
       </form>
       <div class="post-actions">
         <?php if ($p['estado']==='borrador'): ?>
+          <?php /* Borrador → la decisión es APROBAR */ ?>
           <form method="post"><input type="hidden" name="id" value="<?= $p['id'] ?>"><button class="btn btn-ok" name="accion" value="aprobar">✓ Aprobar</button></form>
           <details class="rzrej">
             <summary class="btn btn-no">Rechazar</summary>
@@ -786,8 +792,26 @@ require __DIR__ . '/_shell.php';
               <button class="btn btn-no" name="razon" value="">Solo rechazar</button>
             </form>
           </details>
+        <?php elseif ($p['estado']==='publicado'): ?>
+          <?php /* Publicado → VER PUBLICACIÓN (no re-publicar) */ ?>
+          <?php if (!empty($p['permalink'])): ?>
+            <a class="btn btn-ok" href="<?= $h($p['permalink']) ?>" target="_blank" rel="noopener"><?= ico('eye') ?> Ver publicación</a>
+          <?php else: ?>
+            <span class="btn btn-ghost" style="pointer-events:none;opacity:.75">✓ Publicado</span>
+          <?php endif; ?>
+          <form method="post"><input type="hidden" name="id" value="<?= $p['id'] ?>"><button class="btn btn-ghost" name="accion" value="reabrir">↺ Volver a revisar</button></form>
+        <?php elseif ($p['estado']==='fallido'): ?>
+          <?php /* Fallido → REINTENTAR */ ?>
+          <button type="button" class="btn btn-ok publicarbtn">🔁 Reintentar</button>
+          <form method="post"><input type="hidden" name="id" value="<?= $p['id'] ?>"><button class="btn btn-ghost" name="accion" value="reabrir">↺ Volver a revisar</button></form>
         <?php else: ?>
-          <button type="button" class="btn btn-ok publicarbtn">📲 Publicar</button>
+          <?php /* Aprobado / programado → PUBLICAR (si hay redes) o CONECTAR REDES */ ?>
+          <?php if ($redes_ok): ?>
+            <button type="button" class="btn btn-ok publicarbtn">📲 Publicar</button>
+          <?php else: ?>
+            <a class="btn btn-ok" href="/crecer/panel/conectar.php?marca=<?= $marca_id ?>">🔗 Conectar redes</a>
+            <button type="button" class="btn btn-ghost publicarbtn">Publicar a mano</button>
+          <?php endif; ?>
           <form method="post"><input type="hidden" name="id" value="<?= $p['id'] ?>"><button class="btn btn-ghost" name="accion" value="reabrir">↺ Volver a revisar</button></form>
         <?php endif; ?>
       </div>
@@ -1001,11 +1025,17 @@ require __DIR__ . '/_shell.php';
   var ICO_IMG = <?= json_encode(ico('image'), JSON_UNESCAPED_SLASHES) ?>;
   var PILL = {borrador:['Pendiente','wait'], aprobado:['Aprobado','ok'], rechazado:['Rechazado','no'], publicado:['Publicado','pub']};
   function actionsHTML(id, estado){
+    var reabrir = '<form method="post"><input type="hidden" name="id" value="'+id+'"><button class="btn btn-ghost" name="accion" value="reabrir">↺ Volver a revisar</button></form>';
     if (estado === 'borrador')
       return '<form method="post"><input type="hidden" name="id" value="'+id+'"><button class="btn btn-ok" name="accion" value="aprobar">✓ Aprobar</button></form>'
            + '<form method="post"><input type="hidden" name="id" value="'+id+'"><button class="btn btn-no" name="accion" value="rechazar">Rechazar</button></form>';
-    return '<button type="button" class="btn btn-ok publicarbtn">📲 Publicar</button>'
-         + '<form method="post"><input type="hidden" name="id" value="'+id+'"><button class="btn btn-ghost" name="accion" value="reabrir">↺ Volver a revisar</button></form>';
+    if (estado === 'publicado')
+      return '<span class="btn btn-ghost" style="pointer-events:none;opacity:.75">✓ Publicado</span>' + reabrir;
+    // aprobado / programado → Publicar (si hay redes) o Conectar redes
+    var pub = REDES_OK
+      ? '<button type="button" class="btn btn-ok publicarbtn">📲 Publicar</button>'
+      : '<a class="btn btn-ok" href="/crecer/panel/conectar.php?marca=<?= $marca_id ?>">🔗 Conectar redes</a><button type="button" class="btn btn-ghost publicarbtn">Publicar a mano</button>';
+    return pub + reabrir;
   }
   var feed = document.querySelector('.feedwrap');
   function setChk(card, k, on){
