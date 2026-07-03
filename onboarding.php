@@ -191,7 +191,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <div class="hint">Si tienes una foto real de lo que vendes, la IA la convierte en tu post de muestra. <b>Si no tienes ahora, no hay lío</b> — el corillo te arma el caption igual y la foto la subes después desde tu panel.</div>
   </div>
 
-  <button class="go" id="go">⚡ Que el corillo me arme mi post →</button>
+  <button class="go" id="go">Crea mi primer post →</button>
   <div class="hint" style="text-align:center;margin-top:14px">Gratis · sin tarjeta · tu logo y más posts se desbloquean luego con un plan</div>
 </div>
 
