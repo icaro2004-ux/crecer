@@ -303,8 +303,18 @@ if ($tab !== 'aprobados' && $tab !== '') $tab = 'pendientes';
 $es_hub = ($tab === '');
 
 // Conteos globales para los tabs
-$cnt = ['borrador'=>0,'aprobado'=>0,'rechazado'=>0,'publicado'=>0];
-foreach ($pdo->query("SELECT estado, COUNT(*) n FROM crecer_contenido WHERE marca_id={$marca_id} GROUP BY estado") as $r) $cnt[$r['estado']] = (int)$r['n'];
+$cnt = ['borrador'=>0,'aprobado'=>0,'rechazado'=>0,'publicado'=>0,'programado'=>0,'fallido'=>0];
+foreach ($pdo->query("SELECT estado, COUNT(*) n FROM crecer_contenido WHERE marca_id={$marca_id} GROUP BY estado") as $r) { if (isset($cnt[$r['estado']])) $cnt[$r['estado']] = (int)$r['n']; }
+
+// §8.2 — Contenido entra DIRECTO a la revisión, sin hub duplicado (las stats y la
+// actividad ya viven en Inicio y Resultados). Al estado más útil según lo real:
+// hay borradores → revisar; si no, hay listos/publicados → esos; si no, revisar (vacío).
+if ($es_hub) {
+    $dest = ($cnt['borrador'] > 0) ? 'pendientes'
+          : ((($cnt['aprobado'] + $cnt['programado'] + $cnt['publicado'] + $cnt['fallido']) > 0) ? 'aprobados' : 'pendientes');
+    header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&tab={$dest}"); exit;
+    // (el bloque HTML del hub de abajo queda inalcanzable a propósito)
+}
 $n_pend  = $cnt['borrador'];
 $n_aprob = $cnt['aprobado'] + $cnt['publicado'];
 
