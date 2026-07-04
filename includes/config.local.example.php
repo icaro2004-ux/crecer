@@ -53,8 +53,13 @@ define('META_GRAPH_VERSION', 'v21.0');
 //   https://tu-dominio/crecer/scripts/cron_publicar.php?key=XXXX
 define('CRON_TOKEN', '');
 
-// ── MODO PRUEBA (sandbox) ────────────────────────────────────────────────────
-// Descomenta para activar "Activar Crecer" SIN pasar por Stripe (probar el flujo
-// completo con cuentas de prueba, sin cobrar). SOLO en local/pruebas.
-// ⚠️ NUNCA definir esto en producción: dejaría la activación gratis para todos.
-// define('CRECER_DEV_ACTIVAR', true);
+// ── MODO PRUEBA (sandbox) — activar "Activar Crecer" SIN Stripe ──────────────
+// Para probar el flujo completo con cuentas de prueba, sin cobrar.
+//
+//  · LOCAL (tu XAMPP): activa TODAS las cuentas. NO usar en producción.
+//      define('CRECER_DEV_ACTIVAR', true);
+//
+//  · PRODUCCIÓN (probar en el celular): activa SOLO estos emails. Seguro —
+//    los usuarios reales siguen pagando por Stripe. Registra cuentas de prueba
+//    con estos emails y actívalas gratis desde el teléfono.
+//      define('CRECER_TEST_EMAILS', 'tucorreo+prueba1@gmail.com, tucorreo+prueba2@gmail.com');

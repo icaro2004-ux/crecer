@@ -77,6 +77,21 @@ function marca_es_pagada(PDO $pdo, int $marca_id): bool {
  *  del trial se chequea aparte en cada endpoint. */
 function puede_generar(?array $su): bool { return suscripcion_activa($su); }
 
+/**
+ * ¿Esta cuenta activa en MODO PRUEBA (sin Stripe)? Dos formas:
+ *  - CRECER_DEV_ACTIVAR=true en el config  → todas (solo para LOCAL/pruebas).
+ *  - CRECER_TEST_EMAILS='a@x.com,b@y.com'   → solo esos emails (seguro en PROD:
+ *    los usuarios reales siguen pasando por Stripe).
+ */
+function activacion_de_prueba(?string $email = null): bool {
+    if (defined('CRECER_DEV_ACTIVAR') && CRECER_DEV_ACTIVAR) return true;
+    if ($email !== null && $email !== '' && defined('CRECER_TEST_EMAILS') && CRECER_TEST_EMAILS !== '') {
+        $lista = array_map('trim', explode(',', strtolower((string)CRECER_TEST_EMAILS)));
+        if (in_array(strtolower($email), $lista, true)) return true;
+    }
+    return false;
+}
+
 /** ¿Está en trial (genera pero con candado)? */
 function en_trial(?array $su): bool { return $su && $su['estado'] === 'trial'; }
 

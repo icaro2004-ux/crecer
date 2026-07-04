@@ -33,10 +33,10 @@ if (!in_array($plan_slug, ['crecer', 'despegar'], true)) {
 }
 
 // ── MODO PRUEBA (sandbox): activar SIN Stripe ────────────────────────────────
-// Solo si CRECER_DEV_ACTIVAR está definido/true en el config (config.local.php).
-// Sirve para probar el flujo completo con cuentas de prueba sin cobrar. NUNCA
-// definir este flag en producción (dejaría la activación gratis para cualquiera).
-if (defined('CRECER_DEV_ACTIVAR') && CRECER_DEV_ACTIVAR) {
+// Aplica solo a cuentas de prueba (ver activacion_de_prueba): CRECER_DEV_ACTIVAR
+// (todas, para LOCAL) o CRECER_TEST_EMAILS (solo esos emails, seguro en PROD).
+// Los usuarios reales siguen pasando por Stripe.
+if (activacion_de_prueba($usuario['email'] ?? null)) {
     $pl = $pdo->prepare("SELECT id FROM crecer_planes WHERE slug=?");
     $pl->execute([$plan_slug]);
     $plan_id = (int)$pl->fetchColumn();
