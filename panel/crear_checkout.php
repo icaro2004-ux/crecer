@@ -31,6 +31,29 @@ if (!$m || (int)$m['id'] !== $marca_id) { http_response_code(403); exit('No auto
 if (!in_array($plan_slug, ['crecer', 'despegar'], true)) {
     volver_con_error($marca_id, 'Plan no válido.');
 }
+
+// ── MODO PRUEBA (sandbox): activar SIN Stripe ────────────────────────────────
+// Solo si CRECER_DEV_ACTIVAR está definido/true en el config (config.local.php).
+// Sirve para probar el flujo completo con cuentas de prueba sin cobrar. NUNCA
+// definir este flag en producción (dejaría la activación gratis para cualquiera).
+if (defined('CRECER_DEV_ACTIVAR') && CRECER_DEV_ACTIVAR) {
+    $pl = $pdo->prepare("SELECT id FROM crecer_planes WHERE slug=?");
+    $pl->execute([$plan_slug]);
+    $plan_id = (int)$pl->fetchColumn();
+    if ($plan_id) {
+        $ex = $pdo->prepare("SELECT id FROM crecer_suscripciones WHERE marca_id=?");
+        $ex->execute([$marca_id]);
+        if ($sid = (int)$ex->fetchColumn()) {
+            $pdo->prepare("UPDATE crecer_suscripciones SET plan_id=?, estado='activa', periodo_inicio=NOW(), periodo_fin=DATE_ADD(NOW(), INTERVAL 30 DAY) WHERE id=?")
+                ->execute([$plan_id, $sid]);
+        } else {
+            $pdo->prepare("INSERT INTO crecer_suscripciones (marca_id, usuario_id, plan_id, estado, periodo_inicio, periodo_fin) VALUES (?,?,?, 'activa', NOW(), DATE_ADD(NOW(), INTERVAL 30 DAY))")
+                ->execute([$marca_id, (int)$usuario['id'], $plan_id]);
+        }
+    }
+    header('Location: /crecer/panel/bienvenida.php?marca=' . $marca_id . '&prueba=1'); exit;
+}
+
 if (!stripe_configurado()) {
     volver_con_error($marca_id, 'Los pagos todavía no están activos. Inténtalo en un ratito.');
 }

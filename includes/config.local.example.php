@@ -52,3 +52,9 @@ define('META_GRAPH_VERSION', 'v21.0');
 // Si corres el cron por URL (no CLI), protégelo con este token:
 //   https://tu-dominio/crecer/scripts/cron_publicar.php?key=XXXX
 define('CRON_TOKEN', '');
+
+// ── MODO PRUEBA (sandbox) ────────────────────────────────────────────────────
+// Descomenta para activar "Activar Crecer" SIN pasar por Stripe (probar el flujo
+// completo con cuentas de prueba, sin cobrar). SOLO en local/pruebas.
+// ⚠️ NUNCA definir esto en producción: dejaría la activación gratis para todos.
+// define('CRECER_DEV_ACTIVAR', true);
