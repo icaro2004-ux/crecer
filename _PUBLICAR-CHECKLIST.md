@@ -21,6 +21,13 @@ Los 3 verificados con prueba reproducible (siembra filas, corre el SQL, limpia):
 3. **`publicar_api` sin CSRF** (`panel/aprobar2.php`): la acción que postea a las redes
    reales del cliente no validaba token. Ahora exige `csrf_ok()` y los dos `fetch`
    mandan el token.
+4. **El cron no entregaba las piezas recuperables** (`includes/publicador.php`): con el
+   fix #1, `publicar_pieza()` ya sabía reclamar una pieza atascada en `publicando`, pero
+   `correr_publicador()` seguía haciendo `SELECT ... estado IN ('aprobado','programado')`
+   → nunca se la pasaba, así que la recuperación quedaba muerta para el cron. Ahora el
+   `SELECT` también incluye `publicando` cuando el lock es nulo o viejo (>10 min).
+   Verificado llamando a `correr_publicador()` (no solo el `UPDATE` aislado): la atascada
+   con lock viejo se recupera; la de lock fresco queda intacta.
 
 ---
 
@@ -69,6 +76,7 @@ Panel Hostinger → **Avanzado → Cron Jobs** → nueva tarea **cada 10–15 mi
 | Publicar por API + IG 2 pasos + registrar + reintentar sin duplicar | Repo | ✅ hecho/correcto |
 | Fix del 400 (URL de imagen) | Repo | ✅ hecho (`fe8e258`) — falta desplegarlo |
 | Lock recuperable / reintento no omite la red que falló / CSRF en publicar | Repo | ✅ hecho (2026-07-04) — falta desplegarlo |
+| Cron entrega las piezas recuperables (`publicando` con lock viejo) | Repo | ✅ hecho (2026-07-04) — falta desplegarlo |
 | Override IG/FB/Ambas + diagnóstico de error | Repo | ✅ hecho |
 | Deploy a Hostinger | Manuel | ⏳ pendiente |
 | Enlazar IG↔Página + reconectar | Manuel | ⏳ pendiente |

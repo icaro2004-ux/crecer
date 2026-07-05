@@ -67,11 +67,14 @@ grupo perfil en el sidebar en desktop). Botnav móvil = esos 4, sin FAB central.
 Botón "Publicar": si hay redes conectadas → publica server-side por la API (no share del
 teléfono). Preview del post con botones IG / FB / Ambas.
 
-**Fixes de repo (2026-07-04, hallados por Codex en 2.ª revisión — verificados y corregidos):**
+**Fixes de repo (2026-07-04, hallados por Codex — verificados y corregidos):**
 (1) lock: una pieza trabada en `publicando` ahora se puede reclamar (proceso muerto a
 medias). (2) reintento en "Ambas" ya no omite la red que falló (suma las plataformas
 intentadas; `ya_publicada()` evita duplicar). (3) `publicar_api` ahora valida CSRF y los
-`fetch` mandan el token. Ver `_PUBLICAR-CHECKLIST.md`.
+`fetch` mandan el token. (4) el cron (`correr_publicador()`) ahora **sí entrega** las
+piezas recuperables: su `SELECT` incluye `publicando` con lock nulo o viejo (>10 min) —
+sin esto, el fix (1) quedaba muerto para el cron. Verificado llamando a
+`correr_publicador()`. Ver `_PUBLICAR-CHECKLIST.md`.
 
 **Lo que falta para que publique de verdad (lado de Manuel):**
 1. **Enlazar IG↔Página**: su Instagram debe ser **Business/Creator** y estar **enlazado a

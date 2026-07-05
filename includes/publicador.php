@@ -206,13 +206,23 @@ function finalizar_pieza(PDO $pdo, int $contenido_id, string $tok, bool $ok, arr
  * @return array resumen ['revisadas'=>int, 'publicadas'=>int, 'fallidas'=>int, 'detalle'=>[]]
  */
 function correr_publicador(PDO $pdo, int $limite = 25): array {
+    // Selecciona: (a) lo aprobado/programado cuya hora llegó, y (b) piezas
+    // RECUPERABLES atascadas en 'publicando' (un cron murió a medias) — solo si el
+    // lock es nulo o viejo (>10 min), para no tocar una publicación en curso. Sin
+    // (b), publicar_pieza() sabe reclamar 'publicando' pero el cron nunca se lo
+    // entregaba, así que la recuperación quedaba muerta.
     $q = $pdo->prepare(
         "SELECT c.id
            FROM crecer_contenido c
            JOIN crecer_conexiones x ON x.marca_id = c.marca_id AND x.estado='activa'
-          WHERE c.estado IN ('aprobado','programado')
-            AND c.fecha_programada IS NOT NULL
-            AND c.fecha_programada <= NOW()
+          WHERE (
+                  ( c.estado IN ('aprobado','programado')
+                    AND c.fecha_programada IS NOT NULL
+                    AND c.fecha_programada <= NOW() )
+                  OR
+                  ( c.estado = 'publicando'
+                    AND (c.lock_token IS NULL OR c.lock_at < (NOW() - INTERVAL 10 MINUTE)) )
+                )
           ORDER BY c.fecha_programada ASC
           LIMIT {$limite}");
     $q->execute();
