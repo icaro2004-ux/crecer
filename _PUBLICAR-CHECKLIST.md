@@ -21,6 +21,13 @@ Los 3 verificados con prueba reproducible (siembra filas, corre el SQL, limpia):
 3. **`publicar_api` sin CSRF** (`panel/aprobar2.php`): la acción que postea a las redes
    reales del cliente no validaba token. Ahora exige `csrf_ok()` y los dos `fetch`
    mandan el token.
+5. **IG rechazaba la imagen por formato PNG** (`includes/publicador.php`): las gráficas de
+   IA se guardan como `.png`, pero Instagram (Content Publishing API) **solo acepta JPEG**
+   → Meta respondía `400 "Only photo or video can be accepted as media type"`. Nuevo helper
+   `asegurar_jpeg_publicable()` crea (una vez, idempotente) un `.jpg` hermano aplanando la
+   transparencia sobre blanco, y publica ese. Sin GD o si falla, cae al original sin romper.
+   Verificado con GD: png→jpg real (`image/jpeg`), idempotente, jpg de entrada intacto.
+   **Requiere la extensión GD de PHP en el server (estándar en Hostinger).**
 4. **El cron no entregaba las piezas recuperables** (`includes/publicador.php`): con el
    fix #1, `publicar_pieza()` ya sabía reclamar una pieza atascada en `publicando`, pero
    `correr_publicador()` seguía haciendo `SELECT ... estado IN ('aprobado','programado')`

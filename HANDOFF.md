@@ -75,7 +75,15 @@ intentadas; `ya_publicada()` evita duplicar). (3) `publicar_api` ahora valida CS
 `fetch` mandan el token. (4) el cron (`correr_publicador()`) ahora **sí entrega** las
 piezas recuperables: su `SELECT` incluye `publicando` con lock nulo o viejo (>10 min) —
 sin esto, el fix (1) quedaba muerto para el cron. Verificado llamando a
-`correr_publicador()`. Ver `_PUBLICAR-CHECKLIST.md`.
+`correr_publicador()`. (5) **IG solo acepta JPEG**: las gráficas son PNG → Meta daba
+`400 "Only photo or video can be accepted as media type"`. `asegurar_jpeg_publicable()`
+convierte a `.jpg` (idempotente) antes de publicar. Requiere GD (estándar en Hostinger).
+Ver `_PUBLICAR-CHECKLIST.md`.
+
+**Estado en prod (2026-07-05, probando en vivo con Manuel):** deploy hecho (URL de imagen
+ya correcta, sin `/crecer/crecer`), IG **conectado** (Meta responde), cron montado y
+autorizado (`revisadas:0`). El único error vivo era el PNG→JPEG (fix #5) — falta
+**desplegar `includes/publicador.php`** con este fix y reintentar el post.
 
 **Lo que falta para que publique de verdad (lado de Manuel):**
 1. **Enlazar IG↔Página**: su Instagram debe ser **Business/Creator** y estar **enlazado a

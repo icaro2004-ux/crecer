@@ -36,6 +36,49 @@ function imagen_url_publica(?string $grafica_path): string {
     return rtrim(BASE_URL, '/') . '/' . $p;                    // ruta relativa a la app
 }
 
+/**
+ * Instagram (Content Publishing API) SOLO acepta JPEG. Nuestras gráficas de IA
+ * se guardan como PNG → Meta responde 400 "Only photo or video can be accepted
+ * as media type". Esta función asegura una copia .jpg publicable:
+ *   - si ya es jpg/jpeg o es URL externa → devuelve el path tal cual.
+ *   - si es png/webp → crea (una vez) un .jpg hermano aplanando transparencia
+ *     sobre blanco, y devuelve su URL. Idempotente: reusa el .jpg si ya existe.
+ *   - sin GD o si algo falla → devuelve el original (no rompe; FB igual acepta png).
+ * Devuelve la MISMA forma de path que recibe (URL-path bajo UPLOADS_URL).
+ */
+function asegurar_jpeg_publicable(?string $grafica_path): ?string {
+    $p = trim((string)$grafica_path);
+    if ($p === '') return $grafica_path;
+    if (preg_match('#^https?://#i', $p)) return $grafica_path;   // externa
+    if (preg_match('#\.jpe?g$#i', $p))   return $grafica_path;   // ya es jpg
+    if (!preg_match('#\.(png|webp)$#i', $p)) return $grafica_path;
+    if (!function_exists('imagecreatefromstring') || !function_exists('imagejpeg')) return $grafica_path;
+
+    // URL-path (/crecer/uploads/...) → ruta de archivo (UPLOADS_PATH + rel).
+    $url_pref = rtrim(UPLOADS_URL, '/');
+    $rel = (strpos($p, $url_pref) === 0) ? substr($p, strlen($url_pref)) : $p;
+    $rel = ltrim(str_replace('\\', '/', $rel), '/');
+    $sep = DIRECTORY_SEPARATOR;
+    $src_abs = rtrim(UPLOADS_PATH, '/\\') . $sep . str_replace('/', $sep, $rel);
+    if (!is_file($src_abs)) return $grafica_path;
+
+    $dst_rel = preg_replace('#\.(png|webp)$#i', '.jpg', $rel);
+    $dst_abs = rtrim(UPLOADS_PATH, '/\\') . $sep . str_replace('/', $sep, $dst_rel);
+    $dst_url = $url_pref . '/' . $dst_rel;
+    if (is_file($dst_abs)) return $dst_url;                       // ya convertida antes
+
+    $im = @imagecreatefromstring((string)@file_get_contents($src_abs));
+    if (!$im) return $grafica_path;
+    $w = imagesx($im); $h = imagesy($im);
+    $canvas = imagecreatetruecolor($w, $h);
+    $white  = imagecolorallocate($canvas, 255, 255, 255);         // aplana alfa sobre blanco
+    imagefilledrectangle($canvas, 0, 0, $w, $h, $white);
+    imagecopy($canvas, $im, 0, 0, 0, 0, $w, $h);
+    $ok = imagejpeg($canvas, $dst_abs, 88);
+    imagedestroy($im); imagedestroy($canvas);
+    return $ok ? $dst_url : $grafica_path;
+}
+
 /** Plataformas destino de una pieza (csv 'plataformas' o el enum 'plataforma'). */
 function plataformas_de_pieza(array $pieza): array {
     $raw = trim((string)($pieza['plataformas'] ?? '')) ?: (string)$pieza['plataforma'];
@@ -117,7 +160,9 @@ function publicar_pieza(PDO $pdo, int $contenido_id, array $override_plataformas
     }
 
     $caption   = (string)($pieza['caption'] ?? '');
-    $image_url = imagen_url_publica($pieza['grafica_path'] ?? null);
+    // IG solo acepta JPEG → convertir la gráfica (png/webp) a jpg antes de publicar.
+    $grafica_pub = asegurar_jpeg_publicable($pieza['grafica_path'] ?? null);
+    $image_url = imagen_url_publica($grafica_pub);
     // Plataformas: el override (elegido por el dueño en el preview: IG/FB/ambas)
     // manda; si no viene, se usan las de la pieza.
     $destinos  = $override_plataformas
