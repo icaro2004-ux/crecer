@@ -314,7 +314,12 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
     if ($estilo !== '') $prompt .= "- Estilo: {$estilo}.\n";
     $instr = trim($opts['instrucciones'] ?? '');
     if ($instr !== '') $prompt .= "- LO QUE PIDE EL DUEÑO (prioriza esto): {$instr}\n";
-    $prompt .= "- Calidad de agencia top, colores cálidos boricuas, premium, listo para publicar.";
+    $prompt .= "- DIRECCIÓN DE ARTE (calidad tope, que NO se vea \"AI genérico\" ni barato):\n"
+             . "  · Fotografía profesional real: iluminación natural suave y direccional (golden hour / softbox), sombras creíbles.\n"
+             . "  · Composición intencional (regla de tercios), profundidad de campo con fondo desenfocado (bokeh), foco nítido en el protagonista.\n"
+             . "  · Texturas y detalles ricos y reales; colores cálidos boricuas pero NATURALES (sin sobresaturar); acabado editorial premium.\n"
+             . "  · EVITA a toda costa: look plástico/CGI, objetos deformes o flotando, texto inventado, watermarks falsos, simetría artificial, ruido.\n"
+             . "  · Meta: una foto que un fotógrafo pro de comida/marca tomaría para redes — nítida, con alma, lista para publicar.";
 
     // Calidad make-or-break: SIEMPRE el Pro (Nano Banana Pro). Antes el "sin texto"
     // caía al flash barato y se notaba la baja calidad. El Pro (~$0.13) vale la pena
@@ -325,6 +330,7 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
         'marca_id' => $marca_id,
         'modelo'   => $modelo,
         'imagenes' => $imagenes,
+        'aspect'   => $opts['aspect'] ?? '1:1',   // cuadrado (feed IG/FB); encuadre limpio
     ]);
     $pdo->prepare("INSERT INTO crecer_graficas (marca_id, archivo, copy_text) VALUES (?,?,?)")
         ->execute([$marca_id, $r['archivo'], $copy]);

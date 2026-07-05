@@ -348,9 +348,21 @@ function gemini_imagen(string $prompt, array $opts = []): array {
             if (!empty($im['data'])) $parts[] = ['inlineData' => ['mimeType' => $im['mime'] ?? 'image/jpeg', 'data' => $im['data']]];
         }
     }
-    $payload = ['contents' => [['role'=>'user','parts'=>$parts]], 'generationConfig' => ['responseModalities' => ['IMAGE']]];
-    $resp = ia_http_post_retry($url, ['Content-Type: application/json'], json_encode($payload, JSON_UNESCAPED_UNICODE), $opts['max_reintentos'] ?? 3);
+    // Encuadre: si viene 'aspect' (ej. "1:1", "4:5", "9:16") se lo pedimos al modelo.
+    // Con fallback: si este modelo/endpoint no acepta imageConfig, reintenta sin él
+    // para no romper la generación.
+    $aspect = $opts['aspect'] ?? null;
+    $mk = function (bool $conConfig) use ($parts, $aspect) {
+        $gc = ['responseModalities' => ['IMAGE']];
+        if ($conConfig && $aspect) $gc['imageConfig'] = ['aspectRatio' => $aspect];
+        return ['contents' => [['role'=>'user','parts'=>$parts]], 'generationConfig' => $gc];
+    };
+    $resp = ia_http_post_retry($url, ['Content-Type: application/json'], json_encode($mk(true), JSON_UNESCAPED_UNICODE), $opts['max_reintentos'] ?? 3);
     $d = json_decode($resp, true);
+    if (isset($d['error']) && $aspect) {   // el aspectRatio no gustó → reintentar sin él
+        $resp = ia_http_post_retry($url, ['Content-Type: application/json'], json_encode($mk(false), JSON_UNESCAPED_UNICODE), 1);
+        $d = json_decode($resp, true);
+    }
     if (isset($d['error'])) throw new IaError('Gemini imagen: ' . ($d['error']['message'] ?? 'error'));
     foreach (($d['candidates'][0]['content']['parts'] ?? []) as $p) {
         if (isset($p['inlineData']['data'])) {
