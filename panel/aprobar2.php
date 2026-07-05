@@ -18,7 +18,15 @@ $pagado = marca_es_pagada($pdo, $marca_id);  // no pagado = 1 post de muestra (1
 // ¿Redes conectadas? Si sí, "Publicar" va por la Graph API a la Página conectada
 // (un botón). Si no, cae al flujo manual de compartir.
 $redes_ok = false;
-try { $redes_ok = (bool)$pdo->query("SELECT 1 FROM crecer_conexiones WHERE marca_id={$marca_id} AND estado='activa' LIMIT 1")->fetchColumn(); } catch (Throwable $e) {}
+$redes_conectadas = [];   // ['instagram','facebook'] según lo realmente conectado
+try {
+    $cx = $pdo->query("SELECT ig_user_id, fb_page_id FROM crecer_conexiones WHERE marca_id={$marca_id} AND estado='activa' LIMIT 1")->fetch();
+    if ($cx) {
+        $redes_ok = true;
+        if (!empty($cx['ig_user_id'])) $redes_conectadas[] = 'instagram';
+        if (!empty($cx['fb_page_id'])) $redes_conectadas[] = 'facebook';
+    }
+} catch (Throwable $e) {}
 
 // ── Acción POST (PRG) ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -1431,6 +1439,7 @@ $cf = [
       var fa=new FormData(); fa.append('ajax','1'); fa.append('accion','aprobar'); fa.append('id',wizId);
       fetch(location.pathname+location.search,{method:'POST',body:fa}).then(function(r){return r.json();}).then(function(){
         var fp=new FormData(); fp.append('ajax','1'); fp.append('accion','publicar_api'); fp.append('id',wizId); fp.append('csrf',CSRF);
+        if(REDES_CONECTADAS && REDES_CONECTADAS.length) fp.append('plataformas', REDES_CONECTADAS.join(','));   // publica a TODAS las conectadas (IG+FB)
         return fetch(location.pathname+location.search,{method:'POST',body:fp}).then(function(r){return r.json();});
       }).then(function(d){
         if(d && d.ok){ pubOk('Tu post ya salió a tus redes.', _permalink(d.resultados)); }
@@ -1680,6 +1689,7 @@ $cf = [
     pubov.classList.add('show');
   }
   var REDES_OK = <?= $redes_ok ? 'true' : 'false' ?>;
+  var REDES_CONECTADAS = <?= json_encode($redes_conectadas) ?>;   // ['instagram','facebook'] realmente conectadas
   var CSRF = <?= json_encode(csrf_token()) ?>;   // token para las acciones que postean a redes
 
   // ── Popup de resultado de publicación (loading → éxito/error con botón Cerrar) ──

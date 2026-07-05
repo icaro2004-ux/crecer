@@ -333,14 +333,17 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
     }
 
     $tiene_foto = (bool)($foto_abs && is_file($foto_abs));
-    $prompt = "Crea el ARTE de un post de Instagram (cuadrado 1:1) para \"{$m['nombre_negocio']}\", negocio boricua.\n";
-    if ($tiene_foto) {
-        $prompt .= "- Usa la FOTO REAL del producto (primera imagen) como protagonista; NO la inventes ni la cambies, solo realza composición, luz y fondo.\n";
-    } else {
-        $prompt .= "- Genera una imagen apetitosa y realista acorde al negocio.\n";
-    }
+    $prompt = "Crea el ARTE (imagen cuadrada 1:1) para un post de \"{$m['nombre_negocio']}\", negocio boricua.\n";
     if ($copy !== '') {
-        $prompt .= "- La imagen debe ser COHERENTE con este mensaje del post (mismo tema, ambiente y vibra): \"{$copy}\".\n";
+        // El TEMA DEL POST manda sobre el tipo de negocio: evita imágenes fuera de tema.
+        $prompt .= "- ⭐ LO MÁS IMPORTANTE: la imagen tiene que ILUSTRAR EL TEMA DE ESTE POST en concreto, NO algo genérico del negocio. Lee bien el texto y muestra visualmente de qué habla:\n"
+                 . "  \"{$copy}\"\n"
+                 . "  Si el post NO es sobre comida, NO pongas comida. Piensa qué escena/objeto/concepto representa mejor ESE mensaje.\n";
+    }
+    if ($tiene_foto) {
+        $prompt .= "- Usa la FOTO REAL (primera imagen) como protagonista; NO la inventes ni la cambies, solo realza composición, luz y fondo.\n";
+    } else {
+        $prompt .= "- Genera una imagen realista y atractiva que represente ese tema y encaje con el negocio.\n";
     }
     if ($con_logo && $logo_abs) {
         $le = $opts['logo_estilo'] ?? 'esquina';
@@ -365,7 +368,7 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
              . "  · Composición intencional (regla de tercios), profundidad de campo con fondo desenfocado (bokeh), foco nítido en el protagonista.\n"
              . "  · Texturas y detalles ricos y reales; colores cálidos boricuas pero NATURALES (sin sobresaturar); acabado editorial premium.\n"
              . "  · EVITA a toda costa: look plástico/CGI, objetos deformes o flotando, texto inventado, watermarks falsos, simetría artificial, ruido.\n"
-             . "  · Meta: una foto que un fotógrafo pro de comida/marca tomaría para redes — nítida, con alma, lista para publicar.";
+             . "  · Meta: una foto que un fotógrafo profesional tomaría para redes, sobre EL TEMA del post — nítida, con alma, lista para publicar.";
 
     // Calidad make-or-break: SIEMPRE el Pro (Nano Banana Pro). Antes el "sin texto"
     // caía al flash barato y se notaba la baja calidad. El Pro (~$0.13) vale la pena
