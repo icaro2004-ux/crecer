@@ -472,7 +472,7 @@ $page_title = 'Contenido';
 $guia = ['key'=>'contenido','agente'=>'pen','titulo'=>'Tu fábrica de posts',
   'intro'=>'Aquí La Creativa te prepara los posts. Tú apruebas lo que te guste.',
   'pasos'=>[
-    ['sparkles','Dale a "Pedir un post a la IA": dile un tema o déjala inventar.'],
+    ['sparkles','Dale a "Crear un post (guiado)": dile un tema o déjala inventar.'],
     ['eye','En cada post, "Ver en redes" te muestra cómo se vería en IG/FB.'],
     ['calendar','Cambia la fecha si quieres publicarlo otro día.'],
     ['check','Cuando te guste, dale "Aprobar". Editar un post le enseña tu voz a la IA.'],
@@ -1332,21 +1332,29 @@ $cf = [
     wizCargarIdeas();
   };
   window.wizCerrar=function(){ document.getElementById('wizov').classList.remove('show'); };
-  function wizCargarIdeas(){
-    var cont=document.getElementById('wiz-ideas'); cont.innerHTML='<div class="wiz-load">💭 Pensando ideas para tu negocio…</div>';
+  // Caché de sugerencias durante la página: se reusan al cerrar/reabrir el wizard.
+  // Solo "Dame otras ideas" (force=true) fuerza una llamada nueva a Gemini.
+  var wizIdeasCache=null;
+  function wizRenderIdeas(ideas){
+    var cont=document.getElementById('wiz-ideas'); cont.innerHTML='';
+    if(!ideas || !ideas.length){ cont.innerHTML='<div class="wiz-load">Escribe tu idea abajo 👇</div>'; return; }
+    ideas.forEach(function(it){
+      var b=document.createElement('button'); b.type='button'; b.className='sug-idea';
+      var t=document.createElement('b'); t.textContent=it.tema||'Idea';
+      var s=document.createElement('span'); s.textContent=it.idea||'';
+      b.appendChild(t); b.appendChild(s);
+      b.addEventListener('click', function(){ wizCrear((it.tema?it.tema+': ':'')+(it.idea||'')); });
+      cont.appendChild(b);
+    });
+  }
+  function wizCargarIdeas(force){
+    if(!force && wizIdeasCache){ wizRenderIdeas(wizIdeasCache); return; }   // reusar caché
+    document.getElementById('wiz-ideas').innerHTML='<div class="wiz-load">💭 Pensando ideas para tu negocio…</div>';
     var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','sugerir_temas');
     fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
-      cont.innerHTML='';
-      if(!d.ok || !d.ideas || !d.ideas.length){ cont.innerHTML='<div class="wiz-load">Escribe tu idea abajo 👇</div>'; return; }
-      d.ideas.forEach(function(it){
-        var b=document.createElement('button'); b.type='button'; b.className='sug-idea';
-        var t=document.createElement('b'); t.textContent=it.tema||'Idea';
-        var s=document.createElement('span'); s.textContent=it.idea||'';
-        b.appendChild(t); b.appendChild(s);
-        b.addEventListener('click', function(){ wizCrear((it.tema?it.tema+': ':'')+(it.idea||'')); });
-        cont.appendChild(b);
-      });
-    }).catch(function(){ cont.innerHTML='<div class="wiz-load">Escribe tu idea abajo 👇</div>'; });
+      if(d.ok && d.ideas && d.ideas.length){ wizIdeasCache=d.ideas; wizRenderIdeas(d.ideas); }
+      else { wizRenderIdeas(wizIdeasCache||[]); }
+    }).catch(function(){ wizRenderIdeas(wizIdeasCache||[]); });
   }
   function wizCrear(tema){
     tema=(tema||document.getElementById('wiz-tema').value).trim();
@@ -1382,7 +1390,7 @@ $cf = [
     if(_wizInit) return;
     var g=document.getElementById('wiz-gen'); if(!g) return;   // el DOM aún no está
     _wizInit=true;
-    document.getElementById('wiz-mas').addEventListener('click', wizCargarIdeas);
+    document.getElementById('wiz-mas').addEventListener('click', function(){ wizCargarIdeas(true); });
     document.getElementById('wiz-crear').addEventListener('click', function(){ wizCrear(); });
     var bk2=document.getElementById('wiz-back2'); if(bk2) bk2.addEventListener('click', function(){ wizPaso(1); });
     var bk3=document.getElementById('wiz-back3'); if(bk3) bk3.addEventListener('click', function(){ wizPaso(2); });
