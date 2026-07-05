@@ -269,6 +269,48 @@ function sugerir_arte(PDO $pdo, int $marca_id, string $caption, string $ajuste =
     return trim((string)$r['texto']);
 }
 
+/**
+ * Lluvia de ideas de POST para que el dueño elija (el "sugiéreme temas").
+ * Ideas ESPECÍFICAS de este negocio, con la voz de la marca y la memoria del
+ * Cerebro (RAG), evitando repetir lo reciente. Devuelve [['tema','idea'], ...].
+ */
+function sugerir_temas(PDO $pdo, int $marca_id, int $n = 5): array {
+    $m = leer_marca($pdo, $marca_id);
+    $ctx = marca_contexto($m);
+    // Lo reciente, para no repetir.
+    $rec = $pdo->prepare("SELECT caption FROM crecer_contenido WHERE marca_id=? AND caption<>'' ORDER BY id DESC LIMIT 8");
+    $rec->execute([$marca_id]);
+    $recientes = array_values(array_filter(array_map(
+        fn($c) => trim(mb_substr((string)$c, 0, 80)), $rec->fetchAll(PDO::FETCH_COLUMN))));
+
+    $sistema = "Eres el ESTRATEGA de contenido de Crecer para microempresas boricuas. "
+        . "Propones ideas de post ESPECÍFICAS y con gancho para que el dueño elija — un "
+        . "brainstorm de agencia, enfocado 100% en ESTE negocio. Varía los pilares "
+        . "(producto, proceso/detrás de cámara, prueba social, tip, promo, temporada, "
+        . "pregunta). Nada genérico. Responde SOLO JSON válido.";
+    if (function_exists('tono_instruccion'))  $sistema .= tono_instruccion($m);
+    if (function_exists('memoria_para_prompt')) $sistema .= memoria_para_prompt($pdo, $marca_id);
+
+    $prompt = "Perfil del negocio:\n{$ctx}\n";
+    if ($recientes) $prompt .= "\nYA tiene esto (NO lo repitas, propón cosas distintas):\n- " . implode("\n- ", $recientes) . "\n";
+    $prompt .= "\nPropón {$n} ideas de post. Devuelve JSON EXACTO:\n"
+        . '{"ideas":[{"pilar":"producto","tema":"2-4 palabras","idea":"1 oración específica con el gancho"}]}';
+
+    $r = ia_ejecutar($pdo, 'planificador', 'Sugerir temas de post', $prompt, [
+        'marca_id' => $marca_id, 'sistema' => $sistema, 'json' => true,
+        'temperatura' => 0.95, 'max_tokens' => 1200, 'thinking_budget' => 0,
+        'mock_texto' => '{"ideas":[{"pilar":"producto","tema":"Bizcocho de guayaba","idea":"Primer plano del bizcocho recién cortado mostrando el relleno, con CTA por WhatsApp."},{"pilar":"prueba_social","tema":"Clienta feliz","idea":"Reseña real de una clienta que ordenó para un cumpleaños en Bayamón."},{"pilar":"proceso","tema":"Detrás de cámara","idea":"Video corto batiendo la mezcla a las 5am, para mostrar que todo es fresco."}]}',
+    ]);
+    $d = json_decode((string)$r['texto'], true);
+    $out = [];
+    foreach (($d['ideas'] ?? []) as $it) {
+        $tema = trim((string)($it['tema'] ?? ''));
+        $idea = trim((string)($it['idea'] ?? ''));
+        if ($tema !== '' || $idea !== '') $out[] = ['tema' => $tema, 'idea' => $idea];
+    }
+    return $out;
+}
+
 function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts = []): array {
     $m = leer_marca($pdo, $marca_id);
     $copy      = trim($opts['copy'] ?? '');         // el texto del post (coherencia)
@@ -411,22 +453,29 @@ function planificar_mes(PDO $pdo, int $marca_id, int $anio, int $mes, int $n_pie
     $ctx = marca_contexto($m);
 
     $sistema = <<<SYS
-Eres el PLANIFICADOR de contenido de Crecer, un departamento de marketing
-con IA para microempresas boricuas. Planificas el mes de redes sociales.
+Eres el ESTRATEGA de contenido de Crecer, un departamento de marketing con IA
+para microempresas boricuas. Planificas el mes de redes como lo haría una
+agencia top — no llenas casillas, diseñas una estrategia.
 Reglas:
-- Piensa como mercadólogo boricua: aprovecha fechas, cobros quincenales,
-  fines de semana, y la cultura local de Puerto Rico.
+- Piensa como estratega boricua: aprovecha fechas, cobros quincenales, fines de
+  semana y la cultura local de Puerto Rico (y del municipio del negocio).
+- VARÍA los PILARES de contenido, no repitas el mismo tipo: producto estrella,
+  detrás de cámara/proceso, prueba social (reseñas/clientes), tip o educación,
+  promo u oferta, fecha/temporada, y pregunta/interacción con la comunidad.
+- Cada IDEA debe ser ESPECÍFICA de ESTE negocio y traer un GANCHO concreto
+  (qué mostrar + por qué la gente se detiene a mirar). Nada genérico.
 - Variedad de plataformas (instagram, facebook) y tipos (post, story, reel).
-- Cada pieza debe tener una IDEA concreta y accionable, no genérica.
 - Responde SOLO JSON válido, sin texto extra.
 SYS;
 
     $prompt = "Perfil del negocio:\n{$ctx}\n\n"
-        . "Planifica {$n_piezas} piezas de contenido para el mes {$mes}/{$anio}.\n"
+        . "Diseña la estrategia de {$n_piezas} piezas para el mes {$mes}/{$anio}, con pilares variados.\n"
         . "Devuelve un JSON con esta forma EXACTA:\n"
-        . '{"piezas":[{"dia":1,"plataforma":"instagram","tipo":"post","tema":"...","idea":"..."}]}'
-        . "\n- dia: número 1-28.\n- plataforma: instagram|facebook.\n"
-        . "- tipo: post|story|reel.\n- tema: 2-4 palabras.\n- idea: 1 oración concreta.";
+        . '{"piezas":[{"dia":1,"plataforma":"instagram","tipo":"post","pilar":"producto","tema":"...","idea":"..."}]}'
+        . "\n- dia: número 1-28.\n- plataforma: instagram|facebook.\n- tipo: post|story|reel.\n"
+        . "- pilar: producto|proceso|prueba_social|tip|promo|temporada|pregunta.\n"
+        . "- tema: 2-4 palabras.\n"
+        . "- idea: 1-2 oraciones ESPECÍFICAS con el gancho (qué se ve y por qué engancha). Concreta, de este negocio.";
 
     $r = ia_ejecutar($pdo, 'planificador', "Planificar {$n_piezas} piezas {$mes}/{$anio}", $prompt, [
         'marca_id'   => $marca_id,

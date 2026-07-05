@@ -58,6 +58,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    // ── Sugiéreme temas: brainstorm de ideas de post para elegir ──
+    if ($accion === 'sugerir_temas') {
+        header('Content-Type: application/json');
+        try {
+            $ideas = sugerir_temas($pdo, $marca_id, 5);
+            echo json_encode(['ok'=>true, 'ideas'=>$ideas], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['ok'=>false, 'err'=>substr($e->getMessage(),0,160)], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
     // ── Director de Arte: sugerir la idea del arte (texto, barato) ──
     if ($accion === 'sugerir_arte') {
         header('Content-Type: application/json');
@@ -495,6 +507,13 @@ require __DIR__ . '/_shell.php';
   .art-go:disabled{opacity:.6;cursor:default}
   .art-skip{display:block;text-align:center;margin-top:12px;font-size:13px;font-weight:700;color:var(--muted);text-decoration:none}
   .art-note{font-size:11.5px;color:var(--muted);margin-top:10px;text-align:center}
+  .sug-btn{width:100%;border:1.5px dashed var(--terracota);background:#fff7f2;color:var(--terracota);cursor:pointer;font-family:inherit;font-weight:800;font-size:13.5px;padding:11px;border-radius:14px;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:6px}
+  .sug-btn:disabled{opacity:.7;cursor:default}
+  .sug-list{display:none;flex-direction:column;gap:8px;margin-bottom:14px}
+  .sug-idea{text-align:left;border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:10px 12px;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;gap:2px}
+  .sug-idea:hover,.sug-idea.sel{border-color:var(--terracota);background:#fff7f2}
+  .sug-idea b{font-size:13.5px;color:var(--tinta)}
+  .sug-idea span{font-size:12px;color:var(--muted);line-height:1.35}
   .art-divider{display:flex;align-items:center;gap:10px;margin:18px 0 4px;color:var(--muted);font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
   .art-divider::before,.art-divider::after{content:"";flex:1;height:1px;background:var(--line)}
   /* Encabezado liderado por La Creativa (look del dashboard) */
@@ -897,7 +916,10 @@ $cf = [
     <div class="sub">Sugiere el tema, o escribe un borrador y la IA lo pule respetando tu intención. Déjalo todo en blanco y la IA inventa.</div>
     <input type="hidden" name="accion" value="pedir_post">
 
-    <label class="fl">¿De qué quieres el post? <span style="color:var(--muted);font-weight:500">(opcional)</span></label>
+    <button type="button" id="btn-sugtemas" class="sug-btn"><?= ico('sparkles') ?> 💡 Sugiéreme temas basados en mi negocio</button>
+    <div id="sugtemas" class="sug-list"></div>
+
+    <label class="fl">¿De qué quieres el post? <span style="color:var(--muted);font-weight:500">(opcional — o toca una idea de arriba)</span></label>
     <textarea name="tema" rows="2" placeholder="Ej: promo del bizcocho de guayaba para el Día de las Madres"></textarea>
 
     <label class="fl">¿Tienes un borrador? La IA lo mejora <span style="color:var(--muted);font-weight:500">(opcional)</span></label>
@@ -1228,6 +1250,35 @@ $cf = [
   // ===== Pedir un post a la IA (brief) =====
   function abrirBrief(){ document.getElementById('briefov').classList.add('show'); }
   document.getElementById('briefov').addEventListener('click', function(e){ if(e.target===this) this.classList.remove('show'); });
+
+  // Sugiéreme temas: la IA propone ideas de post basadas en el negocio.
+  (function(){
+    var btn=document.getElementById('btn-sugtemas'); if(!btn) return;
+    var cont=document.getElementById('sugtemas');
+    btn.addEventListener('click', function(){
+      var old=btn.innerHTML; btn.disabled=true; btn.innerHTML='💭 Pensando ideas para tu negocio…';
+      var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','sugerir_temas');
+      fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+        btn.disabled=false; btn.innerHTML=old;
+        if(!d.ok || !d.ideas || !d.ideas.length){ toast('No pude generar ideas ahora. Intenta otra vez.'); return; }
+        cont.innerHTML='';
+        d.ideas.forEach(function(it){
+          var b=document.createElement('button'); b.type='button'; b.className='sug-idea';
+          var t=document.createElement('b'); t.textContent=it.tema||'Idea';
+          var s=document.createElement('span'); s.textContent=it.idea||'';
+          b.appendChild(t); b.appendChild(s);
+          b.addEventListener('click', function(){
+            var ta=document.querySelector('#briefform textarea[name="tema"]');
+            if(ta){ ta.value=(it.tema?it.tema+': ':'')+(it.idea||''); ta.focus(); }
+            cont.querySelectorAll('.sug-idea').forEach(function(x){x.classList.remove('sel');});
+            b.classList.add('sel');
+          });
+          cont.appendChild(b);
+        });
+        cont.style.display='flex';
+      }).catch(function(){ btn.disabled=false; btn.innerHTML=old; toast('Error de conexión. Intenta otra vez.'); });
+    });
+  })();
 
   // ===== Estudio de arte (modal) — fábrica de posts =====
   var artov=document.getElementById('artov'), artform=document.getElementById('artform');
