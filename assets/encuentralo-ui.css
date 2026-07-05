@@ -46,7 +46,13 @@
 
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 
+/* Guard móvil: nada debe empujar la página a lo ancho. Los strips que sí deben
+   deslizar (ej. .reuse-strip) llevan su propio overflow-x:auto y no se afectan. */
+html{overflow-x:hidden}
+
 body{
+  max-width:100%;
+  overflow-x:hidden;
   font-family:var(--font-body);
   color:var(--tinta);
   line-height:1.55;
