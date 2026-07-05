@@ -102,7 +102,7 @@ $nf = fn($n) => number_format($n);
     padding:9px 12px;box-shadow:0 16px 30px -14px rgba(27,22,34,.4);font-size:12px;font-weight:700;display:flex;align-items:center;gap:8px}
   .float .o{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:14px;background:color-mix(in srgb,var(--magenta) 14%,#fff)}
   .float.f1{top:74px;animation:bob 4s ease-in-out infinite}
-  .float.f2{bottom:60px;left:auto;right:-22px;animation:bob 4.6s ease-in-out infinite .5s}
+  .float.f2{bottom:130px;left:auto;right:-22px;animation:bob 4.6s ease-in-out infinite .5s}
   @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
 
   /* Tira "el corillo" */
@@ -354,8 +354,8 @@ $nf = fn($n) => number_format($n);
   <div class="steps">
     <div class="step"><div class="n">1</div><h4>Aprende tu negocio</h4><p>Le hablas 40 segundos: tu voz, tus productos, tu público.</p></div>
     <div class="step"><div class="n">2</div><h4>Planifica y crea</h4><p>Arma el calendario y escribe los posts con tus fotos reales.</p></div>
-    <div class="step"><div class="n">3</div><h4>Tú apruebas</h4><p>Desde el celular, en segundos. La IA propone, tú decides.</p></div>
-    <div class="step"><div class="n">4</div><h4>Publica y crece</h4><p>Lo sueltas a tus redes en un toque y cuida tu clientela.</p></div>
+    <div class="step"><div class="n">3</div><h4>Tú apruebas o ajustas</h4><p>Desde el celular, en segundos. Corriges una palabra y la IA aprende tu voz.</p></div>
+    <div class="step"><div class="n">4</div><h4>Publica y crece</h4><p>Lo sueltas a Instagram y Facebook en un toque, y ves tus resultados.</p></div>
   </div>
 </section>
 
@@ -400,7 +400,7 @@ $nf = fn($n) => number_format($n);
       <div class="price">$<?= (int)$precio_crecer ?><small>/mes</small></div>
       <ul>
         <li>Contenido nuevo cada semana (captions boricuas + arte)</li>
-        <li>Tu marca y logo con IA</li>
+        <li>Tu marca y logo: súbelo o créalo con IA</li>
         <li>Calendario + aprobación desde el celular</li>
         <li>Gráficas con tus fotos reales</li>
         <li>Publicación a IG/FB al conectar tus redes</li>
