@@ -1282,9 +1282,11 @@ $cf = [
   artform.addEventListener('submit', function(e){
     e.preventDefault(); if(!artCard) return;
     var go=document.getElementById('art-go'); go.disabled=true; go.textContent='✨ Creando… (~15s)';
+    loaderShow('Generando tu imagen…', ['Imaginando la escena…','Ajustando la luz y el encuadre…','Puliendo texturas y detalles…','Dándole el acabado premium…','Casi lista…']);
     var card=artCard, thenApprove=artThenApprove;
     var fd=new FormData(artform); fd.append('ajax','1');
     fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+      loaderHide();
       if(!d.ok){
         go.disabled=false; go.textContent='✨ Crear el arte (~15s)';
         if(d.err==='post_limite') toast('⚠️ Ya usaste las <?= CRECER_IMG_POST ?> generaciones de este post. Recicla o sube tu foto.');
@@ -1302,7 +1304,7 @@ $cf = [
       cerrarArte();
       if(thenApprove){ enviarAccion(card,'aprobar').then(function(){ toast('✅ Post completo y aprobado'); }); }
       else toast('🎨 Arte listo y pegado al post');
-    }).catch(function(){ go.disabled=false; go.textContent='✨ Crear el arte (~15s)'; toast('Error de conexión.'); });
+    }).catch(function(){ loaderHide(); go.disabled=false; go.textContent='✨ Crear el arte (~15s)'; toast('Error de conexión.'); });
   });
   // Reusar un arte ya creado (clic en miniatura)
   artform.addEventListener('click', function(e){
@@ -1467,12 +1469,17 @@ $cf = [
 
   // ── Popup de resultado de publicación (loading → éxito/error con botón Cerrar) ──
   function _pubCard(){ return document.getElementById('pubresCard'); }
-  function pubLoading(){
-    _pubCard().innerHTML = '<div class="pubres-spin"></div>'
-      + '<div class="pubres-t">Publicando…</div>'
-      + '<div class="pubres-msg">Subiendo tu post a las redes. Puede tardar unos segundos — no cierres la app.</div>';
-    document.getElementById('pubresOv').classList.add('show');
+  // Loader genérico con spinner y mensajes que rotan (para publicar y generar arte).
+  var _loaderTimer=null;
+  function loaderShow(titulo, msgs){
+    var arr = Array.isArray(msgs) ? msgs : [msgs], i=0;
+    function paint(){ _pubCard().innerHTML='<div class="pubres-spin"></div><div class="pubres-t">'+titulo+'</div><div class="pubres-msg">'+arr[i%arr.length]+'</div>'; }
+    paint(); document.getElementById('pubresOv').classList.add('show');
+    if(_loaderTimer){ clearInterval(_loaderTimer); _loaderTimer=null; }
+    if(arr.length>1) _loaderTimer=setInterval(function(){ i++; paint(); }, 2600);
   }
+  function loaderHide(){ if(_loaderTimer){ clearInterval(_loaderTimer); _loaderTimer=null; } document.getElementById('pubresOv').classList.remove('show'); }
+  function pubLoading(){ loaderShow('Publicando…', 'Subiendo tu post a las redes. Puede tardar unos segundos — no cierres la app.'); }
   function pubOk(msg, verUrl){
     var ver = verUrl ? '<a class="pubres-ver" href="'+verUrl+'" target="_blank" rel="noopener">Ver publicación ↗</a>' : '';
     _pubCard().innerHTML = '<div class="pubres-ico">🎉</div>'
