@@ -260,6 +260,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&edit={$nid}#cap-{$nid}"); exit;
     }
 
+    // ── Borrar una pieza DE VERDAD (la elimina, no solo la rechaza) ──
+    if ($accion === 'borrar') {
+        if (!csrf_ok()) {
+            if (!empty($_POST['ajax'])) { header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'Sesión expiró. Recarga la página.']); exit; }
+            http_response_code(400); exit('Solicitud inválida.');
+        }
+        if ($id) {
+            $pdo->prepare("DELETE FROM crecer_publicaciones WHERE contenido_id=? AND marca_id=?")->execute([$id, $marca_id]);
+            $pdo->prepare("DELETE FROM crecer_contenido WHERE id=? AND marca_id=?")->execute([$id, $marca_id]);
+        }
+        if (!empty($_POST['ajax'])) {
+            $c = ['borrador'=>0,'aprobado'=>0,'rechazado'=>0,'publicado'=>0,'programado'=>0,'fallido'=>0];
+            foreach ($pdo->query("SELECT estado, COUNT(*) n FROM crecer_contenido WHERE marca_id={$marca_id} GROUP BY estado") as $r) { if (isset($c[$r['estado']])) $c[$r['estado']] = (int)$r['n']; }
+            header('Content-Type: application/json');
+            echo json_encode(['ok'=>true, 'id'=>$id, 'borrado'=>true,
+                'revisar'=>$c['borrador'], 'listos'=>$c['aprobado']+$c['programado']+$c['fallido'], 'biblioteca'=>$c['publicado']]);
+            exit;
+        }
+        header('Location: ' . $_SERVER['REQUEST_URI']); exit;
+    }
+
     $nuevo  = ['aprobar'=>'aprobado','rechazar'=>'rechazado','reabrir'=>'borrador','marcar_publicado'=>'publicado'][$accion] ?? null;
     if ($id && $nuevo) {
         if ($nuevo === 'publicado') {
@@ -809,6 +830,7 @@ $cf = [
         <a href="#" class="artbtn" data-id="<?= $p['id'] ?>" style="font-weight:700;color:var(--terracota);text-decoration:none"><?= ico('image') ?> <?= $has_art ? 'Cambiar arte' : 'Crear arte' ?></a>
         <a href="#" class="regenlink" data-id="<?= $p['id'] ?>" style="font-weight:700;color:var(--muted);text-decoration:none"><?= ico('refresh') ?> Regenerar texto</a>
         <?php if ($has_art): ?><a href="#" class="prevlink" data-img="<?= $h($p['grafica_path']) ?>" data-copy="<?= $h($p['caption']) ?>" style="font-weight:700;color:var(--teal);text-decoration:none"><?= ico('eye') ?> Ver en redes</a><?php endif; ?>
+        <a href="#" class="borrarlink" data-id="<?= $p['id'] ?>" style="font-weight:700;color:#b4342a;text-decoration:none;margin-left:auto">🗑 Borrar</a>
       </div>
       <form class="editform" data-id="<?= $p['id'] ?>" style="display:none;padding:0 17px 14px">
         <textarea name="caption" style="width:100%;font-family:inherit;font-size:14px;color:var(--tinta);border:1.5px solid var(--line);border-radius:12px;padding:11px 13px;min-height:96px"><?= $h($p['caption']) ?></textarea>
@@ -1084,8 +1106,9 @@ $cf = [
     var item = card.querySelector('.checklist .ck-item[data-k="'+k+'"]');
     if(item) item.classList.toggle('on', !!on);
   }
-  function enviarAccion(card, accion){
+  function enviarAccion(card, accion, razon){
     var fd = new FormData(); fd.append('ajax','1'); fd.append('id', card.dataset.id); fd.append('accion', accion);
+    if(razon) fd.append('razon', razon);
     card.querySelectorAll('.post-actions button').forEach(function(b){b.disabled=true;});
     return fetch(location.pathname + location.search, {method:'POST', body:fd})
       .then(function(r){return r.json();})
@@ -1121,11 +1144,16 @@ $cf = [
     if (!f || !f.closest('.post-actions')) return;
     e.preventDefault();
     var card = f.closest('.post');
-    var btn = e.submitter || f.querySelector('button[name="accion"]');
-    var accion = btn ? btn.value : '';
+    var sub = e.submitter;
+    // La acción viene del hidden del form (caso rechazar, cuyo botón lleva name="razon"),
+    // o del botón submitter (aprobar/reabrir). Antes leía btn.value siempre → en rechazar
+    // mandaba la razón ("formal") como acción y el rechazo no se guardaba.
+    var hid = f.querySelector('input[name="accion"]');
+    var accion = hid ? hid.value : (sub && sub.name==='accion' ? sub.value : '');
+    var razon = (sub && sub.name==='razon') ? sub.value : '';
     // Aprobar inteligente: sin arte → abrir el estudio (modo "crear y aprobar")
     if (accion === 'aprobar' && !card.dataset.img) { abrirArte(card, true); return; }
-    enviarAccion(card, accion);
+    enviarAccion(card, accion, razon);
   });
 
   function toast(msg){
@@ -1138,8 +1166,20 @@ $cf = [
   }
   // Editar / regenerar / cancelar
   if(feed) feed.addEventListener('click', function(e){
-    var el=e.target.closest('.editlink,.regenlink,.cancel'); if(!el) return; e.preventDefault();
+    var el=e.target.closest('.editlink,.regenlink,.cancel,.borrarlink'); if(!el) return; e.preventDefault();
     var card=el.closest('.post');
+    if(el.classList.contains('borrarlink')){
+      if(!confirm('¿Borrar este post? Esto lo elimina para siempre, no se puede deshacer.')) return;
+      var fdb=new FormData(); fdb.append('ajax','1'); fdb.append('accion','borrar'); fdb.append('id',el.dataset.id); fdb.append('csrf',CSRF);
+      fetch(location.pathname+location.search,{method:'POST',body:fdb}).then(function(r){return r.json();}).then(function(d){
+        if(!d.ok){ toast('⚠️ '+(d.err||'No se pudo borrar')); return; }
+        var cp=document.getElementById('cnt-pend'),ca=document.getElementById('cnt-aprob'),cb=document.getElementById('cnt-bib');
+        if(cp)cp.textContent=d.revisar; if(ca)ca.textContent=d.listos; if(cb)cb.textContent=d.biblioteca;
+        card.style.transition='opacity .3s, transform .3s'; card.style.opacity='0'; card.style.transform='translateX(24px)';
+        setTimeout(function(){ card.remove(); if(!document.querySelector('.feedwrap .post')) location.reload(); },320);
+      }).catch(function(){ toast('⚠️ Error de conexión. Intenta de nuevo.'); });
+      return;
+    }
     if(el.classList.contains('editlink')){
       card.querySelector('.editform').style.display='block';
       card.querySelector('.caption').style.display='none';
