@@ -1325,18 +1325,17 @@ $cf = [
     var esAmbas = plataformas.indexOf(',')>=0;
     var label = esAmbas ? 'ambas redes' : (plataformas==='instagram' ? 'Instagram' : 'Facebook');
     if(!confirm('¿Publicar este post en '+label+'?')) return;
-    var old=btn.innerHTML, btns=document.querySelectorAll('.prev-pub .ppub');
-    btns.forEach(function(b){b.disabled=true;}); btn.textContent='Publicando…';
+    document.getElementById('prevov').classList.remove('show');   // cierra el preview
+    pubLoading();                                                 // muestra "Publicando…"
     var fd=new FormData(); fd.append('accion','publicar_api'); fd.append('id',prevId); fd.append('plataformas',plataformas); fd.append('ajax','1'); fd.append('csrf',CSRF);
     fetch(location.pathname+location.search,{method:'POST',body:fd})
       .then(function(r){return r.json();})
       .then(function(d){
-        btns.forEach(function(b){b.disabled=false;}); btn.innerHTML=old;
-        if(d.ok){ toast('🎉 ¡Publicado en '+label+'!'); document.getElementById('prevov').classList.remove('show'); setTimeout(function(){location.reload();},1300); }
-        else if(d.err==='no_conectado'){ toast('⚠️ No tienes redes conectadas.'); }
-        else { toast('⚠️ '+(d.err||'No se pudo publicar')); }
+        if(d.ok){ pubOk('Tu post ya salió en '+label+'.', _permalink(d.resultados)); }
+        else if(d.err==='no_conectado'){ pubErr('No tienes redes conectadas. Conéctalas primero.'); }
+        else { pubErr(d.err||'No se pudo publicar'); }
       })
-      .catch(function(){ btns.forEach(function(b){b.disabled=false;}); btn.innerHTML=old; toast('⚠️ Error de conexión. Intenta de nuevo.'); });
+      .catch(function(){ pubErr('Error de conexión. Intenta de nuevo.'); });
   }
   function setNet(n){
     document.getElementById('m-ig').style.display = n==='ig' ? '' : 'none';
@@ -1420,21 +1419,46 @@ $cf = [
   }
   var REDES_OK = <?= $redes_ok ? 'true' : 'false' ?>;
   var CSRF = <?= json_encode(csrf_token()) ?>;   // token para las acciones que postean a redes
+
+  // ── Popup de resultado de publicación (loading → éxito/error con botón Cerrar) ──
+  function _pubCard(){ return document.getElementById('pubresCard'); }
+  function pubLoading(){
+    _pubCard().innerHTML = '<div class="pubres-spin"></div>'
+      + '<div class="pubres-t">Publicando…</div>'
+      + '<div class="pubres-msg">Subiendo tu post a las redes. Puede tardar unos segundos — no cierres la app.</div>';
+    document.getElementById('pubresOv').classList.add('show');
+  }
+  function pubOk(msg, verUrl){
+    var ver = verUrl ? '<a class="pubres-ver" href="'+verUrl+'" target="_blank" rel="noopener">Ver publicación ↗</a>' : '';
+    _pubCard().innerHTML = '<div class="pubres-ico">🎉</div>'
+      + '<div class="pubres-t">¡Publicado en tus redes!</div>'
+      + '<div class="pubres-msg">'+(msg||'Tu post ya salió a tus redes.')+'</div>'
+      + '<div class="pubres-btns">'+ver+'<button type="button" class="pubres-cerrar" onclick="pubCerrar(true)">Cerrar</button></div>';
+  }
+  function pubErr(msg){
+    _pubCard().innerHTML = '<div class="pubres-ico">⚠️</div>'
+      + '<div class="pubres-t">No se pudo publicar</div>'
+      + '<div class="pubres-msg">'+(msg||'Intenta de nuevo en un momento.')+'</div>'
+      + '<div class="pubres-btns"><button type="button" class="pubres-cerrar" onclick="pubCerrar(false)">Cerrar</button></div>';
+  }
+  function pubCerrar(reload){ document.getElementById('pubresOv').classList.remove('show'); if(reload) location.reload(); }
+  function _permalink(res){ if(!res) return ''; for(var k in res){ var v=res[k]; if(typeof v==='string' && /^https?:\/\//.test(v)) return v; } return ''; }
   // Publicación REAL por la Graph API a la Página/IG conectados (un botón).
   function publicarPorAPI(card, btn){
     var id = card.dataset.id;
     if(!confirm('¿Publicar este post a tus redes conectadas (Instagram/Facebook)?')) return;
-    var old = btn.textContent; btn.disabled = true; btn.textContent = 'Publicando…';
+    if(btn) btn.disabled = true;
+    pubLoading();                                                // muestra "Publicando…"
     var fd = new FormData(); fd.append('accion','publicar_api'); fd.append('id', id); fd.append('ajax','1'); fd.append('csrf', CSRF);
     fetch(location.pathname + location.search, {method:'POST', body:fd})
       .then(function(r){ return r.json(); })
       .then(function(d){
-        btn.disabled = false; btn.textContent = old;
-        if(d.ok){ toast('🎉 ¡Publicado en tus redes!'); setTimeout(function(){ location.reload(); }, 1300); }
-        else if(d.err === 'no_conectado'){ abrirPublicar(card); }   // sin conexión → flujo manual
-        else { toast('⚠️ ' + (d.err || 'No se pudo publicar')); }
+        if(btn) btn.disabled = false;
+        if(d.ok){ pubOk('Tu post ya salió a Instagram/Facebook.', _permalink(d.resultados)); }
+        else if(d.err === 'no_conectado'){ pubCerrar(false); abrirPublicar(card); }   // sin conexión → flujo manual
+        else { pubErr(d.err || 'No se pudo publicar'); }
       })
-      .catch(function(){ btn.disabled = false; btn.textContent = old; toast('⚠️ Error de conexión. Intenta de nuevo.'); });
+      .catch(function(){ if(btn) btn.disabled = false; pubErr('Error de conexión. Intenta de nuevo.'); });
   }
   if(feed) feed.addEventListener('click', function(e){
     var b=e.target.closest('.publicarbtn'); if(!b) return; e.preventDefault();
@@ -1443,5 +1467,21 @@ $cf = [
     else { abrirPublicar(card); }              // sin redes → compartir a mano
   });
 </script>
+
+<!-- Popup de resultado de publicación (loading → éxito/error con botón Cerrar) -->
+<div class="pubres-ov" id="pubresOv"><div class="pubres-card" id="pubresCard"></div></div>
+<style>
+  .pubres-ov{display:none;position:fixed;inset:0;background:rgba(20,12,8,.72);z-index:130;align-items:center;justify-content:center;padding:24px}
+  .pubres-ov.show{display:flex}
+  .pubres-card{background:#fff;border-radius:20px;max-width:360px;width:100%;padding:28px 24px;text-align:center;box-shadow:0 24px 60px -18px rgba(0,0,0,.5)}
+  .pubres-spin{width:46px;height:46px;margin:4px auto 16px;border:4px solid var(--line);border-top-color:var(--terracota);border-radius:50%;animation:pubspin .8s linear infinite}
+  @keyframes pubspin{to{transform:rotate(360deg)}}
+  .pubres-ico{font-size:50px;line-height:1;margin-bottom:8px}
+  .pubres-t{font-family:'Oswald',sans-serif;font-weight:700;font-size:21px;letter-spacing:.3px;margin-bottom:6px;color:var(--tinta)}
+  .pubres-msg{font-size:14px;color:var(--muted);line-height:1.5;margin-bottom:18px;word-break:break-word}
+  .pubres-btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  .pubres-cerrar{border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:15px;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));padding:12px 30px;border-radius:99px}
+  .pubres-ver{display:inline-flex;align-items:center;border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-weight:700;padding:12px 20px;border-radius:99px;text-decoration:none;font-size:14px}
+</style>
 
 <?php require __DIR__ . '/_shell_foot.php'; ?>
