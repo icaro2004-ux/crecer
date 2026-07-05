@@ -316,8 +316,10 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
     if ($instr !== '') $prompt .= "- LO QUE PIDE EL DUEÑO (prioriza esto): {$instr}\n";
     $prompt .= "- Calidad de agencia top, colores cálidos boricuas, premium, listo para publicar.";
 
-    // Con texto -> modelo Pro (texto perfecto). Sin texto -> estándar (más barato).
-    $modelo = $con_texto ? 'gemini-3-pro-image' : 'gemini-2.5-flash-image';
+    // Calidad make-or-break: SIEMPRE el Pro (Nano Banana Pro). Antes el "sin texto"
+    // caía al flash barato y se notaba la baja calidad. El Pro (~$0.13) vale la pena
+    // frente a un plan de $39/mes. (Reversible: volver a flash para bajar costo.)
+    $modelo = 'gemini-3-pro-image';
     $fname = "marca_{$marca_id}/graficas/post_" . uniqid() . ".png";
     $r = ia_imagen($pdo, 'creador', 'Crear arte de post', $prompt, $fname, [
         'marca_id' => $marca_id,
