@@ -30,6 +30,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // personal del teléfono). Solo si la marca tiene conexión activa.
     if ($accion === 'publicar_api') {
         header('Content-Type: application/json');
+        // CSRF: publicar postea a redes reales del cliente → exige token válido.
+        if (!csrf_ok()) { echo json_encode(['ok'=>false,'err'=>'Sesión expiró. Recarga la página e intenta de nuevo.']); exit; }
         require_once __DIR__ . '/../includes/meta.php';
         require_once __DIR__ . '/../includes/publicador.php';
         if (!$id) { echo json_encode(['ok'=>false,'err'=>'Falta el post.']); exit; }
@@ -1319,7 +1321,7 @@ $cf = [
     if(!confirm('¿Publicar este post en '+label+'?')) return;
     var old=btn.innerHTML, btns=document.querySelectorAll('.prev-pub .ppub');
     btns.forEach(function(b){b.disabled=true;}); btn.textContent='Publicando…';
-    var fd=new FormData(); fd.append('accion','publicar_api'); fd.append('id',prevId); fd.append('plataformas',plataformas); fd.append('ajax','1');
+    var fd=new FormData(); fd.append('accion','publicar_api'); fd.append('id',prevId); fd.append('plataformas',plataformas); fd.append('ajax','1'); fd.append('csrf',CSRF);
     fetch(location.pathname+location.search,{method:'POST',body:fd})
       .then(function(r){return r.json();})
       .then(function(d){
@@ -1411,12 +1413,13 @@ $cf = [
     pubov.classList.add('show');
   }
   var REDES_OK = <?= $redes_ok ? 'true' : 'false' ?>;
+  var CSRF = <?= json_encode(csrf_token()) ?>;   // token para las acciones que postean a redes
   // Publicación REAL por la Graph API a la Página/IG conectados (un botón).
   function publicarPorAPI(card, btn){
     var id = card.dataset.id;
     if(!confirm('¿Publicar este post a tus redes conectadas (Instagram/Facebook)?')) return;
     var old = btn.textContent; btn.disabled = true; btn.textContent = 'Publicando…';
-    var fd = new FormData(); fd.append('accion','publicar_api'); fd.append('id', id); fd.append('ajax','1');
+    var fd = new FormData(); fd.append('accion','publicar_api'); fd.append('id', id); fd.append('ajax','1'); fd.append('csrf', CSRF);
     fetch(location.pathname + location.search, {method:'POST', body:fd})
       .then(function(r){ return r.json(); })
       .then(function(d){

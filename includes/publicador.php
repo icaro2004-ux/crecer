@@ -83,13 +83,16 @@ function log_publicacion(PDO $pdo, int $contenido_id, int $marca_id, string $pla
  */
 function publicar_pieza(PDO $pdo, int $contenido_id, array $override_plataformas = []): array {
     // 1) LOCK atómico: solo procede si está apto y nadie más lo agarró.
-    //    Reclama también locks viejos (>10 min) por si un cron murió a medias.
+    //    Incluye 'publicando' para RECLAMAR piezas que quedaron trabadas cuando un
+    //    proceso murió a medias (lock viejo >10 min). Sin esto, una pieza atascada
+    //    en 'publicando' nunca se recupera. El guard de lock_at evita robarle una
+    //    publicación en curso (lock fresco).
     $tok = bin2hex(random_bytes(8));
     $lock = $pdo->prepare(
         "UPDATE crecer_contenido
             SET estado='publicando', lock_token=?, lock_at=NOW(), pub_intentos=pub_intentos+1
           WHERE id=?
-            AND estado IN ('aprobado','programado','fallido')
+            AND estado IN ('aprobado','programado','fallido','publicando')
             AND (lock_token IS NULL OR lock_at < (NOW() - INTERVAL 10 MINUTE))");
     $lock->execute([$tok, $contenido_id]);
     if ($lock->rowCount() === 0) {
@@ -120,6 +123,20 @@ function publicar_pieza(PDO $pdo, int $contenido_id, array $override_plataformas
     $destinos  = $override_plataformas
         ? array_values(array_intersect($override_plataformas, ['instagram', 'facebook']))
         : plataformas_de_pieza($pieza);
+    // Reintento SIN override: incluir también las plataformas ya INTENTADAS antes,
+    // para no omitir la red que falló en una publicación parcial (ej. "Ambas": IG
+    // salió OK, FB falló → la pieza quedó 'fallido'; al reintentar hay que volver a
+    // FB). ya_publicada() salta las que ya salieron OK, así que no se duplica.
+    if (!$override_plataformas) {
+        $prev = $pdo->prepare("SELECT DISTINCT plataforma FROM crecer_publicaciones WHERE contenido_id=?");
+        $prev->execute([$contenido_id]);
+        foreach ($prev->fetchAll(PDO::FETCH_COLUMN) as $pl) {
+            $pl = strtolower((string)$pl);
+            if (in_array($pl, ['instagram', 'facebook'], true) && !in_array($pl, $destinos, true)) {
+                $destinos[] = $pl;
+            }
+        }
+    }
     if (!$destinos) {
         return finalizar_pieza($pdo, $contenido_id, $tok, false,
             ['_plataforma' => 'La pieza no tiene plataforma válida (IG/FB).'], []);

@@ -1,14 +1,33 @@
 # Publicar a redes — Checklist para Manuel
 
 > Revisión end-to-end del pendiente #1 (conectar → publicar → registrar → reintentar → cron).
-> **Hallazgo: el código está completo y correcto. No hay bug de repo que arreglar.**
-> El bloqueo es 100% deploy/config/Meta (lado Manuel). Sigue estos pasos EN ORDEN.
+> **El happy path estaba completo, pero la 2.ª revisión de Codex encontró 3 fallos de
+> repo (ya corregidos, ver abajo).** Tras eso, el bloqueo restante es 100%
+> deploy/config/Meta (lado Manuel). Sigue estos pasos EN ORDEN.
+
+---
+
+## Fixes de repo (2026-07-04 — hallados por Codex, corregidos por Claude)
+Los 3 verificados con prueba reproducible (siembra filas, corre el SQL, limpia):
+1. **Lock que no se recuperaba** (`includes/publicador.php`): una pieza que quedaba
+   trabada en estado `publicando` (proceso/cron muerto a medias) no se reclamaba nunca
+   → `publicando` ahora está en los estados reclamables, con el guard de lock viejo
+   (>10 min) para no robarle una publicación en curso.
+2. **Reintento omitía la red que falló** (`includes/publicador.php`): en "Ambas" con IG
+   OK + FB fallido, al reintentar sin override solo miraba la plataforma de la pieza y
+   podía saltarse FB (y hasta marcar la pieza como publicada). Ahora el reintento suma
+   las plataformas ya intentadas; `ya_publicada()` salta las OK → reintenta solo la que
+   falló, sin duplicar.
+3. **`publicar_api` sin CSRF** (`panel/aprobar2.php`): la acción que postea a las redes
+   reales del cliente no validaba token. Ahora exige `csrf_ok()` y los dos `fetch`
+   mandan el token.
 
 ---
 
 ## Paso 1 — Deploy del código a Hostinger
-Sube al server los archivos cambiados. **Crítico:** `includes/publicador.php` (lleva el fix
-del error 400 "invalid image file"). Deploys parciales dejaron ese bug vivo.
+Sube al server los archivos cambiados. **Críticos:** `includes/publicador.php` (fix del
+error 400 "invalid image file" + los fixes #1 y #2 de arriba) y `panel/aprobar2.php`
+(fix #3 CSRF). Deploys parciales dejaron bugs vivos.
 - ✅ Verifica: abre el sitio, entra al panel — que cargue sin 500.
 
 ## Paso 2 — Migraciones (si no las corriste)
@@ -49,6 +68,7 @@ Panel Hostinger → **Avanzado → Cron Jobs** → nueva tarea **cada 10–15 mi
 |---|---|---|
 | Publicar por API + IG 2 pasos + registrar + reintentar sin duplicar | Repo | ✅ hecho/correcto |
 | Fix del 400 (URL de imagen) | Repo | ✅ hecho (`fe8e258`) — falta desplegarlo |
+| Lock recuperable / reintento no omite la red que falló / CSRF en publicar | Repo | ✅ hecho (2026-07-04) — falta desplegarlo |
 | Override IG/FB/Ambas + diagnóstico de error | Repo | ✅ hecho |
 | Deploy a Hostinger | Manuel | ⏳ pendiente |
 | Enlazar IG↔Página + reconectar | Manuel | ⏳ pendiente |
