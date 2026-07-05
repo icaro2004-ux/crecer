@@ -93,9 +93,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $o = $pdo->prepare("SELECT caption FROM crecer_contenido WHERE id=? AND marca_id=?");
         $o->execute([$id, $marca_id]); $orig = (string)$o->fetchColumn();
         $leccion = null;
+        // El aprendizaje es premium, pero admin/cuentas de prueba también aprenden.
+        $u_ed = usuario_actual($pdo);
+        $aprende = $pagado || (($u_ed['rol'] ?? '') === 'admin') || (function_exists('activacion_de_prueba') && activacion_de_prueba($u_ed['email'] ?? null));
         if ($id && $nuevo_cap !== '') {
             $pdo->prepare("UPDATE crecer_contenido SET caption=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$nuevo_cap, $id, $marca_id]);
-            if ($pagado) $leccion = aprender_de_edicion($pdo, $marca_id, $orig, $nuevo_cap); // aprendizaje = premium
+            if ($aprende) $leccion = aprender_de_edicion($pdo, $marca_id, $orig, $nuevo_cap);
         }
         if (!empty($_POST['ajax'])) { header('Content-Type: application/json'); echo json_encode(['ok'=>true,'id'=>$id,'caption'=>$nuevo_cap,'leccion'=>$leccion], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE); exit; }
         header('Location: ' . $_SERVER['REQUEST_URI']); exit;
@@ -1347,6 +1350,8 @@ $cf = [
       if(!d.ok){ if(d.err==='paywall'){ toast('🔒 Usaste tu muestra. Actívate para crear más.'); } else toast('No se pudo crear. Intenta otra vez.'); return; }
       wizId=d.id; wizImg='';
       document.getElementById('wiz-cap').textContent=d.caption||'';
+      document.getElementById('wiz-editbox').style.display='none';
+      document.getElementById('wiz-edit').style.display='inline-block';
       document.getElementById('wiz-art').innerHTML=''; document.getElementById('wiz-next2').style.display='none';
       wizPaso(2);
     }).catch(function(){ loaderHide(); toast('Error de conexión. Intenta otra vez.'); });
@@ -1373,6 +1378,31 @@ $cf = [
     document.getElementById('wiz-crear').addEventListener('click', function(){ wizCrear(); });
     var bk2=document.getElementById('wiz-back2'); if(bk2) bk2.addEventListener('click', function(){ wizPaso(1); });
     var bk3=document.getElementById('wiz-back3'); if(bk3) bk3.addEventListener('click', function(){ wizPaso(2); });
+    // Corregir el texto a mano (+ la IA aprende de la edición)
+    document.getElementById('wiz-edit').addEventListener('click', function(e){ e.preventDefault();
+      document.getElementById('wiz-capedit').value=document.getElementById('wiz-cap').textContent;
+      document.getElementById('wiz-editbox').style.display='block'; this.style.display='none';
+      document.getElementById('wiz-capedit').focus();
+    });
+    document.getElementById('wiz-capcancel').addEventListener('click', function(){
+      document.getElementById('wiz-editbox').style.display='none';
+      document.getElementById('wiz-edit').style.display='inline-block';
+    });
+    document.getElementById('wiz-capsave').addEventListener('click', function(){
+      if(!wizId) return;
+      var nuevo=document.getElementById('wiz-capedit').value.trim();
+      if(!nuevo){ toast('El texto no puede quedar vacío.'); return; }
+      var b=this; b.disabled=true; b.textContent='Guardando…';
+      var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','editar'); fd.append('id',wizId); fd.append('caption',nuevo);
+      fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+        b.disabled=false; b.textContent='Guardar';
+        if(!d.ok){ toast('No se pudo guardar.'); return; }
+        document.getElementById('wiz-cap').textContent=d.caption||nuevo;
+        document.getElementById('wiz-editbox').style.display='none';
+        document.getElementById('wiz-edit').style.display='inline-block';
+        toast(d.leccion ? ('🧠 Aprendí: '+d.leccion) : '✅ Texto actualizado');
+      }).catch(function(){ b.disabled=false; b.textContent='Guardar'; toast('Error de conexión.'); });
+    });
     g.addEventListener('click', function(){
       if(!wizId) return;
       loaderShow('Generando tu imagen…', ['Imaginando la escena…','Ajustando la luz y el encuadre…','Puliendo texturas y detalles…','Casi lista…']);
@@ -1750,6 +1780,15 @@ $cf = [
     <div class="wiz-pane" data-pane="2" style="display:none">
       <h3>Ahora el arte 🎨</h3>
       <div class="wiz-cap" id="wiz-cap"></div>
+      <a href="#" class="wiz-editlink" id="wiz-edit">✏️ Corregir el texto a mano</a>
+      <div class="wiz-editbox" id="wiz-editbox" style="display:none">
+        <textarea id="wiz-capedit" rows="5"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button type="button" class="art-go wiz-ok" id="wiz-capsave" style="margin-top:0;flex:1">Guardar</button>
+          <button type="button" class="fbnew" id="wiz-capcancel">Cancelar</button>
+        </div>
+        <div class="art-note">Si cambias una palabra o el tono, la IA aprende tu preferencia para los próximos posts. 🧠</div>
+      </div>
       <div class="wiz-art" id="wiz-art"></div>
       <div class="wiz-artbtns">
         <button type="button" class="art-go" id="wiz-gen">✨ Generar arte con IA</button>
@@ -1789,6 +1828,9 @@ $cf = [
   .wiz-upl{width:100%;text-align:center;cursor:pointer;display:flex;align-items:center;justify-content:center}
   .wiz-ok{background:var(--palma)!important}
   .wiz-load{text-align:center;color:var(--muted);font-size:13px;padding:14px}
+  .wiz-editlink{display:inline-block;font-size:12.5px;font-weight:700;color:var(--terracota);text-decoration:none;margin:-6px 0 12px}
+  .wiz-editbox{margin-bottom:14px}
+  .wiz-editbox textarea{width:100%;font-family:inherit;font-size:14px;color:var(--tinta);border:1.5px solid var(--line);border-radius:12px;padding:11px 13px;min-height:110px;line-height:1.5}
 </style>
 
 <?php require __DIR__ . '/_shell_foot.php'; ?>
