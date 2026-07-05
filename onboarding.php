@@ -88,13 +88,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $cid = (int)$pdo->lastInsertId();
     $caption = '';
     try { $rp = redactar_pieza($pdo, $cid); $caption = $rp['caption'] ?? ''; } catch (Throwable $e) {}
-    if ($foto_path) {
-        try {
-            $g = generar_grafica($pdo, $marca_id, $foto_path, ['copy'=>$caption, 'con_texto'=>false, 'estilo'=>'']);
-            $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, arte_intentos=arte_intentos+1, updated_at=NOW() WHERE id=?")
-                ->execute([$g['archivo'], $cid]);
-        } catch (Throwable $e) { /* el caption igual quedó */ }
-    }
+    // SIEMPRE genera la imagen de muestra (cumple la promesa "imagen + caption").
+    // Con foto real la realza; sin foto, la IA genera una acorde al tema/negocio.
+    try {
+        $g = generar_grafica($pdo, $marca_id, $foto_path ?: null, ['copy'=>$caption, 'con_texto'=>false, 'estilo'=>'']);
+        $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, arte_intentos=arte_intentos+1, updated_at=NOW() WHERE id=?")
+            ->execute([$g['archivo'], $cid]);
+    } catch (Throwable $e) { /* si falla la imagen, el caption igual quedó */ }
 
     echo json_encode(['ok'=>true, 'marca_id'=>$marca_id]);
     exit;
