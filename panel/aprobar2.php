@@ -423,8 +423,11 @@ require __DIR__ . '/_shell.php';
   .mesnav select{font-family:inherit;font-size:13.5px;font-weight:700;border:1.5px solid var(--line);border-radius:99px;padding:9px 14px;background:#fff}
   .okbar{max-width:600px;background:var(--okk-bg);color:var(--okk-ink);font-weight:700;font-size:14px;padding:11px 14px;border-radius:12px;margin-top:14px}
   .errbar{max-width:600px;background:var(--noo-bg);color:var(--noo-ink);font-weight:700;font-size:14px;padding:11px 14px;border-radius:12px;margin-top:14px}
-  .factorybar{max-width:600px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0 4px}
+  .factorybar{max-width:600px;display:flex;flex-direction:column;gap:11px;align-items:stretch;margin:16px 0 4px;background:linear-gradient(135deg,#fff,#fff7f2);border:1.5px solid var(--line);border-radius:16px;padding:14px 16px}
   .factorybar .fbform{display:flex;gap:8px;align-items:center}
+  .fb-lead{font-size:13px;color:var(--tinta);line-height:1.4}
+  .fb-lead strong{color:var(--terracota)}
+  .fb-btns{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   .factorybar select{font-family:inherit;font-size:13.5px;font-weight:700;border:1.5px solid var(--line);border-radius:99px;padding:9px 12px;background:#fff}
   .fbgen{border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:13.5px;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));padding:10px 18px;border-radius:99px}
   .fbnew{border:1.5px solid var(--line);cursor:pointer;font-family:inherit;font-weight:700;font-size:13.5px;color:var(--tinta);background:#fff;padding:10px 18px;border-radius:99px}
@@ -724,11 +727,14 @@ $cf = [
 
 <?php if ($tab === 'revisar'): ?>
   <div class="factorybar">
-    <button type="button" class="fbgen" onclick="abrirBrief()"><?= ico('sparkles') ?> Pedir un post a la IA</button>
-    <form method="post" onsubmit="var b=this.querySelector('button');b.disabled=true;">
-      <input type="hidden" name="accion" value="nuevo_manual">
-      <button type="submit" class="fbnew"><?= ico('plus') ?> Escribir uno yo (sin IA)</button>
-    </form>
+    <div class="fb-lead"><strong>Tú mandas 👉</strong> dile un <b>tema</b>, dale un <b>borrador</b> para que lo pula, o deja que la <b>IA proponga</b> sola.</div>
+    <div class="fb-btns">
+      <button type="button" class="fbgen" onclick="abrirBrief()"><?= ico('sparkles') ?> Pedir o guiar un post</button>
+      <form method="post" onsubmit="var b=this.querySelector('button');b.disabled=true;">
+        <input type="hidden" name="accion" value="nuevo_manual">
+        <button type="submit" class="fbnew"><?= ico('plus') ?> Escribir uno yo (sin IA)</button>
+      </form>
+    </div>
   </div>
 <?php elseif ($tab === 'biblioteca' && $meses_aprob): ?>
   <form method="get" class="mesnav">
