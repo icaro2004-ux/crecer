@@ -111,8 +111,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ── Crear el ARTE del post SIN salir (fábrica de posts) ──
     if ($accion === 'arte') {
         @set_time_limit(0);
-        // Cuentas de prueba (CRECER_TEST_EMAILS / DEV) no tienen topes de generación.
-        $sin_limite = function_exists('activacion_de_prueba') && activacion_de_prueba(usuario_actual($pdo)['email'] ?? null);
+        // Sin topes de generación para: admins (dueño/equipo) y cuentas de prueba
+        // (CRECER_TEST_EMAILS / DEV). Los clientes reales conservan sus límites.
+        $u_now = usuario_actual($pdo);
+        $sin_limite = (($u_now['rol'] ?? '') === 'admin')
+                   || (function_exists('activacion_de_prueba') && activacion_de_prueba($u_now['email'] ?? null));
         if (!$pagado && generaciones_usadas($pdo, $marca_id, 'imagen') >= CRECER_FREE['imagen']) {
             header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'paywall']); exit;
         }
