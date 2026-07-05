@@ -89,6 +89,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             catch (Throwable $e) { $err = 'No se pudo generar: ' . substr($e->getMessage(), 0, 120); }
             if (!$err) { header("Location: /crecer/panel/marca.php?marca={$marca_id}&ok=1"); exit; }
         }
+    } elseif ($accion === 'subir_logo') {
+        // Subir un logo propio (principal o secundario). No es premium: es tu asset.
+        if (!empty($_FILES['logo_file']['tmp_name']) && $_FILES['logo_file']['error'] === UPLOAD_ERR_OK) {
+            $info = @getimagesize($_FILES['logo_file']['tmp_name']);
+            $ext  = ['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp'][$info['mime'] ?? ''] ?? null;
+            if (!$ext) { $err = 'Formato no válido (usa PNG, JPG o WebP).'; }
+            else {
+                $fname = "marca_{$marca_id}/logo_sub_" . uniqid() . ".{$ext}";
+                $abs   = rtrim(UPLOADS_PATH, '/\\') . '/' . $fname;
+                @mkdir(dirname($abs), 0775, true);
+                if (move_uploaded_file($_FILES['logo_file']['tmp_name'], $abs)) {
+                    $url = rtrim(UPLOADS_URL, '/') . '/' . $fname;
+                    $pdo->prepare("INSERT INTO crecer_logos (marca_id, archivo) VALUES (?,?)")->execute([$marca_id, $url]);
+                    $nid = (int)$pdo->lastInsertId();
+                    // Principal si el dueño lo marcó, o si aún no hay uno elegido.
+                    $hayMain = (int)$pdo->query("SELECT COUNT(*) FROM crecer_logos WHERE marca_id={$marca_id} AND elegido=1")->fetchColumn();
+                    if (!empty($_POST['principal']) || !$hayMain) {
+                        $pdo->prepare("UPDATE crecer_logos SET elegido=0 WHERE marca_id=?")->execute([$marca_id]);
+                        $pdo->prepare("UPDATE crecer_logos SET elegido=1 WHERE id=?")->execute([$nid]);
+                        $pdo->prepare("UPDATE crecer_marca SET logo_path=? WHERE id=?")->execute([$url, $marca_id]);
+                    }
+                } else { $err = 'No se pudo guardar el logo.'; }
+            }
+        } else { $err = 'No se pudo subir el archivo (máx del servidor).'; }
+        if (!$err) { header("Location: /crecer/panel/marca.php?marca={$marca_id}&ok=logo#identidad"); exit; }
     } elseif ($accion === 'elegir' && !$final) {
         $lid = (int)($_POST['logo_id'] ?? 0);
         $own = $pdo->prepare("SELECT archivo FROM crecer_logos WHERE id=? AND marca_id=?");
@@ -254,8 +279,20 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
 <?php else: ?>
   <p class="subline">Tu logo profesional con IA — <b>se desbloquea con un plan</b>.</p>
 <?php endif; ?>
-<?php if (!empty($_GET['ok'])): ?><div class="ok-banner">✓ ¡Nuevo logo listo! Mira la galería abajo.</div><?php endif; ?>
+<?php if (!empty($_GET['ok'])): ?><div class="ok-banner">✓ ¡Logo guardado! Mira la galería abajo.</div><?php endif; ?>
 <?php if ($err): ?><div class="err-banner">⚠️ <?= $h($err) ?></div><?php endif; ?>
+
+<!-- SUBIR LOGO PROPIO (principal o secundarios) — no es premium -->
+<div class="genbox" style="margin-bottom:16px">
+  <h3 style="font-size:15px;margin:0 0 4px">📤 Sube tu logo</h3>
+  <p class="subline" style="margin-bottom:10px">¿Ya tienes logo? Súbelo (principal y/o secundarios). La IA lo usará como referencia en tus posts. Lo ideal: <b>PNG con fondo transparente</b>.</p>
+  <form method="post" enctype="multipart/form-data" onsubmit="var b=this.querySelector('.genbtn');b.textContent='Subiendo…';b.disabled=true;">
+    <input type="hidden" name="accion" value="subir_logo">
+    <input type="file" name="logo_file" accept="image/png,image/jpeg,image/webp" required style="width:100%;margin-bottom:10px;font-size:13.5px">
+    <label class="chip-opt" style="display:inline-flex;margin-bottom:10px"><input type="checkbox" name="principal" value="1" checked><span>Usar como logo principal</span></label>
+    <button class="genbtn" type="submit">Subir logo</button>
+  </form>
+</div>
 
 <?php if (!$pagado): ?>
   <div class="genbox" style="text-align:center;background:linear-gradient(135deg,rgba(255,107,61,.07),rgba(255,43,133,.07))">

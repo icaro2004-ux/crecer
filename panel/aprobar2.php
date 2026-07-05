@@ -1405,8 +1405,8 @@ $cf = [
     });
     g.addEventListener('click', function(){
       if(!wizId) return;
-      loaderShow('Generando tu imagen…', ['Imaginando la escena…','Ajustando la luz y el encuadre…','Puliendo texturas y detalles…','Casi lista…']);
-      var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','arte'); fd.append('id',wizId);
+      loaderShow('Generando tu imagen…', ['Imaginando la escena…','Ajustando la luz y el encuadre…','Aplicando tu logo de marca…','Puliendo texturas y detalles…','Casi lista…']);
+      var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','arte'); fd.append('id',wizId); fd.append('con_logo','1');
       fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
         loaderHide(); if(!d.ok){ wizArteErr(d); return; } wizPintaArte(d.img);
       }).catch(function(){ loaderHide(); toast('Error de conexión.'); });
@@ -1414,7 +1414,7 @@ $cf = [
     document.getElementById('wiz-file').addEventListener('change', function(){
       if(!wizId || !this.files[0]) return;
       loaderShow('Subiendo tu foto…', 'La IA la realza un poco. Un momento…');
-      var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','arte'); fd.append('id',wizId); fd.append('foto_nueva',this.files[0]);
+      var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','arte'); fd.append('id',wizId); fd.append('con_logo','1'); fd.append('foto_nueva',this.files[0]);
       fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
         loaderHide(); if(!d.ok){ wizArteErr(d); return; } wizPintaArte(d.img);
       }).catch(function(){ loaderHide(); toast('Error de conexión.'); });
