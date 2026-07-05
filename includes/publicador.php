@@ -79,6 +79,17 @@ function asegurar_jpeg_publicable(?string $grafica_path): ?string {
     return $ok ? $dst_url : $grafica_path;
 }
 
+/** Ruta de archivo (absoluta) de una gráfica guardada como URL-path bajo
+ *  UPLOADS_URL. Devuelve null si es URL externa o viene vacía. */
+function grafica_ruta_abs(?string $grafica_path): ?string {
+    $p = trim((string)$grafica_path);
+    if ($p === '' || preg_match('#^https?://#i', $p)) return null;
+    $url_pref = rtrim(UPLOADS_URL, '/');
+    $rel = (strpos($p, $url_pref) === 0) ? substr($p, strlen($url_pref)) : $p;
+    $rel = ltrim(str_replace('\\', '/', $rel), '/');
+    return rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+}
+
 /** Plataformas destino de una pieza (csv 'plataformas' o el enum 'plataforma'). */
 function plataformas_de_pieza(array $pieza): array {
     $raw = trim((string)($pieza['plataformas'] ?? '')) ?: (string)$pieza['plataforma'];
@@ -160,6 +171,13 @@ function publicar_pieza(PDO $pdo, int $contenido_id, array $override_plataformas
     }
 
     $caption   = (string)($pieza['caption'] ?? '');
+    // Si el post tiene gráfica pero el ARCHIVO no está en el servidor, avisar claro
+    // (evita quemar intentos con el error críptico de Meta "Missing/invalid image").
+    $g_abs = grafica_ruta_abs($pieza['grafica_path'] ?? null);
+    if ($g_abs !== null && !is_file($g_abs)) {
+        return finalizar_pieza($pdo, $contenido_id, $tok, false,
+            ['_imagen' => 'La imagen de este post no está en el servidor. Regenera el arte ("Cambiar arte") y vuelve a publicar.'], []);
+    }
     // IG solo acepta JPEG → convertir la gráfica (png/webp) a jpg antes de publicar.
     $grafica_pub = asegurar_jpeg_publicable($pieza['grafica_path'] ?? null);
     $image_url = imagen_url_publica($grafica_pub);
