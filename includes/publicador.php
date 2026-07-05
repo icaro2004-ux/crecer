@@ -200,9 +200,17 @@ function publicar_pieza(PDO $pdo, int $contenido_id, array $override_plataformas
             }
         }
     }
+    // Publicar DIRECTO (sin override) una pieza sin IG/FB propio (ej. WhatsApp, o
+    // plataforma vacía): caer a las redes CONECTADAS de la marca, para que el botón
+    // "Publicar" funcione igual que el preview (que deja elegir IG/FB a mano).
+    // ya_publicada() evita re-postear lo que ya salió.
+    if (!$destinos && !$override_plataformas) {
+        if (!empty($conx['ig_user_id'])) $destinos[] = 'instagram';
+        if (!empty($conx['fb_page_id'])) $destinos[] = 'facebook';
+    }
     if (!$destinos) {
         return finalizar_pieza($pdo, $contenido_id, $tok, false,
-            ['_plataforma' => 'La pieza no tiene plataforma válida (IG/FB).'], []);
+            ['_plataforma' => 'La pieza no tiene plataforma válida (IG/FB). Usa «Ver en redes» para elegir dónde publicar.'], []);
     }
 
     // 4) Publicar a cada plataforma (skip lo ya publicado OK).
