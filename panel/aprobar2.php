@@ -1311,6 +1311,7 @@ $cf = [
     var b=document.querySelector('#wizov .wiz-box'); if(b) b.scrollTop=0;
   }
   window.wizAbrir=function(){
+    wizInit();
     wizId=null; wizImg='';
     document.getElementById('wiz-tema').value='';
     document.getElementById('wiz-cap').textContent=''; document.getElementById('wiz-art').innerHTML='';
@@ -1361,10 +1362,17 @@ $cf = [
     else if(d && d.err==='paywall') toast('🔒 Actívate para crear más imágenes.');
     else toast('No se pudo crear el arte. Intenta otra vez.');
   }
-  (function(){
-    var g=document.getElementById('wiz-gen'); if(!g) return;
+  // El HTML del wizard vive más abajo que este script, así que enganchamos los
+  // botones la PRIMERA vez que se abre (cuando el DOM ya existe), no al cargar.
+  var _wizInit=false;
+  function wizInit(){
+    if(_wizInit) return;
+    var g=document.getElementById('wiz-gen'); if(!g) return;   // el DOM aún no está
+    _wizInit=true;
     document.getElementById('wiz-mas').addEventListener('click', wizCargarIdeas);
     document.getElementById('wiz-crear').addEventListener('click', function(){ wizCrear(); });
+    var bk2=document.getElementById('wiz-back2'); if(bk2) bk2.addEventListener('click', function(){ wizPaso(1); });
+    var bk3=document.getElementById('wiz-back3'); if(bk3) bk3.addEventListener('click', function(){ wizPaso(2); });
     g.addEventListener('click', function(){
       if(!wizId) return;
       loaderShow('Generando tu imagen…', ['Imaginando la escena…','Ajustando la luz y el encuadre…','Puliendo texturas y detalles…','Casi lista…']);
@@ -1404,7 +1412,7 @@ $cf = [
       wizCerrar(); toast('✅ Guardado. Lo ves en Contenido → Revisar.'); setTimeout(function(){ location.reload(); }, 1000);
     });
     document.getElementById('wizov').addEventListener('click', function(e){ if(e.target===this) wizCerrar(); });
-  })();
+  }
 
   // ===== Estudio de arte (modal) — fábrica de posts =====
   var artov=document.getElementById('artov'), artform=document.getElementById('artform');
@@ -1748,6 +1756,7 @@ $cf = [
         <label class="fbnew wiz-upl">📷 Subir mi foto<input type="file" id="wiz-file" accept="image/png,image/jpeg,image/webp" style="display:none"></label>
       </div>
       <button type="button" class="art-go wiz-ok" id="wiz-next2" style="display:none">Usar este arte →</button>
+      <button type="button" class="art-skip" id="wiz-back2">← Volver a la idea</button>
     </div>
 
     <div class="wiz-pane" data-pane="3" style="display:none">
@@ -1755,6 +1764,7 @@ $cf = [
       <div class="wiz-prev" id="wiz-prev"></div>
       <button type="button" class="art-go" id="wiz-pub">📲 Publicar ahora</button>
       <button type="button" class="art-skip" id="wiz-later">Guardar para después</button>
+      <button type="button" class="art-skip" id="wiz-back3">← Volver al arte</button>
     </div>
   </div>
 </div>
