@@ -2,7 +2,8 @@
 
 > Resumen confiable de dónde estamos, para mantener la comunicación entre los 3.
 > Última actualización: **2026-07-04**. Rama `main`, sincronizada.
-> Commit de los 3 fixes de publicación: **`e094062`** (+ este bump de doc encima).
+> Commit de los 4 fixes de publicación: **`8f159cd`**. El tip de `main` es el bump de doc
+> que fija este hash (un commit no puede contener su propio hash; corre `git log -1` para el HEAD exacto).
 > Repo: `github.com/icaro2004-ux/crecer`.
 
 ---
