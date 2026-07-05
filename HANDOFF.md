@@ -1,7 +1,8 @@
 # HANDOFF — Estado actual (léeme primero · para Manuel + Codex + Claude)
 
 > Resumen confiable de dónde estamos, para mantener la comunicación entre los 3.
-> Última actualización: **2026-07-04**. Rama `main`, sincronizada. Último commit: **`148776b`**.
+> Última actualización: **2026-07-04**. Rama `main`, sincronizada.
+> Commit de los 3 fixes de publicación: **`e094062`** (+ este bump de doc encima).
 > Repo: `github.com/icaro2004-ux/crecer`.
 
 ---
