@@ -231,6 +231,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $fecha = $_POST['fecha'] ?? '';
         $fecha_dt = ($fecha && strtotime($fecha)) ? (date('Y-m-d', strtotime($fecha)) . ' 10:00:00') : date('Y-m-d 10:00:00');
 
+        // ── MODO WIZARD (AJAX): crea UNA pieza IG, la redacta, y devuelve id+caption ──
+        if (!empty($_POST['wizard'])) {
+            header('Content-Type: application/json');
+            $u_w = usuario_actual($pdo);
+            $sin_lim = (($u_w['rol'] ?? '') === 'admin') || (function_exists('activacion_de_prueba') && activacion_de_prueba($u_w['email'] ?? null));
+            if (!$pagado && !$sin_lim && generaciones_usadas($pdo, $marca_id, 'caption') >= CRECER_FREE['caption']) {
+                echo json_encode(['ok'=>false, 'err'=>'paywall']); exit;
+            }
+            if ($tema === '' && $borrador === '') { echo json_encode(['ok'=>false,'err'=>'Falta la idea.']); exit; }
+            $fa=(int)date('Y', strtotime($fecha_dt)); $fm=(int)date('n', strtotime($fecha_dt));
+            $pdo->prepare("INSERT INTO crecer_calendario (marca_id, anio, mes, estado, generado_por_ia) VALUES (?,?,?, 'borrador', 1) ON DUPLICATE KEY UPDATE updated_at=NOW()")->execute([$marca_id,$fa,$fm]);
+            $calid=(int)$pdo->query("SELECT id FROM crecer_calendario WHERE marca_id={$marca_id} AND anio={$fa} AND mes={$fm}")->fetchColumn();
+            $idea = $tema !== '' ? $tema : 'Pulir borrador del dueño';
+            $pdo->prepare("INSERT INTO crecer_contenido (calendario_id, marca_id, plataforma, tipo, caption, fecha_programada, estado) VALUES (?,?,?,?,?,?, 'borrador')")
+                ->execute([$calid, $marca_id, 'instagram', 'post', $idea, $fecha_dt]);
+            $nid=(int)$pdo->lastInsertId();
+            try { redactar_sugerido($pdo, $nid, $tema, $borrador); } catch (Throwable $e) {}
+            $q=$pdo->prepare("SELECT caption FROM crecer_contenido WHERE id=?"); $q->execute([$nid]);
+            $cap = trim((string)$q->fetchColumn()); if ($cap==='') $cap=$idea;
+            echo json_encode(['ok'=>true, 'id'=>$nid, 'caption'=>$cap], JSON_UNESCAPED_UNICODE); exit;
+        }
+
         if ($tema !== '' || $borrador !== '') {
             // ── Post guiado por el dueño: 1 pieza por plataforma ──
             $fa = (int)date('Y', strtotime($fecha_dt)); $fm = (int)date('n', strtotime($fecha_dt));
@@ -774,7 +796,7 @@ $cf = [
   <div class="factorybar">
     <div class="fb-lead"><strong>Tú mandas 👉</strong> dile un <b>tema</b>, dale un <b>borrador</b> para que lo pula, o deja que la <b>IA proponga</b> sola.</div>
     <div class="fb-btns">
-      <button type="button" class="fbgen" onclick="abrirBrief()"><?= ico('sparkles') ?> Pedir o guiar un post</button>
+      <button type="button" class="fbgen" onclick="wizAbrir()"><?= ico('sparkles') ?> Crear un post (guiado)</button>
       <form method="post" onsubmit="var b=this.querySelector('button');b.disabled=true;">
         <input type="hidden" name="accion" value="nuevo_manual">
         <button type="submit" class="fbnew"><?= ico('plus') ?> Escribir uno yo (sin IA)</button>
@@ -1280,6 +1302,110 @@ $cf = [
     });
   })();
 
+  // ===== WIZARD: Crear un post guiado (Idea → Arte → Publicar) =====
+  var wizId=null, wizImg='';
+  function _esc(s){ var d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+  function wizPaso(n){
+    document.querySelectorAll('#wizov .wiz-pane').forEach(function(p){ p.style.display=(p.dataset.pane==String(n))?'block':'none'; });
+    document.querySelectorAll('#wizov .wiz-dot').forEach(function(d){ d.classList.toggle('on', (+d.dataset.s)<=n); });
+    var b=document.querySelector('#wizov .wiz-box'); if(b) b.scrollTop=0;
+  }
+  window.wizAbrir=function(){
+    wizId=null; wizImg='';
+    document.getElementById('wiz-tema').value='';
+    document.getElementById('wiz-cap').textContent=''; document.getElementById('wiz-art').innerHTML='';
+    document.getElementById('wiz-next2').style.display='none';
+    wizPaso(1);
+    document.getElementById('wizov').classList.add('show');
+    wizCargarIdeas();
+  };
+  window.wizCerrar=function(){ document.getElementById('wizov').classList.remove('show'); };
+  function wizCargarIdeas(){
+    var cont=document.getElementById('wiz-ideas'); cont.innerHTML='<div class="wiz-load">💭 Pensando ideas para tu negocio…</div>';
+    var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','sugerir_temas');
+    fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+      cont.innerHTML='';
+      if(!d.ok || !d.ideas || !d.ideas.length){ cont.innerHTML='<div class="wiz-load">Escribe tu idea abajo 👇</div>'; return; }
+      d.ideas.forEach(function(it){
+        var b=document.createElement('button'); b.type='button'; b.className='sug-idea';
+        var t=document.createElement('b'); t.textContent=it.tema||'Idea';
+        var s=document.createElement('span'); s.textContent=it.idea||'';
+        b.appendChild(t); b.appendChild(s);
+        b.addEventListener('click', function(){ wizCrear((it.tema?it.tema+': ':'')+(it.idea||'')); });
+        cont.appendChild(b);
+      });
+    }).catch(function(){ cont.innerHTML='<div class="wiz-load">Escribe tu idea abajo 👇</div>'; });
+  }
+  function wizCrear(tema){
+    tema=(tema||document.getElementById('wiz-tema').value).trim();
+    if(!tema){ toast('Escribe o elige una idea.'); return; }
+    loaderShow('Creando tu post…', ['Escribiendo el caption en tu voz…','Ajustando el tono de la marca…','Casi listo…']);
+    var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','pedir_post'); fd.append('wizard','1'); fd.append('tema',tema);
+    fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+      loaderHide();
+      if(!d.ok){ if(d.err==='paywall'){ toast('🔒 Usaste tu muestra. Actívate para crear más.'); } else toast('No se pudo crear. Intenta otra vez.'); return; }
+      wizId=d.id; wizImg='';
+      document.getElementById('wiz-cap').textContent=d.caption||'';
+      document.getElementById('wiz-art').innerHTML=''; document.getElementById('wiz-next2').style.display='none';
+      wizPaso(2);
+    }).catch(function(){ loaderHide(); toast('Error de conexión. Intenta otra vez.'); });
+  }
+  function wizPintaArte(img){
+    wizImg=img;
+    document.getElementById('wiz-art').innerHTML='<img src="'+img+'?t='+Date.now()+'" alt="arte">';
+    document.getElementById('wiz-next2').style.display='block';
+  }
+  function wizArteErr(d){
+    if(d && d.err==='post_limite') toast('⚠️ Llegaste al límite de generaciones de este post.');
+    else if(d && d.err==='limite') toast('🗓️ Usaste tus imágenes de la semana.');
+    else if(d && d.err==='paywall') toast('🔒 Actívate para crear más imágenes.');
+    else toast('No se pudo crear el arte. Intenta otra vez.');
+  }
+  (function(){
+    var g=document.getElementById('wiz-gen'); if(!g) return;
+    document.getElementById('wiz-mas').addEventListener('click', wizCargarIdeas);
+    document.getElementById('wiz-crear').addEventListener('click', function(){ wizCrear(); });
+    g.addEventListener('click', function(){
+      if(!wizId) return;
+      loaderShow('Generando tu imagen…', ['Imaginando la escena…','Ajustando la luz y el encuadre…','Puliendo texturas y detalles…','Casi lista…']);
+      var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','arte'); fd.append('id',wizId);
+      fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+        loaderHide(); if(!d.ok){ wizArteErr(d); return; } wizPintaArte(d.img);
+      }).catch(function(){ loaderHide(); toast('Error de conexión.'); });
+    });
+    document.getElementById('wiz-file').addEventListener('change', function(){
+      if(!wizId || !this.files[0]) return;
+      loaderShow('Subiendo tu foto…', 'La IA la realza un poco. Un momento…');
+      var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','arte'); fd.append('id',wizId); fd.append('foto_nueva',this.files[0]);
+      fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+        loaderHide(); if(!d.ok){ wizArteErr(d); return; } wizPintaArte(d.img);
+      }).catch(function(){ loaderHide(); toast('Error de conexión.'); });
+    });
+    document.getElementById('wiz-next2').addEventListener('click', function(){
+      var cap=document.getElementById('wiz-cap').textContent;
+      document.getElementById('wiz-prev').innerHTML=(wizImg?'<img src="'+wizImg+'?t='+Date.now()+'" alt="arte" style="width:100%;border-radius:14px;display:block;margin-bottom:10px">':'')+'<div class="wiz-cap">'+_esc(cap)+'</div>';
+      wizPaso(3);
+    });
+    document.getElementById('wiz-pub').addEventListener('click', function(){
+      if(!wizId) return;
+      wizCerrar();
+      loaderShow('Publicando…', 'Subiendo tu post a las redes. No cierres la app.');
+      var fa=new FormData(); fa.append('ajax','1'); fa.append('accion','aprobar'); fa.append('id',wizId);
+      fetch(location.pathname+location.search,{method:'POST',body:fa}).then(function(r){return r.json();}).then(function(){
+        var fp=new FormData(); fp.append('ajax','1'); fp.append('accion','publicar_api'); fp.append('id',wizId); fp.append('csrf',CSRF);
+        return fetch(location.pathname+location.search,{method:'POST',body:fp}).then(function(r){return r.json();});
+      }).then(function(d){
+        if(d && d.ok){ pubOk('Tu post ya salió a tus redes.', _permalink(d.resultados)); }
+        else if(d && d.err==='no_conectado'){ pubErr('No tienes redes conectadas. Conéctalas primero (Conectar redes).'); }
+        else { pubErr((d&&d.err)||'No se pudo publicar'); }
+      }).catch(function(){ pubErr('Error de conexión. Intenta otra vez.'); });
+    });
+    document.getElementById('wiz-later').addEventListener('click', function(){
+      wizCerrar(); toast('✅ Guardado. Lo ves en Contenido → Revisar.'); setTimeout(function(){ location.reload(); }, 1000);
+    });
+    document.getElementById('wizov').addEventListener('click', function(e){ if(e.target===this) wizCerrar(); });
+  })();
+
   // ===== Estudio de arte (modal) — fábrica de posts =====
   var artov=document.getElementById('artov'), artform=document.getElementById('artform');
   var artCard=null, artThenApprove=false;
@@ -1532,17 +1658,21 @@ $cf = [
   function loaderHide(){ if(_loaderTimer){ clearInterval(_loaderTimer); _loaderTimer=null; } document.getElementById('pubresOv').classList.remove('show'); }
   function pubLoading(){ loaderShow('Publicando…', 'Subiendo tu post a las redes. Puede tardar unos segundos — no cierres la app.'); }
   function pubOk(msg, verUrl){
+    if(_loaderTimer){ clearInterval(_loaderTimer); _loaderTimer=null; }
     var ver = verUrl ? '<a class="pubres-ver" href="'+verUrl+'" target="_blank" rel="noopener">Ver publicación ↗</a>' : '';
     _pubCard().innerHTML = '<div class="pubres-ico">🎉</div>'
       + '<div class="pubres-t">¡Publicado en tus redes!</div>'
       + '<div class="pubres-msg">'+(msg||'Tu post ya salió a tus redes.')+'</div>'
       + '<div class="pubres-btns">'+ver+'<button type="button" class="pubres-cerrar" onclick="pubCerrar(true)">Cerrar</button></div>';
+    document.getElementById('pubresOv').classList.add('show');
   }
   function pubErr(msg){
+    if(_loaderTimer){ clearInterval(_loaderTimer); _loaderTimer=null; }
     _pubCard().innerHTML = '<div class="pubres-ico">⚠️</div>'
       + '<div class="pubres-t">No se pudo publicar</div>'
       + '<div class="pubres-msg">'+(msg||'Intenta de nuevo en un momento.')+'</div>'
       + '<div class="pubres-btns"><button type="button" class="pubres-cerrar" onclick="pubCerrar(false)">Cerrar</button></div>';
+    document.getElementById('pubresOv').classList.add('show');
   }
   function pubCerrar(reload){ document.getElementById('pubresOv').classList.remove('show'); if(reload) location.reload(); }
   function _permalink(res){ if(!res) return ''; for(var k in res){ var v=res[k]; if(typeof v==='string' && /^https?:\/\//.test(v)) return v; } return ''; }
@@ -1585,6 +1715,70 @@ $cf = [
   .pubres-btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
   .pubres-cerrar{border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:15px;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));padding:12px 30px;border-radius:99px}
   .pubres-ver{display:inline-flex;align-items:center;border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-weight:700;padding:12px 20px;border-radius:99px;text-decoration:none;font-size:14px}
+</style>
+
+<!-- WIZARD: Crear un post guiado (Idea → Arte → Publicar) -->
+<div class="wiz-ov" id="wizov">
+  <div class="wiz-box">
+    <button type="button" class="x" onclick="wizCerrar()">✕</button>
+    <div class="wiz-steps">
+      <span class="wiz-dot on" data-s="1"><b>1</b> Idea</span>
+      <span class="wiz-line"></span>
+      <span class="wiz-dot" data-s="2"><b>2</b> Arte</span>
+      <span class="wiz-line"></span>
+      <span class="wiz-dot" data-s="3"><b>3</b> Publicar</span>
+    </div>
+
+    <div class="wiz-pane" data-pane="1">
+      <h3>¿De qué hacemos el post?</h3>
+      <p class="wiz-sub">Toca una idea o escribe la tuya. Yo escribo el caption en tu voz.</p>
+      <div id="wiz-ideas" class="sug-list" style="display:flex"></div>
+      <button type="button" id="wiz-mas" class="sug-btn">💡 Dame otras ideas</button>
+      <label class="fl">O escribe tu propia idea</label>
+      <textarea id="wiz-tema" rows="2" placeholder="Ej: promo del bizcocho de guayaba para el Día de las Madres"></textarea>
+      <button type="button" class="art-go" id="wiz-crear">Crear el post →</button>
+    </div>
+
+    <div class="wiz-pane" data-pane="2" style="display:none">
+      <h3>Ahora el arte 🎨</h3>
+      <div class="wiz-cap" id="wiz-cap"></div>
+      <div class="wiz-art" id="wiz-art"></div>
+      <div class="wiz-artbtns">
+        <button type="button" class="art-go" id="wiz-gen">✨ Generar arte con IA</button>
+        <label class="fbnew wiz-upl">📷 Subir mi foto<input type="file" id="wiz-file" accept="image/png,image/jpeg,image/webp" style="display:none"></label>
+      </div>
+      <button type="button" class="art-go wiz-ok" id="wiz-next2" style="display:none">Usar este arte →</button>
+    </div>
+
+    <div class="wiz-pane" data-pane="3" style="display:none">
+      <h3>¡Listo para publicar! 🚀</h3>
+      <div class="wiz-prev" id="wiz-prev"></div>
+      <button type="button" class="art-go" id="wiz-pub">📲 Publicar ahora</button>
+      <button type="button" class="art-skip" id="wiz-later">Guardar para después</button>
+    </div>
+  </div>
+</div>
+<style>
+  .wiz-ov{display:none;position:fixed;inset:0;background:rgba(20,12,8,.72);z-index:110;align-items:flex-start;justify-content:center;padding:24px 14px;overflow:auto}
+  .wiz-ov.show{display:flex}
+  .wiz-box{position:relative;background:#fff;border-radius:22px;max-width:440px;width:100%;padding:22px 20px 24px;box-shadow:0 30px 70px -20px rgba(0,0,0,.5)}
+  .wiz-box .x{position:absolute;top:12px;right:12px;width:32px;height:32px;border:0;border-radius:50%;background:var(--crema-2,#f0e7d8);cursor:pointer;font-size:15px;color:var(--muted)}
+  .wiz-steps{display:flex;align-items:center;justify-content:center;gap:6px;margin:2px 0 16px}
+  .wiz-dot{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:800;color:var(--muted)}
+  .wiz-dot b{width:20px;height:20px;border-radius:50%;background:var(--crema-2,#eee);display:grid;place-items:center;font-size:11px}
+  .wiz-dot.on{color:var(--terracota)} .wiz-dot.on b{background:var(--terracota);color:#fff}
+  .wiz-line{width:18px;height:2px;background:var(--line)}
+  .wiz-pane h3{font-family:'Oswald',sans-serif;font-weight:700;font-size:20px;color:var(--tinta);margin-bottom:4px}
+  .wiz-sub{font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.4}
+  .wiz-pane .fl{display:block;font-size:12.5px;font-weight:700;color:var(--muted);margin:14px 0 6px}
+  .wiz-pane textarea{width:100%;font-family:inherit;font-size:14px;color:var(--tinta);border:1.5px solid var(--line);border-radius:12px;padding:11px 13px}
+  .wiz-cap{background:var(--crema,#fbf6ee);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.5;color:var(--tinta);white-space:pre-wrap;margin-bottom:14px}
+  .wiz-art{margin-bottom:14px}
+  .wiz-art img{width:100%;border-radius:14px;display:block}
+  .wiz-artbtns{display:flex;flex-direction:column;gap:10px}
+  .wiz-upl{width:100%;text-align:center;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .wiz-ok{background:var(--palma)!important}
+  .wiz-load{text-align:center;color:var(--muted);font-size:13px;padding:14px}
 </style>
 
 <?php require __DIR__ . '/_shell_foot.php'; ?>
