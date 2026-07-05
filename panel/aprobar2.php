@@ -111,6 +111,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ── Crear el ARTE del post SIN salir (fábrica de posts) ──
     if ($accion === 'arte') {
         @set_time_limit(0);
+        // Cuentas de prueba (CRECER_TEST_EMAILS / DEV) no tienen topes de generación.
+        $sin_limite = function_exists('activacion_de_prueba') && activacion_de_prueba(usuario_actual($pdo)['email'] ?? null);
         if (!$pagado && generaciones_usadas($pdo, $marca_id, 'imagen') >= CRECER_FREE['imagen']) {
             header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'paywall']); exit;
         }
@@ -118,12 +120,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Tope por post (2 generaciones IA)
         $ai = $pdo->prepare("SELECT arte_intentos FROM crecer_contenido WHERE id=? AND marca_id=?");
         $ai->execute([$id, $marca_id]); $intentos = (int)$ai->fetchColumn();
-        if ($intentos >= CRECER_IMG_POST) { header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'post_limite']); exit; }
+        if (!$sin_limite && $intentos >= CRECER_IMG_POST) { header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'post_limite']); exit; }
         // Tope semanal (10 imágenes)
         $wk = $pdo->prepare("SELECT COUNT(*) c, MIN(created_at) oldest FROM crecer_graficas WHERE marca_id=? AND created_at >= (NOW() - INTERVAL 7 DAY)");
         $wk->execute([$marca_id]); $w = $wk->fetch(); $usados = (int)$w['c'];
         $reset = $w['oldest'] ? date('d/m', strtotime($w['oldest'].' +7 days')) : null;
-        if ($usados >= CRECER_IMG_SEMANA) { header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'limite','reset'=>$reset]); exit; }
+        if (!$sin_limite && $usados >= CRECER_IMG_SEMANA) { header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'limite','reset'=>$reset]); exit; }
         // Foto: subida nueva (inline) o escogida del picker
         $src = null;
         if (!empty($_FILES['foto_nueva']['tmp_name']) && $_FILES['foto_nueva']['error'] === UPLOAD_ERR_OK) {
