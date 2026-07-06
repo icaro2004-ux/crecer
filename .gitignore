@@ -15,8 +15,9 @@ service-account*.json
 .claude/
 
 # === Dependencias ===
+# PHPMailer SÍ va al repo (el deploy por Git lo necesita para enviar correo).
 /vendor/*
-!/vendor/PHPMailer/          # PHPMailer SÍ va al repo (lo necesita el deploy por Git para enviar correo)
+!/vendor/PHPMailer/
 
 # === Subidas de usuarios (fotos de los negocios) ===
 /uploads/*
