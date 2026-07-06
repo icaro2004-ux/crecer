@@ -28,6 +28,26 @@ function crecer_enviar_email(string $para, string $asunto, string $cuerpo_html):
 }
 
 /**
+ * Correo de ACTIVACIÓN (verificar que es humano). Se envía al registrarse.
+ * Sin confirmar el correo, la cuenta no entra ni ve el post de muestra.
+ */
+function crecer_email_activacion(string $email, string $nombre, string $link): bool {
+    $n = htmlspecialchars(trim($nombre) !== '' ? $nombre : 'mi gente', ENT_QUOTES, 'UTF-8');
+    $lk = htmlspecialchars($link, ENT_QUOTES, 'UTF-8');
+    $asunto = 'Activa tu cuenta de Crecer 🌱';
+    $cuerpo =
+      '<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;color:#1b1622">'
+    . '<h2 style="font-family:Arial;color:#e3683f">¡Wepa, ' . $n . '! 👋</h2>'
+    . '<p style="font-size:15px;line-height:1.55">Un paso y estás dentro. Confirma que eres humano para <b>activar tu cuenta</b> y ver tu primer post de muestra hecho por la IA, en tu voz.</p>'
+    . '<p style="text-align:center;margin:26px 0">'
+    . '<a href="' . $lk . '" style="display:inline-block;background:#ff2d85;color:#fff;text-decoration:none;font-weight:800;font-size:16px;padding:14px 30px;border-radius:99px">Activar mi cuenta →</a></p>'
+    . '<p style="font-size:12.5px;color:#8a7f72">O copia este enlace:<br>' . $lk . '</p>'
+    . '<p style="font-size:12px;color:#8a7f72;border-top:1px solid #eee;padding-top:12px;margin-top:18px">Si no creaste esta cuenta, ignora este correo.</p>'
+    . '</div>';
+    return crecer_enviar_email($email, $asunto, $cuerpo);
+}
+
+/**
  * Recordatorio de que la prueba gratis está por terminar (se dispara
  * desde el webhook con el evento customer.subscription.trial_will_end,
  * ~3 días antes del primer cobro). Idempotente vía bandera en DB.

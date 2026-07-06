@@ -22,13 +22,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_ok())              $err = 'La sesión expiró. Recarga e intenta otra vez.';
     elseif (!$email || !$pass)   $err = 'Completa email y contraseña.';
     else {
-        $s = $pdo->prepare("SELECT id, nombre, password, rol, activo FROM usuarios WHERE email = ? AND deleted_at IS NULL");
+        $s = $pdo->prepare("SELECT id, nombre, email, password, rol, activo, verificado, verif_token FROM usuarios WHERE email = ? AND deleted_at IS NULL");
         $s->execute([$email]);
         $u = $s->fetch();
         if (!$u || !password_verify($pass, $u['password'])) {
             $err = 'Email o contraseña incorrectos.';
         } elseif (!$u['activo']) {
             $err = 'Tu cuenta está desactivada.';
+        } elseif ((int)$u['verificado'] !== 1) {
+            // Cuenta sin verificar → reenviar el enlace y mandar a "revisa tu correo".
+            require_once __DIR__ . '/includes/notificaciones.php';
+            $tok = $u['verif_token'] ?: bin2hex(random_bytes(32));
+            if (!$u['verif_token']) $pdo->prepare("UPDATE usuarios SET verif_token=? WHERE id=?")->execute([$tok, $u['id']]);
+            $base = defined('BASE_URL') ? rtrim(BASE_URL, '/') : 'http://localhost/crecer';
+            crecer_email_activacion($u['email'], $u['nombre'], $base . '/activar.php?token=' . $tok);
+            header('Location: /crecer/registro.php?enviado=' . urlencode($u['email'])); exit;
         } else {
             login_usuario($u);
             $dest = $_SESSION['after_login'] ?? null; unset($_SESSION['after_login']);

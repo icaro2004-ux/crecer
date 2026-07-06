@@ -33,12 +33,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             // Registro mínimo: telefono/municipio quedan NULL (se piden luego —
             // el municipio del negocio va en el onboarding, el WhatsApp en activación).
-            $ins = $pdo->prepare("INSERT INTO usuarios (nombre, email, password, rol)
-                                  VALUES (?,?,?, 'proveedor')");
-            $ins->execute([$val['nombre'], $val['email'], password_hash($pass, PASSWORD_DEFAULT)]);
-            $uid = (int)$pdo->lastInsertId();
-            login_usuario(['id'=>$uid, 'nombre'=>$val['nombre'], 'rol'=>'proveedor']);
-            header('Location: /crecer/onboarding.php');  // onboarding wow por voz + foto
+            // Activación por correo OBLIGATORIA (confirma que es humano). La cuenta
+            // arranca SIN verificar; no entra ni ve el post de muestra hasta activar.
+            $token = bin2hex(random_bytes(32));
+            $ins = $pdo->prepare("INSERT INTO usuarios (nombre, email, password, rol, verificado, verif_token)
+                                  VALUES (?,?,?, 'proveedor', 0, ?)");
+            $ins->execute([$val['nombre'], $val['email'], password_hash($pass, PASSWORD_DEFAULT), $token]);
+            require_once __DIR__ . '/includes/notificaciones.php';
+            $base = defined('BASE_URL') ? rtrim(BASE_URL, '/') : 'http://localhost/crecer';
+            crecer_email_activacion($val['email'], $val['nombre'], $base . '/activar.php?token=' . $token);
+            header('Location: /crecer/registro.php?enviado=' . urlencode($val['email'])); // NO login: revisa tu correo
             exit;
         }
     }
@@ -159,8 +163,22 @@ $plan_lbl = ['crecer'=>'Crecer','despegar'=>'Despegar'][$plan_intent] ?? '';
 
   <!-- FORMULARIO -->
   <div class="formwrap">
+    <?php if (!empty($_GET['enviado'])): $em = $h($_GET['enviado']); ?>
+    <h1 class="disp">Revisa tu <span class="g">correo</span> 📬</h1>
+    <p class="sub">Te enviamos un enlace a <b><?= $em ?></b>. Ábrelo y dale <b>"Activar mi cuenta"</b> para confirmar que eres humano — y de una vez, tu primer post de muestra.</p>
+    <div class="card" style="text-align:center">
+      <div style="font-size:44px;margin-bottom:6px">✉️</div>
+      <p style="font-size:14px;color:var(--muted,#8a7f72);line-height:1.5;margin-bottom:14px">¿No llegó en un par de minutos? Revisa <b>spam/promociones</b>, o reenvíalo.</p>
+      <form method="post" action="/crecer/reenviar.php">
+        <?= csrf_field() ?>
+        <input type="hidden" name="email" value="<?= $em ?>">
+        <button class="go" type="submit">Reenviar el enlace</button>
+      </form>
+    </div>
+    <p class="alt">¿Ya lo activaste? <a href="/crecer/login.php">Entra aquí</a></p>
+    <?php else: ?>
     <h1 class="disp">Crea tu <span class="g">cuenta</span> 🌱</h1>
-    <p class="sub">Toma 1 minuto. Después le hablas de tu negocio y el corillo hace el resto.</p>
+    <p class="sub">Toma 1 minuto. Activas por correo (confirmamos que eres humano) y el corillo hace el resto.</p>
 
     <form method="post" class="card">
       <?= csrf_field() ?>
@@ -182,6 +200,7 @@ $plan_lbl = ['crecer'=>'Crecer','despegar'=>'Despegar'][$plan_intent] ?? '';
     </form>
 
     <p class="alt">¿Ya tienes cuenta? <a href="/crecer/login.php">Entra aquí</a></p>
+    <?php endif; ?>
   </div>
 </div>
 </body>
