@@ -14,7 +14,7 @@
  */
 function crecer_enviar_email(string $para, string $asunto, string $cuerpo_html): bool {
     if (!$para || !filter_var($para, FILTER_VALIDATE_EMAIL)) return false;
-    $de = 'Crecer <hola@encuentralo.com>'; // ajustar al dominio real en prod
+    $de = 'Crecer · Encuéntralo <hola@encuentraloahora.com>'; // dominio real → pasa SPF en Hostinger
     $headers  = "MIME-Version: 1.0\r\n";
     $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
     $headers .= "From: $de\r\n";
