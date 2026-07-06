@@ -102,7 +102,7 @@ $max_posts = max(1, max($serie_posts));
 
 // ── Clientes (tabla) ─────────────────────────────────────────
 $clientes = $pdo->query("SELECT m.id, m.nombre_negocio, m.created_at, m.autopilot,
-        u.nombre dueno, u.email, u.telefono,
+        u.nombre dueno, u.email, u.telefono, u.rol dueno_rol,
         p.slug plan, p.nombre plan_nombre, s.estado sub_estado, s.es_early_adopter, s.stripe_subscription_id stripe_sub,
         (SELECT COUNT(*) FROM crecer_contenido c WHERE c.marca_id=m.id) posts,
         (SELECT COUNT(*) FROM crecer_contenido c WHERE c.marca_id=m.id AND c.estado='publicado') publicados,
@@ -111,7 +111,7 @@ $clientes = $pdo->query("SELECT m.id, m.nombre_negocio, m.created_at, m.autopilo
     FROM crecer_marca m JOIN usuarios u ON u.id=m.usuario_id
     LEFT JOIN crecer_suscripciones s ON s.marca_id=m.id
     LEFT JOIN crecer_planes p ON p.id=s.plan_id
-    ORDER BY m.id DESC")->fetchAll();
+    ORDER BY (u.rol='admin') DESC, ult DESC, m.id DESC")->fetchAll();
 
 // ── Quejas / mensajes (DMs entrantes) ────────────────────────
 $msgs_pend = (int)$pdo->query("SELECT COUNT(*) FROM crecer_mensajes WHERE estado='pendiente'")->fetchColumn();
@@ -190,7 +190,7 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
   <span style="font-size:13px;color:#9f96b0">Hola, <?= $h($usuario['nombre']) ?></span>
   <a href="/crecer/panel/admin_soporte.php" style="margin-left:14px">Soporte</a>
   <a href="/crecer/panel/admin_equipo.php" style="margin-left:14px">Equipo</a>
-  <a href="/crecer/panel/index.php<?= !empty($clientes) ? '?marca='.(int)$clientes[0]['id'] : '' ?>" style="margin-left:14px">Ver panel cliente →</a>
+  <a href="#clientes" style="margin-left:14px">Ver clientes ↓</a>
   <a href="/crecer/logout.php" style="margin-left:14px;color:#fff;background:rgba(255,255,255,.12);padding:6px 12px;border-radius:8px;font-weight:700">🚪 Salir</a>
 </div>
 
@@ -266,7 +266,7 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
   </div>
 
   <!-- CLIENTES -->
-  <div class="sec"><h2>👥 Clientes (<?= $total_clientes ?>)</h2></div>
+  <div class="sec" id="clientes"><h2>👥 Clientes (<?= $total_clientes ?>)</h2></div>
   <div class="card scrollx">
     <table>
       <tr><th>Negocio</th><th>Dueño</th><th>Plan</th><th>Posts</th><th>Pub.</th><th>Gasto IA</th><th>Activo</th><th>Auto</th><th>Cortesía</th></tr>
@@ -276,7 +276,7 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
         $real_paid = !empty($c['stripe_sub']);
         $cort = (!$real_paid && (int)$c['es_early_adopter']===1 && $c['sub_estado']==='activa'); ?>
         <tr>
-          <td><a href="/crecer/panel/index.php?marca=<?= (int)$c['id'] ?>" style="color:var(--tinta);font-weight:800;text-decoration:none" title="Abrir panel de este negocio">🔗 <?= $h($c['nombre_negocio']) ?></a></td>
+          <td><a href="/crecer/panel/index.php?marca=<?= (int)$c['id'] ?>" style="color:var(--tinta);font-weight:800;text-decoration:none" title="Abrir panel de este negocio">🔗 <?= $h($c['nombre_negocio']) ?></a><?php if (($c['dueno_rol'] ?? '') === 'admin'): ?> <span style="background:#fff4d6;border:1px solid #f2d488;color:#8a5a00;border-radius:99px;padding:1px 8px;font-size:10.5px;font-weight:800;white-space:nowrap">⭐ Tu negocio</span><?php endif; ?></td>
           <td><?= $h($c['dueno']) ?><br><span style="color:var(--muted);font-size:11px"><?= $h($c['email']) ?></span></td>
           <td><?php if($c['plan']): ?><span class="pill <?= $pc ?>"><?= $h($c['plan_nombre']) ?></span> <span class="pill <?= $se ?>"><?= $h($c['sub_estado']?:'—') ?></span><?php if($c['es_early_adopter']):?><span class="rel">allegado</span><?php endif;?><?php else: ?><span class="pill none">sin plan</span><?php endif; ?></td>
           <td class="num"><?= (int)$c['posts'] ?></td>
