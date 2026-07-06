@@ -12,19 +12,56 @@
  * Envío básico de email. Devuelve true/false. Nunca lanza (no debe
  * tumbar el webhook). Loguea siempre para tener rastro en local.
  */
+/** Carga PHPMailer (la misma librería que ya usa Encuéntralo). */
+function crecer_cargar_phpmailer(): bool {
+    if (class_exists('\\PHPMailer\\PHPMailer\\PHPMailer')) return true;
+    $base = __DIR__ . '/../vendor/PHPMailer/';
+    if (!is_file($base . 'PHPMailer.php')) return false;
+    require_once $base . 'PHPMailer.php';
+    require_once $base . 'SMTP.php';
+    require_once $base . 'Exception.php';
+    return class_exists('\\PHPMailer\\PHPMailer\\PHPMailer');
+}
+
+/**
+ * Envía un correo. MISMA receta que Encuéntralo (SMTP autenticado con PHPMailer),
+ * que sí entrega a Gmail/Yahoo. Las credenciales SMTP_* viven en el config de prod
+ * (crecer-config.local.php). Si no hay SMTP o falla, cae a mail() (local/último recurso).
+ */
 function crecer_enviar_email(string $para, string $asunto, string $cuerpo_html): bool {
     if (!$para || !filter_var($para, FILTER_VALIDATE_EMAIL)) return false;
-    $de = 'Crecer · Encuéntralo <hola@encuentraloahora.com>'; // dominio real → pasa SPF en Hostinger
+
+    if (defined('SMTP_HOST') && SMTP_HOST !== '' && crecer_cargar_phpmailer()) {
+        try {
+            $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+            $mail->isSMTP();
+            $mail->Host       = SMTP_HOST;
+            $mail->SMTPAuth   = true;
+            $mail->Username   = SMTP_USER;
+            $mail->Password   = SMTP_PASS;
+            $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS;
+            $mail->Port       = defined('SMTP_PORT') ? (int)SMTP_PORT : 465;
+            $mail->CharSet    = 'UTF-8';
+            $from = (defined('SMTP_FROM') && SMTP_FROM) ? SMTP_FROM : 'info@encuentraloahora.com';
+            $mail->setFrom($from, 'Crecer · Encuéntralo');
+            $mail->isHTML(true);
+            $mail->addAddress($para);
+            $mail->Subject = $asunto;
+            $mail->Body    = $cuerpo_html;
+            $mail->AltBody = trim(strip_tags($cuerpo_html));
+            $mail->send();
+            return true;
+        } catch (\Throwable $e) {
+            error_log('[crecer smtp] ' . $e->getMessage());   // sigue al fallback
+        }
+    }
+
+    // Fallback: mail() (poco fiable; sirve en local o si SMTP no está configurado).
+    $from = (defined('SMTP_FROM') && SMTP_FROM) ? SMTP_FROM : 'info@encuentraloahora.com';
     $headers  = "MIME-Version: 1.0\r\n";
     $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
-    $headers .= "From: $de\r\n";
-    error_log("[crecer email] -> $para | $asunto");
-    try {
-        return @mail($para, '=?UTF-8?B?' . base64_encode($asunto) . '?=', $cuerpo_html, $headers);
-    } catch (Throwable $e) {
-        error_log('[crecer email error] ' . $e->getMessage());
-        return false;
-    }
+    $headers .= "From: Crecer · Encuéntralo <$from>\r\n";
+    return @mail($para, '=?UTF-8?B?' . base64_encode($asunto) . '?=', $cuerpo_html, $headers);
 }
 
 /**
