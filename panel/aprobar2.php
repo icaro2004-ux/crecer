@@ -125,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $f = $_POST['fecha'] ?? '';
         if ($id && strtotime($f)) {
             $pdo->prepare("UPDATE crecer_contenido SET fecha_programada=?, updated_at=NOW() WHERE id=? AND marca_id=?")
-                ->execute([date('Y-m-d 10:00:00', strtotime($f)), $id, $marca_id]);
+                ->execute([date('Y-m-d H:i:s', strtotime($f)), $id, $marca_id]);
         }
         if (!empty($_POST['ajax'])) { header('Content-Type: application/json'); echo json_encode(['ok'=>(bool)strtotime($f)]); exit; }
         header('Location: ' . $_SERVER['REQUEST_URI']); exit;
@@ -879,7 +879,7 @@ $cf = [
       <div class="schedrow">
         <?= ico('calendar') ?>
         <span class="lab">El corillo lo programó para</span>
-        <input type="date" class="fecha-in" data-id="<?= $p['id'] ?>" value="<?= date('Y-m-d', strtotime($p['fecha_programada'] ?: 'now')) ?>">
+        <input type="datetime-local" class="fecha-in" data-id="<?= $p['id'] ?>" value="<?= date('Y-m-d\TH:i', strtotime($p['fecha_programada'] ?: 'now')) ?>">
         <span class="hint">cámbialo si quieres (ej. un día especial)</span>
       </div>
       <div class="toolrow" id="tools-<?= $p['id'] ?>" style="padding:0 17px 12px;display:flex;gap:16px;flex-wrap:wrap;font-size:13px">
