@@ -65,15 +65,25 @@ function asegurar_jpeg_publicable(?string $grafica_path): ?string {
     $dst_rel = preg_replace('#\.(png|webp)$#i', '.jpg', $rel);
     $dst_abs = rtrim(UPLOADS_PATH, '/\\') . $sep . str_replace('/', $sep, $dst_rel);
     $dst_url = $url_pref . '/' . $dst_rel;
-    if (is_file($dst_abs)) return $dst_url;                       // ya convertida antes
+    if (is_file($dst_abs)) {                                      // ya convertida antes…
+        $sz = @getimagesize($dst_abs);
+        if ($sz && max((int)$sz[0], (int)$sz[1]) <= 1440) return $dst_url;
+        @unlink($dst_abs);                                       // …pero era muy grande → rehacer reducida
+    }
 
     $im = @imagecreatefromstring((string)@file_get_contents($src_abs));
     if (!$im) return $grafica_path;
     $w = imagesx($im); $h = imagesy($im);
-    $canvas = imagecreatetruecolor($w, $h);
+    // Cap a 1440px (ancho que IG/FB usan de verdad): baja el peso y evita el error
+    // de Facebook "Please reduce the amount of data" con imágenes muy grandes.
+    $MAX = 1440;
+    $escala = min(1.0, $MAX / max($w, $h));
+    $nw = max(1, (int)round($w * $escala));
+    $nh = max(1, (int)round($h * $escala));
+    $canvas = imagecreatetruecolor($nw, $nh);
     $white  = imagecolorallocate($canvas, 255, 255, 255);         // aplana alfa sobre blanco
-    imagefilledrectangle($canvas, 0, 0, $w, $h, $white);
-    imagecopy($canvas, $im, 0, 0, 0, 0, $w, $h);
+    imagefilledrectangle($canvas, 0, 0, $nw, $nh, $white);
+    imagecopyresampled($canvas, $im, 0, 0, 0, 0, $nw, $nh, $w, $h);
     $ok = imagejpeg($canvas, $dst_abs, 88);
     imagedestroy($im); imagedestroy($canvas);
     return $ok ? $dst_url : $grafica_path;
