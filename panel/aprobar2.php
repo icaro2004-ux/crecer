@@ -1377,8 +1377,24 @@ $cf = [
       document.getElementById('wiz-editbox').style.display='none';
       document.getElementById('wiz-edit').style.display='inline-block';
       document.getElementById('wiz-art').innerHTML=''; document.getElementById('wiz-next2').style.display='none';
+      document.getElementById('wiz-arteidea').value='';
       wizPaso(2);
+      wizSugerirArte();   // el Diseñador propone la idea del arte (texto) para que la veas/ajustes
     }).catch(function(){ loaderHide(); toast('Error de conexión. Intenta otra vez.'); });
+  }
+  // Director de Arte: propone en TEXTO qué debe mostrar la imagen (para ver/ajustar
+  // antes de generar). Rellena el textarea de la idea.
+  function wizSugerirArte(ajuste){
+    if(!wizId) return;
+    var ta=document.getElementById('wiz-arteidea'), b=document.getElementById('wiz-arte-sug');
+    if(!ajuste) ta.value=''; ta.placeholder='💭 El Diseñador está pensando la idea…';
+    if(b){ b.disabled=true; }
+    var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','sugerir_arte'); fd.append('id',wizId); if(ajuste) fd.append('ajuste',ajuste);
+    fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+      if(b){ b.disabled=false; }
+      ta.placeholder='Describe qué debe mostrar la imagen…';
+      if(d && d.ok && d.idea){ ta.value=d.idea; }
+    }).catch(function(){ if(b){ b.disabled=false; } ta.placeholder='Describe qué debe mostrar la imagen…'; });
   }
   function wizPintaArte(img){
     wizImg=img;
@@ -1427,10 +1443,13 @@ $cf = [
         toast(d.leccion ? ('🧠 Aprendí: '+d.leccion) : '✅ Texto actualizado');
       }).catch(function(){ b.disabled=false; b.textContent='Guardar'; toast('Error de conexión.'); });
     });
+    document.getElementById('wiz-arte-sug').addEventListener('click', function(){ wizSugerirArte(); });
     g.addEventListener('click', function(){
       if(!wizId) return;
       loaderShow('Generando tu imagen…', ['Imaginando la escena…','Ajustando la luz y el encuadre…','Aplicando tu logo de marca…','Puliendo texturas y detalles…','Casi lista…']);
+      var idea=document.getElementById('wiz-arteidea').value.trim();
       var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','arte'); fd.append('id',wizId); fd.append('con_logo','1');
+      if(idea) fd.append('instrucciones', idea);   // genera con la idea que ves/ajustaste
       fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
         loaderHide(); if(!d.ok){ wizArteErr(d); return; } wizPintaArte(d.img);
       }).catch(function(){ loaderHide(); toast('Error de conexión.'); });
@@ -1816,9 +1835,12 @@ $cf = [
         </div>
         <div class="art-note">Si cambias una palabra o el tono, la IA aprende tu preferencia para los próximos posts. 🧠</div>
       </div>
+      <label class="fl" style="margin-top:4px">💡 Idea para la imagen <span style="color:var(--muted);font-weight:500">(el Diseñador la propone — ajústala a tu gusto)</span></label>
+      <textarea id="wiz-arteidea" rows="3" placeholder="El Diseñador está pensando la idea…"></textarea>
+      <button type="button" class="fbnew" id="wiz-arte-sug" style="width:100%;margin:8px 0 4px">🔄 Sugiéreme otra idea</button>
       <div class="wiz-art" id="wiz-art"></div>
       <div class="wiz-artbtns">
-        <button type="button" class="art-go" id="wiz-gen">✨ Generar arte con IA</button>
+        <button type="button" class="art-go" id="wiz-gen">🎨 Generar la imagen con esta idea</button>
         <label class="fbnew wiz-upl">📷 Subir mi foto<input type="file" id="wiz-file" accept="image/png,image/jpeg,image/webp" style="display:none"></label>
       </div>
       <button type="button" class="art-go wiz-ok" id="wiz-next2" style="display:none">Usar este arte →</button>
