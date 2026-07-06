@@ -1336,19 +1336,27 @@ $cf = [
   // Solo "Dame otras ideas" (force=true) fuerza una llamada nueva a Gemini.
   var wizIdeasCache=null;
   function wizRenderIdeas(ideas){
-    var cont=document.getElementById('wiz-ideas'); cont.innerHTML='';
-    if(!ideas || !ideas.length){ cont.innerHTML='<div class="wiz-load">Escribe tu idea abajo 👇</div>'; return; }
-    ideas.forEach(function(it){
-      var b=document.createElement('button'); b.type='button'; b.className='sug-idea';
-      var t=document.createElement('b'); t.textContent=it.tema||'Idea';
-      var s=document.createElement('span'); s.textContent=it.idea||'';
-      b.appendChild(t); b.appendChild(s);
-      b.addEventListener('click', function(){ wizCrear((it.tema?it.tema+': ':'')+(it.idea||'')); });
-      cont.appendChild(b);
+    var cont=document.getElementById('wiz-ideas'); var hint=document.getElementById('wiz-hint');
+    cont.innerHTML='';
+    if(!ideas || !ideas.length){ cont.className=''; if(hint) hint.style.display='none'; cont.innerHTML='<div class="wiz-load">Escribe tu idea abajo 👇</div>'; return; }
+    cont.className='wiz-car';
+    if(hint) hint.style.display = ideas.length>1 ? 'block' : 'none';
+    ideas.forEach(function(it,i){
+      var card=document.createElement('div'); card.className='wiz-card';
+      var chip = it.pilar ? '<span class="wiz-chip">'+_esc(it.pilar)+'</span>' : '<span></span>';
+      card.innerHTML =
+        '<div class="wiz-card-top">'+chip+'<span class="wiz-card-n">'+(i+1)+'/'+ideas.length+'</span></div>'+
+        '<div class="wiz-card-t">'+_esc(it.tema||'Idea')+'</div>'+
+        '<div class="wiz-card-d">'+_esc(it.idea||'')+'</div>'+
+        '<button type="button" class="wiz-card-go">✓ Escoger esta idea</button>';
+      card.querySelector('.wiz-card-go').addEventListener('click', function(){ wizCrear((it.tema?it.tema+': ':'')+(it.idea||'')); });
+      cont.appendChild(card);
     });
   }
   function wizCargarIdeas(force){
     if(!force && wizIdeasCache){ wizRenderIdeas(wizIdeasCache); return; }   // reusar caché
+    var _h=document.getElementById('wiz-hint'); if(_h) _h.style.display='none';
+    document.getElementById('wiz-ideas').className='';
     document.getElementById('wiz-ideas').innerHTML='<div class="wiz-load">💭 Pensando ideas para tu negocio…</div>';
     var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','sugerir_temas');
     fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
@@ -1788,7 +1796,8 @@ $cf = [
     <div class="wiz-pane" data-pane="1">
       <h3>¿De qué hacemos el post?</h3>
       <p class="wiz-sub">Toca una idea o escribe la tuya. Yo escribo el caption en tu voz.</p>
-      <div id="wiz-ideas" class="sug-list" style="display:flex"></div>
+      <div class="wiz-swipe-hint" id="wiz-hint">Desliza para ver más ideas 👉</div>
+      <div id="wiz-ideas"></div>
       <button type="button" id="wiz-mas" class="sug-btn">💡 Dame otras ideas</button>
       <label class="fl">O escribe tu propia idea</label>
       <textarea id="wiz-tema" rows="2" placeholder="Ej: promo del bizcocho de guayaba para el Día de las Madres"></textarea>
@@ -1849,6 +1858,18 @@ $cf = [
   .wiz-editlink{display:inline-block;font-size:12.5px;font-weight:700;color:var(--terracota);text-decoration:none;margin:-6px 0 12px}
   .wiz-editbox{margin-bottom:14px}
   .wiz-editbox textarea{width:100%;font-family:inherit;font-size:14px;color:var(--tinta);border:1.5px solid var(--line);border-radius:12px;padding:11px 13px;min-height:110px;line-height:1.5}
+  /* Carrusel de ideas — swipe lateral tipo Instagram */
+  .wiz-swipe-hint{display:none;font-size:12px;font-weight:700;color:var(--muted);margin:2px 0 8px}
+  .wiz-car{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding:2px 2px 14px;margin:0 -20px 6px;padding-left:20px;padding-right:20px;scrollbar-width:none}
+  .wiz-car::-webkit-scrollbar{display:none}
+  .wiz-card{flex:0 0 84%;scroll-snap-align:center;min-height:186px;background:linear-gradient(158deg,#ffffff,#fff4ec);border:1.5px solid var(--line);border-radius:20px;padding:16px 16px 15px;display:flex;flex-direction:column;gap:9px;box-shadow:0 14px 32px -18px rgba(40,25,12,.5)}
+  .wiz-card-top{display:flex;align-items:center;justify-content:space-between;min-height:22px}
+  .wiz-chip{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));border-radius:99px;padding:4px 10px}
+  .wiz-card-n{font-size:11px;font-weight:800;color:var(--muted)}
+  .wiz-card-t{font-family:'Oswald',sans-serif;font-weight:700;font-size:19px;line-height:1.15;color:var(--tinta);letter-spacing:.2px}
+  .wiz-card-d{font-size:14.5px;line-height:1.5;color:#3f3640;flex:1}
+  .wiz-card-go{margin-top:4px;border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:14.5px;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));padding:12px;border-radius:13px}
+  .wiz-card-go:active{transform:scale(.98)}
 </style>
 
 <?php require __DIR__ . '/_shell_foot.php'; ?>

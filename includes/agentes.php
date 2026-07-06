@@ -306,7 +306,8 @@ function sugerir_temas(PDO $pdo, int $marca_id, int $n = 5): array {
     foreach (($d['ideas'] ?? []) as $it) {
         $tema = trim((string)($it['tema'] ?? ''));
         $idea = trim((string)($it['idea'] ?? ''));
-        if ($tema !== '' || $idea !== '') $out[] = ['tema' => $tema, 'idea' => $idea];
+        $pilar = trim((string)($it['pilar'] ?? ''));
+        if ($tema !== '' || $idea !== '') $out[] = ['tema' => $tema, 'idea' => $idea, 'pilar' => $pilar];
     }
     return $out;
 }
