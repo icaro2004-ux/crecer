@@ -108,7 +108,7 @@ require __DIR__ . '/_shell.php';
   .rz-net .st{margin-left:auto;font-size:12.5px;color:var(--muted);font-weight:700}
 </style>
 
-<h1 class="rz-h1">📈 Resultados</h1>
+<h1 class="rz-h1"><?= ico('chart') ?> Resultados</h1>
 <p class="rz-lede">Cómo te está yendo. Hoy ves tu producción y consistencia (datos reales); al conectar tus redes se encienden alcance e interacciones.</p>
 
 <div class="rz-tabs" role="tablist">
@@ -147,7 +147,7 @@ require __DIR__ . '/_shell.php';
         <?php endforeach; ?>
       </div>
       <div class="rz-streak">
-        <?php if ($racha >= 2): ?>Racha actual: <b><?= $racha ?> semanas</b> seguidas publicando 🔥
+        <?php if ($racha >= 2): ?>Racha actual: <b><?= $racha ?> semanas</b> seguidas publicando
         <?php elseif ($racha === 1): ?>Racha actual: <b>1 semana</b>. ¡Sigue así!
         <?php else: ?>Publica esta semana para arrancar tu racha.<?php endif; ?>
       </div>
@@ -155,7 +155,7 @@ require __DIR__ . '/_shell.php';
   </div>
 
   <div class="rz-card rz-lock">
-    <div class="lk">🔒 Alcance e interacciones</div>
+    <div class="lk"><?= ico('lock') ?> Alcance e interacciones</div>
     <?php if ($meta_ok): ?>
       <p>Tus redes están conectadas. El alcance y las interacciones de cada post están en camino — el corillo los traerá de Meta.</p>
     <?php else: ?>
@@ -176,7 +176,7 @@ require __DIR__ . '/_shell.php';
       <div class="rz-pub">
         <?php if (!empty($p['grafica_path'])): ?>
           <img class="th" src="<?= $h($p['grafica_path']) ?>" alt="">
-        <?php else: ?><span class="th ph"><?= $p['plataforma']==='facebook'?'👍':'📸' ?></span><?php endif; ?>
+        <?php else: ?><span class="th ph"><?= $p['plataforma']==='facebook'?ico('facebook'):ico('instagram') ?></span><?php endif; ?>
         <div class="tx">
           <div class="cap"><?= $h(mb_strimwidth($cap,0,120,'…')) ?></div>
           <div class="mt"><?= $p['plataforma']==='facebook'?'Facebook':'Instagram' ?> · <?= $p['publicado_at'] ? $h(date('d/m/Y', strtotime($p['publicado_at']))) : 'publicado' ?></div>
@@ -187,7 +187,7 @@ require __DIR__ . '/_shell.php';
   </div>
 
   <div class="rz-card rz-lock">
-    <div class="lk">🔒 Cómo rindió cada post</div>
+    <div class="lk"><?= ico('lock') ?> Cómo rindió cada post</div>
     <?php if ($meta_ok): ?>
       <p>Tus redes están conectadas. Los likes, comentarios, guardados y alcance de cada post están en camino.</p>
     <?php else: ?>
@@ -201,15 +201,15 @@ require __DIR__ . '/_shell.php';
 <section class="rz-pane" id="pane-redes">
   <div class="rz-card">
     <h2>Tus redes</h2>
-    <div class="rz-net"><span class="e">📸</span> Instagram <span class="st"><?= $meta_ok ? 'conectado' : 'no conectado' ?></span></div>
-    <div class="rz-net"><span class="e">👍</span> Facebook <span class="st"><?= $meta_ok ? 'conectado' : 'no conectado' ?></span></div>
+    <div class="rz-net"><span class="e"><?= ico('instagram') ?></span> Instagram <span class="st"><?= $meta_ok ? 'conectado' : 'no conectado' ?></span></div>
+    <div class="rz-net"><span class="e"><?= ico('facebook') ?></span> Facebook <span class="st"><?= $meta_ok ? 'conectado' : 'no conectado' ?></span></div>
   </div>
   <div class="rz-card rz-lock">
     <?php if ($meta_ok): ?>
-      <div class="lk">✅ Redes conectadas</div>
+      <div class="lk"><?= ico('check-circle') ?> Redes conectadas</div>
       <p>Tus métricas de alcance, interacciones y crecimiento de seguidores están en camino — el corillo las traerá de Meta.</p>
     <?php else: ?>
-      <div class="lk">⚡ Enciende tus métricas de redes</div>
+      <div class="lk"><?= ico('bolt') ?> Enciende tus métricas de redes</div>
       <p>Conecta Instagram y Facebook para ver alcance, interacciones y crecimiento de seguidores. Mientras tanto, en <b>Resumen</b> ya ves tu producción y consistencia, que son reales.</p>
       <a class="rz-cta" href="<?= $BASE ?>/conectar.php?marca=<?= $marca_id ?>">Conectar mis redes →</a>
     <?php endif; ?>
