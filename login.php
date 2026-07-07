@@ -184,6 +184,9 @@ $nf = fn($n) => number_format($n);
 
     <p class="forgot"><a href="/crecer/recuperar.php">¿Olvidaste tu contraseña?</a></p>
     <p class="alt">¿No tienes cuenta? <a href="/crecer/registro.php">Créala gratis</a></p>
+    <p style="text-align:center;font-size:12px;color:var(--muted);margin-top:18px">
+      <a href="/crecer/terminos.php" style="color:var(--muted);text-decoration:none">Términos</a> ·
+      <a href="/crecer/privacidad.php" style="color:var(--muted);text-decoration:none">Privacidad</a></p>
   </div>
 </div>
 

@@ -193,6 +193,9 @@ $nf = fn($n) => number_format($n);
   .final .big-cta:hover{filter:brightness(1.06)}
   .foot{text-align:center;color:var(--muted);font-size:13px;padding:30px}
   .foot b{color:var(--terracota)}
+  .foot-legal{display:inline-block;margin-top:8px;font-size:12.5px}
+  .foot-legal a{color:var(--muted);text-decoration:none;font-weight:600}
+  .foot-legal a:hover{color:var(--terracota);text-decoration:underline}
 
   /* Empatía (el "te entendemos") */
   .empat{background:linear-gradient(135deg,#2a1020,#160a12);color:#fff;border-radius:26px;padding:48px 40px;text-align:center}
@@ -441,7 +444,8 @@ $nf = fn($n) => number_format($n);
   <p style="color:var(--muted);font-size:14px;margin-top:14px">Gratis · sin tarjeta · en 2 minutos lo tienes corriendo</p>
 </section>
 
-<p class="foot">© Encuéntralo · Crecer — hecho con cariño en <b>Puerto Rico</b></p>
+<p class="foot">© <?= date('Y') ?> Encuéntralo · Crecer — hecho con cariño en <b>Puerto Rico</b><br>
+  <span class="foot-legal"><a href="/crecer/terminos.php">Términos de Servicio</a> · <a href="/crecer/privacidad.php">Política de Privacidad</a> · <a href="/crecer/eliminar-datos.php">Eliminar mis datos</a></span></p>
 
 <script>
   // Reveal on scroll (suave, premium)

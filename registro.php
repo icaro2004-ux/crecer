@@ -205,6 +205,9 @@ $plan_lbl = ['crecer'=>'Crecer','despegar'=>'Despegar'][$plan_intent] ?? '';
 
     <p class="alt">¿Ya tienes cuenta? <a href="/crecer/login.php">Entra aquí</a></p>
     <?php endif; ?>
+    <p style="text-align:center;font-size:12px;color:var(--muted);margin-top:16px">
+      Al crear tu cuenta aceptas los <a href="/crecer/terminos.php" style="color:var(--muted)">Términos</a>
+      y la <a href="/crecer/privacidad.php" style="color:var(--muted)">Política de Privacidad</a>.</p>
   </div>
 </div>
 </body>
