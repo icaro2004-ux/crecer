@@ -4,6 +4,7 @@
 // ============================================================
 require __DIR__ . '/includes/db.php';
 require __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/includes/iconos.php';
 
 // Recuerda el plan elegido en el landing (para llevarlo al checkout tras el onboarding)
 if (!empty($_GET['plan']) && in_array($_GET['plan'], ['crecer','despegar'], true)) {
@@ -96,6 +97,9 @@ $plan_lbl = ['crecer'=>'Crecer','despegar'=>'Despegar'][$plan_intent] ?? '';
   .aside::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
     background:radial-gradient(60% 50% at 100% 0%,rgba(255,92,57,.22),transparent 60%),radial-gradient(50% 50% at 0% 100%,rgba(192,57,95,.2),transparent 55%)}
   .aside .in{position:relative;z-index:1}
+  .aside .pill svg{width:15px;height:15px}
+  .bnf .it .ic,.bnf .it svg{width:18px;height:18px;color:var(--terracota)}
+  .big-ic svg{width:46px;height:46px;color:var(--terracota)}
   .aside .pill{display:inline-flex;align-items:center;gap:7px;font-weight:800;font-size:12px;letter-spacing:.05em;text-transform:uppercase;
     color:#ffcaa8;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);padding:6px 13px;border-radius:99px}
   .aside h2{font-size:clamp(28px,3.6vw,40px);margin:16px 0 0}
@@ -149,13 +153,13 @@ $plan_lbl = ['crecer'=>'Crecer','despegar'=>'Despegar'][$plan_intent] ?? '';
   <!-- PANEL: únete al corillo -->
   <aside class="aside">
     <div class="in">
-      <span class="pill">🤝 <?= $plan_lbl ? 'Vas pa\' '.$h($plan_lbl) : 'Tu corillo te espera' ?></span>
+      <span class="pill"><?= ico('users') ?> <?= $plan_lbl ? 'Vas pa\' '.$h($plan_lbl) : 'Tu corillo te espera' ?></span>
       <h2 class="disp">Móntate tu <span class="g">corillo</span> en un minuto.</h2>
       <p>Creas tu cuenta, le hablas 40 segundos de tu negocio, y el corillo arranca a trabajarte el marketing. Tú solo apruebas.</p>
       <div class="bnf">
-        <div class="it"><span class="ic">🎤</span> Onboarding por voz — sin formularios largos</div>
-        <div class="it"><span class="ic">✍️</span> Tu primer post listo, en tu voz boricua</div>
-        <div class="it"><span class="ic">💳</span> Gratis y sin tarjeta para empezar</div>
+        <div class="it"><?= ico('mic') ?> Onboarding por voz — sin formularios largos</div>
+        <div class="it"><?= ico('pen') ?> Tu primer post listo, en tu voz boricua</div>
+        <div class="it"><?= ico('wallet') ?> Gratis y sin tarjeta para empezar</div>
       </div>
       <div class="proof"><span class="dot"></span><span>El corillo ya trabaja <b><?= number_format($negocios) ?></b> negocios · <b><?= number_format($acciones) ?></b> acciones de IA</span></div>
     </div>
@@ -164,10 +168,10 @@ $plan_lbl = ['crecer'=>'Crecer','despegar'=>'Despegar'][$plan_intent] ?? '';
   <!-- FORMULARIO -->
   <div class="formwrap">
     <?php if (!empty($_GET['enviado'])): $em = $h($_GET['enviado']); ?>
-    <h1 class="disp">Revisa tu <span class="g">correo</span> 📬</h1>
+    <h1 class="disp">Revisa tu <span class="g">correo</span></h1>
     <p class="sub">Te enviamos un enlace a <b><?= $em ?></b>. Ábrelo y dale <b>"Activar mi cuenta"</b> para confirmar que eres humano — y de una vez, tu primer post de muestra.</p>
     <div class="card" style="text-align:center">
-      <div style="font-size:44px;margin-bottom:6px">✉️</div>
+      <div class="big-ic" style="margin-bottom:8px"><?= ico('inbox') ?></div>
       <p style="font-size:14px;color:var(--muted,#8a7f72);line-height:1.5;margin-bottom:14px">¿No llegó en un par de minutos? Revisa <b>spam/promociones</b>, o reenvíalo.</p>
       <form method="post" action="/crecer/reenviar.php">
         <?= csrf_field() ?>
@@ -177,7 +181,7 @@ $plan_lbl = ['crecer'=>'Crecer','despegar'=>'Despegar'][$plan_intent] ?? '';
     </div>
     <p class="alt">¿Ya lo activaste? <a href="/crecer/login.php">Entra aquí</a></p>
     <?php else: ?>
-    <h1 class="disp">Crea tu <span class="g">cuenta</span> 🌱</h1>
+    <h1 class="disp">Crea tu <span class="g">cuenta</span></h1>
     <p class="sub">Toma 1 minuto. Activas por correo (confirmamos que eres humano) y el corillo hace el resto.</p>
 
     <form method="post" class="card">

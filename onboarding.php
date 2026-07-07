@@ -177,7 +177,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       </div>
       <audio id="player" controls style="display:none"></audio>
       <div class="hint">Di: qué vendes, a quién, qué te hace especial, alguna promo. Entre 20 y 60 segundos. Habla normal, como le hablas a un cliente.</div>
-      <div style="margin-top:12px"><a href="#" id="prefiero" style="color:var(--terracota);font-weight:700;font-size:13.5px;text-decoration:none">✍️ Mejor lo escribo (sin micrófono)</a></div>
+      <div style="margin-top:12px"><a href="#" id="prefiero" style="color:var(--terracota);font-weight:700;font-size:13.5px;text-decoration:none">Mejor lo escribo (sin micrófono)</a></div>
     </div>
     <div id="texto-hint" style="display:none;background:var(--okk-bg,#e6f6ee);color:var(--okk-ink,#0d7a44);font-weight:700;font-size:13px;padding:10px 13px;border-radius:11px;margin-top:10px"></div>
     <textarea id="texto" rows="4" placeholder="Escribe: qué vendes, a quién, qué te hace especial, alguna promo…" style="display:none;width:100%;font-family:inherit;font-size:15px;border:1.5px solid var(--line);border-radius:12px;padding:11px 13px;margin-top:10px"></textarea>
@@ -199,7 +199,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   <div class="spin"></div>
   <div class="big">El corillo está trabajando</div>
   <div class="sub">Escuchando tu voz, aprendiendo tu negocio y montándote el primer post…</div>
-  <div class="dotpulse" id="dot">🎧 Escuchando…</div>
+  <div class="dotpulse" id="dot">Escuchando…</div>
 </div>
 
 <script>
@@ -212,7 +212,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   recBtn.addEventListener('click', async function(){
     if (mediaRec && mediaRec.state==='recording'){ mediaRec.stop(); return; }
     if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-      usarTexto('Tu navegador no deja grabar aquí — no hay lío, cuéntamelo por escrito 👇');
+      usarTexto('Tu navegador no deja grabar aquí — no hay lío, cuéntamelo por escrito');
       return;
     }
     try{
@@ -231,7 +231,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       timerId = setInterval(function(){ secs++; timer.textContent=fmt(secs); if(secs>=60) mediaRec.stop(); }, 1000);
     }catch(e){
       // Mic bloqueado/sin permiso → NO trancamos al usuario: lo pasamos a escribir, suave.
-      usarTexto('No pudimos usar el micrófono — tranqui, cuéntamelo por escrito aquí 👇');
+      usarTexto('No pudimos usar el micrófono — tranqui, cuéntamelo por escrito aquí');
     }
   });
 
@@ -253,19 +253,19 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   // Al cargar: decidir si mostrar el micrófono o solo el texto.
   if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
     // El navegador no puede grabar → ni mostramos el micrófono.
-    usarTexto('Aquí no se puede grabar — escríbelo y el corillo arranca igual 👇');
+    usarTexto('Aquí no se puede grabar — escríbelo y el corillo arranca igual');
   } else if (navigator.permissions && navigator.permissions.query){
     navigator.permissions.query({name:'microphone'}).then(function(st){
       // 'denied' → ocultamos el micrófono y dejamos solo el texto.
-      if(st.state==='denied') usarTexto('Tu micrófono está bloqueado — no hay lío, escríbelo aquí 👇');
+      if(st.state==='denied') usarTexto('Tu micrófono está bloqueado — no hay lío, escríbelo aquí');
       // 'granted' o 'prompt' (primera vez) → dejamos el micrófono visible.
-      if(st.onchange===null){ st.onchange=function(){ if(st.state==='denied') usarTexto('Micrófono bloqueado — escríbelo aquí 👇'); }; }
+      if(st.onchange===null){ st.onchange=function(){ if(st.state==='denied') usarTexto('Micrófono bloqueado — escríbelo aquí'); }; }
     }).catch(function(){});
   }
 
   function showErr(m){ var e=document.getElementById('err'); e.textContent='⚠️ '+m; e.style.display='block'; window.scrollTo(0,0); }
 
-  var dots=['🎧 Escuchando tu voz…','🧠 Aprendiendo tu negocio…','✍️ Escribiendo tu caption…','🎨 Montando tu arte…'];
+  var dots=['Escuchando tu voz…','Aprendiendo tu negocio…','Escribiendo tu caption…','Montando tu arte…'];
   document.getElementById('go').addEventListener('click', function(){
     var nombre=document.getElementById('nombre').value.trim();
     if(!nombre){ showErr('Ponle nombre a tu negocio (paso 1).'); return; }
