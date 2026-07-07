@@ -312,6 +312,32 @@ function sugerir_temas(PDO $pdo, int $marca_id, int $n = 5): array {
     return $out;
 }
 
+/**
+ * Propone la LÍNEA DE DISEÑO (estilo visual) de la marca: el look consistente que
+ * tendrán TODAS sus imágenes. Se guarda en crecer_marca.estilo_visual y se inyecta
+ * en cada generación. Devuelve 2-3 frases editables por el dueño.
+ */
+function sugerir_estilo_visual(PDO $pdo, int $marca_id, string $ajuste = ''): string {
+    $m = leer_marca($pdo, $marca_id);
+    $ctx = marca_contexto($m);
+    $sistema = "Eres el DIRECTOR DE ARTE de Crecer. Defines la LÍNEA DE DISEÑO (estilo visual) "
+        . "de una marca boricua: el look CONSISTENTE que tendrán TODAS sus imágenes de redes. "
+        . "Devuelve 2-3 frases en español sencillo (sin jerga, sin la palabra \"prompt\") que "
+        . "describan: paleta de colores, mood/vibra, tipo de fotografía o ilustración, fondos y "
+        . "detalles de estilo. Concreto y específico de ESTE negocio, para que el feed se vea "
+        . "cohesivo y profesional.";
+    if (function_exists('tono_instruccion')) $sistema .= tono_instruccion($m);
+    $prompt = "Perfil del negocio:\n{$ctx}\n";
+    if (trim($ajuste) !== '') $prompt .= "\nEl dueño pide este ajuste — priorízalo: {$ajuste}\n";
+    $prompt .= "\nDescribe la línea de diseño visual de la marca en 2-3 frases.";
+    $r = ia_ejecutar($pdo, 'diseñador', 'Sugerir línea de diseño', $prompt, [
+        'marca_id' => $marca_id, 'sistema' => $sistema,
+        'temperatura' => 0.8, 'max_tokens' => 300, 'thinking_budget' => 0,
+        'mock_texto' => 'Paleta cálida boricua (terracota, crema y verde palma) con luz natural de tarde. Fotografía real y apetitosa, fondos simples de madera o piedra, composición limpia con aire arriba para el texto. Vibra artesanal y acogedora, nada corporativo.',
+    ]);
+    return trim((string)$r['texto']);
+}
+
 function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts = []): array {
     $m = leer_marca($pdo, $marca_id);
     $copy      = trim($opts['copy'] ?? '');         // el texto del post (coherencia)
@@ -362,8 +388,12 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
         $prompt .= "- SIN texto sobre la imagen: solo la foto/arte limpio y bonito.\n";
     }
     if ($estilo !== '') $prompt .= "- Estilo: {$estilo}.\n";
+    // LÍNEA DE DISEÑO de la marca (definida en Mi marca): se conserva en TODAS las
+    // imágenes → feed consistente, como una marca de verdad.
+    $linea = trim((string)($m['estilo_visual'] ?? ''));
+    if ($linea !== '') $prompt .= "- LÍNEA DE DISEÑO DE LA MARCA — MANTÉN SIEMPRE este estilo visual (colores, mood, tratamiento) para que todos los posts se vean de la misma familia: {$linea}\n";
     $instr = trim($opts['instrucciones'] ?? '');
-    if ($instr !== '') $prompt .= "- LO QUE PIDE EL DUEÑO (prioriza esto): {$instr}\n";
+    if ($instr !== '') $prompt .= "- LO QUE PIDE EL DUEÑO PARA ESTA IMAGEN (prioriza esto, sin romper la línea de diseño): {$instr}\n";
     $prompt .= "- DIRECCIÓN DE ARTE (calidad tope, que NO se vea \"AI genérico\" ni barato):\n"
              . "  · Fotografía profesional real: iluminación natural suave y direccional (golden hour / softbox), sombras creíbles.\n"
              . "  · Composición intencional (regla de tercios), profundidad de campo con fondo desenfocado (bokeh), foco nítido en el protagonista.\n"

@@ -66,6 +66,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    if ($accion === 'sugerir_estilo') {   // la IA propone la línea de diseño de ESTE cliente
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            $ajuste = trim((string)($_POST['ajuste'] ?? ''));
+            echo json_encode(['ok' => true, 'estilo' => sugerir_estilo_visual($pdo, $marca_id, $ajuste)], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => substr($e->getMessage(), 0, 160)], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
+    if ($accion === 'guardar_estilo') {   // guarda la línea de diseño de la marca
+        $ev = trim((string)($_POST['estilo_visual'] ?? ''));
+        $pdo->prepare("UPDATE crecer_marca SET estilo_visual=? WHERE id=?")->execute([$ev !== '' ? $ev : null, $marca_id]);
+        header("Location: /crecer/panel/marca.php?marca={$marca_id}&estilo=1#identidad"); exit;
+    }
+
     if ($accion === 'logo') {
         if (!$pagado)           $err = 'El logo se desbloquea cuando te suscribes a un plan.';
         elseif ($final)         $err = 'Tu logo ya está finalizado.';
@@ -273,6 +290,37 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
 </section>
 
 <section class="mk-pane" id="mk-identidad">
+<?php $ev_actual = (string)$pdo->query("SELECT estilo_visual FROM crecer_marca WHERE id={$marca_id}")->fetchColumn(); ?>
+<h2 class="sec-h">🎨 Línea de diseño</h2>
+<p class="subline">El estilo visual de <b>TU</b> negocio (colores, vibra, tipo de foto). La IA lo aplica a <b>todas</b> tus imágenes para que tu feed se vea de la misma familia. Es único de tu marca — cada cliente tiene la suya.</p>
+<?php if (!empty($_GET['estilo'])): ?><div class="ok-banner">✓ Línea de diseño guardada.</div><?php endif; ?>
+<div class="genbox" style="margin-bottom:18px">
+  <form method="post" onsubmit="var b=this.querySelector('.genbtn');b.disabled=true;b.textContent='Guardando…';">
+    <input type="hidden" name="accion" value="guardar_estilo">
+    <textarea name="estilo_visual" id="estilo-ta" rows="4" placeholder="Ej: paleta cálida (terracota y crema), luz natural de tarde, fotos reales sobre madera, composición limpia con aire para texto, vibra artesanal y acogedora…"><?= $h($ev_actual) ?></textarea>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <button class="genbtn" type="submit" style="margin:0">Guardar línea de diseño</button>
+      <button type="button" id="estilo-sug" class="fbnew" style="font-weight:800">✨ Sugerir con IA</button>
+    </div>
+    <div class="genline">La IA la propone leyendo tu negocio; ajústala a tu gusto. Déjala en blanco y la IA decide cada vez.</div>
+  </form>
+</div>
+<script>
+(function(){
+  var b=document.getElementById('estilo-sug'); if(!b) return;
+  b.addEventListener('click', function(){
+    var ta=document.getElementById('estilo-ta'), old=b.textContent;
+    b.disabled=true; b.textContent='💭 Pensando tu estilo…';
+    var fd=new FormData(); fd.append('accion','sugerir_estilo'); fd.append('ajuste', ta.value.trim());
+    fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+      b.disabled=false; b.textContent=old;
+      if(d && d.ok && d.estilo){ ta.value=d.estilo; ta.focus(); }
+      else { alert('No pude sugerir ahora. Intenta otra vez.'); }
+    }).catch(function(){ b.disabled=false; b.textContent=old; });
+  });
+})();
+</script>
+
 <h2 class="sec-h">🎨 Tu logo</h2>
 <?php if ($pagado): ?>
   <p class="subline">Tienes <b><?= $LIMITE_LOGO ?> oportunidades</b> para crear tu logo con IA. Genéralos, compáralos y escoge el que más te guste.</p>
