@@ -4,6 +4,7 @@
 // ============================================================
 require __DIR__ . '/includes/db.php';
 require __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/includes/iconos.php';
 
 if (esta_logueado()) {
     $u = usuario_actual($pdo);
@@ -116,7 +117,10 @@ $nf = fn($n) => number_format($n);
   input{width:100%;font-family:inherit;font-size:16px;color:var(--tinta);background:#fff;border:1.5px solid var(--line);border-radius:13px;padding:12px 14px}
   .pw input{padding-right:46px}
   input:focus{outline:none;border-color:var(--terracota);box-shadow:0 0 0 4px color-mix(in srgb,var(--terracota) 18%,transparent)}
-  .eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:0;cursor:pointer;font-size:18px;padding:6px;line-height:1;color:var(--muted)}
+  .eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:0;cursor:pointer;padding:6px;line-height:0;color:var(--muted)}
+  .eye svg{width:19px;height:19px}
+  .eye.on{color:var(--terracota)}
+  .aside .pill svg{width:15px;height:15px}
   .go{margin-top:20px;width:100%;background:var(--grad);color:#fff;border:0;cursor:pointer;font-weight:800;font-size:16px;
     padding:15px;border-radius:99px;box-shadow:0 14px 32px -12px rgba(192,57,95,.55);position:relative;overflow:hidden;transition:transform .15s,filter .15s}
   .go:hover{transform:translateY(-2px);filter:brightness(1.05)}
@@ -149,7 +153,7 @@ $nf = fn($n) => number_format($n);
   <!-- PANEL: bienvenida -->
   <aside class="aside">
     <div class="in">
-      <span class="pill">🤝 Tu corillo te esperaba</span>
+      <span class="pill"><?= ico('users') ?> Tu corillo te esperaba</span>
       <h2 class="disp">Bienvenido de <span class="g">vuelta.</span></h2>
       <p>Mientras no estabas, el corillo siguió trabajándote el negocio. Entra y mira lo que te dejó listo.</p>
       <div class="proof"><span class="dot"></span><span>El corillo ya trabaja <b><?= $nf($negocios) ?></b> negocios · <b><?= $nf($acciones) ?></b> acciones de IA</span></div>
@@ -172,7 +176,7 @@ $nf = fn($n) => number_format($n);
       <label>Contraseña</label>
       <div class="pw">
         <input type="password" name="password" id="pw" required placeholder="Tu contraseña">
-        <button type="button" class="eye" id="eye" aria-label="Mostrar contraseña">👁</button>
+        <button type="button" class="eye" id="eye" aria-label="Mostrar contraseña"><?= ico('eye') ?></button>
       </div>
 
       <button class="go" type="submit">Entrar →</button>
@@ -186,7 +190,7 @@ $nf = fn($n) => number_format($n);
 <script>
   document.getElementById('eye').addEventListener('click', function(){
     var i=document.getElementById('pw'); var show=i.type==='password';
-    i.type=show?'text':'password'; this.textContent=show?'🙈':'👁';
+    i.type=show?'text':'password'; this.classList.toggle('on', show);
   });
 </script>
 </body>
