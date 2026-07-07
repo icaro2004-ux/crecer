@@ -100,7 +100,11 @@ $nf = fn($n) => number_format($n);
   .pcard .pact .sh{font-weight:800;font-size:12.5px;color:var(--tinta);background:var(--crema);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
   .float{position:absolute;left:-26px;background:#fff;border:1px solid var(--line);border-radius:14px;
     padding:9px 12px;box-shadow:0 16px 30px -14px rgba(27,22,34,.4);font-size:12px;font-weight:700;display:flex;align-items:center;gap:8px}
-  .float .o{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:14px;background:color-mix(in srgb,var(--magenta) 14%,#fff)}
+  .float .o{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:14px;background:color-mix(in srgb,var(--magenta) 14%,#fff);color:var(--magenta)}
+  .float .o svg{width:15px;height:15px}
+  .cell .ic svg{width:30px;height:30px;stroke-width:1.8}
+  .hero-cell .ic svg{width:38px;height:38px}
+  .empat .pain svg{width:18px;height:18px;flex:none;color:var(--coral)}
   .float.f1{top:74px;animation:bob 4s ease-in-out infinite}
   .float.f2{bottom:130px;left:auto;right:-22px;animation:bob 4.6s ease-in-out infinite .5s}
   @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
@@ -136,7 +140,7 @@ $nf = fn($n) => number_format($n);
   .bento{display:grid;grid-template-columns:repeat(6,1fr);gap:16px}
   .cell{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:26px;position:relative;overflow:hidden}
   .cell.big{grid-column:span 4}.cell.sm{grid-column:span 2}
-  .cell .ic{font-size:30px}
+  .cell .ic{font-size:30px;color:var(--coral)}
   .cell h3{font-family:'Anton',sans-serif;font-size:24px;text-transform:uppercase;letter-spacing:.02em;margin:12px 0 6px}
   .cell p{font-size:14.5px;color:var(--muted);margin:0;line-height:1.55;max-width:44ch}
   .cell.hero-cell{grid-column:1/-1;background:linear-gradient(135deg,#241633,#0e0a16);color:#fff}
@@ -195,7 +199,7 @@ $nf = fn($n) => number_format($n);
   .empat .k{font-weight:800;letter-spacing:.12em;text-transform:uppercase;font-size:12.5px;color:#ffb27a}
   .empat h2{font-family:'Anton',sans-serif;font-size:clamp(28px,4.4vw,46px);text-transform:uppercase;margin:12px 0 0;line-height:1}
   .empat .pains{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin:26px 0 0}
-  .empat .pain{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.13);border-radius:14px;padding:12px 16px;font-size:14px;color:#efe7ee}
+  .empat .pain{display:inline-flex;align-items:center;gap:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.13);border-radius:14px;padding:12px 16px;font-size:14px;color:#efe7ee}
   .empat .turn{font-family:'Anton',sans-serif;font-size:clamp(22px,3.4vw,36px);text-transform:uppercase;margin-top:30px;color:#fff;letter-spacing:.01em}
   .empat .turn span{color:#ff7a4d}
   /* Voz del agente (el alma del corillo) */
@@ -243,8 +247,8 @@ $nf = fn($n) => number_format($n);
   @keyframes zap{0%{opacity:0}10%{opacity:1}28%{opacity:.35}44%{opacity:.95}100%{opacity:0}}
   /* Trazo de marcador hecho a mano bajo palabras clave (firma boricua) */
   .brush{position:relative}
-  .brush::after{content:"";position:absolute;left:-3%;right:-3%;bottom:-.16em;height:.32em;pointer-events:none;
-    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 18'%3E%3Cpath d='M4 11 C70 3 130 16 186 8 S281 7 296 12' stroke='%23e3683f' stroke-width='6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") center/100% 100% no-repeat}
+  .brush::after{content:"";position:absolute;left:-5%;right:-5%;bottom:-.30em;height:.6em;pointer-events:none;
+    background:url("/crecer/assets/crecer-contenido/headline_brush.png") center/100% 100% no-repeat}
   /* Brillo que cruza los botones (vivo, premium) */
   .btn-primary,.big-cta{position:relative;overflow:hidden}
   .btn-primary::after,.big-cta::after{content:"";position:absolute;top:0;left:-130%;width:55%;height:100%;
@@ -294,7 +298,7 @@ $nf = fn($n) => number_format($n);
 <header class="hero">
   <div class="in wrap">
     <div>
-      <span class="eyebrow">🇵🇷 Pa'l boricua que lo da todo en su negocio</span>
+      <span class="eyebrow">Pa'l boricua que lo da todo en su negocio</span>
       <h1 class="disp">Tú sigues <span class="g">en lo tuyo.</span></h1>
       <p class="sub">Crecer te prepara cada semana los posts de tus redes, en tu propia voz. Tú solo los apruebas desde el celular.</p>
       <div class="actions">
@@ -317,14 +321,14 @@ $nf = fn($n) => number_format($n);
           <div class="pact"><span class="ok" id="demoBtn">✓ Aprobar</span><span class="sh">📲</span></div>
         </div>
       </div>
-      <div class="float f1"><span class="o">✍️</span> La Creativa escribió esto</div>
-      <div class="float f2"><span class="o">🎨</span> El Diseñador montó el arte</div>
+      <div class="float f1"><span class="o"><?= ico('pen') ?></span> La Creativa escribió esto</div>
+      <div class="float f2"><span class="o"><?= ico('palette') ?></span> El Diseñador montó el arte</div>
     </div>
   </div>
 
   <!-- Tira el corillo -->
   <div class="band wrap rv">
-    <div class="lab">No es una app — es tu corillo 🤝</div>
+    <div class="lab">No es una app — es tu corillo</div>
     <div class="agents">
       <div class="ag" style="--c:#7928ff"><div class="ag-in"><div class="o"><?= ico('list') ?></div><h4>El Estratega</h4><p>Planifica el mes</p><div class="q">"Estoy cuadrando el plan pa' que no publiques a lo loco."</div></div></div>
       <div class="ag" style="--c:#ff2d6f"><div class="ag-in"><div class="o"><?= ico('pen') ?></div><h4>La Creativa</h4><p>Escribe los posts</p><div class="q">"Déjame cocinar algo brutal pa' tu marca."</div></div></div>
@@ -340,9 +344,9 @@ $nf = fn($n) => number_format($n);
     <div class="k">Te entendemos, de verdad</div>
     <h2>Sabemos lo que es darlo todo<br>y que el día no alcance.</h2>
     <div class="pains">
-      <span class="pain">😮‍💨 "Sé que tengo que estar en redes… pero ¿cuándo?"</span>
-      <span class="pain">😕 "Lo que subo se ve aficionado."</span>
-      <span class="pain">😩 "Una agencia me sale por un ojo de la cara."</span>
+      <span class="pain"><?= ico('clock') ?> "Sé que tengo que estar en redes… pero ¿cuándo?"</span>
+      <span class="pain"><?= ico('camera') ?> "Lo que subo se ve aficionado."</span>
+      <span class="pain"><?= ico('wallet') ?> "Una agencia me sale por un ojo de la cara."</span>
     </div>
     <div class="turn">Se acabó. Ahora <span>metemos mano contigo.</span></div>
   </div>
@@ -364,14 +368,14 @@ $nf = fn($n) => number_format($n);
   <div class="sec-head"><h2 class="disp">Todo un equipo de marketing, <span class="g">por menos que un almuerzo al día.</span></h2></div>
   <div class="bento">
     <div class="cell hero-cell big">
-      <div class="ic">🗓️</div>
+      <div class="ic"><?= ico('calendar') ?></div>
       <h3>El corillo te prepara la semana</h3>
       <p>Cada semana el corillo te deja listos los posts de tus redes, en tu voz. Te despiertas con el trabajo hecho — tú solo das el OK desde el celular.</p>
       <span class="tagm">Operado por agentes de IA, con evidencia real</span>
     </div>
-    <div class="cell sm"><div class="ic">✍️</div><h3>Voz boricua</h3><p>Captions auténticos, nunca traducidos ni genéricos. La IA aprende cómo hablas tú.</p></div>
-    <div class="cell sm"><div class="ic">🎨</div><h3>Arte premium</h3><p>Tus fotos reales convertidas en gráficas de agencia. El producto siempre real.</p></div>
-    <div class="cell sm"><div class="ic">📲</div><h3>Publica fácil</h3><p>Pasa el post completo a Facebook e Instagram en un solo toque.</p></div>
+    <div class="cell sm"><div class="ic"><?= ico('pen') ?></div><h3>Voz boricua</h3><p>Captions auténticos, nunca traducidos ni genéricos. La IA aprende cómo hablas tú.</p></div>
+    <div class="cell sm"><div class="ic"><?= ico('palette') ?></div><h3>Arte premium</h3><p>Tus fotos reales convertidas en gráficas de agencia. El producto siempre real.</p></div>
+    <div class="cell sm"><div class="ic"><?= ico('share') ?></div><h3>Publica fácil</h3><p>Pasa el post completo a Facebook e Instagram en un solo toque.</p></div>
   </div>
 </section>
 
@@ -408,7 +412,7 @@ $nf = fn($n) => number_format($n);
       <a class="cta" href="/crecer/registro.php?plan=crecer">Activar Crecer</a>
     </div>
   </div>
-  <p class="note">Precio accesible a propósito — hecho para el microempresario boricua 🇵🇷</p>
+  <p class="note">Precio accesible a propósito — hecho para el microempresario boricua.</p>
 </section>
 
 <!-- EVIDENCIA / PRUEBA -->
@@ -427,7 +431,7 @@ $nf = fn($n) => number_format($n);
 <!-- MANIFIESTO -->
 <section class="wrap manif rv">
   <h2 class="disp">Tú no naciste pa' pelear<br>con un <span class="g brush">teléfono.</span></h2>
-  <p>Naciste pa' lo que amas — tu sazón, tu arte, tu gente. Lo demás, déjaselo al corillo. Poco a poco, pero siempre pa'lante. 🇵🇷</p>
+  <p>Naciste pa' lo que amas — tu sazón, tu arte, tu gente. Lo demás, déjaselo al corillo. Poco a poco, pero siempre pa'lante.</p>
 </section>
 
 <!-- CTA FINAL -->
@@ -437,7 +441,7 @@ $nf = fn($n) => number_format($n);
   <p style="color:var(--muted);font-size:14px;margin-top:14px">Gratis · sin tarjeta · en 2 minutos lo tienes corriendo</p>
 </section>
 
-<p class="foot">© Encuéntralo · Crecer — hecho con 🤎 y un poco de 🐸 en <b>Puerto Rico 🇵🇷</b></p>
+<p class="foot">© Encuéntralo · Crecer — hecho con cariño en <b>Puerto Rico</b></p>
 
 <script>
   // Reveal on scroll (suave, premium)
