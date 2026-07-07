@@ -339,6 +339,63 @@ function sugerir_estilo_visual(PDO $pdo, int $marca_id, string $ajuste = ''): st
 }
 
 /**
+ * EL ESTRATEGA: consejero de negocio. Conoce el negocio (perfil + Cerebro) y
+ * aconseja sobre contenido, promociones, crecimiento y modelo de negocio. Tips de
+ * dinero SOLO generales/educativos y con disclaimer (nada de impuestos/Hacienda).
+ */
+function estratega_responder(PDO $pdo, int $marca_id, string $pregunta, array $historial = []): array {
+    $m = leer_marca($pdo, $marca_id);
+    $ctx = marca_contexto($m);
+
+    $sistema = <<<SYS
+Eres EL ESTRATEGA de Crecer: un consultor de negocio y marketing para
+microempresas boricuas (reposterías, comida, servicios, barras, etc.). Conoces
+ESTE negocio y aconsejas para que crezca y venda más.
+
+De qué SÍ hablas (tu fuerte):
+- Contenido y promoción: qué postear, ofertas que jalan, campañas de temporada,
+  fechas boricuas (Navidades, Reyes, Día de Madres, quincena), colaboraciones.
+- Crecimiento y modelo de negocio: combos, servicios nuevos, precios, retención
+  de clientes, upsell, boca a boca, alianzas locales, presencia en WhatsApp/IG.
+- Ideas concretas y accionables para SU tipo de negocio y municipio.
+
+Dinero (con cuidado): puedes dar tips FINANCIEROS GENERALES y educativos (ej.
+separar gastos del negocio, margen, flujo de caja, apartar para reinvertir).
+SIEMPRE con esta advertencia cuando toques dinero: "Ojo: esto son ideas
+generales, no asesoría financiera — para números serios, un contable." NUNCA
+des consejos de impuestos, Hacienda, ni contabilidad específica.
+
+Estilo: boricua cálido y directo, lo tuteas. Práctico y CONCRETO (pasos o una
+lista corta, no discursos). Aterriza todo a SU negocio con lo que sabes de él.
+Si te falta un dato, dilo y pregúntalo. No inventes cifras ni datos del negocio.
+SYS;
+    if (function_exists('tono_instruccion'))   $sistema .= tono_instruccion($m);
+    if (function_exists('memoria_para_prompt')) $sistema .= memoria_para_prompt($pdo, $marca_id);
+
+    // Contexto de desempeño reciente (para aterrizar el consejo).
+    try {
+        $pub = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$marca_id} AND estado='publicado'")->fetchColumn();
+        $ctx .= "\nPosts publicados hasta ahora: {$pub}.";
+    } catch (Throwable $e) {}
+
+    $mensajes = [];
+    foreach ($historial as $h) {
+        $rol = ($h['rol'] ?? '') === 'user' ? 'user' : 'model';
+        $txt = trim((string)($h['texto'] ?? ''));
+        if ($txt !== '') $mensajes[] = ['role' => $rol, 'texto' => $txt];
+    }
+
+    $prompt = "Perfil del negocio:\n{$ctx}\n\nEl dueño pregunta/plantea:\n\"{$pregunta}\"\n\nDale tu consejo de estratega, concreto y aterrizado a su negocio.";
+    $r = ia_ejecutar($pdo, 'estratega', 'Consejo de negocio', $prompt, [
+        'marca_id' => $marca_id, 'sistema' => $sistema,
+        'temperatura' => 0.85, 'max_tokens' => 700, 'thinking_budget' => 0,
+        'historial' => $mensajes,
+        'mock_texto' => "Pa' tu barra, prueba un 'jueves de after-work': combo de 2 tragos de la casa a precio fijo de 5 a 7pm, y lo anuncias el martes por IG y WhatsApp. Aprovecha la quincena. Y saca un 'trago del mes' pa' que la gente vuelva a probar algo nuevo.\n\nOjo: esto son ideas generales, no asesoría financiera — para números serios, un contable.",
+    ]);
+    return ['ok' => true, 'respuesta' => trim((string)$r['texto'])];
+}
+
+/**
  * CEREBRO VISUAL: aprende la línea de diseño de un cliente MIRANDO las imágenes
  * que aprobó/publicó (visión → texto) y actualiza crecer_marca.estilo_visual.
  * Cada cliente aprende la SUYA. Devuelve true si actualizó.
