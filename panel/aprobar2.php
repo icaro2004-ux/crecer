@@ -819,7 +819,7 @@ $cf = [
 
 <?php if ($tab === 'revisar'): ?>
   <div class="factorybar">
-    <div class="fb-lead"><strong>Tú mandas 👉</strong> dile un <b>tema</b>, dale un <b>borrador</b> para que lo pula, o deja que la <b>IA proponga</b> sola.</div>
+    <div class="fb-lead"><strong>Tú mandas:</strong> dile un <b>tema</b>, dale un <b>borrador</b> para que lo pula, o deja que la <b>IA proponga</b> sola.</div>
     <div class="fb-btns">
       <button type="button" class="fbgen" onclick="wizAbrir()"><?= ico('sparkles') ?> Crear un post (guiado)</button>
       <form method="post" onsubmit="var b=this.querySelector('button');b.disabled=true;">
@@ -901,7 +901,7 @@ $cf = [
         <a href="#" class="artbtn" data-id="<?= $p['id'] ?>" style="font-weight:700;color:var(--terracota);text-decoration:none"><?= ico('image') ?> <?= $has_art ? 'Cambiar arte' : 'Crear arte' ?></a>
         <a href="#" class="regenlink" data-id="<?= $p['id'] ?>" style="font-weight:700;color:var(--muted);text-decoration:none"><?= ico('refresh') ?> Regenerar texto</a>
         <?php if ($has_art): ?><a href="#" class="prevlink" data-img="<?= $h($p['grafica_path']) ?>" data-copy="<?= $h($p['caption']) ?>" style="font-weight:700;color:var(--teal);text-decoration:none"><?= ico('eye') ?> Ver en redes</a><?php endif; ?>
-        <a href="#" class="borrarlink" data-id="<?= $p['id'] ?>" style="font-weight:700;color:#b4342a;text-decoration:none;margin-left:auto">🗑 Borrar</a>
+        <a href="#" class="borrarlink" data-id="<?= $p['id'] ?>" style="font-weight:700;color:#b4342a;text-decoration:none;margin-left:auto"><?= ico('trash') ?> Borrar</a>
       </div>
       <form class="editform" data-id="<?= $p['id'] ?>" style="display:none;padding:0 17px 14px">
         <textarea name="caption" style="width:100%;font-family:inherit;font-size:14px;color:var(--tinta);border:1.5px solid var(--line);border-radius:12px;padding:11px 13px;min-height:96px"><?= $h($p['caption']) ?></textarea>
@@ -937,14 +937,14 @@ $cf = [
           <form method="post"><input type="hidden" name="id" value="<?= $p['id'] ?>"><button class="btn btn-ghost" name="accion" value="reabrir">↺ Volver a revisar</button></form>
         <?php elseif ($p['estado']==='fallido'): ?>
           <?php /* Fallido → REINTENTAR */ ?>
-          <button type="button" class="btn btn-ok publicarbtn">🔁 Reintentar</button>
+          <button type="button" class="btn btn-ok publicarbtn"><?= ico('refresh') ?> Reintentar</button>
           <form method="post"><input type="hidden" name="id" value="<?= $p['id'] ?>"><button class="btn btn-ghost" name="accion" value="reabrir">↺ Volver a revisar</button></form>
         <?php else: ?>
           <?php /* Aprobado / programado → PUBLICAR (si hay redes) o CONECTAR REDES */ ?>
           <?php if ($redes_ok): ?>
-            <button type="button" class="btn btn-ok publicarbtn">📲 Publicar</button>
+            <button type="button" class="btn btn-ok publicarbtn"><?= ico('share') ?> Publicar</button>
           <?php else: ?>
-            <a class="btn btn-ok" href="/crecer/panel/conectar.php?marca=<?= $marca_id ?>">🔗 Conectar redes</a>
+            <a class="btn btn-ok" href="/crecer/panel/conectar.php?marca=<?= $marca_id ?>"><?= ico('pin') ?> Conectar redes</a>
             <button type="button" class="btn btn-ghost publicarbtn">Publicar a mano</button>
           <?php endif; ?>
           <form method="post"><input type="hidden" name="id" value="<?= $p['id'] ?>"><button class="btn btn-ghost" name="accion" value="reabrir">↺ Volver a revisar</button></form>
@@ -963,7 +963,7 @@ $cf = [
     <div class="sub">Sugiere el tema, o escribe un borrador y la IA lo pule respetando tu intención. Déjalo todo en blanco y la IA inventa.</div>
     <input type="hidden" name="accion" value="pedir_post">
 
-    <button type="button" id="btn-sugtemas" class="sug-btn"><?= ico('sparkles') ?> 💡 Sugiéreme temas basados en mi negocio</button>
+    <button type="button" id="btn-sugtemas" class="sug-btn"><?= ico('sparkles') ?> Sugiéreme temas basados en mi negocio</button>
     <div id="sugtemas" class="sug-list"></div>
 
     <label class="fl">¿De qué quieres el post? <span style="color:var(--muted);font-weight:500">(opcional — o toca una idea de arriba)</span></label>
@@ -1171,8 +1171,8 @@ $cf = [
       return '<span class="btn btn-ghost" style="pointer-events:none;opacity:.75">✓ Publicado</span>' + reabrir;
     // aprobado / programado → Publicar (si hay redes) o Conectar redes
     var pub = REDES_OK
-      ? '<button type="button" class="btn btn-ok publicarbtn">📲 Publicar</button>'
-      : '<a class="btn btn-ok" href="/crecer/panel/conectar.php?marca=<?= $marca_id ?>">🔗 Conectar redes</a><button type="button" class="btn btn-ghost publicarbtn">Publicar a mano</button>';
+      ? '<button type="button" class="btn btn-ok publicarbtn"><?= ico('share') ?> Publicar</button>'
+      : '<a class="btn btn-ok" href="/crecer/panel/conectar.php?marca=<?= $marca_id ?>"><?= ico('pin') ?> Conectar redes</a><button type="button" class="btn btn-ghost publicarbtn">Publicar a mano</button>';
     return pub + reabrir;
   }
   var feed = document.querySelector('.feedwrap');
@@ -1829,42 +1829,42 @@ $cf = [
     <div class="wiz-pane" data-pane="1">
       <h3>¿De qué hacemos el post?</h3>
       <p class="wiz-sub">Toca una idea o escribe la tuya. Yo escribo el caption en tu voz.</p>
-      <div class="wiz-swipe-hint" id="wiz-hint">Desliza para ver más ideas 👉</div>
+      <div class="wiz-swipe-hint" id="wiz-hint">Desliza para ver más ideas →</div>
       <div id="wiz-ideas"></div>
-      <button type="button" id="wiz-mas" class="sug-btn">💡 Dame otras ideas</button>
+      <button type="button" id="wiz-mas" class="sug-btn"><?= ico('lightbulb') ?> Dame otras ideas</button>
       <label class="fl">O escribe tu propia idea</label>
       <textarea id="wiz-tema" rows="2" placeholder="Ej: promo del bizcocho de guayaba para el Día de las Madres"></textarea>
       <button type="button" class="art-go" id="wiz-crear">Crear el post →</button>
     </div>
 
     <div class="wiz-pane" data-pane="2" style="display:none">
-      <h3>Ahora el arte 🎨</h3>
+      <h3>Ahora el arte</h3>
       <div class="wiz-cap" id="wiz-cap"></div>
-      <a href="#" class="wiz-editlink" id="wiz-edit">✏️ Corregir el texto a mano</a>
+      <a href="#" class="wiz-editlink" id="wiz-edit"><?= ico('edit') ?> Corregir el texto a mano</a>
       <div class="wiz-editbox" id="wiz-editbox" style="display:none">
         <textarea id="wiz-capedit" rows="5"></textarea>
         <div style="display:flex;gap:8px;margin-top:8px">
           <button type="button" class="art-go wiz-ok" id="wiz-capsave" style="margin-top:0;flex:1">Guardar</button>
           <button type="button" class="fbnew" id="wiz-capcancel">Cancelar</button>
         </div>
-        <div class="art-note">Si cambias una palabra o el tono, la IA aprende tu preferencia para los próximos posts. 🧠</div>
+        <div class="art-note">Si cambias una palabra o el tono, la IA aprende tu preferencia para los próximos posts.</div>
       </div>
-      <label class="fl" style="margin-top:4px">💡 Idea para la imagen <span style="color:var(--muted);font-weight:500">(el Diseñador la propone — ajústala a tu gusto)</span></label>
+      <label class="fl" style="margin-top:4px"><?= ico('lightbulb') ?> Idea para la imagen <span style="color:var(--muted);font-weight:500">(el Diseñador la propone — ajústala a tu gusto)</span></label>
       <textarea id="wiz-arteidea" rows="3" placeholder="El Diseñador está pensando la idea…"></textarea>
-      <button type="button" class="fbnew" id="wiz-arte-sug" style="width:100%;margin:8px 0 4px">🔄 Sugiéreme otra idea</button>
+      <button type="button" class="fbnew" id="wiz-arte-sug" style="width:100%;margin:8px 0 4px"><?= ico('refresh') ?> Sugiéreme otra idea</button>
       <div class="wiz-art" id="wiz-art"></div>
       <div class="wiz-artbtns">
-        <button type="button" class="art-go" id="wiz-gen">🎨 Generar la imagen con esta idea</button>
-        <label class="fbnew wiz-upl">📷 Subir mi foto<input type="file" id="wiz-file" accept="image/png,image/jpeg,image/webp" style="display:none"></label>
+        <button type="button" class="art-go" id="wiz-gen"><?= ico('palette') ?> Generar la imagen con esta idea</button>
+        <label class="fbnew wiz-upl"><?= ico('camera') ?> Subir mi foto<input type="file" id="wiz-file" accept="image/png,image/jpeg,image/webp" style="display:none"></label>
       </div>
       <button type="button" class="art-go wiz-ok" id="wiz-next2" style="display:none">Usar este arte →</button>
       <button type="button" class="art-skip" id="wiz-back2">← Volver a la idea</button>
     </div>
 
     <div class="wiz-pane" data-pane="3" style="display:none">
-      <h3>¡Listo para publicar! 🚀</h3>
+      <h3>¡Listo para publicar!</h3>
       <div class="wiz-prev" id="wiz-prev"></div>
-      <button type="button" class="art-go" id="wiz-pub">📲 Publicar ahora</button>
+      <button type="button" class="art-go" id="wiz-pub"><?= ico('share') ?> Publicar ahora</button>
       <button type="button" class="art-skip" id="wiz-later">Guardar para después</button>
       <button type="button" class="art-skip" id="wiz-back3">← Volver al arte</button>
     </div>
