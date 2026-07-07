@@ -93,6 +93,13 @@ function gemini_generar(string $prompt, array $opts = []): array {
             'data'     => $opts['audio']['data'],   // base64
         ]];
     }
+    // Imágenes de entrada (visión → texto): ej. aprender la línea de diseño de las
+    // gráficas que el cliente aprobó.
+    if (!empty($opts['imagenes']) && is_array($opts['imagenes'])) {
+        foreach ($opts['imagenes'] as $im) {
+            if (!empty($im['data'])) $parts[] = ['inlineData' => ['mimeType' => $im['mime'] ?? 'image/jpeg', 'data' => $im['data']]];
+        }
+    }
     $payload = [
         'contents' => [[
             'role'  => 'user',

@@ -369,6 +369,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'listos'=>$c['aprobado']+$c['programado']+$c['fallido'],
             'biblioteca'=>$c['publicado'],
             'pend'=>$c['borrador'], 'aprob'=>$c['aprobado']+$c['publicado']]);   // aliases legacy
+        // CEREBRO VISUAL: al aprobar un post CON arte, la IA refina la línea de
+        // diseño de este cliente mirando sus imágenes aprobadas. En background
+        // (no traba la respuesta) y con freno de costo (temprano seguido; luego
+        // cada 3 aprobaciones).
+        if ($accion === 'aprobar' && function_exists('aprender_estilo_visual')) {
+            $tiene_arte = (bool)$pdo->query("SELECT 1 FROM crecer_contenido WHERE id=".(int)$id." AND grafica_path IS NOT NULL AND grafica_path<>''")->fetchColumn();
+            if ($tiene_arte) {
+                $na = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$marca_id} AND grafica_path IS NOT NULL AND grafica_path<>'' AND estado IN ('aprobado','programado','publicado')")->fetchColumn();
+                if ($na >= 2 && ($na <= 4 || $na % 3 === 0)) {
+                    if (function_exists('fastcgi_finish_request')) { fastcgi_finish_request(); }
+                    try { aprender_estilo_visual($pdo, $marca_id); } catch (Throwable $e) {}
+                }
+            }
+        }
         exit;
     }
     header('Location: ' . $_SERVER['REQUEST_URI']); exit;

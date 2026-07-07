@@ -338,6 +338,55 @@ function sugerir_estilo_visual(PDO $pdo, int $marca_id, string $ajuste = ''): st
     return trim((string)$r['texto']);
 }
 
+/**
+ * CEREBRO VISUAL: aprende la línea de diseño de un cliente MIRANDO las imágenes
+ * que aprobó/publicó (visión → texto) y actualiza crecer_marca.estilo_visual.
+ * Cada cliente aprende la SUYA. Devuelve true si actualizó.
+ */
+function aprender_estilo_visual(PDO $pdo, int $marca_id): bool {
+    $q = $pdo->prepare(
+        "SELECT grafica_path FROM crecer_contenido
+          WHERE marca_id=? AND grafica_path IS NOT NULL AND grafica_path<>''
+            AND estado IN ('aprobado','programado','publicado')
+          ORDER BY id DESC LIMIT 5");
+    $q->execute([$marca_id]);
+    $paths = $q->fetchAll(PDO::FETCH_COLUMN);
+
+    $imagenes = [];
+    $url_pref = rtrim(UPLOADS_URL, '/');
+    foreach ($paths as $p) {
+        $rel = (strpos((string)$p, $url_pref) === 0) ? substr((string)$p, strlen($url_pref)) : (string)$p;
+        $rel = ltrim(str_replace('\\', '/', $rel), '/');
+        $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+        if (is_file($abs) && ($data = @file_get_contents($abs)) !== false) {
+            $mime = (function_exists('mime_content_type') ? @mime_content_type($abs) : null) ?: 'image/jpeg';
+            $imagenes[] = ['data' => base64_encode($data), 'mime' => $mime];
+        }
+    }
+    if (count($imagenes) < 2) return false;   // aún no hay suficiente señal
+
+    $m = leer_marca($pdo, $marca_id);
+    $ctx = marca_contexto($m);
+    $sistema = "Eres el DIRECTOR DE ARTE de Crecer. Te muestro varias imágenes que ESTE negocio "
+        . "boricua APROBÓ para sus redes. Deduce su LÍNEA DE DISEÑO común: el estilo visual que se "
+        . "repite y que hay que MANTENER en los próximos posts. Devuelve 2-3 frases en español "
+        . "sencillo (sin jerga, sin la palabra \"prompt\", sin saludar) con: paleta de colores, "
+        . "mood/vibra, tipo de fotografía o ilustración, fondos y composición. Solo la descripción.";
+    $prompt = "Perfil del negocio:\n{$ctx}\n\nMira las imágenes aprobadas y describe la línea de diseño que comparten.";
+    try {
+        $r = ia_ejecutar($pdo, 'diseñador', 'Aprender línea de diseño (visión)', $prompt, [
+            'marca_id' => $marca_id, 'sistema' => $sistema, 'imagenes' => $imagenes,
+            'temperatura' => 0.5, 'max_tokens' => 300, 'thinking_budget' => 0,
+        ]);
+        $linea = trim((string)($r['texto'] ?? ''));
+        if ($linea !== '') {
+            $pdo->prepare("UPDATE crecer_marca SET estilo_visual=? WHERE id=?")->execute([$linea, $marca_id]);
+            return true;
+        }
+    } catch (Throwable $e) { error_log('aprender_estilo_visual: ' . $e->getMessage()); }
+    return false;
+}
+
 function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts = []): array {
     $m = leer_marca($pdo, $marca_id);
     $copy      = trim($opts['copy'] ?? '');         // el texto del post (coherencia)
