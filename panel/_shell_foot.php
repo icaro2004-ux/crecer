@@ -18,7 +18,7 @@
 </button>
 <div class="asis-panel" id="asisPanel" aria-hidden="true">
   <div class="asis-head">
-    <span class="asis-orb">💬</span>
+    <span class="asis-orb"><?= ico('chat') ?></span>
     <div><div class="asis-t">El corillo</div><div class="asis-i">Pregúntame lo que sea de la app</div></div>
     <button class="asis-x" id="asisX" aria-label="Cerrar">✕</button>
   </div>

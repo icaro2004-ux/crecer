@@ -237,7 +237,7 @@ $nodos = ['Negocio','Contenido','Tu OK','Publicado'];
 </div>
 
 <?php if ($obs): ?>
-<div class="ix-obs">💡 <?= $h($obs) ?></div>
+<div class="ix-obs"><?= ico('lightbulb') ?> <?= $h($obs) ?></div>
 <?php endif; ?>
 
 <?php if ($proximos): ?>

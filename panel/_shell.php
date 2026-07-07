@@ -69,12 +69,12 @@ $nav_perfil = [
               <option value="<?= $mn['id'] ?>" <?= $mn['id']==$marca_id?'selected':'' ?>><?= $h($mn['nombre_negocio']) ?></option>
             <?php endforeach; ?>
           </select>
-          <?php if ($plan): ?><div class="tag">🌿 <?= $h($plan_etq) ?> · cambia negocio ↑</div>
-          <?php else: ?><div class="tag"><a href="<?= $BASE ?>/precios.php?marca=<?= $marca_id ?>" style="color:#0d7a44;font-weight:700;text-decoration:none">⚡ Activar plan</a> · cambia negocio ↑</div><?php endif; ?>
+          <?php if ($plan): ?><div class="tag"><?= ico('leaf') ?> <?= $h($plan_etq) ?> · cambia negocio ↑</div>
+          <?php else: ?><div class="tag"><a href="<?= $BASE ?>/precios.php?marca=<?= $marca_id ?>" style="color:#0d7a44;font-weight:700;text-decoration:none"><?= ico('bolt') ?> Activar plan</a> · cambia negocio ↑</div><?php endif; ?>
         <?php else: ?>
           <div class="nm"><?= $h($marca['nombre_negocio']) ?></div>
-          <?php if ($plan): ?><div class="tag">🌿 <?= $h($plan_etq) ?></div>
-          <?php else: ?><div class="tag"><a href="<?= $BASE ?>/precios.php?marca=<?= $marca_id ?>" style="color:#0d7a44;font-weight:700;text-decoration:none">⚡ Activar plan</a></div><?php endif; ?>
+          <?php if ($plan): ?><div class="tag"><?= ico('leaf') ?> <?= $h($plan_etq) ?></div>
+          <?php else: ?><div class="tag"><a href="<?= $BASE ?>/precios.php?marca=<?= $marca_id ?>" style="color:#0d7a44;font-weight:700;text-decoration:none"><?= ico('bolt') ?> Activar plan</a></div><?php endif; ?>
         <?php endif; ?>
       </div>
     </div>
@@ -86,9 +86,9 @@ $nav_perfil = [
       <?php endforeach; ?>
     </nav>
     <?php if ($es_admin): ?>
-      <a href="<?= $BASE ?>/admin.php" style="display:flex;align-items:center;gap:10px;padding:10px 12px;margin-top:6px;border-radius:12px;text-decoration:none;color:#fff;background:var(--tinta);font-weight:800;font-size:13.5px">⚙️ Centro de Operaciones</a>
+      <a href="<?= $BASE ?>/admin.php" style="display:flex;align-items:center;gap:10px;padding:10px 12px;margin-top:6px;border-radius:12px;text-decoration:none;color:#fff;background:var(--tinta);font-weight:800;font-size:13.5px"><?= ico('settings') ?> Centro de Operaciones</a>
     <?php endif; ?>
-    <a href="/crecer/logout.php" style="display:flex;align-items:center;gap:10px;padding:9px 12px;margin-top:6px;border-radius:12px;text-decoration:none;color:var(--muted);font-weight:600;font-size:13.5px"><span class="ic">🚪</span> Salir</a>
+    <a href="/crecer/logout.php" style="display:flex;align-items:center;gap:10px;padding:9px 12px;margin-top:6px;border-radius:12px;text-decoration:none;color:var(--muted);font-weight:600;font-size:13.5px">Salir</a>
   </aside>
   <div class="backdrop" id="bd"></div>
 
@@ -105,11 +105,11 @@ $nav_perfil = [
     </div>
     <div class="content">
     <?php if (function_exists('activacion_de_prueba') && activacion_de_prueba($u_actual['email'] ?? null)): ?>
-      <div style="background:#fff4d6;border:1px solid #f2d488;color:#8a5a00;border-radius:10px;padding:8px 13px;margin-bottom:14px;font-size:12.5px;font-weight:700">🧪 MODO PRUEBA — esta cuenta activa sin cobro (Stripe en bypass).</div>
+      <div style="background:#fff4d6;border:1px solid #f2d488;color:#8a5a00;border-radius:10px;padding:8px 13px;margin-bottom:14px;font-size:12.5px;font-weight:700">MODO PRUEBA — esta cuenta activa sin cobro (Stripe en bypass).</div>
     <?php endif; ?>
     <?php if (!empty($viendo_como_admin)): ?>
       <div style="background:#140a16;color:#fff;padding:11px 16px;border-radius:12px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13.5px">
-        👁 Estás viendo como <b>admin</b> el negocio de <b><?= $h($marca['nombre_negocio']) ?></b>
+        <?= ico('eye') ?> Estás viendo como <b>admin</b> el negocio de <b><?= $h($marca['nombre_negocio']) ?></b>
         <a href="<?= $BASE ?>/admin.php" style="margin-left:auto;color:#ffcaa8;font-weight:800;text-decoration:none">← Volver a Operaciones</a>
       </div>
     <?php endif; ?>
