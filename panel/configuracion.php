@@ -131,10 +131,10 @@ $page_title = 'Configuración';
 require __DIR__ . '/_shell.php';
 
 $tabs = [
-  'negocio' => ['🏪','Mi negocio'],
-  'redes'   => ['🔗','Redes'],
-  'plan'    => ['💳','Mi plan'],
-  'cuenta'  => ['👤','Mi cuenta'],
+  'negocio' => [ico('home'),'Mi negocio'],
+  'redes'   => [ico('pin'),'Redes'],
+  'plan'    => [ico('wallet'),'Mi plan'],
+  'cuenta'  => [ico('users'),'Mi cuenta'],
 ];
 $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
 ?>
@@ -175,15 +175,15 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
     <?php endforeach; ?>
   </div>
 
-  <?php if ($ok): ?><div class="cfg-msg ok">✅ Guardado.</div><?php endif; ?>
-  <?php if ($okpass): ?><div class="cfg-msg ok">✅ Contraseña actualizada.</div><?php endif; ?>
+  <?php if ($ok): ?><div class="cfg-msg ok"><?= ico('check-circle') ?>Guardado.</div><?php endif; ?>
+  <?php if ($okpass): ?><div class="cfg-msg ok"><?= ico('check-circle') ?>Contraseña actualizada.</div><?php endif; ?>
   <?php if ($error): ?><div class="cfg-msg err">⚠️ <?= $h($error) ?></div><?php endif; ?>
 
   <?php if ($tab === 'negocio'): ?>
     <form method="post" action="<?= $turl('negocio') ?>">
       <?= csrf_field() ?><input type="hidden" name="accion" value="negocio">
       <div class="cfg-card">
-        <h2>El cerebro de tu corillo 🧠</h2>
+        <h2>El cerebro de tu corillo <?= ico('lightbulb') ?></h2>
         <p class="sub">Mientras mejor describas tu negocio aquí, mejor sale TODO lo que la IA escribe y diseña para ti. Edítalo cuando quieras.</p>
 
         <label>Nombre del negocio</label>
@@ -239,7 +239,7 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
     <form method="post" action="<?= $turl('negocio') ?>">
       <?= csrf_field() ?><input type="hidden" name="accion" value="autopilot">
       <div class="cfg-card" style="border-color:color-mix(in srgb,var(--terracota) 30%,#fff)">
-        <h2>🌙 Piloto automático</h2>
+        <h2><?= ico('refresh') ?> Piloto automático</h2>
         <p class="sub">Deja que el corillo te prepare posts <b>solo</b>, cada semana, sin que tengas que pedírselo. Te los deja como borradores listos para que apruebes — tú siempre tienes la última palabra.</p>
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin:0">
           <input type="checkbox" name="autopilot" value="1" <?= !empty($m['autopilot'])?'checked':'' ?> style="width:20px;height:20px">
@@ -258,12 +258,12 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
 
   <?php elseif ($tab === 'redes'): ?>
     <div class="cfg-card">
-      <h2>Tus redes 🔗</h2>
+      <h2>Tus redes <?= ico('pin') ?></h2>
       <p class="sub">Conecta Instagram y Facebook para que el corillo publique solo los posts que tú aprobaste.</p>
       <?php if ($conx && $conx['estado']==='activa'): ?>
-        <p>🟢 Conectado:
-          <?php if ($conx['ig_username']): ?><span class="cfg-pill">📸 @<?= $h($conx['ig_username']) ?></span><?php endif; ?>
-          <?php if ($conx['fb_page_nombre']): ?><span class="cfg-pill">👍 <?= $h($conx['fb_page_nombre']) ?></span><?php endif; ?>
+        <p><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--palma);vertical-align:middle;margin-right:5px"></span> Conectado:
+          <?php if ($conx['ig_username']): ?><span class="cfg-pill"><?= ico('instagram') ?> @<?= $h($conx['ig_username']) ?></span><?php endif; ?>
+          <?php if ($conx['fb_page_nombre']): ?><span class="cfg-pill"><?= ico('facebook') ?> <?= $h($conx['fb_page_nombre']) ?></span><?php endif; ?>
         </p>
         <a class="cfg-link" style="background:#1877F2;margin-top:14px" href="<?= $BASE ?>/conectar.php?marca=<?= $marca_id ?>">Gestionar redes →</a>
       <?php else: ?>
@@ -274,9 +274,9 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
 
   <?php elseif ($tab === 'plan'): ?>
     <div class="cfg-card">
-      <h2>Tu plan 💳</h2>
+      <h2>Tu plan <?= ico('wallet') ?></h2>
       <p class="sub">Tu suscripción y facturación.</p>
-      <p style="margin:0 0 16px"><span class="cfg-pill">🌿 <?= $h($plan_etq) ?></span></p>
+      <p style="margin:0 0 16px"><span class="cfg-pill"><?= ico('leaf') ?> <?= $h($plan_etq) ?></span></p>
       <?php if ($susc && !empty($susc['stripe_customer_id'])): ?>
         <a class="cfg-link" style="background:var(--tinta)" href="<?= $BASE ?>/portal.php?marca=<?= $marca_id ?>">Gestionar o cancelar →</a>
         <div class="cfg-hint" style="margin-top:10px">Te lleva al portal seguro de Stripe (cambiar tarjeta, ver facturas, cancelar).</div>
@@ -289,7 +289,7 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
     <form method="post" action="<?= $turl('cuenta') ?>">
       <?= csrf_field() ?><input type="hidden" name="accion" value="cuenta_datos">
       <div class="cfg-card">
-        <h2>Tus datos 👤</h2>
+        <h2>Tus datos <?= ico('users') ?></h2>
         <p class="sub">Tu nombre y correo de acceso.</p>
         <label>Nombre</label>
         <input type="text" name="nombre" value="<?= $h($usuario['nombre']) ?>" maxlength="100">
@@ -302,7 +302,7 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
     <form method="post" action="<?= $turl('cuenta') ?>">
       <?= csrf_field() ?><input type="hidden" name="accion" value="cuenta_pass">
       <div class="cfg-card">
-        <h2>Cambiar contraseña 🔒</h2>
+        <h2>Cambiar contraseña <?= ico('lock') ?></h2>
         <label>Contraseña actual</label>
         <input type="password" name="actual" autocomplete="current-password">
         <div class="cfg-row">
