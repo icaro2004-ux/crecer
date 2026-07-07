@@ -272,4 +272,87 @@ $nodos = ['Negocio','Contenido','Tu OK','Publicado'];
   <a class="more" href="<?= $BASE ?>/actividad.php?marca=<?= $marca_id ?>">Ver más actividad →</a>
 </div>
 
+<?php
+// ── Mascota flotante: EL ESTRATEGA (solo en Inicio) — te recibe y conversa ──
+$estr_img = '/crecer/assets/crecer-contenido/creativa_character_clean.png'; // placeholder; cambiar por la mascota del Estratega
+$negocio  = $marca['nombre_negocio'] ?? 'mi gente';
+?>
+<div class="estr" id="estr">
+  <div class="estr-bubble" id="estrBubble">
+    <button class="estr-x" id="estrBx" aria-label="Cerrar">&times;</button>
+    <div class="estr-msgs" id="estrMsgs">
+      <div class="estr-m ia">¡Wepa, <?= $h($negocio) ?>! Soy <b>El Estratega</b>. ¿Buscas más clientes, una promo que jale o una idea nueva? Cuéntame y te tiro un plan.</div>
+    </div>
+    <div class="estr-chips" id="estrChips">
+      <button type="button">Una promo para este mes</button>
+      <button type="button">Cómo consigo más clientes</button>
+    </div>
+    <form class="estr-form" id="estrForm" autocomplete="off">
+      <input type="text" id="estrInput" placeholder="Pregúntale al Estratega…" maxlength="1000">
+      <button type="submit" aria-label="Enviar"><?= ico('send') ?></button>
+    </form>
+    <a class="estr-full" href="<?= $BASE ?>/estratega.php?marca=<?= $marca_id ?>">Abrir el chat completo →</a>
+  </div>
+  <button class="estr-face" id="estrFace" aria-label="Habla con El Estratega">
+    <img src="<?= $estr_img ?>" alt="El Estratega">
+    <span class="estr-ping"></span>
+  </button>
+</div>
+<style>
+  .estr{position:fixed;left:16px;bottom:82px;z-index:118;display:flex;flex-direction:column;align-items:flex-start;gap:10px}
+  .estr-face{position:relative;width:66px;height:66px;border-radius:50%;border:0;cursor:pointer;padding:0;background:linear-gradient(135deg,var(--coral),var(--magenta));box-shadow:0 12px 28px -8px rgba(192,57,95,.55);overflow:visible}
+  .estr-face img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+  .estr-face .estr-ping{position:absolute;top:-2px;right:-2px;width:14px;height:14px;border-radius:50%;background:var(--palma);border:2px solid #fff;animation:estrping 1.8s ease-out infinite}
+  @keyframes estrping{0%{box-shadow:0 0 0 0 rgba(22,184,106,.5)}70%{box-shadow:0 0 0 8px rgba(22,184,106,0)}100%{box-shadow:0 0 0 0 rgba(22,184,106,0)}}
+  .estr-bubble{display:none;width:min(320px,86vw);background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 24px 60px -18px rgba(27,22,34,.4);padding:14px 14px 12px;position:relative}
+  .estr-bubble.show{display:block;animation:estrpop .22s ease-out}
+  @keyframes estrpop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+  .estr-x{position:absolute;top:8px;right:9px;background:0;border:0;font-size:18px;color:var(--muted);cursor:pointer;line-height:1}
+  .estr-msgs{display:flex;flex-direction:column;gap:8px;max-height:230px;overflow-y:auto;margin-bottom:10px;padding-right:2px}
+  .estr-m{font-size:13.5px;line-height:1.5;padding:9px 11px;border-radius:12px;white-space:pre-wrap;word-wrap:break-word}
+  .estr-m.ia{background:var(--crema);border:1px solid var(--line);color:var(--tinta);align-self:flex-start;border-bottom-left-radius:4px}
+  .estr-m.user{background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;align-self:flex-end;border-bottom-right-radius:4px}
+  .estr-m.load{color:var(--muted);font-style:italic;background:var(--crema);border:1px solid var(--line);align-self:flex-start}
+  .estr-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}
+  .estr-chips button{border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-family:inherit;font-weight:700;font-size:11.5px;padding:6px 10px;border-radius:99px;cursor:pointer}
+  .estr-chips button:hover{border-color:var(--terracota)}
+  .estr-form{display:flex;gap:7px}
+  .estr-form input{flex:1;font-family:inherit;font-size:13.5px;border:1.5px solid var(--line);border-radius:11px;padding:9px 11px}
+  .estr-form button{border:0;cursor:pointer;background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;width:40px;border-radius:11px;display:grid;place-items:center}
+  .estr-form button svg{width:17px;height:17px}
+  .estr-full{display:block;text-align:center;font-size:12px;font-weight:700;color:var(--terracota);text-decoration:none;margin-top:9px}
+  @media(max-width:760px){.estr{bottom:80px}}
+</style>
+<script>
+(function(){
+  var CSRF=<?= json_encode(csrf_token()) ?>, MARCA=<?= (int)$marca_id ?>;
+  var wrap=document.getElementById('estr'), face=document.getElementById('estrFace'),
+      bubble=document.getElementById('estrBubble'), bx=document.getElementById('estrBx'),
+      msgs=document.getElementById('estrMsgs'), form=document.getElementById('estrForm'),
+      input=document.getElementById('estrInput'), chips=document.getElementById('estrChips');
+  var hist=[], busy=false, abierto=false;
+  function open(o){ abierto=o; bubble.classList.toggle('show',o); if(o) setTimeout(function(){input.focus();},60); }
+  face.addEventListener('click', function(){ open(!abierto); });
+  bx.addEventListener('click', function(e){ e.stopPropagation(); open(false); });
+  // Saludo automático la primera vez de la sesión (te "recibe").
+  try{ if(!sessionStorage.getItem('estr_hi')){ setTimeout(function(){ open(true); sessionStorage.setItem('estr_hi','1'); }, 900); } }catch(e){}
+  function bubbleMsg(t,cls){ var d=document.createElement('div'); d.className='estr-m '+cls; d.textContent=t; msgs.appendChild(d); msgs.scrollTop=msgs.scrollHeight; return d; }
+  function preguntar(q){
+    if(busy||!q.trim()) return;
+    if(chips) chips.style.display='none';
+    bubbleMsg(q,'user'); hist.push({rol:'user',texto:q}); input.value='';
+    busy=true; var load=bubbleMsg('Pensando…','load');
+    var fd=new FormData(); fd.append('csrf',CSRF); fd.append('pregunta',q); fd.append('historial',JSON.stringify(hist.slice(-8)));
+    fetch('<?= $BASE ?>/estratega.php?marca='+MARCA,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+      load.remove();
+      var t=d.ok?d.respuesta:('No pude responder ahora. '+(d.err||''));
+      bubbleMsg(t,'ia'); if(d.ok) hist.push({rol:'ia',texto:d.respuesta});
+    }).catch(function(){ load.remove(); bubbleMsg('Se cayó la conexión. Intenta otra vez.','ia'); })
+      .finally(function(){ busy=false; input.focus(); });
+  }
+  form.addEventListener('submit', function(e){ e.preventDefault(); preguntar(input.value); });
+  if(chips) chips.addEventListener('click', function(e){ var b=e.target.closest('button'); if(b) preguntar(b.textContent); });
+})();
+</script>
+
 <?php require __DIR__ . '/_shell_foot.php'; ?>
