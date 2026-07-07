@@ -1042,8 +1042,8 @@ $cf = [
     </div>
 
     <label class="fl" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-      <span>✍️ Qué va a mostrar el arte <span style="color:var(--muted);font-weight:500">(el Diseñador lo sugiere — cámbialo en tus palabras)</span></span>
-      <button type="button" id="art-sug" class="fbnew" style="white-space:nowrap;font-size:12px;padding:6px 10px">✨ Sugerir otra</button>
+      <span><?= ico("pen") ?> Qué va a mostrar el arte <span style="color:var(--muted);font-weight:500">(el Diseñador lo sugiere — cámbialo en tus palabras)</span></span>
+      <button type="button" id="art-sug" class="fbnew" style="white-space:nowrap;font-size:12px;padding:6px 10px"><?= ico("sparkles") ?> Sugerir otra</button>
     </label>
     <textarea name="instrucciones" id="art-instr" rows="3" placeholder='El Diseñador te propone una idea aquí cuando abres el arte… o escríbela tú: "bizcocho sobre mesa de madera, luz cálida".'></textarea>
 
@@ -1061,7 +1061,7 @@ $cf = [
     <div id="art-postnote" style="font-size:12px;font-weight:700;margin-top:14px;text-align:center"></div>
     <button type="submit" class="art-go" id="art-go">Crear el arte (~15s)</button>
     <a href="#" class="art-skip" id="art-skip" style="display:none">Aprobar solo con el texto (sin imagen) →</a>
-    <div class="art-note">📅 Te quedan <b id="art-rest" style="color:var(--terracota)"><?= $restantes_sem ?></b> de <?= CRECER_IMG_SEMANA ?> generaciones esta semana<?php if($reset_fecha): ?> · se recargan el <span id="art-reset"><?= $h($reset_fecha) ?></span><?php endif; ?>. Con texto = modelo Pro.</div>
+    <div class="art-note"><?= ico("calendar") ?> Te quedan <b id="art-rest" style="color:var(--terracota)"><?= $restantes_sem ?></b> de <?= CRECER_IMG_SEMANA ?> generaciones esta semana<?php if($reset_fecha): ?> · se recargan el <span id="art-reset"><?= $h($reset_fecha) ?></span><?php endif; ?>. Con texto = modelo Pro.</div>
 
     <div class="art-divider"><span>o usa lo tuyo</span></div>
     <label class="fl" style="margin-top:0;display:inline-flex;align-items:center;gap:6px"><?= ico('paperclip') ?> Subir mi propia imagen tal cual <span style="color:var(--muted);font-weight:500">(sin IA, sin gastar límite)</span></label>
@@ -1095,15 +1095,15 @@ $cf = [
     </div>
     <div class="prev-actions">
       <button type="button" class="pa" onclick="copiarCopy()"><?= ico('copy') ?> Copiar copy</button>
-      <a class="pa" id="pa-dl" href="" download>⬇ Descargar imagen</a>
+      <a class="pa" id="pa-dl" href="" download><?= ico("download") ?> Descargar imagen</a>
     </div>
     <?php if ($redes_ok): ?>
     <div class="prev-pub">
-      <div class="prev-pub-h">📲 Publicar ahora a tus redes conectadas</div>
+      <div class="prev-pub-h"><?= ico("share") ?> Publicar ahora a tus redes conectadas</div>
       <div class="prev-pub-btns">
         <button type="button" class="ppub" onclick="publicarPrev('instagram',this)"><?= ico('instagram') ?> Instagram</button>
         <button type="button" class="ppub" onclick="publicarPrev('facebook',this)"><?= ico('facebook') ?> Facebook</button>
-        <button type="button" class="ppub both" onclick="publicarPrev('instagram,facebook',this)">✨ Ambas</button>
+        <button type="button" class="ppub both" onclick="publicarPrev('instagram,facebook',this)"><?= ico("sparkles") ?> Ambas</button>
       </div>
     </div>
     <div class="prev-note">Se publica en la Página/IG que conectaste. Instagram necesita imagen (este post la tiene).</div>
@@ -1118,14 +1118,14 @@ $cf = [
 <div class="art-ov" id="pubov">
   <div class="art-box" style="max-width:440px">
     <button type="button" class="x" onclick="document.getElementById('pubov').classList.remove('show')">✕</button>
-    <h3>📲 Publicar tu post</h3>
+    <h3><?= ico("share") ?> Publicar tu post</h3>
     <div class="sub" id="pub-modo-sub">Pásalo a tus redes.</div>
     <img id="pub-img" src="" alt="" style="width:100%;border-radius:14px;margin:12px 0;display:none">
     <div id="pub-cap" style="font-size:13.5px;line-height:1.45;white-space:pre-wrap;background:var(--crema);border:1px solid var(--line);border-radius:12px;padding:11px 13px;max-height:140px;overflow:auto"></div>
 
     <!-- MÓVIL: un toque -->
     <div id="pub-movil" style="display:none">
-      <button type="button" id="pub-share" class="art-go" style="margin-top:14px">📲 Compartir a mis redes</button>
+      <button type="button" id="pub-share" class="art-go" style="margin-top:14px"><?= ico("share") ?> Compartir a mis redes</button>
       <div class="art-note">Un toque y escoges Facebook, Instagram o WhatsApp.</div>
     </div>
 
@@ -1138,11 +1138,11 @@ $cf = [
       <ol style="margin:0;padding-left:22px;font-size:13.5px;line-height:1.5;color:var(--tinta)">
         <li style="margin-bottom:12px">
           <b>Descarga la imagen</b><br>
-          <a id="pub-dl" href="" download class="fbnew" style="display:inline-block;margin-top:6px;text-decoration:none">⬇ Descargar imagen</a>
+          <a id="pub-dl" href="" download class="fbnew" style="display:inline-block;margin-top:6px;text-decoration:none"><?= ico("download") ?> Descargar imagen</a>
         </li>
         <li style="margin-bottom:12px">
           <b>El texto ya está copiado</b> — pégalo cuando subas el post.<br>
-          <button type="button" id="pub-copy" class="fbnew" style="margin-top:6px">📋 Copiar texto otra vez</button>
+          <button type="button" id="pub-copy" class="fbnew" style="margin-top:6px"><?= ico("copy") ?> Copiar texto otra vez</button>
         </li>
         <li style="margin-bottom:4px">
           <b>Abre tu red, crea una publicación, sube la imagen y pega el texto:</b><br>
@@ -1152,7 +1152,7 @@ $cf = [
           </span>
         </li>
       </ol>
-      <div class="art-note" style="margin-top:12px">💡 En Instagram, publicar desde computadora se hace con el botón <b>＋</b> arriba; en celular es más fácil con "Compartir".</div>
+      <div class="art-note" style="margin-top:12px"><?= ico("lightbulb") ?> En Instagram, publicar desde computadora se hace con el botón <b>＋</b> arriba; en celular es más fácil con "Compartir".</div>
     </div>
 
     <button type="button" id="pub-done" class="art-go" style="background:var(--palma);margin-top:16px">✓ Ya lo publiqué</button>
