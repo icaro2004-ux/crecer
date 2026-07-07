@@ -239,13 +239,13 @@ require __DIR__ . '/_shell.php';
 <?php if (!empty($_GET['tono'])): ?><div class="ok-banner" style="max-width:680px">✓ Tu tono quedó guardado. La Creativa escribirá así de ahora en adelante.</div><?php endif; ?>
 
 <div class="mk-tabs" role="tablist">
-  <button type="button" class="mk-tab on" data-pane="voz" role="tab">🎙️ Voz</button>
-  <button type="button" class="mk-tab" data-pane="identidad" role="tab">🎨 Identidad</button>
-  <button type="button" class="mk-tab" data-pane="aprendido" role="tab">🧠 Lo aprendido</button>
+  <button type="button" class="mk-tab on" data-pane="voz" role="tab"><?= ico('mic') ?> Voz</button>
+  <button type="button" class="mk-tab" data-pane="identidad" role="tab"><?= ico('palette') ?> Identidad</button>
+  <button type="button" class="mk-tab" data-pane="aprendido" role="tab"><?= ico('lightbulb') ?> Lo aprendido</button>
 </div>
 
 <section class="mk-pane on" id="mk-voz">
-<h2 class="sec-h">🎙️ Tu tono de voz</h2>
+<h2 class="sec-h"><?= ico('mic') ?> Tu tono de voz</h2>
 <p class="subline">Define cómo te escribe La Creativa: mueve los controles, genera ejemplos y guárdalo. Así suena <b>todo tu contenido</b>.</p>
 <?php include __DIR__ . '/_tono_panel.php'; ?>
 </section>
@@ -256,7 +256,7 @@ $memorias = function_exists('memoria_listar') ? memoria_listar($pdo, $marca_id) 
 $tipo_lbl = ['patron'=>'Patrón detectado','preferencia'=>'Preferencia','decision'=>'Decisión','tono'=>'Voz de marca','marca'=>'Identidad','conversacion'=>'De una conversación','hito'=>'Hito'];
 ?>
 <section class="mk-pane" id="mk-aprendido">
-<h2 class="sec-h" id="cerebro">🧠 Lo que he aprendido de tu negocio</h2>
+<h2 class="sec-h" id="cerebro"><?= ico('lightbulb') ?> Lo que he aprendido de tu negocio</h2>
 <p class="subline">El corillo aprende de lo que apruebas, editas y rechazas, y lo usa para escribir mejor. Esto es tuyo: <b>corrígelo o descártalo</b> cuando quieras.</p>
 <?php if (!$memorias): ?>
   <div class="empty-g" style="max-width:680px">Todavía no he aprendido nada específico. Aprueba, edita o rechaza unos posts y aquí verás lo que voy captando de tu negocio.</div>
@@ -291,7 +291,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
 
 <section class="mk-pane" id="mk-identidad">
 <?php $ev_actual = (string)$pdo->query("SELECT estilo_visual FROM crecer_marca WHERE id={$marca_id}")->fetchColumn(); ?>
-<h2 class="sec-h">🎨 Línea de diseño</h2>
+<h2 class="sec-h"><?= ico('palette') ?>Línea de diseño</h2>
 <p class="subline">El estilo visual de <b>TU</b> negocio (colores, vibra, tipo de foto). La IA lo aplica a <b>todas</b> tus imágenes para que tu feed se vea de la misma familia. Es único de tu marca — cada cliente tiene la suya.</p>
 <?php if (!empty($_GET['estilo'])): ?><div class="ok-banner">✓ Línea de diseño guardada.</div><?php endif; ?>
 <div class="genbox" style="margin-bottom:18px">
@@ -300,7 +300,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
     <textarea name="estilo_visual" id="estilo-ta" rows="4" placeholder="Ej: paleta cálida (terracota y crema), luz natural de tarde, fotos reales sobre madera, composición limpia con aire para texto, vibra artesanal y acogedora…"><?= $h($ev_actual) ?></textarea>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
       <button class="genbtn" type="submit" style="margin:0">Guardar línea de diseño</button>
-      <button type="button" id="estilo-sug" class="fbnew" style="font-weight:800">✨ Sugerir con IA</button>
+      <button type="button" id="estilo-sug" class="fbnew" style="font-weight:800"><?= ico('sparkles') ?> Sugerir con IA</button>
     </div>
     <div class="genline">La IA la propone leyendo tu negocio; ajústala a tu gusto. Déjala en blanco y la IA decide cada vez.</div>
   </form>
@@ -321,7 +321,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
 })();
 </script>
 
-<h2 class="sec-h">🎨 Tu logo</h2>
+<h2 class="sec-h"><?= ico('palette') ?>Tu logo</h2>
 <?php if ($pagado): ?>
   <p class="subline">Tienes <b><?= $LIMITE_LOGO ?> oportunidades</b> para crear tu logo con IA. Genéralos, compáralos y escoge el que más te guste.</p>
 <?php else: ?>
@@ -332,7 +332,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
 
 <!-- SUBIR LOGO PROPIO (principal o secundarios) — no es premium -->
 <div class="genbox" style="margin-bottom:16px">
-  <h3 style="font-size:15px;margin:0 0 4px">📤 Sube tu logo</h3>
+  <h3 style="font-size:15px;margin:0 0 4px"><?= ico('upload') ?> Sube tu logo</h3>
   <p class="subline" style="margin-bottom:10px">¿Ya tienes logo? Súbelo (principal y/o secundarios). La IA lo usará como referencia en tus posts. Lo ideal: <b>PNG con fondo transparente</b>.</p>
   <form method="post" enctype="multipart/form-data" onsubmit="var b=this.querySelector('.genbtn');b.textContent='Subiendo…';b.disabled=true;">
     <input type="hidden" name="accion" value="subir_logo">
@@ -424,7 +424,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
 <!-- DESCARGA DEL ELEGIDO -->
 <?php if ($elegido): ?>
   <div class="chosen">
-    <h3>⬇ Descargar tu logo<?= $final?' final':'' ?></h3>
+    <h3><?= ico('download') ?> Descargar tu logo<?= $final?' final':'' ?></h3>
     <img id="logoimg" src="<?= $h($elegido['archivo']) ?>" style="display:none">
     <div class="dl">
       <button type="button" onclick="dlLogo('png')">PNG</button>
