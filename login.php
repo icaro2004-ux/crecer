@@ -68,11 +68,11 @@ $nf = fn($n) => number_format($n);
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Entrar · Encuéntralo</title>
-<link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/encuentralo-pin.svg">
+<link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/crecer-mark.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Poppins:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=7" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=9" rel="stylesheet">
 <style>
   :root{ --grad:linear-gradient(120deg,var(--coral,#ff5c39),var(--magenta,#c0395f)); }
   *{box-sizing:border-box}
@@ -144,7 +144,7 @@ $nf = fn($n) => number_format($n);
 <body>
 
 <div class="topbar">
-  <a href="/crecer/index.php"><img src="/crecer/assets/brand/encuentralo-pin.svg" alt=""><b>encuéntralo</b></a>
+  <a href="/crecer/index.php"><img src="/crecer/assets/brand/crecer-mark.svg" alt=""><b>encuéntralo <span style="color:var(--teal)">crecer</span></b></a>
   <span class="sp"></span>
   <a class="lg" href="/crecer/registro.php">¿No tienes cuenta? Créala →</a>
 </div>

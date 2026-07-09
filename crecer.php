@@ -32,11 +32,11 @@ $nf = fn($n) => number_format($n);
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Crecer · El contenido de tus redes, hecho por IA — Encuéntralo</title>
 <meta name="description" content="Crecer te prepara cada semana los posts de tus redes, en tu propia voz. Tú solo los apruebas desde el celular. Hecho en y para Puerto Rico.">
-<link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/encuentralo-pin.svg">
+<link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/crecer-mark.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Poppins:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=7" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=9" rel="stylesheet">
 <style>
   :root{ --grad:linear-gradient(120deg,var(--coral,#ff5c39),var(--magenta,#c0395f)); }
   *{box-sizing:border-box}
@@ -290,7 +290,7 @@ $nf = fn($n) => number_format($n);
 <nav class="nav">
   <div class="in">
     <a href="/crecer/index.php" style="display:flex;align-items:center;gap:9px;text-decoration:none;color:inherit">
-      <img class="mark" src="/crecer/assets/brand/encuentralo-pin.svg" alt=""><span class="bn">encuéntralo</span></a>
+      <img class="mark" src="/crecer/assets/brand/crecer-mark.svg" alt=""><span class="bn">encuéntralo <span style="color:var(--teal)">crecer</span></span></a>
     <span class="sp"></span>
     <a class="enter" href="/crecer/login.php">Entrar</a>
     <a class="cta" href="/crecer/registro.php">Crea mi primer post</a>
