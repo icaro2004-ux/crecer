@@ -8,35 +8,37 @@
    ============================================================ */
 
 :root{
-  /* ── Color: paleta tropical boricua, alineada con Encuéntralo ──
-     Base sand + acento rosa/coral de marca + VERDE de Crecer (crecimiento). */
-  --crema:#FFF8F1;        /* sand-50 — fondo */
-  --crema-2:#FDEEDE;      /* sand — tracks / fondo hundido */
-  --card:#FFFDFA;         /* superficie */
+  /* ── Color: identidad Crecer — LIMPIO sobre blanco, acentos vivos ──
+     Fondo blanco + rosa de marca (#EF4375) + teal (#00A49F) + texto navy.
+     (Antes: base "sand" cálida; migrado a blanco por dirección de marca.) */
+  --crema:#FFFFFF;        /* fondo — blanco limpio */
+  --crema-2:#F3F4F6;      /* tracks / fondo hundido (gris frío muy claro) */
+  --card:#FFFFFF;         /* superficie (se separa por borde + sombra) */
 
-  --terracota:#EF4375;    /* (= rosa del pin) acento de MARCA / énfasis */
+  --terracota:#EF4375;    /* ROSA de marca — acento / énfasis */
   --terracota-700:#D62E61;
-  --coral:#FF6B3D;        /* coral tropical (gradientes) */
-  --magenta:#FF2B85;
-  --teal:#0096A6;         /* caribbean teal */
+  --coral:#FF5E8B;        /* rosa claro (extremo claro de los gradientes) */
+  --magenta:#EF4375;      /* rosa de marca (gradiente = familia rosa, sin naranja) */
+  --teal:#00A49F;         /* TEAL de marca — acento secundario vivo */
+  --teal-700:#00827E;
   --gold:#FBC02D;
 
-  --palma:#16B86A;        /* VERDE Crecer — brillante, tropical (acción +) */
+  --palma:#16B86A;        /* verde acción (+) / éxito */
   --palma-600:#0FA25C;
-  --tinta:#1B1622;        /* texto principal (casi negro cálido) */
-  --muted:#8A8178;        /* texto secundario */
-  --line:#F1E4D4;         /* hairlines cálidas */
+  --tinta:#231F20;        /* texto principal — navy/near-black de marca */
+  --muted:#6E6A67;        /* texto secundario (gris neutro) */
+  --line:#E9E7E4;         /* hairlines neutras sobre blanco */
 
   /* ── Pills de estado (tintes tropicales) ── */
   --amber-ink:#9A6A0E; --amber-bg:#FDEAC2;
   --okk-ink:#0F7A45;   --okk-bg:#D6F2E2;
   --noo-ink:#C23A2E;   --noo-bg:#FFE0D6;
-  --blue-ink:#0A7886;  --blue-bg:#D3EDF1;
+  --blue-ink:#00827E;  --blue-bg:#D6F0EF;
 
   /* ── Radio, espacio (escala 4/8), sombra ── */
   --r-sm:10px; --r-md:16px; --r-lg:22px; --r-xl:30px;
-  --shadow:0 6px 22px rgba(74,52,32,.10);
-  --shadow-sm:0 2px 10px rgba(74,52,32,.07);
+  --shadow:0 8px 26px rgba(20,20,30,.08);
+  --shadow-sm:0 2px 10px rgba(20,20,30,.06);
 
   /* Fonts alineados con el web de Encuéntralo */
   --font-display:"Poppins","Plus Jakarta Sans",sans-serif;
@@ -57,10 +59,10 @@ body{
   color:var(--tinta);
   line-height:1.55;
   background:var(--crema);
-  /* textura cálida sutil: dos destellos muy tenues, no degradado plano */
+  /* Blanco limpio con un susurro de color arriba (no degradado plano). */
   background-image:
-    radial-gradient(120% 60% at 100% 0%, rgba(255,43,133,.08), transparent 60%),
-    radial-gradient(90% 55% at 0% 0%, rgba(0,150,166,.07), transparent 58%);
+    radial-gradient(110% 45% at 100% 0%, rgba(239,67,117,.035), transparent 60%),
+    radial-gradient(85% 40% at 0% 0%, rgba(0,164,159,.03), transparent 58%);
   background-attachment:fixed;
   padding-bottom:env(safe-area-inset-bottom);
   -webkit-font-smoothing:antialiased;
@@ -196,7 +198,7 @@ body{
   text-decoration:none;color:var(--tinta);font-weight:600;font-size:14.5px;transition:background .15s}
 .side a .ic{font-size:17px;width:22px;text-align:center}
 .side a:hover{background:var(--crema)}
-.side a.on{background:linear-gradient(135deg,rgba(255,107,61,.14),rgba(255,43,133,.14));color:var(--terracota-700)}
+.side a.on{background:linear-gradient(135deg,rgba(239,67,117,.12),rgba(0,164,159,.10));color:var(--terracota-700)}
 .side a .badge{margin-left:auto;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;
   color:var(--muted);background:var(--crema-2);padding:3px 7px;border-radius:99px}
 .side a.locked{color:var(--muted)}
@@ -247,7 +249,7 @@ img.zoomable{cursor:zoom-in}
     background:var(--card);border-top:1px solid var(--line);
     justify-content:space-around;align-items:center;padding:8px 6px;
     padding-bottom:calc(8px + env(safe-area-inset-bottom));
-    box-shadow:0 -6px 20px rgba(74,52,32,.08)}
+    box-shadow:0 -6px 20px rgba(20,20,30,.06)}
   .botnav a{display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;
     text-decoration:none;color:var(--muted);font-size:10px;font-weight:800;
     letter-spacing:.01em;transition:color .15s}
@@ -343,7 +345,7 @@ img.zoomable{cursor:zoom-in}
 .d-agent .act{color:var(--muted);font-size:11.5px;margin-top:3px;line-height:1.35;min-height:31px}
 .d-agent .st{font-size:10.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:9px}
 .d-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}
-.d-dot.work{background:var(--teal);box-shadow:0 0 0 3px rgba(0,150,166,.18)}
+.d-dot.work{background:var(--teal);box-shadow:0 0 0 3px rgba(0,164,159,.18)}
 .d-dot.done{background:var(--palma)}
 .d-dot.idle{background:var(--muted)}
 

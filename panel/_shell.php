@@ -26,7 +26,7 @@ $nav = [
 ];
 // Perfil (secundario, abajo): config, facturación, soporte.
 $nav_perfil = [
-  ['key'=>'estratega',   'ic'=>'lightbulb','lb'=>'El Estratega', 'hr'=>"$BASE/estratega.php?marca=$marca_id"],
+  ['key'=>'estratega',   'ic'=>'sparkles','lb'=>'Copiloto', 'hr'=>"$BASE/estratega.php?marca=$marca_id"],
   ['key'=>'config',      'ic'=>'settings','lb'=>'Configuración','hr'=>"$BASE/configuracion.php?marca=$marca_id"],
   ['key'=>'facturacion', 'ic'=>'wallet',  'lb'=>'Facturación',  'hr'=>"$BASE/precios.php?marca=$marca_id"],
   ['key'=>'soporte',     'ic'=>'chat',    'lb'=>'Soporte',      'hr'=>"$BASE/soporte.php?marca=$marca_id"],
@@ -38,16 +38,16 @@ $nav_perfil = [
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title><?= $h(($page_title ?? 'Panel') . ' · ' . $marca['nombre_negocio']) ?> — Encuéntralo</title>
-<link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/encuentralo-pin.svg">
+<link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/crecer-mark.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Poppins:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=8" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=9" rel="stylesheet">
 </head>
 <body>
 <div class="layout">
   <aside class="side" id="side">
-    <a class="sbrand" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="text-decoration:none;color:inherit"><img src="/crecer/assets/brand/encuentralo-pin.svg" alt="Inicio"><b>encuéntralo</b></a>
+    <a class="sbrand" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="text-decoration:none;color:inherit"><img src="/crecer/assets/brand/crecer-mark.svg" alt="Inicio"><b>encuéntralo <span style="color:var(--teal)">crecer</span></b></a>
     <nav>
       <?php foreach ($nav as $n): ?>
         <a href="<?= $n['hr'] ?>" class="<?= $n['key']===$active?'on':'' ?>">
@@ -96,7 +96,7 @@ $nav_perfil = [
   <div class="main">
     <div class="ptop">
       <a href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit">
-        <img src="/crecer/assets/brand/encuentralo-pin.svg" alt="Inicio"><b>encuéntralo</b></a>
+        <img src="/crecer/assets/brand/crecer-mark.svg" alt="Inicio"><b>encuéntralo <span style="color:var(--teal)">crecer</span></b></a>
       <button id="burger" aria-label="Perfil y ajustes"
         style="margin-left:auto;width:38px;height:38px;border-radius:50%;border:0;cursor:pointer;
         background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;font-weight:800;font-size:15px;

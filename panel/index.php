@@ -273,28 +273,30 @@ $nodos = ['Negocio','Contenido','Tu OK','Publicado'];
 </div>
 
 <?php
-// ── Mascota flotante: EL ESTRATEGA (solo en Inicio) — te recibe y conversa ──
-$estr_img = '/crecer/assets/crecer-contenido/creativa_character_clean.png'; // placeholder; cambiar por la mascota del Estratega
+// ── Copiloto flotante (solo en Inicio) — te recibe y conversa ──
+$estr_img = '/crecer/assets/crecer-contenido/creativa_character_clean.png'; // placeholder; cambiar por el asset final del copiloto
 $negocio  = $marca['nombre_negocio'] ?? 'mi gente';
 ?>
 <div class="estr" id="estr">
   <div class="estr-bubble" id="estrBubble">
     <button class="estr-x" id="estrBx" aria-label="Cerrar">&times;</button>
+    <div class="estr-kicker"><?= ico('sparkles') ?> Copiloto de Encuéntralo</div>
     <div class="estr-msgs" id="estrMsgs">
-      <div class="estr-m ia">¡Wepa, <?= $h($negocio) ?>! Soy <b>El Estratega</b>. ¿Buscas más clientes, una promo que jale o una idea nueva? Cuéntame y te tiro un plan.</div>
+      <div class="estr-m ia">Estoy pendiente a <b><?= $h($negocio) ?></b>. Puedo mirar tu contenido, detectar qué falta y ayudarte a decidir el próximo movimiento.</div>
     </div>
     <div class="estr-chips" id="estrChips">
-      <button type="button">Una promo para este mes</button>
-      <button type="button">Cómo consigo más clientes</button>
+      <button type="button">Qué hago ahora</button>
+      <button type="button">Detecta qué falta</button>
+      <button type="button">Dame una promo</button>
     </div>
     <form class="estr-form" id="estrForm" autocomplete="off">
-      <input type="text" id="estrInput" placeholder="Pregúntale al Estratega…" maxlength="1000">
+      <input type="text" id="estrInput" placeholder="Dile qué quieres resolver…" maxlength="1000">
       <button type="submit" aria-label="Enviar"><?= ico('send') ?></button>
     </form>
-    <a class="estr-full" href="<?= $BASE ?>/estratega.php?marca=<?= $marca_id ?>">Abrir el chat completo →</a>
+    <a class="estr-full" href="<?= $BASE ?>/estratega.php?marca=<?= $marca_id ?>">Abrir centro de mando →</a>
   </div>
-  <button class="estr-face" id="estrFace" aria-label="Habla con El Estratega">
-    <img src="<?= $estr_img ?>" alt="El Estratega">
+  <button class="estr-face" id="estrFace" aria-label="Habla con el Copiloto de Encuéntralo">
+    <img src="<?= $estr_img ?>" alt="Copiloto de Encuéntralo">
     <span class="estr-ping"></span>
   </button>
 </div>
@@ -308,6 +310,8 @@ $negocio  = $marca['nombre_negocio'] ?? 'mi gente';
   .estr-bubble.show{display:block;animation:estrpop .22s ease-out}
   @keyframes estrpop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
   .estr-x{position:absolute;top:8px;right:9px;background:0;border:0;font-size:18px;color:var(--muted);cursor:pointer;line-height:1}
+  .estr-kicker{display:inline-flex;align-items:center;gap:6px;margin:0 22px 9px 0;color:var(--terracota);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.04em}
+  .estr-kicker svg{width:14px;height:14px}
   .estr-msgs{display:flex;flex-direction:column;gap:8px;max-height:230px;overflow-y:auto;margin-bottom:10px;padding-right:2px}
   .estr-m{font-size:13.5px;line-height:1.5;padding:9px 11px;border-radius:12px;white-space:pre-wrap;word-wrap:break-word}
   .estr-m.ia{background:var(--crema);border:1px solid var(--line);color:var(--tinta);align-self:flex-start;border-bottom-left-radius:4px}
@@ -322,6 +326,8 @@ $negocio  = $marca['nombre_negocio'] ?? 'mi gente';
   .estr-form button svg{width:17px;height:17px}
   .estr-full{display:block;text-align:center;font-size:12px;font-weight:700;color:var(--terracota);text-decoration:none;margin-top:9px}
   @media(max-width:760px){.estr{bottom:80px}}
+  /* Desktop: el sidebar ya navega; la mascota es feature del celular y chocaría con el menú. */
+  @media(min-width:761px){.estr{display:none}}
 </style>
 <script>
 (function(){
