@@ -184,13 +184,20 @@ $nodos = ['Negocio','Contenido','Tu OK','Publicado'];
   .ix-feed .t{font-size:12px;font-weight:700;color:var(--muted);width:62px;flex:none;font-variant-numeric:tabular-nums}
   .ix-feed img.ic{width:24px;height:24px;flex:none}
   .ix-feed .m{font-size:14px;color:#473b46;line-height:1.35}
-  .ix-feed .more{display:inline-block;margin-top:14px;color:var(--terracota);font-weight:800;font-size:13.5px;text-decoration:none}
+  .ix-feed .more{display:inline-block;margin-top:14px;color:var(--teal);font-weight:800;font-size:13.5px;text-decoration:none}
+  .ix-feed .more:hover{color:var(--teal-700)}
 
-  /* 3 KPIs de pulso */
+  /* 3 KPIs de pulso — el color mapea significado, no decora:
+     teal = ya logrado (crecimiento) · rosa = necesita tu acción · navy = métrica neutra */
   .ix-kpis{display:flex;gap:10px;margin-top:18px;overflow-x:auto;padding-bottom:2px}
-  .ix-kpi{flex:1;min-width:118px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow-sm)}
-  .ix-kpi b{font-family:'Oswald',sans-serif;font-weight:700;font-size:26px;color:var(--terracota);display:block;line-height:1}
+  .ix-kpi{flex:1;min-width:118px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow-sm);border-top:3px solid var(--line)}
+  .ix-kpi b{font-family:'Oswald',sans-serif;font-weight:700;font-size:26px;color:var(--tinta);display:block;line-height:1}
   .ix-kpi span{font-size:12.5px;color:var(--muted);font-weight:600}
+  .ix-kpi:nth-child(1){border-top-color:var(--teal)}
+  .ix-kpi:nth-child(1) b{color:var(--teal)}
+  .ix-kpi:nth-child(2){border-top-color:var(--terracota)}
+  .ix-kpi:nth-child(2) b{color:var(--terracota)}
+  .ix-kpi:nth-child(3){border-top-color:var(--tinta)}
   /* observación (solo hechos) */
   .ix-obs{margin-top:16px;padding:12px 16px;border-radius:12px;font-size:14px;line-height:1.45;color:#0a5a5c;
     background:color-mix(in srgb,var(--teal) 8%,#fff);border:1px solid color-mix(in srgb,var(--teal) 20%,#fff)}
@@ -200,9 +207,10 @@ $nodos = ['Negocio','Contenido','Tu OK','Publicado'];
   .ix-next ul{list-style:none;margin:0;padding:0}
   .ix-next li{display:flex;gap:12px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px;align-items:baseline}
   .ix-next li:last-child{border-bottom:0}
-  .ix-next .d{color:var(--terracota);font-weight:700;flex:none;min-width:140px}
+  .ix-next .d{color:var(--teal-700);font-weight:700;flex:none;min-width:140px}
   .ix-next .c{color:#473b46}
-  .ix-next .more{display:inline-block;margin-top:10px;color:var(--terracota);font-weight:800;font-size:13px;text-decoration:none}
+  .ix-next .more{display:inline-block;margin-top:10px;color:var(--teal);font-weight:800;font-size:13px;text-decoration:none}
+  .ix-next .more:hover{color:var(--teal-700)}
   @media(max-width:560px){.ix-next li{flex-direction:column;gap:1px}.ix-next .d{min-width:0;font-size:12.5px}}
 </style>
 
@@ -314,9 +322,9 @@ $negocio  = $marca['nombre_negocio'] ?? 'mi gente';
   .estr-kicker svg{width:14px;height:14px}
   .estr-msgs{display:flex;flex-direction:column;gap:8px;max-height:230px;overflow-y:auto;margin-bottom:10px;padding-right:2px}
   .estr-m{font-size:13.5px;line-height:1.5;padding:9px 11px;border-radius:12px;white-space:pre-wrap;word-wrap:break-word}
-  .estr-m.ia{background:var(--crema);border:1px solid var(--line);color:var(--tinta);align-self:flex-start;border-bottom-left-radius:4px}
+  .estr-m.ia{background:var(--crema-2);border:1px solid var(--line);color:var(--tinta);align-self:flex-start;border-bottom-left-radius:4px}
   .estr-m.user{background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;align-self:flex-end;border-bottom-right-radius:4px}
-  .estr-m.load{color:var(--muted);font-style:italic;background:var(--crema);border:1px solid var(--line);align-self:flex-start}
+  .estr-m.load{color:var(--muted);font-style:italic;background:var(--crema-2);border:1px solid var(--line);align-self:flex-start}
   .estr-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}
   .estr-chips button{border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-family:inherit;font-weight:700;font-size:11.5px;padding:6px 10px;border-radius:99px;cursor:pointer}
   .estr-chips button:hover{border-color:var(--terracota)}

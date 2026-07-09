@@ -16,20 +16,20 @@
      En Inicio NO se muestra: allí la mascota (El Estratega) es el recibidor
      y dos orbes flotantes recargan la pantalla. En el resto de páginas, sí. -->
 <?php if (($active ?? '') !== 'inicio'): ?>
-<button class="asis-fab" id="asisFab" aria-label="Pregúntale al corillo" title="Pregúntale al corillo">
+<button class="asis-fab" id="asisFab" aria-label="Habla con el copiloto" title="Habla con el copiloto">
   <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor"><path d="M12 3C6.5 3 2 6.58 2 11c0 2.05.98 3.92 2.6 5.34-.12 1.27-.6 2.5-1.4 3.5 1.6-.2 3.1-.7 4.32-1.5 1.32.43 2.77.66 4.48.66 5.5 0 10-3.58 10-8s-4.5-8-10-8z"/></svg>
 </button>
 <div class="asis-panel" id="asisPanel" aria-hidden="true">
   <div class="asis-head">
     <span class="asis-orb"><?= ico('chat') ?></span>
-    <div><div class="asis-t">El corillo</div><div class="asis-i">Pregúntame lo que sea de la app</div></div>
+    <div><div class="asis-t">Copiloto</div><div class="asis-i">Radar y ayuda del panel</div></div>
     <button class="asis-x" id="asisX" aria-label="Cerrar">✕</button>
   </div>
   <div class="asis-msgs" id="asisMsgs">
-    <div class="asis-m ia">¡Wepa! Soy tu asistente. Pregúntame cómo crear un post, montar tu logo, conectar Instagram y Facebook, o lo que no entiendas.</div>
+    <div class="asis-m ia">Estoy pendiente. Puedo ayudarte a usar esta pantalla, detectar qué falta y decirte el próximo paso.</div>
   </div>
   <form class="asis-form" id="asisForm">
-    <input type="text" id="asisInput" placeholder="Escribe tu pregunta…" autocomplete="off" maxlength="1000">
+    <input type="text" id="asisInput" placeholder="Dile qué quieres resolver…" autocomplete="off" maxlength="1000">
     <button type="submit" id="asisSend" aria-label="Enviar"><?= ico('send') ?></button>
   </form>
 </div>
@@ -45,7 +45,7 @@
   .asis-t{font-weight:800;font-size:15px;line-height:1.1}
   .asis-i{font-size:12px;color:#cfc7d6}
   .asis-x{margin-left:auto;background:0;border:0;color:#cfc7d6;font-size:16px;cursor:pointer;padding:4px}
-  .asis-msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--crema,#fbf6ee)}
+  .asis-msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--crema-2)}
   .asis-m{max-width:84%;padding:10px 13px;border-radius:14px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word}
   .asis-m.ia{background:#fff;border:1px solid var(--line,#eadfce);color:var(--tinta,#1b1622);align-self:flex-start;border-bottom-left-radius:5px}
   .asis-m.user{background:var(--terracota,#e3683f);color:#fff;align-self:flex-end;border-bottom-right-radius:5px}

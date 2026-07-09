@@ -67,27 +67,27 @@ require __DIR__ . '/_shell.php';
   .rz-tabs{position:sticky;top:0;z-index:5;display:flex;gap:6px;background:var(--crema);padding:8px 0 12px}
   .rz-tab{flex:1;border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:10px 8px;cursor:pointer;
     font-family:inherit;font-weight:800;font-size:13.5px;color:var(--muted);transition:.15s}
-  .rz-tab.on{border-color:transparent;background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;box-shadow:0 8px 20px -10px rgba(255,43,133,.5)}
+  .rz-tab.on{border-color:transparent;background:linear-gradient(135deg,var(--teal),var(--teal-700));color:#fff;box-shadow:0 8px 20px -10px rgba(0,164,159,.45)}
   .rz-pane{display:none}.rz-pane.on{display:block;animation:rzin .25s ease both}
   @keyframes rzin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
   .rz-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin-bottom:16px;box-shadow:var(--shadow-sm)}
   .rz-card h2{font-family:'Oswald',sans-serif;font-weight:700;text-transform:uppercase;font-size:15px;letter-spacing:.3px;margin:0 0 12px;display:flex;align-items:center;gap:8px}
   /* flujo compacto de producción (NO 4 cards) */
   .rz-flow{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;font-size:15px;color:var(--tinta)}
-  .rz-flow b{font-family:'Oswald',sans-serif;font-weight:700;font-size:22px;color:var(--terracota);margin-right:4px}
+  .rz-flow b{font-family:'Oswald',sans-serif;font-weight:700;font-size:22px;color:var(--tinta);margin-right:4px}
   .rz-flow .arw{color:var(--line);font-weight:900;font-size:18px}
   .rz-sub{margin-top:8px;font-size:14px;color:var(--muted)}
   .rz-sub b{color:var(--tinta)}
   /* barras de consistencia */
   .rz-bars{display:flex;align-items:flex-end;gap:7px;height:88px;margin-top:6px}
   .rz-bar{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%}
-  .rz-bar .col{width:100%;border-radius:6px 6px 0 0;background:linear-gradient(180deg,var(--coral),var(--magenta));min-height:3px;align-self:flex-end}
+  .rz-bar .col{width:100%;border-radius:6px 6px 0 0;background:linear-gradient(180deg,var(--teal),var(--teal-700));min-height:3px;align-self:flex-end}
   .rz-bar .col.z{background:var(--line)}
   .rz-bar small{font-size:10px;color:var(--muted)}
   .rz-streak{margin-top:12px;font-size:14px;color:var(--tinta)}
-  .rz-streak b{color:var(--terracota)}
-  /* bloque bloqueado (sin Meta) */
-  .rz-lock{border:1.5px dashed color-mix(in srgb,var(--terracota) 35%,var(--line));background:color-mix(in srgb,var(--terracota) 4%,#fff)}
+  .rz-streak b{color:var(--tinta)}
+  /* bloque bloqueado (sin Meta) — informativo = teal */
+  .rz-lock{border:1.5px dashed color-mix(in srgb,var(--teal) 40%,var(--line));background:color-mix(in srgb,var(--teal) 5%,#fff)}
   .rz-lock .lk{display:flex;align-items:center;gap:8px;font-weight:800;color:var(--tinta);font-size:14.5px}
   .rz-lock p{margin:8px 0 14px;font-size:13.5px;color:var(--muted);line-height:1.5}
   .rz-cta{display:inline-flex;align-items:center;gap:8px;text-decoration:none;font-family:'Oswald',sans-serif;font-weight:700;
@@ -96,12 +96,12 @@ require __DIR__ . '/_shell.php';
   /* lista de publicaciones */
   .rz-pub{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
   .rz-pub:last-child{border-bottom:0}
-  .rz-pub .th{width:46px;height:46px;border-radius:10px;object-fit:cover;flex:none;background:var(--crema)}
+  .rz-pub .th{width:46px;height:46px;border-radius:10px;object-fit:cover;flex:none;background:var(--crema-2)}
   .rz-pub .th.ph{display:grid;place-items:center;font-size:20px;color:var(--muted)}
   .rz-pub .tx{flex:1;min-width:0}
   .rz-pub .cap{font-size:13.5px;color:#473b46;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .rz-pub .mt{font-size:11.5px;color:var(--muted);margin-top:2px}
-  .rz-pub a.vp{flex:none;color:var(--terracota);font-weight:700;font-size:12.5px;text-decoration:none}
+  .rz-pub a.vp{flex:none;color:var(--teal);font-weight:700;font-size:12.5px;text-decoration:none}
   .rz-empty{color:var(--muted);font-size:13.5px}
   .rz-net{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
   .rz-net:last-child{border-bottom:0}.rz-net .e{font-size:18px}

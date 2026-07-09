@@ -498,12 +498,12 @@ require __DIR__ . '/_shell.php';
   .feedwrap .post{margin-top:14px}
   .viewtoggle{display:flex;gap:6px;margin:6px 0 10px}
   .vt{font-weight:700;font-size:13.5px;text-decoration:none;color:var(--muted);padding:8px 16px;border-radius:99px;border:1.5px solid var(--line)}
-  .vt.on{color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));border-color:transparent}
+  .vt.on{color:#fff;background:linear-gradient(135deg,var(--teal),var(--teal-700));border-color:transparent}
   .subtabs{display:flex;gap:8px;max-width:600px;margin:14px 0 4px;border-bottom:1.5px solid var(--line);padding-bottom:0}
   .st{display:flex;align-items:center;gap:7px;font-weight:800;font-size:14px;text-decoration:none;color:var(--muted);padding:10px 14px;border-bottom:3px solid transparent;margin-bottom:-1.5px}
-  .st.on{color:var(--terracota);border-bottom-color:var(--terracota)}
-  .st .b{font-size:11.5px;font-weight:800;background:var(--crema);color:var(--muted);border-radius:99px;padding:1px 9px;min-width:20px;text-align:center}
-  .st.on .b{background:var(--terracota);color:#fff}
+  .st.on{color:var(--teal-700);border-bottom-color:var(--teal)}
+  .st .b{font-size:11.5px;font-weight:800;background:var(--crema-2);color:var(--muted);border-radius:99px;padding:1px 9px;min-width:20px;text-align:center}
+  .st.on .b{background:var(--teal);color:#fff}
   .mesnav{max-width:600px;display:flex;align-items:center;gap:10px;margin:14px 0 4px}
   .mesnav select{font-family:inherit;font-size:13.5px;font-weight:700;border:1.5px solid var(--line);border-radius:99px;padding:9px 14px;background:#fff}
   .okbar{max-width:600px;background:var(--okk-bg);color:var(--okk-ink);font-weight:700;font-size:14px;padding:11px 14px;border-radius:12px;margin-top:14px}
@@ -542,7 +542,7 @@ require __DIR__ . '/_shell.php';
   .art-box .picker{display:flex;gap:8px;flex-wrap:wrap}
   .art-box .pk{cursor:pointer}.art-box .pk input{position:absolute;opacity:0}
   .art-box .pk img,.art-box .pk .none{width:64px;height:64px;border-radius:12px;object-fit:cover;border:2.5px solid var(--line);display:block}
-  .art-box .pk .none{display:grid;place-items:center;font-size:10.5px;color:var(--muted);text-align:center;background:var(--crema);line-height:1.1}
+  .art-box .pk .none{display:grid;place-items:center;font-size:10.5px;color:var(--muted);text-align:center;background:var(--crema-2);line-height:1.1}
   .art-box .pk input:checked + img,.art-box .pk input:checked + .none{border-color:var(--terracota)}
   .art-box .chips{display:flex;flex-wrap:wrap;gap:7px}
   .art-box .chip-opt{cursor:pointer}.art-box .chip-opt input{position:absolute;opacity:0}
@@ -580,7 +580,7 @@ require __DIR__ . '/_shell.php';
   /* Preview "cómo se ve en redes" (igual que Gráficas) */
   .prev-ov{display:none;position:fixed;inset:0;background:rgba(20,12,8,.7);z-index:96;align-items:flex-start;justify-content:center;padding:28px 16px;overflow:auto}
   .prev-ov.show{display:flex}
-  .prev-box{background:var(--crema);border-radius:var(--r-xl);padding:18px;max-width:420px;width:100%;position:relative}
+  .prev-box{background:var(--crema-2);border-radius:var(--r-xl);padding:18px;max-width:420px;width:100%;position:relative}
   .prev-x{position:absolute;top:12px;right:14px;border:0;background:none;font-size:20px;cursor:pointer;color:var(--muted)}
   .prev-tabs{display:flex;gap:8px;justify-content:center;margin-bottom:14px}
   .prev-pub{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
@@ -594,7 +594,7 @@ require __DIR__ . '/_shell.php';
   .prev-pub-btns .ppub.both{border-color:transparent;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta))}
   .prev-pub-btns .ppub:disabled{opacity:.6;cursor:default}
   .ptab{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--line);background:#fff;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;border-radius:99px;padding:7px 14px}
-  .ptab.on{border-color:transparent;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta))}
+  .ptab.on{border-color:transparent;color:#fff;background:linear-gradient(135deg,var(--teal),var(--teal-700))}
   .mock{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;max-width:360px;margin:0 auto;box-shadow:var(--shadow);color:#111}
   .mock .av{width:34px;height:34px;border-radius:50%;object-fit:cover;background:#eee}
   .mock .post-img{width:100%;display:block}
@@ -1121,7 +1121,7 @@ $cf = [
     <h3><?= ico("share") ?> Publicar tu post</h3>
     <div class="sub" id="pub-modo-sub">Pásalo a tus redes.</div>
     <img id="pub-img" src="" alt="" style="width:100%;border-radius:14px;margin:12px 0;display:none">
-    <div id="pub-cap" style="font-size:13.5px;line-height:1.45;white-space:pre-wrap;background:var(--crema);border:1px solid var(--line);border-radius:12px;padding:11px 13px;max-height:140px;overflow:auto"></div>
+    <div id="pub-cap" style="font-size:13.5px;line-height:1.45;white-space:pre-wrap;background:var(--crema-2);border:1px solid var(--line);border-radius:12px;padding:11px 13px;max-height:140px;overflow:auto"></div>
 
     <!-- MÓVIL: un toque -->
     <div id="pub-movil" style="display:none">
@@ -1884,7 +1884,7 @@ $cf = [
   .wiz-sub{font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.4}
   .wiz-pane .fl{display:block;font-size:12.5px;font-weight:700;color:var(--muted);margin:14px 0 6px}
   .wiz-pane textarea{width:100%;font-family:inherit;font-size:14px;color:var(--tinta);border:1.5px solid var(--line);border-radius:12px;padding:11px 13px}
-  .wiz-cap{background:var(--crema,#fbf6ee);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.5;color:var(--tinta);white-space:pre-wrap;margin-bottom:14px}
+  .wiz-cap{background:var(--crema-2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.5;color:var(--tinta);white-space:pre-wrap;margin-bottom:14px}
   .wiz-art{margin-bottom:14px}
   .wiz-art img{width:100%;border-radius:14px;display:block}
   .wiz-artbtns{display:flex;flex-direction:column;gap:10px}

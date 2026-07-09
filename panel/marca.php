@@ -215,19 +215,19 @@ require __DIR__ . '/_shell.php';
   .cer-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;max-width:920px;margin-top:14px}
   .cer-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px 16px;box-shadow:var(--shadow-sm)}
   .cer-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-  .cer-tag{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--terracota);background:color-mix(in srgb,var(--terracota) 10%,#fff);border-radius:99px;padding:3px 10px}
+  .cer-tag{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--teal-700);background:color-mix(in srgb,var(--teal) 11%,#fff);border-radius:99px;padding:3px 10px}
   .cer-conf{font-size:11px;color:var(--muted);font-weight:700}
   .cer-det{margin:0;font-size:14px;color:var(--tinta);line-height:1.45}
   .cer-why{margin:7px 0 0;font-size:12px;color:var(--muted);font-style:italic}
   .cer-acts{display:flex;gap:14px;margin-top:11px}
-  .cer-link{background:none;border:0;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;color:var(--terracota);padding:0}
+  .cer-link{background:none;border:0;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;color:var(--teal-700);padding:0}
   .cer-link.danger{color:var(--muted)}
   .cer-editform textarea{width:100%;font-family:inherit;font-size:13.5px;border:1.5px solid var(--line);border-radius:10px;padding:8px;margin:8px 0}
   .cer-editform .btn-save{background:var(--terracota);color:#fff;border:0;border-radius:9px;padding:7px 14px;font-weight:800;cursor:pointer;font-size:12.5px}
   /* §8.4 — Mi marca en 3 vistas (Voz / Identidad / Lo aprendido) */
   .mk-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 20px;max-width:680px}
   .mk-tab{border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:10px 16px;cursor:pointer;font-family:inherit;font-weight:800;font-size:13.5px;color:var(--muted);transition:.15s}
-  .mk-tab.on{border-color:transparent;background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;box-shadow:0 8px 20px -10px rgba(255,43,133,.5)}
+  .mk-tab.on{border-color:transparent;background:linear-gradient(135deg,var(--teal),var(--teal-700));color:#fff;box-shadow:0 8px 20px -10px rgba(0,164,159,.45)}
   .mk-pane{display:none;animation:mkin .25s ease both}
   .mk-pane.on{display:block}
   @keyframes mkin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
