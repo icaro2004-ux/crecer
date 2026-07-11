@@ -84,7 +84,7 @@ function metricas_proximos(PDO $pdo, int $marca_id, int $limit = 3): array {
  */
 function metricas_publicaciones(PDO $pdo, int $marca_id, int $limit = 20): array {
     $q = $pdo->prepare(
-        "SELECT c.id, c.caption, c.plataforma, c.grafica_path, c.publicado_at,
+        "SELECT c.id, c.caption, c.plataforma, c.plataformas, c.grafica_path, c.publicado_at,
                 p.external_id, p.permalink
          FROM crecer_contenido c
          LEFT JOIN crecer_publicaciones p
@@ -96,6 +96,44 @@ function metricas_publicaciones(PDO $pdo, int $marca_id, int $limit = 20): array
          LIMIT {$limit}");
     $q->execute([$marca_id]);
     return $q->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Estado por RED de un conjunto de posts (para "¿salió en IG y FB?").
+ * Devuelve [contenido_id => ['instagram'=>['estado','permalink','error'], 'facebook'=>...]].
+ * Se queda con el ÚLTIMO intento por (post, red).
+ */
+function metricas_redes_de_posts(PDO $pdo, int $marca_id, array $ids): array {
+    $ids = array_values(array_unique(array_map('intval', $ids)));
+    if (!$ids) return [];
+    $in = implode(',', array_fill(0, count($ids), '?'));
+    $out = [];
+    try {
+        $q = $pdo->prepare(
+            "SELECT contenido_id, plataforma, estado, permalink, error_msg
+             FROM crecer_publicaciones
+             WHERE marca_id=? AND contenido_id IN ($in)
+             ORDER BY id ASC");
+        $q->execute(array_merge([$marca_id], $ids));
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int)$r['contenido_id']][$r['plataforma']] = [
+                'estado'    => $r['estado'],
+                'permalink' => $r['permalink'],
+                'error'     => $r['error_msg'],
+            ];
+        }
+    } catch (Throwable $e) {}
+    return $out;
+}
+
+/** Detalle de la conexión activa: ¿qué redes están realmente enganchadas? */
+function metricas_conexion_detalle(PDO $pdo, int $marca_id): array {
+    try {
+        $r = $pdo->query("SELECT ig_user_id, fb_page_id FROM crecer_conexiones
+                          WHERE marca_id={$marca_id} AND estado='activa'
+                          ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+        return ['ig' => !empty($r['ig_user_id']), 'fb' => !empty($r['fb_page_id'])];
+    } catch (Throwable $e) { return ['ig' => false, 'fb' => false]; }
 }
 
 /**

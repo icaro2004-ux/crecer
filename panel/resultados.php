@@ -25,6 +25,8 @@ $prod    = metricas_produccion($pdo, $marca_id);
 $racha   = metricas_racha($pdo, $marca_id);
 $pubs    = metricas_publicaciones($pdo, $marca_id, 30);
 $meta_ok = metricas_meta_conectado($pdo, $marca_id);
+$redes   = metricas_redes_de_posts($pdo, $marca_id, array_column($pubs, 'id')); // estado por red
+$conx    = metricas_conexion_detalle($pdo, $marca_id);                          // ig/fb enganchadas
 
 // Consistencia: publicaciones por semana (últimas 8 semanas ISO), datos reales.
 $semsql = $pdo->prepare(
@@ -103,6 +105,13 @@ require __DIR__ . '/_shell.php';
   .rz-pub .mt{font-size:11.5px;color:var(--muted);margin-top:2px}
   .rz-pub a.vp{flex:none;color:var(--teal);font-weight:700;font-size:12.5px;text-decoration:none}
   .rz-empty{color:var(--muted);font-size:13.5px}
+  /* badges por red (¿salió en IG y FB?) */
+  .rz-nets{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  .rz-nb{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:800;padding:3px 9px;border-radius:99px;border:1px solid var(--line);text-decoration:none}
+  .rz-nb svg{width:13px;height:13px;flex:none}
+  .rz-nb.ok{color:var(--teal-dark);background:color-mix(in srgb,var(--teal) 8%,#fff);border-color:color-mix(in srgb,var(--teal) 28%,#fff)}
+  .rz-nb.err{color:#b3123b;background:#ffe0e6;border-color:#f4b8c6}
+  .rz-nb.none{color:var(--muted);background:var(--crema-2)}
   .rz-net{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
   .rz-net:last-child{border-bottom:0}.rz-net .e{font-size:18px}
   .rz-net .st{margin-left:auto;font-size:12.5px;color:var(--muted);font-weight:700}
@@ -172,16 +181,42 @@ require __DIR__ . '/_shell.php';
     <?php if (!$pubs): ?>
       <p class="rz-empty">Todavía no has publicado nada. Cuando publiques un post, aparece aquí con su fecha y enlace.</p>
     <?php else: foreach ($pubs as $p):
-      $cap = trim((string)$p['caption']); if ($cap==='') $cap = '(sin texto)'; ?>
+      $cap = trim((string)$p['caption']); if ($cap==='') $cap = '(sin texto)';
+      // Redes que se intentaron para este post (de plataformas; fallback a plataforma)
+      $intent = [];
+      if (!empty($p['plataformas'])) {
+          foreach (preg_split('/[,\s]+/', strtolower((string)$p['plataformas'])) as $x) {
+              if (in_array($x, ['instagram','facebook'], true)) $intent[$x] = true;
+          }
+      }
+      if (!$intent && !empty($p['plataforma'])) $intent[$p['plataforma']] = true;
+      if (!$intent) $intent = ['instagram'=>true];
+      $rp = $redes[(int)$p['id']] ?? [];
+    ?>
       <div class="rz-pub">
         <?php if (!empty($p['grafica_path'])): ?>
           <img class="th" src="<?= $h($p['grafica_path']) ?>" alt="">
         <?php else: ?><span class="th ph"><?= $p['plataforma']==='facebook'?ico('facebook'):ico('instagram') ?></span><?php endif; ?>
         <div class="tx">
           <div class="cap"><?= $h(mb_strimwidth($cap,0,120,'…')) ?></div>
-          <div class="mt"><?= $p['plataforma']==='facebook'?'Facebook':'Instagram' ?> · <?= $p['publicado_at'] ? $h(date('d/m/Y', strtotime($p['publicado_at']))) : 'publicado' ?></div>
+          <div class="mt"><?= $p['publicado_at'] ? $h(date('d/m/Y', strtotime($p['publicado_at']))) : 'publicado' ?></div>
+          <div class="rz-nets">
+            <?php foreach (['instagram'=>'Instagram','facebook'=>'Facebook'] as $net=>$lbl):
+                if (empty($intent[$net])) continue;
+                $info = $rp[$net] ?? null;
+                $ic = $net==='facebook' ? ico('facebook') : ico('instagram');
+                if ($info && $info['estado']==='ok' && !empty($info['permalink'])): ?>
+                  <a class="rz-nb ok" href="<?= $h($info['permalink']) ?>" target="_blank" rel="noopener"><?= $ic ?> <?= $lbl ?> · ver →</a>
+                <?php elseif ($info && $info['estado']==='ok'): ?>
+                  <span class="rz-nb ok"><?= $ic ?> <?= $lbl ?> · publicado</span>
+                <?php elseif ($info && $info['estado']==='error'): ?>
+                  <span class="rz-nb err" title="<?= $h($info['error'] ?? 'Error al publicar') ?>"><?= $ic ?> <?= $lbl ?> · falló</span>
+                <?php else: ?>
+                  <span class="rz-nb none"><?= $ic ?> <?= $lbl ?> · no salió</span>
+                <?php endif;
+            endforeach; ?>
+          </div>
         </div>
-        <?php if (!empty($p['permalink'])): ?><a class="vp" href="<?= $h($p['permalink']) ?>" target="_blank" rel="noopener">ver post →</a><?php endif; ?>
       </div>
     <?php endforeach; endif; ?>
   </div>
@@ -201,8 +236,11 @@ require __DIR__ . '/_shell.php';
 <section class="rz-pane" id="pane-redes">
   <div class="rz-card">
     <h2>Tus redes</h2>
-    <div class="rz-net"><span class="e"><?= ico('instagram') ?></span> Instagram <span class="st"><?= $meta_ok ? 'conectado' : 'no conectado' ?></span></div>
-    <div class="rz-net"><span class="e"><?= ico('facebook') ?></span> Facebook <span class="st"><?= $meta_ok ? 'conectado' : 'no conectado' ?></span></div>
+    <div class="rz-net"><span class="e"><?= ico('instagram') ?></span> Instagram <span class="st" style="color:<?= $conx['ig']?'var(--teal-dark)':'var(--muted)' ?>"><?= $conx['ig'] ? 'conectado' : 'no conectado' ?></span></div>
+    <div class="rz-net"><span class="e"><?= ico('facebook') ?></span> Facebook <span class="st" style="color:<?= $conx['fb']?'var(--teal-dark)':'var(--muted)' ?>"><?= $conx['fb'] ? 'conectado' : 'no conectado' ?></span></div>
+    <?php if ($meta_ok && !$conx['fb']): ?>
+      <p style="font-size:12.5px;color:#b3123b;font-weight:700;margin-top:10px;line-height:1.45">Tu Instagram está conectado pero <b>falta enganchar una Página de Facebook</b> — por eso los posts salen solo en IG. Vuelve a <a href="<?= $BASE ?>/conectar.php?marca=<?= $marca_id ?>" style="color:#b3123b;text-decoration:underline">conectar</a> y elige tu Página.</p>
+    <?php endif; ?>
   </div>
   <div class="rz-card rz-lock">
     <?php if ($meta_ok): ?>
