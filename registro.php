@@ -36,10 +36,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // el municipio del negocio va en el onboarding, el WhatsApp en activación).
             // Activación por correo OBLIGATORIA (confirma que es humano). La cuenta
             // arranca SIN verificar; no entra ni ve el post de muestra hasta activar.
+            // EXCEPCIÓN — CUENTAS DE PRUEBA: si el email está en CRECER_TEST_EMAILS
+            // (o CRECER_DEV_ACTIVAR en local), entra DIRECTO sin correo, para poder
+            // probar el flujo completo desde la página. Los reales sí pasan por correo.
+            require_once __DIR__ . '/includes/suscripcion.php';
+            $es_prueba = activacion_de_prueba($val['email']);
             $token = bin2hex(random_bytes(32));
             $ins = $pdo->prepare("INSERT INTO usuarios (nombre, email, password, rol, verificado, verif_token)
-                                  VALUES (?,?,?, 'proveedor', 0, ?)");
-            $ins->execute([$val['nombre'], $val['email'], password_hash($pass, PASSWORD_DEFAULT), $token]);
+                                  VALUES (?,?,?, 'proveedor', ?, ?)");
+            $ins->execute([$val['nombre'], $val['email'], password_hash($pass, PASSWORD_DEFAULT), $es_prueba ? 1 : 0, $token]);
+            $nuevo_id = (int)$pdo->lastInsertId();
+
+            if ($es_prueba) {
+                login_usuario(['id'=>$nuevo_id, 'nombre'=>$val['nombre'], 'rol'=>'proveedor']);
+                header('Location: /crecer/onboarding.php'); exit;   // prueba: sin correo, directo
+            }
+
             require_once __DIR__ . '/includes/notificaciones.php';
             $base = defined('BASE_URL') ? rtrim(BASE_URL, '/') : 'http://localhost/crecer';
             crecer_email_activacion($val['email'], $val['nombre'], $base . '/activar.php?token=' . $token);

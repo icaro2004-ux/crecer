@@ -32,6 +32,13 @@ define('GOOGLE_APPLICATION_CREDENTIALS', '');
 define('GCP_PROJECT_ID', '');
 define('GCP_LOCATION',   'us-central1');
 define('GEMINI_MODEL',   'gemini-2.5-flash'); // 2.0-flash no tiene free tier; 2.5 sí
+// Copiloto de Encuentralo: limites de costo/abuso. Puedes usar otro modelo
+// solo para el chat sin afectar planificador, creador ni imagenes.
+// define('CRECER_COPILOTO_MODEL', 'gemini-2.5-flash-lite');
+// define('CRECER_COPILOTO_HORA', 3);         // por negocio con plan
+// define('CRECER_COPILOTO_DIA', 8);          // por negocio con plan
+// define('CRECER_COPILOTO_FREE_DIA', 3);     // por negocio sin plan
+// define('CRECER_COPILOTO_GLOBAL_DIA', 80);  // todo Crecer
 
 // ── Stripe ──
 define('STRIPE_SECRET_KEY',      '');
@@ -62,4 +69,20 @@ define('CRON_TOKEN', '');
 //  · PRODUCCIÓN (probar en el celular): activa SOLO estos emails. Seguro —
 //    los usuarios reales siguen pagando por Stripe. Registra cuentas de prueba
 //    con estos emails y actívalas gratis desde el teléfono.
-//      define('CRECER_TEST_EMAILS', 'tucorreo+prueba1@gmail.com, tucorreo+prueba2@gmail.com');
+//    Estas cuentas, además, ENTRAN SIN VERIFICAR POR CORREO (registro directo),
+//    así puedes probar el flujo completo desde la página aunque el email falle.
+//      define('CRECER_TEST_EMAILS', 'tucorreo+prueba1@gmail.com, tucorreo+prueba2@gmail.com, tucorreo+prueba3@gmail.com');
+
+// ── EMAIL / SMTP (activación de cuentas y avisos) ────────────────────────────
+// SIN estas constantes, crecer_enviar_email() cae a mail() de PHP, que NO
+// entrega a Gmail/Yahoo → "los correos de creación de cuenta no llegan".
+// ARREGLO EN PROD: copia los valores EXACTOS del config de Encuéntralo que YA
+// funciona (mismo servidor Hostinger): abre en hPanel el
+// includes/config.local.php de Encuéntralo y copia SMTP_HOST / SMTP_USER /
+// SMTP_PASS aquí. Puerto 465 (SSL). El USER es la cuenta de correo completa.
+define('SMTP_HOST',     '');                          // ej. smtp.hostinger.com
+define('SMTP_PORT',     465);
+define('SMTP_USER',     '');                          // ej. hola@encuentraloahora.com
+define('SMTP_PASS',     '');                          // contraseña de esa cuenta
+define('SMTP_FROM',     'hola@encuentraloahora.com'); // remitente visible
+define('SMTP_FROMNAME', 'Encuéntralo Crecer');
