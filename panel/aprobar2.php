@@ -1777,14 +1777,24 @@ $cf = [
       + '<div class="pubres-btns">'+ver+'<button type="button" class="pubres-cerrar" onclick="pubCerrar(true)">Cerrar</button></div>';
     document.getElementById('pubresOv').classList.add('show');
   }
-  function pubErr(msg){
+  var _errCard=null;
+  function pubErr(msg, card){
     if(_loaderTimer){ clearInterval(_loaderTimer); _loaderTimer=null; }
+    _errCard = card || null;
+    var manualBtn = _errCard
+      ? '<button type="button" onclick="pubManual()" style="border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:15px;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));padding:12px 22px;border-radius:99px;margin-right:8px">Publícalo tú mismo →</button>'
+      : '';
+    var tip = _errCard
+      ? '<div class="pubres-msg" style="font-size:12.5px;color:var(--muted);margin-top:4px">Tranqui: lo publicas a mano en un momento — te copiamos el texto y bajas la imagen.</div>'
+      : '';
     _pubCard().innerHTML = '<div class="pubres-ico">⚠️</div>'
-      + '<div class="pubres-t">No se pudo publicar</div>'
-      + '<div class="pubres-msg">'+(msg||'Intenta de nuevo en un momento.')+'</div>'
-      + '<div class="pubres-btns"><button type="button" class="pubres-cerrar" onclick="pubCerrar(false)">Cerrar</button></div>';
+      + '<div class="pubres-t">No se pudo publicar solo</div>'
+      + '<div class="pubres-msg">'+(msg||'La conexión con tus redes falló.')+'</div>'
+      + tip
+      + '<div class="pubres-btns">'+manualBtn+'<button type="button" class="pubres-cerrar" onclick="pubCerrar(false)">Cerrar</button></div>';
     document.getElementById('pubresOv').classList.add('show');
   }
+  function pubManual(){ var c=_errCard; pubCerrar(false); if(c && typeof abrirPublicar==='function') abrirPublicar(c); }
   function pubCerrar(reload){ document.getElementById('pubresOv').classList.remove('show'); if(reload) location.reload(); }
   function _permalink(res){ if(!res) return ''; for(var k in res){ var v=res[k]; if(typeof v==='string' && /^https?:\/\//.test(v)) return v; } return ''; }
   // Publicación REAL por la Graph API a la Página/IG conectados (un botón).
@@ -1800,9 +1810,9 @@ $cf = [
         if(btn) btn.disabled = false;
         if(d.ok){ pubOk('Tu post ya salió a Instagram/Facebook.', _permalink(d.resultados)); }
         else if(d.err === 'no_conectado'){ pubCerrar(false); abrirPublicar(card); }   // sin conexión → flujo manual
-        else { pubErr(d.err || 'No se pudo publicar'); }
+        else { pubErr(d.err || 'No se pudo publicar', card); }                          // falló → ofrece publicar a mano
       })
-      .catch(function(){ if(btn) btn.disabled = false; pubErr('Error de conexión. Intenta de nuevo.'); });
+      .catch(function(){ if(btn) btn.disabled = false; pubErr('La conexión con tus redes falló.', card); });
   }
   if(feed) feed.addEventListener('click', function(e){
     var b=e.target.closest('.publicarbtn'); if(!b) return; e.preventDefault();
