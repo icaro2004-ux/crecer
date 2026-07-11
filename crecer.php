@@ -162,7 +162,7 @@ $nf = fn($n) => number_format((int)$n);
     .hero-photo img{object-position:62% center}
     .photo-bubble{display:none}
     .pain-note{padding:22px 20px}.feature-row{grid-template-columns:1fr}
-    .banner{padding:42px 24px 30px;grid-template-columns:1fr;gap:10px}.banner h2{font-size:31px}.banner p{font-size:16px}.growth-art{min-height:310px;margin-top:-8px}.growth-art img{width:124%;max-height:340px;object-position:center}
+    .banner{padding:42px 24px 30px;grid-template-columns:1fr;gap:10px}.banner h2{font-size:31px}.banner p{font-size:16px}.growth-art{min-height:236px;margin-top:-8px}.growth-art img{width:93%;max-height:255px;object-position:center}
     .price-card{padding-bottom:34px}.price-card .price{font-size:58px}
   }
   /* ═══════════════ HERO SOLO MÓVIL (≤768px) ═══════════════
