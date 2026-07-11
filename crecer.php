@@ -66,6 +66,7 @@ $nf = fn($n) => number_format((int)$n);
   .brand img{width:54px;height:58px;object-fit:contain;display:block}
   .navlinks{margin-left:auto;display:flex;align-items:center;gap:20px}
   .navlinks a{color:var(--ink);text-decoration:none;font-size:14px;font-weight:800}
+  .navlinks a.cta{color:#fff}
   .navlinks .login{color:var(--muted)}
   .cta{display:inline-flex;align-items:center;justify-content:center;gap:9px;border:0;border-radius:999px;background:var(--pink);color:#fff;text-decoration:none;font-weight:900;padding:13px 22px;box-shadow:0 16px 32px -18px var(--pink);transition:transform .16s ease,filter .16s ease}
   .cta:hover{transform:translateY(-2px);filter:brightness(1.04)}
