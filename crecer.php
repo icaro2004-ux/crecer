@@ -7,7 +7,7 @@ require __DIR__ . '/includes/iconos.php';
 
 $acciones = 113;
 $negocios = 7;
-$precio_crecer = 49;
+$precio_crecer = 35;   // respaldo si la BD no responde; la fuente real es crecer_planes.precio_mensual
 try {
     if (is_file(__DIR__ . '/includes/config.local.php')) require_once __DIR__ . '/includes/config.local.php';
     if (defined('DB_NAME') && DB_NAME !== '') {
