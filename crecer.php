@@ -345,16 +345,16 @@ $nf = fn($n) => number_format((int)$n);
         <div class="desde">Planes desde</div>
         <div class="price">$<?= (int)$precio_crecer ?><small>/mes</small></div>
         <p>Hecho para emprendedores como tú.</p>
-        <a class="price-cta" href="/crecer/registro.php">Probar 7 días</a>
-        <span class="price-note">Sin compromiso.</span>
+        <a class="price-cta" href="/crecer/registro.php">Empezar gratis</a>
+        <span class="price-note">Tu primer post, gratis · sin tarjeta</span>
       </aside>
     </div>
   </section>
 
   <section class="final wrap">
     <h2>Haz que tu negocio se vea <span>presente, activo y listo para crecer.</span></h2>
-    <a class="cta" href="/crecer/registro.php">Probar gratis por 7 días</a>
-    <div class="micro">Sin compromiso. Empiezas con tu primer post.</div>
+    <a class="cta" href="/crecer/registro.php">Crea tu primer post gratis</a>
+    <div class="micro">Sin tarjeta · empiezas con tu post de muestra.</div>
   </section>
 </main>
 
