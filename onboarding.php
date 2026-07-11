@@ -134,6 +134,16 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .hint{font-size:12.5px;color:var(--muted);margin-top:10px}
   audio{width:100%;margin-top:12px}
   .photo-prev{width:100%;max-height:230px;object-fit:cover;border-radius:14px;margin-top:12px;display:none}
+  /* Uploader bonito (reemplaza el "Choose File" nativo) */
+  .uploader{display:flex;align-items:center;gap:13px;width:100%;cursor:pointer;padding:15px 16px;border:1.5px dashed color-mix(in srgb,var(--terracota) 36%,var(--line));border-radius:14px;background:color-mix(in srgb,var(--terracota) 4%,#fff);transition:border-color .15s,background .15s}
+  .uploader:hover,.uploader.drag{border-color:var(--terracota);background:color-mix(in srgb,var(--terracota) 8%,#fff)}
+  .uploader .up-ic{width:44px;height:44px;border-radius:12px;flex:none;display:grid;place-items:center;background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff}
+  .uploader .up-ic svg{width:22px;height:22px}
+  .uploader .up-tx{font-weight:800;font-size:14.5px;color:var(--tinta);line-height:1.3;overflow:hidden;text-overflow:ellipsis}
+  .uploader .up-tx b{display:block;color:var(--muted);font-weight:600;font-size:12.5px;margin-top:1px}
+  .uploader.has-file{border-style:solid;border-color:var(--palma);background:color-mix(in srgb,var(--palma) 7%,#fff)}
+  .uploader.has-file .up-ic{background:var(--palma)}
+  input[type=file]{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip:rect(0 0 0 0)}
   .go{width:100%;border:0;cursor:pointer;font-family:var(--font-impact);text-transform:uppercase;letter-spacing:.04em;font-size:18px;color:#fff;background:var(--palma);padding:16px;border-radius:14px;box-shadow:0 12px 28px -12px rgba(22,184,106,.7);margin-top:6px}
   .go:disabled{opacity:.5;cursor:default}
   .err{background:var(--noo-bg);color:var(--noo-ink);font-weight:700;font-size:14px;padding:11px 14px;border-radius:12px;margin-bottom:14px;display:none}
@@ -186,6 +196,10 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   <div class="step">
     <div class="n">PASO 3 · OPCIONAL</div>
     <label style="display:inline-flex;align-items:center;gap:8px"><img src="/crecer/assets/icons/foto.svg" alt="" style="width:22px;height:22px"> ¿Tienes una foto de tu producto? <span style="color:var(--muted);font-weight:500">(opcional)</span></label>
+    <label class="uploader" id="foto-drop" for="foto">
+      <span class="up-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span>
+      <span class="up-tx" id="foto-tx">Subir una foto<b>Toca aquí o arrástrala</b></span>
+    </label>
     <input type="file" id="foto" accept="image/png,image/jpeg,image/webp">
     <img class="photo-prev" id="prev" alt="">
     <div class="hint">Si tienes una foto real de lo que vendes, la IA la convierte en tu post de muestra. <b>Si no tienes ahora, no hay lío</b> — el corillo te arma el caption igual y la foto la subes después desde tu panel.</div>
@@ -235,9 +249,23 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     }
   });
 
-  foto.addEventListener('change', function(){
-    if(foto.files[0]){ prev.src=URL.createObjectURL(foto.files[0]); prev.style.display='block'; }
-  });
+  var fotoDrop=document.getElementById('foto-drop'), fotoTx=document.getElementById('foto-tx');
+  function mostrarFoto(file){
+    if(!file) return;
+    prev.src=URL.createObjectURL(file); prev.style.display='block';
+    if(fotoTx) fotoTx.innerHTML = file.name + '<b>Toca para cambiar</b>';
+    if(fotoDrop) fotoDrop.classList.add('has-file');
+  }
+  foto.addEventListener('change', function(){ if(foto.files[0]) mostrarFoto(foto.files[0]); });
+  // Arrastrar y soltar
+  if(fotoDrop){
+    ['dragenter','dragover'].forEach(function(ev){ fotoDrop.addEventListener(ev, function(e){ e.preventDefault(); fotoDrop.classList.add('drag'); }); });
+    ['dragleave','drop'].forEach(function(ev){ fotoDrop.addEventListener(ev, function(e){ e.preventDefault(); fotoDrop.classList.remove('drag'); }); });
+    fotoDrop.addEventListener('drop', function(e){
+      var f=e.dataTransfer && e.dataTransfer.files[0];
+      if(f && /^image\//.test(f.type)){ foto.files=e.dataTransfer.files; mostrarFoto(f); }
+    });
+  }
 
   function usarTexto(msg){
     var t=document.getElementById('texto'); if(t) t.style.display='block';
