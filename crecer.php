@@ -1,569 +1,368 @@
 <?php
 // ============================================================
-//  ENCUÉNTRALO · CRECER — Landing de venta (rediseño "brutal")
-//  crecer.php  ·  /crecer
-//
-//  Identidad "El Corillo": Anton de impacto + paleta boricua.
-//  Prueba social VIVA desde crecer_ia_log (con fallback si la BD
-//  no responde — la landing nunca debe caerse).
+//  ENCUENTRALO · CRECER — Landing minimalista inspirada en flyer
+//  crecer.php · /crecer
 // ============================================================
 require __DIR__ . '/includes/iconos.php';
 
-// ── Prueba social viva (defensiva: nunca tumba la página) ──
-$acciones = 113; $negocios = 7;
-$precio_crecer = 49;   // fallback; el real se lee de crecer_planes (dato configurable)
+$acciones = 113;
+$negocios = 7;
+$precio_crecer = 49;
 try {
     if (is_file(__DIR__ . '/includes/config.local.php')) require_once __DIR__ . '/includes/config.local.php';
     if (defined('DB_NAME') && DB_NAME !== '') {
-        $pdo = new PDO("mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
-            DB_USER, DB_PASS, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        $pdo = new PDO(
+            "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
+            DB_USER,
+            DB_PASS,
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+        );
         $r = $pdo->query("SELECT COUNT(*) a, COUNT(DISTINCT marca_id) n FROM crecer_ia_log WHERE estado='ok'")->fetch(PDO::FETCH_ASSOC);
-        if ($r) { $acciones = max($acciones, (int)$r['a']); $negocios = max($negocios, (int)$r['n']); }
+        if ($r) {
+            $acciones = max($acciones, (int)$r['a']);
+            $negocios = max($negocios, (int)$r['n']);
+        }
         $pp = $pdo->query("SELECT precio_mensual FROM crecer_planes WHERE slug='crecer' AND activo=1")->fetchColumn();
         if ($pp !== false && $pp !== null) $precio_crecer = (int)$pp;
     }
-} catch (Throwable $e) { /* usa el fallback */ }
-$nf = fn($n) => number_format($n);
+} catch (Throwable $e) {}
+
+$nf = fn($n) => number_format((int)$n);
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Crecer · El contenido de tus redes, hecho por IA — Encuéntralo</title>
-<meta name="description" content="Crecer te prepara cada semana los posts de tus redes, en tu propia voz. Tú solo los apruebas desde el celular. Hecho en y para Puerto Rico.">
-<link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/crecer-mark.svg">
+<title>Crecer · Hacerse conocer no tiene por qué serlo</title>
+<meta name="description" content="Encuéntralo Crecer es tu asistente de inteligencia artificial para atraer clientes, ahorrar tiempo y hacer crecer tu negocio.">
+<link rel="icon" type="image/png" href="/crecer/assets/brand/encuentralo-crecer-pin-drop.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Poppins:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=9" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Caveat:wght@600;700&family=Poppins:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=10" rel="stylesheet">
 <style>
-  :root{ --grad:linear-gradient(120deg,var(--coral,#ff5c39),var(--magenta,#c0395f)); }
-  *{box-sizing:border-box}
-  body{background:var(--crema,#fbf6ee);color:var(--tinta,#1b1622);overflow-x:hidden;
-    font-family:'Plus Jakarta Sans',system-ui,sans-serif}
-  .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
-  .disp{font-family:'Anton',sans-serif;text-transform:uppercase;letter-spacing:.01em;line-height:.94;font-weight:400}
-  .g{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-
-  /* NAV */
-  .nav{position:sticky;top:0;z-index:50;backdrop-filter:saturate(1.2) blur(10px);
-    background:color-mix(in srgb,var(--crema) 82%,transparent);border-bottom:1px solid var(--line)}
-  .nav .in{display:flex;align-items:center;gap:12px;max-width:1120px;margin:0 auto;padding:13px 24px}
-  .nav .mark{height:30px}
-  .nav .bn{font-family:var(--font-display);font-weight:800;text-transform:lowercase;font-size:20px;letter-spacing:-.03em}
-  .nav .sp{flex:1}
-  .nav .enter{font-weight:700;font-size:14.5px;color:var(--muted);text-decoration:none;padding:9px 14px;border-radius:99px}
-  .nav .enter:hover{color:var(--tinta)}
-  .nav .cta{font-weight:800;font-size:14.5px;color:#fff;background:var(--grad);text-decoration:none;
-    padding:10px 18px;border-radius:99px;box-shadow:0 10px 24px -10px rgba(192,57,95,.7)}
-  .nav .cta:hover{filter:brightness(1.06)}
-
-  /* HERO */
-  .hero{position:relative;padding:60px 0 40px}
-  .hero::before{content:"";position:absolute;inset:0;z-index:-1;
-    background:radial-gradient(60% 70% at 78% 8%,rgba(255,92,57,.16),transparent 60%),
-               radial-gradient(50% 60% at 8% 30%,rgba(192,57,95,.12),transparent 55%)}
-  .hero .in{display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center}
-  .eyebrow{display:inline-flex;align-items:center;gap:8px;font-weight:800;font-size:12.5px;letter-spacing:.1em;
-    text-transform:uppercase;color:var(--terracota,#e3683f);background:color-mix(in srgb,var(--terracota) 12%,#fff);
-    border:1px solid color-mix(in srgb,var(--terracota) 24%,#fff);padding:7px 14px;border-radius:99px}
-  .hero h1{font-size:clamp(44px,7vw,80px);margin:18px 0 0}
-  .hero .sub{font-size:clamp(16px,1.5vw,19px);color:var(--muted);margin:20px 0 0;max-width:38ch;line-height:1.5}
-  .hero .actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:28px}
-  .btn-primary{font-weight:800;font-size:16px;color:#fff;background:var(--grad);text-decoration:none;
-    padding:15px 28px;border-radius:99px;box-shadow:0 16px 36px -12px rgba(192,57,95,.6);transition:transform .15s,filter .15s}
-  .btn-primary:hover{transform:translateY(-2px);filter:brightness(1.06)}
-  .btn-ghost{font-weight:800;font-size:16px;color:var(--tinta);background:#fff;border:1.5px solid var(--line);
-    text-decoration:none;padding:15px 24px;border-radius:99px}
-  .btn-ghost:hover{border-color:var(--terracota)}
-  .proof{display:flex;align-items:center;gap:10px;margin-top:26px;font-size:14px;color:var(--muted)}
-  .proof b{font-family:'Anton',sans-serif;font-size:22px;color:var(--tinta);letter-spacing:.02em}
-  .proof .dot{width:8px;height:8px;border-radius:50%;background:var(--palma,#16b86a);box-shadow:0 0 0 4px rgba(22,184,106,.18)}
-
-  /* HERO phone mockup (puro CSS, sin imágenes) */
-  .phone{justify-self:center;width:300px;max-width:84vw;background:#0e0a16;border-radius:38px;padding:12px;
-    box-shadow:0 40px 90px -30px rgba(27,22,34,.55),0 0 0 2px rgba(255,255,255,.04) inset;position:relative}
-  .phone .scr{background:var(--crema);border-radius:28px;overflow:hidden}
-  .phone .bar{display:flex;align-items:center;gap:8px;padding:14px 16px 10px;background:#fff;border-bottom:1px solid var(--line)}
-  .phone .bar .av{width:30px;height:30px;border-radius:50%;background:var(--grad)}
-  .phone .bar b{font-size:13.5px}
-  .phone .bar .live{margin-left:auto;font-size:10px;font-weight:800;color:var(--palma);text-transform:uppercase;letter-spacing:.06em}
-  .pcard{margin:14px;background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:var(--shadow-sm)}
-  .pcard .pimg{height:128px;background:
-    radial-gradient(circle at 30% 30%,rgba(255,255,255,.5),transparent 40%),
-    linear-gradient(135deg,#ffb27a,#e3683f 55%,#c0395f);position:relative}
-  .pcard .pimg .emoji{position:absolute;inset:0;display:grid;place-items:center;font-size:46px;filter:drop-shadow(0 6px 10px rgba(0,0,0,.2))}
-  .pcard .pcap{padding:11px 13px;font-size:12.5px;line-height:1.45;color:#2a2230}
-  .pcard .pact{display:flex;gap:8px;padding:0 13px 13px}
-  .pcard .pact .ok{flex:1;text-align:center;font-weight:800;font-size:12.5px;color:#fff;background:var(--palma);border-radius:10px;padding:9px}
-  .pcard .pact .sh{font-weight:800;font-size:12.5px;color:var(--tinta);background:var(--crema);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
-  .float{position:absolute;left:-26px;background:#fff;border:1px solid var(--line);border-radius:14px;
-    padding:9px 12px;box-shadow:0 16px 30px -14px rgba(27,22,34,.4);font-size:12px;font-weight:700;display:flex;align-items:center;gap:8px}
-  .float .o{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:14px;background:color-mix(in srgb,var(--magenta) 14%,#fff);color:var(--magenta)}
-  .float .o svg{width:15px;height:15px}
-  .cell .ic svg{width:30px;height:30px;stroke-width:1.8}
-  .hero-cell .ic svg{width:38px;height:38px}
-  .empat .pain svg{width:18px;height:18px;flex:none;color:var(--coral)}
-  .float.f1{top:74px;animation:bob 4s ease-in-out infinite}
-  .float.f2{bottom:130px;left:auto;right:-22px;animation:bob 4.6s ease-in-out infinite .5s}
-  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
-
-  /* Tira "el corillo" */
-  .band{margin-top:46px}
-  .band .lab{text-align:center;font-weight:800;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
-  .agents{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:18px;position:relative;perspective:900px}
-  .ag{background:var(--card,#fff);border:1px solid var(--line);border-radius:16px;padding:16px 10px;text-align:center;
-    transition:transform .18s,box-shadow .18s}
-  .ag{position:relative;transform-style:preserve-3d;transition:transform .1s ease-out,box-shadow .2s}
-  .ag:hover{transform:translateY(-8px);box-shadow:0 26px 50px -18px color-mix(in srgb,var(--c) 50%,rgba(27,22,34,.5)),0 0 0 2px color-mix(in srgb,var(--c) 40%,transparent),0 0 30px -2px color-mix(in srgb,var(--c) 55%,transparent)}
-  .ag .o{width:56px;height:56px;border-radius:50%;margin:0 auto 11px;display:grid;place-items:center;color:#fff;
-    background:linear-gradient(140deg,color-mix(in srgb,var(--c) 72%,#fff),var(--c))}
-  .ag .o svg{width:27px;height:27px;stroke:#fff;fill:none}
-  .ag h4{font-family:'Anton',sans-serif;font-size:15px;letter-spacing:.02em;margin:0;text-transform:uppercase}
-  .ag p{font-size:11.5px;color:var(--muted);margin:2px 0 0}
-
-  /* Secciones */
-  section{padding:64px 0}
-  .sec-head{text-align:center;max-width:680px;margin:0 auto 36px}
-  .sec-head h2{font-size:clamp(30px,4.6vw,52px);margin:0}
-  .sec-head p{color:var(--muted);margin:14px 0 0;font-size:17px}
-
-  /* Cómo funciona */
-  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
-  .step{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px 20px;position:relative}
-  .step .n{font-family:'Anton',sans-serif;font-size:40px;color:color-mix(in srgb,var(--terracota) 30%,#fff);line-height:1}
-  .step h4{font-size:17px;font-weight:800;margin:8px 0 5px}
-  .step p{font-size:14px;color:var(--muted);margin:0;line-height:1.5}
-
-  /* Bento de features */
-  .bento{display:grid;grid-template-columns:repeat(6,1fr);gap:16px}
-  .cell{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:26px;position:relative;overflow:hidden}
-  .cell.big{grid-column:span 4}.cell.sm{grid-column:span 2}
-  .cell .ic{font-size:30px;color:var(--coral)}
-  .cell h3{font-family:'Anton',sans-serif;font-size:24px;text-transform:uppercase;letter-spacing:.02em;margin:12px 0 6px}
-  .cell p{font-size:14.5px;color:var(--muted);margin:0;line-height:1.55;max-width:44ch}
-  .cell.hero-cell{grid-column:1/-1;background:linear-gradient(135deg,#241633,#0e0a16);color:#fff}
-  .cell.hero-cell h3{color:#fff}.cell.hero-cell p{color:#ccc4d6}
-  .cell.hero-cell .tagm{display:inline-block;margin-top:14px;font-size:12px;font-weight:800;color:#c9b8ff;
-    background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);padding:6px 12px;border-radius:99px}
-
-  /* Niveles */
-  .plans{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;align-items:start;max-width:760px;margin:0 auto}
-  .plan{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:28px 24px;position:relative}
-  .plan.pop{border:2px solid transparent;transform:translateY(-10px);
-    background:linear-gradient(var(--card),var(--card)) padding-box,var(--grad) border-box;
-    box-shadow:0 26px 56px -24px rgba(192,57,95,.5)}
-  .plan .pop-tag{position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:var(--grad);color:#fff;
-    font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:6px 15px;border-radius:99px}
-  .plan .lvl{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
-  .plan .lvl svg{width:15px;height:15px}
-  .plan .name{font-family:'Anton',sans-serif;font-size:30px;text-transform:uppercase;letter-spacing:.02em;margin:6px 0 2px}
-  .plan .promise{font-size:14px;color:var(--muted);min-height:42px}
-  .plan .price{font-family:'Anton',sans-serif;font-size:50px;letter-spacing:.01em;margin:12px 0 2px}
-  .plan .price small{font-size:15px;color:var(--muted);font-weight:600;font-family:'Plus Jakarta Sans'}
-  .plan ul{list-style:none;margin:18px 0 0;padding:0;display:flex;flex-direction:column;gap:11px}
-  .plan li{font-size:14px;display:flex;gap:9px;align-items:flex-start;line-height:1.4}
-  .plan li::before{content:"✓";color:var(--palma);font-weight:900;flex:none}
-  .plan .cta{display:block;text-align:center;margin-top:22px;padding:14px;border-radius:99px;font-weight:800;font-size:15px;
-    text-decoration:none;border:1.5px solid var(--line);color:var(--tinta);transition:.15s}
-  .plan.pop .cta{background:var(--grad);color:#fff;border-color:transparent}
-  .plan .cta:hover{border-color:var(--terracota)}.plan.pop .cta:hover{filter:brightness(1.06)}
-  .note{text-align:center;color:var(--muted);font-size:13.5px;margin-top:20px}
-
-  /* Evidencia / prueba */
-  .ev{background:linear-gradient(135deg,#241633,#0e0a16);color:#fff;border-radius:26px;padding:44px;text-align:center}
-  .ev h2{font-family:'Anton',sans-serif;font-size:clamp(28px,4vw,44px);text-transform:uppercase;margin:0}
-  .ev p{color:#c9c2d4;font-size:16px;margin:14px auto 0;max-width:52ch}
-  .ev .stats{display:flex;justify-content:center;gap:42px;flex-wrap:wrap;margin-top:30px}
-  .ev .stat b{font-family:'Anton',sans-serif;font-size:46px;display:block;line-height:1}
-  .ev .stat .g{display:inline}
-  .ev .stat span{color:#9f96b0;font-size:13px;font-weight:700}
-
-  /* Flywheel */
-  .ring{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;align-items:center}
-  .node{background:#fff;border:1px solid var(--line);border-radius:99px;padding:11px 18px;font-weight:700;font-size:14px}
-  .arr{color:var(--terracota);font-weight:900}
-
-  /* CTA final */
-  .final{text-align:center}
-  .final h2{font-size:clamp(34px,6vw,64px);max-width:16ch;margin:0 auto}
-  .final .big-cta{display:inline-block;margin-top:26px;background:var(--grad);color:#fff;font-weight:800;font-size:18px;
-    padding:18px 40px;border-radius:99px;text-decoration:none;box-shadow:0 18px 40px -14px rgba(192,57,95,.6)}
-  .final .big-cta:hover{filter:brightness(1.06)}
-  .foot{text-align:center;color:var(--muted);font-size:13px;padding:30px}
-  .foot b{color:var(--terracota)}
-  .foot-legal{display:inline-block;margin-top:8px;font-size:12.5px}
-  .foot-legal a{color:var(--muted);text-decoration:none;font-weight:600}
-  .foot-legal a:hover{color:var(--terracota);text-decoration:underline}
-
-  /* Empatía (el "te entendemos") */
-  .empat{background:linear-gradient(135deg,#2a1020,#160a12);color:#fff;border-radius:26px;padding:48px 40px;text-align:center}
-  .empat .k{font-weight:800;letter-spacing:.12em;text-transform:uppercase;font-size:12.5px;color:#ffb27a}
-  .empat h2{font-family:'Anton',sans-serif;font-size:clamp(28px,4.4vw,46px);text-transform:uppercase;margin:12px 0 0;line-height:1}
-  .empat .pains{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin:26px 0 0}
-  .empat .pain{display:inline-flex;align-items:center;gap:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.13);border-radius:14px;padding:12px 16px;font-size:14px;color:#efe7ee}
-  .empat .turn{font-family:'Anton',sans-serif;font-size:clamp(22px,3.4vw,36px);text-transform:uppercase;margin-top:30px;color:#fff;letter-spacing:.01em}
-  .empat .turn span{color:#ff7a4d}
-  /* Voz del agente (el alma del corillo) */
-  .ag .q{font-size:11.5px;font-style:italic;color:#6a5c66;margin-top:8px;line-height:1.4;min-height:46px}
-  /* Manifiesto (crescendo emocional) */
-  .manif{text-align:center;padding:84px 24px 70px}
-  .manif h2{font-size:clamp(34px,6.2vw,70px);line-height:.98;max-width:16ch;margin:0 auto}
-  .manif p{color:var(--muted);font-size:18px;margin:22px auto 0;max-width:44ch;line-height:1.55}
-
-  /* ── Personalidad / vida ── */
-  /* Orbes del corillo: laten suave (sensación de "trabajando") */
-  .ag .o{animation:pulseGlow 3.8s ease-in-out infinite}
-  .ag:nth-child(2) .o{animation-delay:.5s}.ag:nth-child(3) .o{animation-delay:1s}
-  .ag:nth-child(4) .o{animation-delay:1.5s}.ag:nth-child(5) .o{animation-delay:2s}.ag:nth-child(6) .o{animation-delay:2.5s}
-  @keyframes pulseGlow{0%,100%{box-shadow:0 8px 18px -8px color-mix(in srgb,var(--c) 55%,transparent),0 0 0 0 transparent}
-    50%{box-shadow:0 8px 18px -8px color-mix(in srgb,var(--c) 55%,transparent),0 0 0 8px color-mix(in srgb,var(--c) 12%,transparent)}}
-  /* Dinamismo boricua: el corillo se mece en cadencia (ola) */
-  .ag-in{will-change:transform;animation:sway 3.4s ease-in-out infinite}
-  .ag:nth-child(2) .ag-in{animation-delay:.28s}
-  .ag:nth-child(3) .ag-in{animation-delay:.56s}
-  .ag:nth-child(4) .ag-in{animation-delay:.84s}
-  .ag:nth-child(5) .ag-in{animation-delay:1.12s}
-  .ag:nth-child(6) .ag-in{animation-delay:1.4s}
-  @keyframes sway{0%,100%{transform:translateY(0) rotate(0deg)}30%{transform:translateY(-6px) rotate(-.9deg)}65%{transform:translateY(-2px) rotate(.9deg)}}
-  .ag:hover .ag-in{animation-play-state:paused}
-  /* El orbe del agente baila al pasar el cursor */
-  .ag .o{position:relative;transition:transform .22s cubic-bezier(.34,1.56,.64,1)}
-  .ag:hover .o{transform:scale(1.18) rotate(-8deg)}
-  /* Ondas eléctricas que emite cada orbe (radar) */
-  .ag .o::after{content:"";position:absolute;inset:-3px;border-radius:50%;border:2px solid var(--c);opacity:0;pointer-events:none;animation:onda 2.8s ease-out infinite}
-  .ag:nth-child(2) .o::after{animation-delay:.45s}.ag:nth-child(3) .o::after{animation-delay:.9s}
-  .ag:nth-child(4) .o::after{animation-delay:1.35s}.ag:nth-child(5) .o::after{animation-delay:1.8s}.ag:nth-child(6) .o::after{animation-delay:2.25s}
-  @keyframes onda{0%{transform:scale(1);opacity:.55}80%,100%{transform:scale(2.4);opacity:0}}
-  .ag:hover .o::after{animation-duration:.9s}
-  /* Chispa de los fireworks */
-  .chispa{position:absolute;width:7px;height:7px;border-radius:50%;pointer-events:none;z-index:6;will-change:transform,opacity}
-  /* Reflejo que sigue el cursor (luz sobre la tarjeta) */
-  .ag{z-index:1}
-  .ag::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:3;pointer-events:none;opacity:0;transition:opacity .25s;
-    background:radial-gradient(170px circle at var(--gx,50%) var(--gy,50%),rgba(255,255,255,.55),transparent 46%)}
-  .ag:hover::before{opacity:1}
-  /* Rayos eléctricos entre los agentes */
-  .rayos{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:visible}
-  .bolt{fill:none;stroke:#fff;stroke-width:2;opacity:0;filter:drop-shadow(0 0 4px #ff7a4d) drop-shadow(0 0 8px #c0395f)}
-  @keyframes zap{0%{opacity:0}10%{opacity:1}28%{opacity:.35}44%{opacity:.95}100%{opacity:0}}
-  /* Trazo de marcador hecho a mano bajo palabras clave (firma boricua) */
-  .brush{position:relative}
-  .brush::after{content:"";position:absolute;left:-5%;right:-5%;bottom:-.30em;height:.6em;pointer-events:none;
-    background:url("/crecer/assets/crecer-contenido/headline_brush.png") center/100% 100% no-repeat}
-  /* Brillo que cruza los botones (vivo, premium) */
-  .btn-primary,.big-cta{position:relative;overflow:hidden}
-  .btn-primary::after,.big-cta::after{content:"";position:absolute;top:0;left:-130%;width:55%;height:100%;
-    background:linear-gradient(100deg,transparent,rgba(255,255,255,.45),transparent);transform:skewX(-18deg);animation:shine 5s ease-in-out infinite}
-  @keyframes shine{0%,62%{left:-130%}82%,100%{left:170%}}
-  /* Demo del teléfono auto-reproduciéndose */
-  #demoWrap{transition:opacity .4s ease,transform .4s ease}
-  .demo-pop{animation:popb .5s ease}
-  @keyframes popb{0%{transform:scale(.92)}55%{transform:scale(1.05)}100%{transform:scale(1)}}
-  @media(prefers-reduced-motion:reduce){.ag .o,.ag .o::after,.ag-in,.btn-primary::after,.big-cta::after{animation:none}.rayos{display:none}}
-  /* Alma boricua: barra de marca + grano de film */
-  body::before{content:"";position:fixed;top:0;left:0;right:0;height:4px;z-index:60;background:var(--grad)}
-  body::after{content:"";position:fixed;inset:0;z-index:9998;pointer-events:none;opacity:.03;
-    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:180px}
-  /* Confeti del demo */
-  .conf{position:absolute;width:8px;height:11px;border-radius:2px;pointer-events:none;will-change:transform,opacity}
-
-  /* Reveal */
-  .rv{opacity:0;transform:translateY(22px);transition:opacity .6s cubic-bezier(.2,.7,.2,1),transform .6s cubic-bezier(.2,.7,.2,1)}
-  .rv.in{opacity:1;transform:none}
-
-  @media(max-width:960px){
-    .hero .in{grid-template-columns:1fr;gap:30px}.phone{order:-1}
-    .agents{grid-template-columns:repeat(2,1fr)}
-    .steps{grid-template-columns:1fr 1fr}
-    .bento{grid-template-columns:1fr}.cell.big,.cell.sm{grid-column:auto}
-    .plans{grid-template-columns:1fr;max-width:440px;margin:0 auto}.plan.pop{transform:none}
+  :root{
+    --paper:#fff;
+    --ink:#06274a;
+    --pink:#ef4375;
+    --teal:#00a49f;
+    --teal-dark:#00827e;
+    --soft:#eefafa;
+    --line:#ebe7df;
+    --muted:#566276;
+    --cream:#fff6dc;
+    --display:'Anton', Impact, sans-serif;
+    --hand:'Caveat', cursive;
+    --body:'Plus Jakarta Sans', system-ui, sans-serif;
   }
-  @media(max-width:520px){.agents{grid-template-columns:repeat(2,1fr)}.steps{grid-template-columns:1fr}.ev{padding:30px 20px}
-    .nav .cta{display:none}}
-  @media(prefers-reduced-motion:reduce){.rv{opacity:1;transform:none}.float{animation:none}}
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:#fff;color:var(--ink);font-family:var(--body);overflow-x:hidden}
+  .wrap{width:min(1160px,calc(100% - 48px));margin:0 auto}
+  .nav{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);backdrop-filter:blur(14px);border-bottom:1px solid rgba(235,231,223,.75)}
+  .nav .in{height:74px;display:flex;align-items:center;gap:18px}
+  .brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}
+  .brand img{width:54px;height:58px;object-fit:contain;display:block}
+  .navlinks{margin-left:auto;display:flex;align-items:center;gap:20px}
+  .navlinks a{color:var(--ink);text-decoration:none;font-size:14px;font-weight:800}
+  .navlinks .login{color:var(--muted)}
+  .cta{display:inline-flex;align-items:center;justify-content:center;gap:9px;border:0;border-radius:999px;background:var(--pink);color:#fff;text-decoration:none;font-weight:900;padding:13px 22px;box-shadow:0 16px 32px -18px var(--pink);transition:transform .16s ease,filter .16s ease}
+  .cta:hover{transform:translateY(-2px);filter:brightness(1.04)}
+  .hero{padding:58px 0 42px}
+  .hero-grid{display:grid;grid-template-columns:minmax(0,1.03fr) minmax(340px,.97fr);gap:44px;align-items:center}
+  .hand{font-family:var(--hand);font-weight:700;letter-spacing:.01em}
+  .pre{font-size:clamp(28px,3.6vw,42px);line-height:1;color:var(--ink);margin:0 0 10px;transform:rotate(-1deg)}
+  h1{font-family:var(--display);font-weight:400;text-transform:uppercase;letter-spacing:.012em;font-size:clamp(62px,8.7vw,116px);line-height:.88;margin:0;max-width:760px}
+  .pink{color:var(--pink)} .teal{color:var(--teal)}
+  .underline{position:relative;display:inline-block}
+  .underline::after{content:"";position:absolute;left:-3%;right:-3%;bottom:-.16em;height:.18em;background:var(--teal);border-radius:999px;transform:rotate(-2deg)}
+  .lede{max-width:570px;margin:30px 0 0;font-size:clamp(18px,2vw,24px);line-height:1.47;color:var(--ink)}
+  .lede b{color:var(--pink)}
+  .lede strong{color:var(--teal)}
+  .hero-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:30px}
+  .secondary{font-weight:900;color:var(--ink);text-decoration:none;border-bottom:3px solid var(--teal);padding-bottom:2px}
+  .pain-note{margin-top:34px;width:min(520px,100%);background:linear-gradient(100deg,rgba(0,164,159,.12),rgba(0,164,159,.045));border:1px solid rgba(0,164,159,.14);padding:26px 30px;position:relative;clip-path:polygon(1% 3%,98% 0,100% 96%,2% 100%)}
+  .pain-note h2{font-family:var(--hand);font-size:36px;line-height:.95;color:var(--teal);margin:0 0 16px;text-transform:uppercase}
+  .pain-note h2 span{border-bottom:4px solid var(--pink)}
+  .pain-note ul{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+  .pain-note li{display:flex;align-items:center;gap:10px;color:var(--ink);font-size:16px;font-weight:700}
+  .xmark{width:23px;height:23px;display:grid;place-items:center;border-radius:50%;background:var(--pink);color:#fff;flex:none}
+  .xmark svg{width:14px;height:14px}
+  .alone{font-family:var(--hand);font-size:34px;line-height:1;color:var(--teal);margin:20px 0 0;text-transform:uppercase}
+  .alone small{display:block;color:var(--ink);font-size:27px}
+  .visual{position:relative;min-height:620px;display:grid;place-items:center;overflow:visible}
+  .hero-photo{position:absolute;inset:-18px -96px -42px -48px;z-index:1}
+  .hero-photo img{width:100%;height:100%;object-fit:cover;object-position:center right;display:block;
+    -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 16%,#000 100%),
+      linear-gradient(180deg,#000 0,#000 90%,transparent 100%);
+    -webkit-mask-composite:source-in;
+    mask-image:linear-gradient(90deg,transparent 0,#000 16%,#000 100%),
+      linear-gradient(180deg,#000 0,#000 90%,transparent 100%);
+    mask-composite:intersect}
+  .hero-photo::after{content:"";position:absolute;inset:auto 0 0;height:34%;background:linear-gradient(180deg,transparent,var(--paper));pointer-events:none}
+  .photo-bubble{position:absolute;right:18px;top:155px;border:3px solid var(--teal);border-radius:50%;padding:18px 26px;background:rgba(255,253,249,.78);font-family:var(--hand);font-size:27px;line-height:1.05;text-align:center;transform:rotate(5deg);z-index:3}
+  .photo-bubble::after{content:"";position:absolute;left:26px;bottom:-20px;width:34px;height:24px;border-left:3px solid var(--teal);border-bottom:3px solid var(--teal);border-radius:0 0 0 30px;transform:rotate(-20deg)}
+  .features{padding:46px 0 30px;border-top:1px solid var(--line)}
+  .features h2{text-align:center;font-family:var(--hand);font-size:34px;line-height:1;color:var(--ink);margin:0 0 28px;text-transform:uppercase}
+  .features h2 span{color:var(--teal)}
+  .feature-row{display:grid;grid-template-columns:repeat(5,1fr);gap:0}
+  .feature{padding:8px 22px 0;text-align:center;border-right:1px solid var(--line)}
+  .feature:last-child{border-right:0}
+  .feature .icon{height:58px;display:grid;place-items:center;color:var(--teal);margin-bottom:10px}
+  .feature .icon svg{width:44px;height:44px;stroke-width:1.8}
+  .feature p{margin:0 auto;font-size:15px;line-height:1.35;color:var(--ink);font-weight:800;max-width:180px}
+  .offer{padding:52px 0}
+  .offer-grid{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:28px;align-items:center}
+  .banner{position:relative;overflow:hidden;background:linear-gradient(135deg,#008f8b 0%,#00a49f 52%,#0dbbb5 100%);color:#fff;padding:42px 46px;display:grid;grid-template-columns:minmax(0,1fr) minmax(250px,.78fr);align-items:center;gap:28px;clip-path:polygon(1% 6%,99% 0,98% 96%,0 100%)}
+  .banner::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 78% 30%,rgba(255,255,255,.24),transparent 30%),linear-gradient(90deg,rgba(0,0,0,.16),transparent 45%);pointer-events:none}
+  .banner-copy{position:relative;z-index:2}
+  .banner h2{font-family:var(--display);font-size:clamp(32px,4vw,50px);font-weight:400;letter-spacing:.01em;line-height:1.02;margin:0;text-transform:uppercase;color:#fff}
+  .banner h2 span{display:block;color:#ffe45c}
+  .banner h2 b{color:var(--pink);font-weight:400}
+  .banner .accent-line{width:76px;height:4px;background:var(--pink);border-radius:999px;margin:20px 0 18px;display:block}
+  .banner p{margin:0;font-size:16px;font-weight:800;color:#e9ffff}
+  .growth-art{position:relative;z-index:1;min-height:250px;align-self:stretch;display:grid;place-items:center;overflow:visible}
+  .growth-art img{width:145%;height:100%;max-height:330px;object-fit:contain;object-position:center;border-radius:8px;opacity:.98;mix-blend-mode:screen;
+    -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 10%,#000 100%),linear-gradient(180deg,transparent 0,#000 10%,#000 90%,transparent 100%);
+    -webkit-mask-composite:source-in;
+    mask-image:linear-gradient(90deg,transparent 0,#000 10%,#000 100%),linear-gradient(180deg,transparent 0,#000 10%,#000 90%,transparent 100%);
+    mask-composite:intersect}
+  .price-card{background:linear-gradient(140deg,#fffaf0,#fff2d3);border:1px solid #f2dfba;border-radius:24px;padding:28px 24px;text-align:center;box-shadow:0 22px 50px -38px rgba(0,0,0,.38)}
+  .price-card .hand{font-size:31px;line-height:1;color:var(--teal);text-transform:uppercase}
+  .price-card .line{width:120px;height:4px;background:var(--pink);border-radius:999px;margin:6px auto 18px;transform:rotate(-2deg)}
+  .price-card .desde{font-size:16px;font-weight:900;color:var(--ink)}
+  .price-card .price{font-family:var(--display);font-size:70px;line-height:.85;margin:8px 0;color:var(--ink)}
+  .price-card .price small{font-family:var(--body);font-size:24px;color:var(--teal);font-weight:900}
+  .price-card p{margin:12px 0 0;color:var(--ink);font-weight:800}
+  .price-cta{display:inline-flex;align-items:center;justify-content:center;margin-top:18px;border-radius:999px;background:var(--pink);color:#fff;text-decoration:none;font-size:14px;font-weight:900;padding:11px 18px;box-shadow:0 14px 30px -20px var(--pink)}
+  .price-note{display:block;margin-top:10px;color:var(--muted);font-size:12px;font-weight:800}
+  .final{padding:30px 0 58px;text-align:center}
+  .final h2{font-family:var(--display);font-size:clamp(40px,5vw,70px);line-height:.94;margin:0 auto 22px;max-width:760px;text-transform:uppercase}
+  .final h2 span{color:var(--pink)}
+  .micro{color:var(--muted);font-size:14px;font-weight:800;margin-top:12px}
+  .foot{border-top:1px solid var(--line);padding:22px 0;color:var(--muted)}
+  .foot .in{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
+  .foot img{width:160px;height:auto}
+  .foot a{color:var(--muted);text-decoration:none;font-size:13px;font-weight:800}
+  .foot a:hover{color:var(--pink)}
+  @media(max-width:960px){
+    .hero-grid,.offer-grid{grid-template-columns:1fr}
+    .visual{min-height:520px}
+    .hero-photo{inset:0 -46px -28px -34px}
+    .photo-bubble{right:4px;top:112px}
+    .feature-row{grid-template-columns:repeat(2,1fr);gap:24px}.feature{border-right:0}
+  }
+  @media(max-width:620px){
+    .wrap{width:min(100% - 30px,1160px)}
+    .nav .in{height:66px}.brand img{width:48px;height:52px}.navlinks a:not(.cta){display:none}
+    .hero{padding-top:30px}h1{font-size:58px}.pre{font-size:31px}.lede{font-size:18px}
+    .visual{min-height:390px;margin-top:22px}
+    .hero-photo{inset:0 -105px -18px -34px}
+    .hero-photo img{object-position:62% center}
+    .photo-bubble{display:none}
+    .pain-note{padding:22px 20px}.feature-row{grid-template-columns:1fr}
+    .banner{padding:42px 24px 30px;grid-template-columns:1fr;gap:10px}.banner h2{font-size:31px}.banner p{font-size:16px}.growth-art{min-height:310px;margin-top:-8px}.growth-art img{width:124%;max-height:340px;object-position:center}
+    .price-card{padding-bottom:34px}.price-card .price{font-size:58px}
+  }
+  /* ═══════════════ HERO SOLO MÓVIL (≤768px) ═══════════════
+     Capa aparte. NO altera el desktop: solo se muestra bajo 768px. */
+  .hero-mobile{display:none}
+  @media (max-width:768px){
+    .hero-desktop{display:none !important}
+    .hero-mobile{display:block}
+    .hero{padding:0}
+  }
+  .hero-mobile{width:100%;overflow:hidden;background:#fff;padding:32px 0 56px}
+  .hero-mobile__content{width:min(100% - 40px,480px);margin-inline:auto}
+  .hero-mobile__eyebrow{margin:0 0 12px;color:#062A4E;font-family:var(--hand);font-size:clamp(28px,8vw,38px);line-height:1;font-weight:700;transform:rotate(-1deg)}
+  .hero-mobile__title{margin:0;color:#061F3B;font-family:var(--display);font-weight:400;text-transform:uppercase;font-size:clamp(34px,10vw,48px);line-height:.96;letter-spacing:.01em}
+  .text-magenta{color:var(--pink)} .text-teal{color:var(--teal)}
+  .text-underlined{position:relative;display:inline-block}
+  .text-underlined::after{content:"";position:absolute;left:0;right:0;bottom:-5px;height:5px;border-radius:999px;background:var(--teal)}
+  .hero-mobile__description{margin:20px 0 0;max-width:36ch;color:#36506B;font-size:17px;line-height:1.55}
+  .hero-mobile__description strong{font-weight:800}
+  .hero-mobile__actions{display:flex;flex-direction:column;align-items:flex-start;gap:16px;margin-top:26px}
+  .hero-mobile .button--primary{display:inline-flex;align-items:center;justify-content:center;min-height:56px;padding:14px 24px;border-radius:999px;background:var(--pink);color:#fff;font-size:17px;font-weight:800;text-decoration:none;box-shadow:0 14px 30px rgba(239,67,117,.22)}
+  .hero-mobile__plans-link{color:#061F3B;font-size:16px;font-weight:800;text-decoration:none;border-bottom:3px solid var(--teal);padding-bottom:3px}
+  /* teléfono */
+  .hero-mobile__visual{position:relative;width:min(118%,610px);margin:42px auto 0;min-height:650px}
+  .hero-mobile__phone{position:relative;z-index:1;display:block;width:100%;height:auto;margin-inline:auto;object-fit:contain;object-position:top center}
+  /* card flotante */
+  .growth-card{position:absolute;z-index:3;top:17%;right:2%;width:min(46vw,190px);padding:16px;border:1px solid rgba(6,31,59,.06);border-radius:20px;background:rgba(255,255,255,.96);box-shadow:0 20px 50px rgba(6,31,59,.16),0 4px 12px rgba(6,31,59,.06);transform:rotate(2deg);backdrop-filter:blur(12px)}
+  .growth-card__icon{display:grid;place-items:center;width:36px;height:36px;margin-bottom:10px;border-radius:50%;background:var(--teal);color:#fff}
+  .growth-card__icon svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+  .growth-card__title{margin:0;color:#061F3B;font-size:15px;line-height:1.2;font-weight:800}
+  .growth-card__metric{margin:8px 0 0;color:var(--teal);font-size:14px;line-height:1.25;font-weight:800}
+  /* partículas */
+  .hero-particle{position:absolute;z-index:2;width:10px;height:10px;border-radius:3px;pointer-events:none}
+  .hero-particle--one{left:5%;top:36%;background:var(--pink)}
+  .hero-particle--two{right:6%;top:43%;background:var(--teal)}
+  .hero-particle--three{left:10%;top:65%;background:var(--teal)}
+  /* card ¿Te suena? */
+  .pain-card{position:relative;z-index:4;width:min(100% - 32px,520px);margin:-70px auto 0;padding:28px 24px;border:1px solid rgba(0,164,159,.20);border-radius:28px;background:#F1FBFA;box-shadow:0 20px 50px rgba(6,31,59,.08)}
+  .pain-card__title{display:inline-block;margin:0 0 20px;color:var(--teal);font-family:var(--hand);font-size:34px;line-height:1;border-bottom:4px solid var(--pink);text-transform:uppercase}
+  .pain-card__list{display:grid;gap:14px;margin:0;padding:0;list-style:none}
+  .pain-card__list li{position:relative;padding-left:36px;color:#061F3B;font-size:16px;line-height:1.35;font-weight:700}
+  .pain-card__list li::before{content:"×";position:absolute;left:0;top:-1px;display:grid;place-items:center;width:23px;height:23px;border-radius:50%;background:var(--pink);color:#fff;font-size:17px;line-height:1;font-weight:800}
+  .pain-card__footer{display:flex;flex-direction:column;margin-top:26px;padding-top:22px;border-top:1px solid rgba(0,164,159,.18)}
+  .pain-card__footer strong{color:var(--teal);font-family:var(--hand);font-size:27px;line-height:1;font-weight:700;text-transform:uppercase}
+  .pain-card__footer span{margin-top:6px;color:#062A4E;font-family:var(--hand);font-size:22px;line-height:1.05;text-transform:uppercase}
+  /* accesibilidad */
+  .hero-mobile a:focus-visible{outline:3px solid var(--teal);outline-offset:3px;border-radius:6px}
+  @media (max-width:390px){
+    .hero-mobile__content{width:min(100% - 32px,480px)}
+    .hero-mobile__title{font-size:clamp(31px,9.5vw,39px)}
+    .hero-mobile__description{font-size:16px}
+    .hero-mobile__visual{width:122%;margin-left:-11%;min-height:600px}
+    .growth-card{right:8%;width:165px;padding:14px}
+    .pain-card{width:calc(100% - 24px);padding:25px 20px}
+  }
+  @media (prefers-reduced-motion:no-preference){
+    .growth-card{animation:growth-card-in 700ms ease-out 250ms both}
+    @keyframes growth-card-in{from{opacity:0;transform:translateY(18px) rotate(2deg)}to{opacity:1;transform:translateY(0) rotate(2deg)}}
+  }
 </style>
 </head>
 <body>
-
 <nav class="nav">
-  <div class="in">
-    <a href="/crecer/index.php" style="display:flex;align-items:center;gap:9px;text-decoration:none;color:inherit">
-      <img class="mark" src="/crecer/assets/brand/crecer-mark.svg" alt=""><span class="bn">encuéntralo <span style="color:var(--teal)">crecer</span></span></a>
-    <span class="sp"></span>
-    <a class="enter" href="/crecer/login.php">Entrar</a>
-    <a class="cta" href="/crecer/registro.php">Crea mi primer post</a>
+  <div class="in wrap">
+    <a class="brand" href="/crecer/crecer.php"><img src="/crecer/assets/brand/encuentralo-crecer-pin-drop.png" alt="Encuéntralo Crecer"></a>
+    <div class="navlinks">
+      <a class="login" href="/crecer/login.php">Entrar</a>
+      <a class="cta" href="/crecer/registro.php">Probar gratis</a>
+    </div>
   </div>
 </nav>
 
-<!-- HERO -->
-<header class="hero">
-  <div class="in wrap">
-    <div>
-      <span class="eyebrow">Pa'l boricua que lo da todo en su negocio</span>
-      <h1 class="disp">Tú sigues <span class="g">en lo tuyo.</span></h1>
-      <p class="sub">Crecer te prepara cada semana los posts de tus redes, en tu propia voz. Tú solo los apruebas desde el celular.</p>
-      <div class="actions">
-        <a class="btn-primary" href="/crecer/registro.php">Crea mi primer post →</a>
-        <a class="btn-ghost" href="#planes">Ver los planes</a>
-      </div>
-      <div class="proof">
-        <span class="dot"></span>
-        <span>El corillo ya ejecutó <b class="count" data-to="<?= $acciones ?>">0</b> acciones de IA para <b class="count" data-to="<?= $negocios ?>">0</b> negocios.</span>
-      </div>
+<main>
+  <header class="hero">
+    <div class="hero-grid wrap hero-desktop">
+      <section>
+        <p class="pre hand">Emprender es difícil.</p>
+        <h1>Hacerse <span class="pink">conocer</span><br>no tiene por qué<br><span class="teal underline">serlo.</span></h1>
+        <p class="lede"><b>Encuéntralo Crecer</b> es tu asistente de inteligencia artificial que te ayuda a atraer clientes, ahorrar tiempo y <strong>hacer crecer tu negocio.</strong></p>
+        <div class="hero-actions">
+          <a class="cta" href="/crecer/registro.php">Crear mi primer post</a>
+          <a class="secondary" href="#planes">Ver planes desde $<?= (int)$precio_crecer ?>/mes</a>
+        </div>
+
+        <div class="pain-note">
+          <h2><span>¿Te suena?</span></h2>
+          <ul>
+            <li><span class="xmark"><?= ico('x') ?></span>No sabes qué publicar.</li>
+            <li><span class="xmark"><?= ico('x') ?></span>No tienes tiempo.</li>
+            <li><span class="xmark"><?= ico('x') ?></span>Tus redes están abandonadas.</li>
+            <li><span class="xmark"><?= ico('x') ?></span>No sabes de marketing.</li>
+            <li><span class="xmark"><?= ico('x') ?></span>Sientes que tu negocio merece más.</li>
+          </ul>
+          <p class="alone">No estás solo.<small>Estamos aquí para ayudarte.</small></p>
+        </div>
+      </section>
+
+      <section class="visual" aria-label="Vista previa de Crecer">
+        <div class="hero-photo">
+          <img src="/crecer/assets/crecer-contenido/hero-foto-crecer.png" alt="Teléfono con la app Encuéntralo Crecer junto a una taza y una planta">
+        </div>
+        <div class="photo-bubble">Tu negocio<br>en buenas manos.</div>
+      </section>
     </div>
 
-    <!-- Phone mockup -->
-    <div class="phone">
-      <div class="scr">
-        <div class="bar"><span class="av"></span><b>Dulce Coquí</b><span class="live">● en vivo</span></div>
-        <div class="pcard" id="demoWrap">
-          <div class="pimg"><span class="emoji" id="demoEmoji">🍰</span></div>
-          <div class="pcap" id="demoCap"><b>¡Llegó el weekend, mi gente!</b> 🎉 Endúlzate con un bizcocho de guayaba hecho con amor. Ordena por WhatsApp 👉</div>
-          <div class="pact"><span class="ok" id="demoBtn">✓ Aprobar</span><span class="sh">📲</span></div>
+    <!-- ── HERO SOLO MÓVIL (≤768px). Desktop intacto arriba. ── -->
+    <div class="hero-mobile">
+      <div class="hero-mobile__content">
+        <p class="hero-mobile__eyebrow">Emprender es difícil.</p>
+        <h1 class="hero-mobile__title">Hacerse <span class="text-magenta">conocer</span><br>no tiene por qué<br><span class="text-teal text-underlined">serlo.</span></h1>
+        <p class="hero-mobile__description"><strong class="text-magenta">Encuéntralo Crecer</strong> es tu asistente de inteligencia artificial que te ayuda a atraer clientes, ahorrar tiempo y <strong class="text-teal">hacer crecer tu negocio.</strong></p>
+        <div class="hero-mobile__actions">
+          <a class="button button--primary" href="/crecer/registro.php">Crear mi primer post</a>
+          <a class="hero-mobile__plans-link" href="#planes">Ver planes desde $<?= (int)$precio_crecer ?>/mes</a>
         </div>
       </div>
-      <div class="float f1"><span class="o"><?= ico('pen') ?></span> La Creativa escribió esto</div>
-      <div class="float f2"><span class="o"><?= ico('palette') ?></span> El Diseñador montó el arte</div>
+
+      <div class="hero-mobile__visual">
+        <img class="hero-mobile__phone" src="/crecer/assets/images/crecer-phone-mobile.png"
+             alt="Aplicación Encuéntralo Crecer mostrada en un teléfono" loading="eager" decoding="async">
+
+        <div class="growth-card" aria-label="Ejemplo de resultado generado por Crecer">
+          <div class="growth-card__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M4 17l5-5 4 4 7-8"></path><path d="M15 8h5v5"></path></svg>
+          </div>
+          <p class="growth-card__title">Tu negocio está creciendo</p>
+          <p class="growth-card__metric">+14 clientes esta semana</p>
+        </div>
+
+        <span class="hero-particle hero-particle--one" aria-hidden="true"></span>
+        <span class="hero-particle hero-particle--two" aria-hidden="true"></span>
+        <span class="hero-particle hero-particle--three" aria-hidden="true"></span>
+      </div>
+
+      <article class="pain-card">
+        <h2 class="pain-card__title">¿Te suena?</h2>
+        <ul class="pain-card__list">
+          <li>No sabes qué publicar.</li>
+          <li>No tienes tiempo.</li>
+          <li>Tus redes están abandonadas.</li>
+          <li>No sabes de marketing.</li>
+          <li>Sientes que tu negocio merece más.</li>
+        </ul>
+        <div class="pain-card__footer">
+          <strong>No estás solo.</strong>
+          <span>Estamos aquí para ayudarte.</span>
+        </div>
+      </article>
     </div>
-  </div>
+  </header>
 
-  <!-- Tira el corillo -->
-  <div class="band wrap rv">
-    <div class="lab">No es una app — es tu corillo</div>
-    <div class="agents">
-      <div class="ag" style="--c:#7928ff"><div class="ag-in"><div class="o"><?= ico('list') ?></div><h4>El Estratega</h4><p>Planifica el mes</p><div class="q">"Estoy cuadrando el plan pa' que no publiques a lo loco."</div></div></div>
-      <div class="ag" style="--c:#ff2d6f"><div class="ag-in"><div class="o"><?= ico('pen') ?></div><h4>La Creativa</h4><p>Escribe los posts</p><div class="q">"Déjame cocinar algo brutal pa' tu marca."</div></div></div>
-      <div class="ag" style="--c:#ff7900"><div class="ag-in"><div class="o"><?= ico('palette') ?></div><h4>El Diseñador</h4><p>Crea las gráficas</p><div class="q">"Quiero que esto se vea premium, con cariño en cada detalle."</div></div></div>
-      <div class="ag" style="--c:#1e69ff"><div class="ag-in"><div class="o"><?= ico('chart') ?></div><h4>El Analista</h4><p>Mide y aconseja</p><div class="q">"Vi tus números y hay una oportunidad aquí."</div></div></div>
+  <section class="features wrap" aria-label="Beneficios">
+    <h2>Con <span>Encuéntralo Crecer</span> puedes:</h2>
+    <div class="feature-row">
+      <article class="feature"><div class="icon"><?= ico('lightbulb') ?></div><p>Tener ideas de contenido sin romperte la cabeza.</p></article>
+      <article class="feature"><div class="icon"><?= ico('pen') ?></div><p>Publicar contenido que atrae y conecta con tu gente.</p></article>
+      <article class="feature"><div class="icon"><?= ico('calendar') ?></div><p>Organizar tus publicaciones y olvidarte del estrés.</p></article>
+      <article class="feature"><div class="icon"><?= ico('chat') ?></div><p>Responder a tus clientes rápido y de forma profesional.</p></article>
+      <article class="feature"><div class="icon"><?= ico('chart') ?></div><p>Hacer crecer tu negocio con recomendaciones inteligentes.</p></article>
     </div>
-  </div>
-</header>
+  </section>
 
-<!-- EMPATÍA -->
-<section class="wrap rv">
-  <div class="empat">
-    <div class="k">Te entendemos, de verdad</div>
-    <h2>Sabemos lo que es darlo todo<br>y que el día no alcance.</h2>
-    <div class="pains">
-      <span class="pain"><?= ico('clock') ?> "Sé que tengo que estar en redes… pero ¿cuándo?"</span>
-      <span class="pain"><?= ico('camera') ?> "Lo que subo se ve aficionado."</span>
-      <span class="pain"><?= ico('wallet') ?> "Una agencia me sale por un ojo de la cara."</span>
+  <section class="offer wrap" id="planes">
+    <div class="offer-grid">
+      <div class="banner">
+        <div class="banner-copy">
+          <h2>Tu negocio tiene potencial.<span>Nosotros te ayudamos a hacerlo <b>crecer.</b></span></h2>
+          <span class="accent-line" aria-hidden="true"></span>
+          <p><?= $nf($acciones) ?> acciones de IA registradas para <?= $nf($negocios) ?> negocios y contando.</p>
+        </div>
+        <picture class="growth-art" aria-hidden="true">
+          <source media="(max-width: 620px)" srcset="/crecer/assets/crecer-contenido/grafica-crecimiento-mobile-square.png">
+          <img src="/crecer/assets/crecer-contenido/grafica-crecimiento-tight.png" alt="">
+        </picture>
+      </div>
+      <aside class="price-card">
+        <div class="hand">Bueno, bonito<br>y asequible</div>
+        <div class="line"></div>
+        <div class="desde">Planes desde</div>
+        <div class="price">$<?= (int)$precio_crecer ?><small>/mes</small></div>
+        <p>Hecho para emprendedores como tú.</p>
+        <a class="price-cta" href="/crecer/registro.php">Probar 7 días</a>
+        <span class="price-note">Sin compromiso.</span>
+      </aside>
     </div>
-    <div class="turn">Se acabó. Ahora <span>metemos mano contigo.</span></div>
+  </section>
+
+  <section class="final wrap">
+    <h2>Haz que tu negocio se vea <span>presente, activo y listo para crecer.</span></h2>
+    <a class="cta" href="/crecer/registro.php">Probar gratis por 7 días</a>
+    <div class="micro">Sin compromiso. Empiezas con tu primer post.</div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="in wrap">
+    <img src="/crecer/assets/brand/encuentralo-crecer-completo.png" alt="Encuéntralo Crecer">
+    <span>Conecta. Impulsa. <b style="color:var(--pink)">Crece.</b></span>
+    <span><a href="/crecer/terminos.php">Términos</a> · <a href="/crecer/privacidad.php">Privacidad</a> · <a href="/crecer/eliminar-datos.php">Eliminar datos</a></span>
   </div>
-</section>
-
-<!-- CÓMO FUNCIONA -->
-<section class="wrap rv">
-  <div class="sec-head"><h2 class="disp">La IA hace el trabajo. <span class="g brush">Tú apruebas.</span></h2></div>
-  <div class="steps">
-    <div class="step"><div class="n">1</div><h4>Aprende tu negocio</h4><p>Le hablas 40 segundos: tu voz, tus productos, tu público.</p></div>
-    <div class="step"><div class="n">2</div><h4>Planifica y crea</h4><p>Arma el calendario y escribe los posts con tus fotos reales.</p></div>
-    <div class="step"><div class="n">3</div><h4>Tú apruebas o ajustas</h4><p>Desde el celular, en segundos. Corriges una palabra y la IA aprende tu voz.</p></div>
-    <div class="step"><div class="n">4</div><h4>Publica y crece</h4><p>Lo sueltas a Instagram y Facebook en un toque, y ves tus resultados.</p></div>
-  </div>
-</section>
-
-<!-- BENTO FEATURES -->
-<section class="wrap rv">
-  <div class="sec-head"><h2 class="disp">Todo un equipo de marketing, <span class="g">por menos que un almuerzo al día.</span></h2></div>
-  <div class="bento">
-    <div class="cell hero-cell big">
-      <div class="ic"><?= ico('calendar') ?></div>
-      <h3>El corillo te prepara la semana</h3>
-      <p>Cada semana el corillo te deja listos los posts de tus redes, en tu voz. Te despiertas con el trabajo hecho — tú solo das el OK desde el celular.</p>
-      <span class="tagm">Operado por agentes de IA, con evidencia real</span>
-    </div>
-    <div class="cell sm"><div class="ic"><?= ico('pen') ?></div><h3>Voz boricua</h3><p>Captions auténticos, nunca traducidos ni genéricos. La IA aprende cómo hablas tú.</p></div>
-    <div class="cell sm"><div class="ic"><?= ico('palette') ?></div><h3>Arte premium</h3><p>Tus fotos reales convertidas en gráficas de agencia. El producto siempre real.</p></div>
-    <div class="cell sm"><div class="ic"><?= ico('share') ?></div><h3>Publica fácil</h3><p>Pasa el post completo a Facebook e Instagram en un solo toque.</p></div>
-  </div>
-</section>
-
-<!-- NIVELES -->
-<section class="wrap rv" id="planes">
-  <div class="sec-head"><h2 class="disp">Empieza gratis, <span class="g">crece a tu ritmo.</span></h2>
-    <p>Prueba la IA con un post de muestra — sin tarjeta. Si te gusta, activa un plan y suéltalo todo.</p></div>
-  <div class="plans">
-    <div class="plan">
-      <div class="lvl"><?= ico('gift') ?> Gratis</div>
-      <div class="name">Prueba</div>
-      <div class="promise">Mira la IA en acción con tu propio negocio, sin pagar nada.</div>
-      <div class="price">$0 <small>sin tarjeta</small></div>
-      <ul>
-        <li>1 post de muestra (imagen + caption en tu voz)</li>
-        <li>Onboarding por voz o texto</li>
-        <li>El logo y más posts se desbloquean con un plan</li>
-      </ul>
-      <a class="cta" href="/crecer/registro.php">Empezar gratis</a>
-    </div>
-    <div class="plan pop">
-      <span class="pop-tag">★ Tu corillo</span>
-      <div class="lvl"><?= ico('leaf') ?> Mensual</div>
-      <div class="name">Crecer</div>
-      <div class="promise">Contenido nuevo cada semana, en tu voz. Tú apruebas.</div>
-      <div class="price">$<?= (int)$precio_crecer ?><small>/mes</small></div>
-      <ul>
-        <li>Contenido nuevo cada semana (captions boricuas + arte)</li>
-        <li>Tu marca y logo: súbelo o créalo con IA</li>
-        <li>Calendario + aprobación desde el celular</li>
-        <li>Gráficas con tus fotos reales</li>
-        <li>Publicación a IG/FB al conectar tus redes</li>
-      </ul>
-      <a class="cta" href="/crecer/registro.php?plan=crecer">Activar Crecer</a>
-    </div>
-  </div>
-  <p class="note">Precio accesible a propósito — hecho para el microempresario boricua.</p>
-</section>
-
-<!-- EVIDENCIA / PRUEBA -->
-<section class="wrap rv">
-  <div class="ev">
-    <h2>Esto no es promesa. La IA opera de verdad.</h2>
-    <p>Cada decisión del corillo queda registrada — planificó, escribió y diseñó. Transparencia total, datos reales.</p>
-    <div class="stats">
-      <div class="stat"><b class="g count" data-to="<?= $acciones ?>">0</b><span>ACCIONES DE IA EJECUTADAS</span></div>
-      <div class="stat"><b class="g count" data-to="<?= $negocios ?>">0</b><span>NEGOCIOS OPERADOS</span></div>
-      <div class="stat"><b class="g">24/7</b><span>EL CORILLO NO PARA</span></div>
-    </div>
-  </div>
-</section>
-
-<!-- MANIFIESTO -->
-<section class="wrap manif rv">
-  <h2 class="disp">Tú no naciste pa' pelear<br>con un <span class="g brush">teléfono.</span></h2>
-  <p>Naciste pa' lo que amas — tu sazón, tu arte, tu gente. Lo demás, déjaselo al corillo. Poco a poco, pero siempre pa'lante.</p>
-</section>
-
-<!-- CTA FINAL -->
-<section class="wrap final rv">
-  <h2 class="disp">Tu negocio merece <span class="g">un corillo que lo trabaje.</span></h2>
-  <a class="big-cta" href="/crecer/registro.php">Crea mi primer post →</a>
-  <p style="color:var(--muted);font-size:14px;margin-top:14px">Gratis · sin tarjeta · en 2 minutos lo tienes corriendo</p>
-</section>
-
-<p class="foot">© <?= date('Y') ?> Encuéntralo · Crecer — hecho con cariño en <b>Puerto Rico</b><br>
-  <span class="foot-legal"><a href="/crecer/terminos.php">Términos de Servicio</a> · <a href="/crecer/privacidad.php">Política de Privacidad</a> · <a href="/crecer/eliminar-datos.php">Eliminar mis datos</a></span></p>
-
-<script>
-  // Reveal on scroll (suave, premium)
-  var io = new IntersectionObserver(function(es){
-    es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
-  }, {threshold:.12});
-  document.querySelectorAll('.rv').forEach(function(el){ io.observe(el); });
-
-  // Contadores que suben al entrar en pantalla
-  function countUp(el){
-    var to=+el.dataset.to||0, t0=null, dur=1200;
-    function step(ts){ if(!t0)t0=ts; var p=Math.min(1,(ts-t0)/dur);
-      var v=Math.floor((1-Math.pow(1-p,3))*to);
-      el.textContent=v.toLocaleString('en-US'); if(p<1) requestAnimationFrame(step); else el.textContent=to.toLocaleString('en-US'); }
-    requestAnimationFrame(step);
-  }
-  var io2=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){countUp(e.target);io2.unobserve(e.target);}});},{threshold:.6});
-  document.querySelectorAll('.count').forEach(function(el){io2.observe(el);});
-
-  // Confeti ligero (DOM)
-  function confeti(host){
-    var cols=['#ff5c39','#c0395f','#16b86a','#ffb27a','#1e69ff'];
-    for(var i=0;i<20;i++){
-      var d=document.createElement('span'); d.className='conf'; d.style.background=cols[i%cols.length];
-      d.style.left=(42+Math.random()*16)+'%'; d.style.top='42%'; host.appendChild(d);
-      var ang=Math.random()*Math.PI*2, dist=55+Math.random()*85;
-      var dx=Math.cos(ang)*dist, dy=Math.sin(ang)*dist;
-      d.animate([{transform:'translate(0,0) rotate(0)',opacity:1},
-                 {transform:'translate('+dx+'px,'+(dy+130)+'px) rotate('+(Math.random()*540)+'deg)',opacity:0}],
-                {duration:950+Math.random()*450,easing:'cubic-bezier(.2,.7,.2,1)'}).onfinish=function(){this.effect.target.remove();};
-    }
-  }
-
-  // Demo del teléfono: el corillo creando → tú aprobando → publicado, en loop
-  (function(){
-    var wrap=document.getElementById('demoWrap'); if(!wrap) return;
-    var em=document.getElementById('demoEmoji'), cap=document.getElementById('demoCap'),
-        btn=document.getElementById('demoBtn'), phone=wrap.closest('.phone');
-    var posts=[
-      {e:'🍰',c:'<b>¡Llegó el weekend, mi gente!</b> 🎉 Endúlzate con un bizcocho de guayaba hecho con amor. Ordena por WhatsApp 👉'},
-      {e:'☕',c:'<b>Tu cafecito recién colao</b> ☕ Como le gusta a la familia boricua. Pásate por El Posito 📍'},
-      {e:'🎂',c:'<b>¿Cumpleaños este finde?</b> 🥳 Te montamos el bizcocho que se roba la fiesta. Escríbenos 💬'}
-    ];
-    var i=0;
-    function cycle(){
-      setTimeout(function(){ btn.textContent='✓ Publicado 🎉'; btn.classList.add('demo-pop'); if(phone) confeti(phone); }, 2300);
-      setTimeout(function(){
-        wrap.style.opacity='0'; wrap.style.transform='translateY(10px)';
-        setTimeout(function(){
-          i=(i+1)%posts.length; em.textContent=posts[i].e; cap.innerHTML=posts[i].c;
-          btn.textContent='✓ Aprobar'; btn.classList.remove('demo-pop');
-          wrap.style.opacity='1'; wrap.style.transform='none';
-        },430);
-      }, 3500);
-    }
-    cycle(); setInterval(cycle, 4600);
-  })();
-
-  // Agentes ELÉCTRICOS: tilt 3D que sigue el cursor + fireworks al entrar
-  (function(){
-    var cards=document.querySelectorAll('.agents .ag'); if(!cards.length) return;
-    cards.forEach(function(card){
-      card.addEventListener('pointermove',function(e){
-        var r=card.getBoundingClientRect();
-        var px=(e.clientX-r.left)/r.width-.5, py=(e.clientY-r.top)/r.height-.5;
-        card.style.transform='translateY(-8px) rotateX('+(-py*16).toFixed(1)+'deg) rotateY('+(px*18).toFixed(1)+'deg) scale(1.06)';
-        card.style.setProperty('--gx',((px+.5)*100).toFixed(1)+'%');
-        card.style.setProperty('--gy',((py+.5)*100).toFixed(1)+'%');
-      });
-      card.addEventListener('pointerleave',function(){ card.style.transform=''; });
-      card.addEventListener('pointerenter',function(){ fuegos(card); });
-    });
-    function fuegos(card){
-      var grid=card.parentNode, r=card.getBoundingClientRect(), g=grid.getBoundingClientRect();
-      var cx=r.left-g.left+r.width/2, cy=r.top-g.top+r.height*0.30;
-      var col=(getComputedStyle(card).getPropertyValue('--c')||'#ff5c39').trim();
-      for(var i=0;i<14;i++){
-        var s=document.createElement('span'); s.className='chispa';
-        s.style.left=(cx-3.5)+'px'; s.style.top=(cy-3.5)+'px';
-        s.style.background=col; s.style.boxShadow='0 0 9px '+col;
-        grid.appendChild(s);
-        var a=Math.PI*2*i/14+Math.random()*.35, d=36+Math.random()*54;
-        s.animate([{transform:'translate(0,0) scale(1.35)',opacity:1},
-                   {transform:'translate('+(Math.cos(a)*d).toFixed(0)+'px,'+(Math.sin(a)*d).toFixed(0)+'px) scale(0)',opacity:0}],
-                  {duration:520+Math.random()*240,easing:'cubic-bezier(.12,.7,.25,1)'}).onfinish=function(){this.effect.target.remove();};
-      }
-    }
-  })();
-
-  // RAYOS entre los agentes: relámpagos que saltan de orbe a orbe
-  (function(){
-    var grid=document.querySelector('.agents'); if(!grid) return;
-    if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches) return;
-    var NS='http://www.w3.org/2000/svg';
-    var svg=document.createElementNS(NS,'svg'); svg.setAttribute('class','rayos'); grid.appendChild(svg);
-    var bolts=[];
-    function jag(a,b){
-      var seg=7, pts=[[a[0],a[1]]], nx=-(b[1]-a[1]), ny=(b[0]-a[0]), len=Math.hypot(nx,ny)||1;
-      for(var k=1;k<seg;k++){ var t=k/seg, off=(Math.random()-.5)*18;
-        pts.push([a[0]+(b[0]-a[0])*t+nx/len*off, a[1]+(b[1]-a[1])*t+ny/len*off]); }
-      pts.push([b[0],b[1]]);
-      return 'M'+pts.map(function(p){return p[0].toFixed(0)+' '+p[1].toFixed(0);}).join(' L');
-    }
-    function build(){
-      var gr=grid.getBoundingClientRect();
-      svg.setAttribute('viewBox','0 0 '+gr.width+' '+gr.height);
-      svg.setAttribute('width',gr.width); svg.setAttribute('height',gr.height); svg.innerHTML='';
-      var orbs=[].map.call(grid.querySelectorAll('.ag .o'),function(o){
-        var r=o.getBoundingClientRect(); return [r.left-gr.left+r.width/2, r.top-gr.top+r.height/2]; });
-      bolts=[];
-      for(var i=0;i<orbs.length-1;i++){ var p=document.createElementNS(NS,'path'); p.setAttribute('class','bolt');
-        svg.appendChild(p); bolts.push({el:p,a:orbs[i],b:orbs[i+1]}); }
-    }
-    function zap(){ if(!bolts.length) return; var b=bolts[Math.floor(Math.random()*bolts.length)];
-      b.el.setAttribute('d',jag(b.a,b.b)); b.el.style.animation='none'; void b.el.offsetWidth; b.el.style.animation='zap .5s ease-out'; }
-    build(); var rt; window.addEventListener('resize',function(){clearTimeout(rt);rt=setTimeout(build,200);});
-    setInterval(zap, 850);
-  })();
-</script>
+</footer>
 </body>
 </html>
