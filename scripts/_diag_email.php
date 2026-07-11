@@ -27,8 +27,8 @@ echo "\nRutas candidatas del config (la que exista PRIMERO se usa):\n";
 $cands = [
     getenv('CRECER_CONFIG') ?: '(env CRECER_CONFIG no seteada)',
     __DIR__ . '/../includes/config.local.php',
-    dirname(__DIR__, 2) . '/crecer-config.local.php',   // /home/USER/crecer-config.local.php
-    dirname(__DIR__, 1) . '/crecer-config.local.php',   // sobre public_html (respaldo)
+    dirname(__DIR__, 3) . '/crecer-config.local.php',   // /home/USER/crecer-config.local.php
+    dirname(__DIR__, 2) . '/crecer-config.local.php',   // sobre public_html (respaldo)
 ];
 foreach ($cands as $c) {
     $existe = (strpos($c, '(env') === 0) ? false : is_file($c);
