@@ -58,9 +58,9 @@ $nf = fn($n) => number_format((int)$n);
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
-  body{margin:0;background:#fff;color:var(--ink);font-family:var(--body);overflow-x:hidden}
+  body{margin:0;background:#fff;color:var(--ink);font-family:var(--body);overflow-x:hidden;padding-top:75px}
   .wrap{width:min(1160px,calc(100% - 48px));margin:0 auto}
-  .nav{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);backdrop-filter:blur(14px);border-bottom:1px solid rgba(235,231,223,.75)}
+  .nav{position:fixed;top:0;left:0;right:0;z-index:50;background:rgba(255,255,255,.92);backdrop-filter:blur(14px);border-bottom:1px solid rgba(235,231,223,.75)}
   .nav .in{height:74px;display:flex;align-items:center;gap:18px}
   .brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}
   .brand img{width:54px;height:58px;object-fit:contain;display:block}
@@ -186,10 +186,10 @@ $nf = fn($n) => number_format((int)$n);
   .hero-mobile .button--primary{display:inline-flex;align-items:center;justify-content:center;min-height:56px;padding:14px 24px;border-radius:999px;background:var(--pink);color:#fff;font-size:17px;font-weight:800;text-decoration:none;box-shadow:0 14px 30px rgba(239,67,117,.22)}
   .hero-mobile__plans-link{color:#061F3B;font-size:16px;font-weight:800;text-decoration:none;border-bottom:3px solid var(--teal);padding-bottom:3px}
   /* teléfono */
-  .hero-mobile__visual{position:relative;width:min(118%,610px);margin:42px auto 0;min-height:650px}
+  .hero-mobile__visual{position:relative;width:min(102%,532px);margin:42px auto 0;min-height:auto}
   .hero-mobile__phone{position:relative;z-index:1;display:block;width:100%;height:auto;margin-inline:auto;object-fit:contain;object-position:top center}
   /* card flotante */
-  .growth-card{position:absolute;z-index:3;top:17%;right:2%;width:min(46vw,190px);padding:16px;border:1px solid rgba(6,31,59,.06);border-radius:20px;background:rgba(255,255,255,.96);box-shadow:0 20px 50px rgba(6,31,59,.16),0 4px 12px rgba(6,31,59,.06);transform:rotate(2deg);backdrop-filter:blur(12px)}
+  .growth-card{position:absolute;z-index:3;top:17%;right:2%;width:min(46vw,190px);padding:16px;border:1px solid rgba(6,31,59,.06);border-radius:20px;background:#fff;box-shadow:0 20px 50px rgba(6,31,59,.18),0 4px 12px rgba(6,31,59,.08);transform:rotate(2deg)}
   .growth-card__icon{display:grid;place-items:center;width:36px;height:36px;margin-bottom:10px;border-radius:50%;background:var(--teal);color:#fff}
   .growth-card__icon svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
   .growth-card__title{margin:0;color:#061F3B;font-size:15px;line-height:1.2;font-weight:800}
@@ -200,7 +200,7 @@ $nf = fn($n) => number_format((int)$n);
   .hero-particle--two{right:6%;top:43%;background:var(--teal)}
   .hero-particle--three{left:10%;top:65%;background:var(--teal)}
   /* card ¿Te suena? */
-  .pain-card{position:relative;z-index:4;width:min(100% - 32px,520px);margin:-70px auto 0;padding:28px 24px;border:1px solid rgba(0,164,159,.20);border-radius:28px;background:#F1FBFA;box-shadow:0 20px 50px rgba(6,31,59,.08)}
+  .pain-card{position:relative;z-index:4;width:min(100% - 32px,520px);margin:-150px auto 0;padding:28px 24px;border:1px solid rgba(0,164,159,.20);border-radius:28px;background:#F1FBFA;box-shadow:0 20px 50px rgba(6,31,59,.08)}
   .pain-card__title{display:inline-block;margin:0 0 20px;color:var(--teal);font-family:var(--hand);font-size:34px;line-height:1;border-bottom:4px solid var(--pink);text-transform:uppercase}
   .pain-card__list{display:grid;gap:14px;margin:0;padding:0;list-style:none}
   .pain-card__list li{position:relative;padding-left:36px;color:#061F3B;font-size:16px;line-height:1.35;font-weight:700}
@@ -214,7 +214,7 @@ $nf = fn($n) => number_format((int)$n);
     .hero-mobile__content{width:min(100% - 32px,480px)}
     .hero-mobile__title{font-size:clamp(31px,9.5vw,39px)}
     .hero-mobile__description{font-size:16px}
-    .hero-mobile__visual{width:122%;margin-left:-11%;min-height:600px}
+    .hero-mobile__visual{width:104%;margin-inline:auto;min-height:auto}
     .growth-card{right:8%;width:165px;padding:14px}
     .pain-card{width:calc(100% - 24px);padding:25px 20px}
   }
