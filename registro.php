@@ -115,7 +115,7 @@ $plan_lbl = ['crecer'=>'Crecer','despegar'=>'Despegar'][$plan_intent] ?? '';
   <!-- Únete al corillo -->
   <section class="welcome">
     <p class="eyebrow"><?= $plan_lbl ? 'Vas pa\' '.$h($plan_lbl).'.' : 'Tu corillo te espera.' ?></p>
-    <h1>Móntate tu <span class="teal u-teal">corillo</span> en un minuto.</h1>
+    <h1>Monta tu <span class="teal u-teal">corillo</span> en un minuto.</h1>
     <p>Creas tu cuenta, le hablas 40 segundos de tu negocio, y el corillo arranca a trabajarte el marketing. Tú solo apruebas.</p>
     <div class="bnf">
       <div class="it"><?= ico('mic') ?> Onboarding por voz — sin formularios largos</div>
