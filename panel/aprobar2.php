@@ -15,6 +15,14 @@ $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (i
 if (!$marca) { header('Location: /crecer/intake.php'); exit; }
 $marca_id = (int)$marca['id'];
 $pagado = marca_es_pagada($pdo, $marca_id);  // no pagado = 1 post de muestra (1 caption + 1 imagen)
+// Acceso completo = pagado, admin, o cuenta de prueba (MODO PRUEBA sin Stripe).
+// FREE/PRUEBA: SOLO 1 post (el de muestra). Crear más → upgrade. Y una vez el
+// post está PUBLICADO, no se puede corregir (al pagar, libre según el plan).
+$acceso_full = $pagado
+    || (($usuario['rol'] ?? '') === 'admin')
+    || (function_exists('activacion_de_prueba') && activacion_de_prueba($usuario['email'] ?? null));
+$posts_total = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$marca_id}")->fetchColumn();
+$puede_crear = $acceso_full || $posts_total < 1;   // tope de 1 post en free/prueba
 // ¿Redes conectadas? Si sí, "Publicar" va por la Graph API a la Página conectada
 // (un botón). Si no, cae al flujo manual de compartir.
 $redes_ok = false;
@@ -222,9 +230,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ── Pedir un post a la IA (tema sugerido / borrador a pulir / random) ──
     if ($accion === 'pedir_post') {
         @set_time_limit(0);
-        // No pagado: 1 post de muestra. Si ya lo usó → al paywall; si no, forzar 1 sola pieza.
-        if (!$pagado) {
-            if (generaciones_usadas($pdo, $marca_id, 'caption') >= CRECER_FREE['caption']) {
+        // FREE/PRUEBA: 1 post de muestra. Si ya lo tiene → paywall; si no, forzar 1 sola pieza.
+        if (!$acceso_full) {
+            if (!$puede_crear) {
+                if (!empty($_POST['wizard'])) { header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'paywall']); exit; }
                 header("Location: /crecer/panel/precios.php?marca={$marca_id}&motivo=muestra"); exit;
             }
             $pl0 = $_POST['plataformas'] ?? 'instagram';
@@ -245,11 +254,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // ── MODO WIZARD (AJAX): crea UNA pieza IG, la redacta, y devuelve id+caption ──
         if (!empty($_POST['wizard'])) {
             header('Content-Type: application/json');
-            $u_w = usuario_actual($pdo);
-            $sin_lim = (($u_w['rol'] ?? '') === 'admin') || (function_exists('activacion_de_prueba') && activacion_de_prueba($u_w['email'] ?? null));
-            if (!$pagado && !$sin_lim && generaciones_usadas($pdo, $marca_id, 'caption') >= CRECER_FREE['caption']) {
-                echo json_encode(['ok'=>false, 'err'=>'paywall']); exit;
-            }
+            // (el tope de 1 post en free/prueba ya se aplicó arriba con $puede_crear)
             if ($tema === '' && $borrador === '') { echo json_encode(['ok'=>false,'err'=>'Falta la idea.']); exit; }
             $fa=(int)date('Y', strtotime($fecha_dt)); $fm=(int)date('n', strtotime($fecha_dt));
             $pdo->prepare("INSERT INTO crecer_calendario (marca_id, anio, mes, estado, generado_por_ia) VALUES (?,?,?, 'borrador', 1) ON DUPLICATE KEY UPDATE updated_at=NOW()")->execute([$marca_id,$fa,$fm]);
@@ -297,6 +302,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     // ── Escribir un post yo mismo (borrador vacío para editar) ──
     if ($accion === 'nuevo_manual') {
+        // FREE/PRUEBA: tope 1 post → si ya lo tiene, al upgrade.
+        if (!$puede_crear) { header("Location: /crecer/panel/precios.php?marca={$marca_id}&motivo=muestra"); exit; }
         $cal = (int)$pdo->query("SELECT id FROM crecer_calendario WHERE marca_id={$marca_id} ORDER BY anio DESC, mes DESC LIMIT 1")->fetchColumn();
         if (!$cal) {
             $ca = (int)date('Y'); $cm = (int)date('n');
@@ -819,14 +826,21 @@ $cf = [
 
 <?php if ($tab === 'revisar'): ?>
   <div class="factorybar">
-    <div class="fb-lead"><strong>Tú mandas:</strong> dile un <b>tema</b>, dale un <b>borrador</b> para que lo pula, o deja que la <b>IA proponga</b> sola.</div>
-    <div class="fb-btns">
-      <button type="button" class="fbgen" onclick="wizAbrir()"><?= ico('sparkles') ?> Crear un post (guiado)</button>
-      <form method="post" onsubmit="var b=this.querySelector('button');b.disabled=true;">
-        <input type="hidden" name="accion" value="nuevo_manual">
-        <button type="submit" class="fbnew"><?= ico('plus') ?> Escribir uno yo (sin IA)</button>
-      </form>
-    </div>
+    <?php if ($puede_crear): ?>
+      <div class="fb-lead"><strong>Tú mandas:</strong> dile un <b>tema</b>, dale un <b>borrador</b> para que lo pula, o deja que la <b>IA proponga</b> sola.</div>
+      <div class="fb-btns">
+        <button type="button" class="fbgen" onclick="wizAbrir()"><?= ico('sparkles') ?> Crear un post (guiado)</button>
+        <form method="post" onsubmit="var b=this.querySelector('button');b.disabled=true;">
+          <input type="hidden" name="accion" value="nuevo_manual">
+          <button type="submit" class="fbnew"><?= ico('plus') ?> Escribir uno yo (sin IA)</button>
+        </form>
+      </div>
+    <?php else: ?>
+      <div class="fb-lead"><strong>Estás en modo prueba:</strong> tienes <b>1 post de muestra</b>. Actívate y el corillo te crea todos los que quieras, cada semana, en tu voz.</div>
+      <div class="fb-btns">
+        <a class="fbgen" href="/crecer/panel/precios.php?marca=<?= $marca_id ?>&motivo=muestra" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px"><?= ico('bolt') ?> Activar Crecer</a>
+      </div>
+    <?php endif; ?>
   </div>
 <?php elseif ($tab === 'biblioteca' && $meses_aprob): ?>
   <form method="get" class="mesnav">
