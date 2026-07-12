@@ -102,7 +102,7 @@ $nf = fn($n) => number_format((int)$n);
       linear-gradient(180deg,#000 0,#000 90%,transparent 100%);
     mask-composite:intersect}
   .hero-photo::after{content:"";position:absolute;inset:auto 0 0;height:34%;background:linear-gradient(180deg,transparent,var(--paper));pointer-events:none}
-  .photo-bubble{position:absolute;right:18px;top:155px;border:3px solid var(--teal);border-radius:50%;padding:18px 26px;background:rgba(255,253,249,.78);font-family:var(--hand);font-size:27px;line-height:1.05;text-align:center;transform:rotate(5deg);z-index:3}
+  .photo-bubble{position:absolute;right:18px;top:52px;border:3px solid var(--teal);border-radius:50%;padding:18px 26px;background:rgba(255,253,249,.78);font-family:var(--hand);font-size:27px;line-height:1.05;text-align:center;transform:rotate(5deg);z-index:3}
   .photo-bubble::after{content:"";position:absolute;left:26px;bottom:-20px;width:34px;height:24px;border-left:3px solid var(--teal);border-bottom:3px solid var(--teal);border-radius:0 0 0 30px;transform:rotate(-20deg)}
   .features{padding:46px 0 30px;border-top:1px solid var(--line)}
   .features h2{text-align:center;font-family:var(--hand);font-size:34px;line-height:1;color:var(--ink);margin:0 0 28px;text-transform:uppercase}
@@ -245,7 +245,7 @@ $nf = fn($n) => number_format((int)$n);
         <p class="lede"><b>Encuéntralo Crecer</b> es tu asistente de inteligencia artificial que te ayuda a atraer clientes, ahorrar tiempo y <strong>hacer crecer tu negocio.</strong></p>
         <div class="hero-actions">
           <a class="cta" href="/crecer/registro.php">Crear mi primer post</a>
-          <a class="secondary" href="#planes">Ver planes desde $<?= (int)$precio_crecer ?>/mes</a>
+          <a class="secondary" href="#planes">Ver el plan · $<?= (int)$precio_crecer ?>/mes</a>
         </div>
 
         <div class="pain-note">
@@ -277,7 +277,7 @@ $nf = fn($n) => number_format((int)$n);
         <p class="hero-mobile__description"><strong class="text-magenta">Encuéntralo Crecer</strong> es tu asistente de inteligencia artificial que te ayuda a atraer clientes, ahorrar tiempo y <strong class="text-teal">hacer crecer tu negocio.</strong></p>
         <div class="hero-mobile__actions">
           <a class="button button--primary" href="/crecer/registro.php">Crear mi primer post</a>
-          <a class="hero-mobile__plans-link" href="#planes">Ver planes desde $<?= (int)$precio_crecer ?>/mes</a>
+          <a class="hero-mobile__plans-link" href="#planes">Ver el plan · $<?= (int)$precio_crecer ?>/mes</a>
         </div>
       </div>
 
@@ -342,7 +342,7 @@ $nf = fn($n) => number_format((int)$n);
       <aside class="price-card">
         <div class="hand">Bueno, bonito<br>y asequible</div>
         <div class="line"></div>
-        <div class="desde">Planes desde</div>
+        <div class="desde">Un solo plan</div>
         <div class="price">$<?= (int)$precio_crecer ?><small>/mes</small></div>
         <p>Hecho para emprendedores como tú.</p>
         <a class="price-cta" href="/crecer/registro.php">Empezar gratis</a>
