@@ -263,7 +263,7 @@ $nf = fn($n) => number_format((int)$n);
 
       <section class="visual" aria-label="Vista previa de Crecer">
         <div class="hero-photo">
-          <img src="/crecer/assets/crecer-contenido/hero-foto-crecer.png" alt="Teléfono con la app Encuéntralo Crecer junto a una taza y una planta">
+          <img src="/crecer/assets/crecer-contenido/hero-foto-crecer.png?v=2" alt="Teléfono con la app Encuéntralo Crecer junto a una taza y una planta">
         </div>
         <div class="photo-bubble">Tu negocio<br>en buenas manos.</div>
       </section>
