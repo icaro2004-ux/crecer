@@ -321,7 +321,7 @@ $nf = fn($n) => number_format((int)$n);
       <article class="feature"><div class="icon"><?= ico('lightbulb') ?></div><p>Tener ideas de contenido sin romperte la cabeza.</p></article>
       <article class="feature"><div class="icon"><?= ico('pen') ?></div><p>Publicar contenido que atrae y conecta con tu gente.</p></article>
       <article class="feature"><div class="icon"><?= ico('calendar') ?></div><p>Organizar tus publicaciones y olvidarte del estrés.</p></article>
-      <article class="feature"><div class="icon"><?= ico('chat') ?></div><p>Responder a tus clientes rápido y de forma profesional.</p></article>
+      <article class="feature"><div class="icon"><?= ico('chat') ?></div><p>El Estratega: tu asesor de negocio por IA, siempre disponible.</p></article>
       <article class="feature"><div class="icon"><?= ico('chart') ?></div><p>Hacer crecer tu negocio con recomendaciones inteligentes.</p></article>
     </div>
   </section>
