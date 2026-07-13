@@ -232,8 +232,21 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
         <div class="cfg-row">
           <div><label>Instagram</label><input type="text" name="instagram" value="<?= $h($m['instagram']) ?>" placeholder="@tunegocio"></div>
           <div><label>Facebook</label><input type="text" name="facebook" value="<?= $h($m['facebook']) ?>" placeholder="Tu página"></div>
-          <div><label>WhatsApp</label><input type="text" name="whatsapp" value="<?= $h($m['whatsapp']) ?>" placeholder="787-000-0000"></div>
+          <div><label>WhatsApp</label><input type="tel" id="waInput" name="whatsapp" value="<?= $h($m['whatsapp']) ?>" placeholder="787-000-0000" inputmode="numeric" maxlength="12" autocomplete="tel"></div>
         </div>
+        <script>
+          (function(){
+            var wa=document.getElementById('waInput'); if(!wa) return;
+            function fmt(v){
+              var d=(v||'').replace(/\D/g,'').slice(0,10), o=d.slice(0,3);
+              if(d.length>3) o+='-'+d.slice(3,6);
+              if(d.length>6) o+='-'+d.slice(6,10);
+              return o;
+            }
+            wa.value=fmt(wa.value);
+            wa.addEventListener('input',function(){ wa.value=fmt(wa.value); });
+          })();
+        </script>
 
         <div style="margin-top:18px">
           <label style="display:block;font-weight:800;font-size:13.5px;color:var(--tinta);margin-bottom:3px">¿Cómo quieres que la gente te contacte?</label>
