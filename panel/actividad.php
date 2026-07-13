@@ -17,12 +17,16 @@ if (!$marca) { header('Location: /crecer/onboarding.php'); exit; }
 $marca_id = (int)$marca['id'];
 $BASE = '/crecer/panel';
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
-$ago = function($ts){
-    $s = time() - strtotime((string)$ts);
+$_meses_ab = [1=>'ene',2=>'feb',3=>'mar',4=>'abr',5=>'may',6=>'jun',7=>'jul',8=>'ago',9=>'sep',10=>'oct',11=>'nov',12=>'dic'];
+$ago = function($ts) use ($_meses_ab){
+    $d = strtotime((string)$ts); if (!$d) return '';
+    $s = time() - $d;
     if ($s < 60)    return 'hace un momento';
     if ($s < 3600)  return 'hace ' . floor($s/60) . ' min';
-    if ($s < 86400) return 'hace ' . floor($s/3600) . ' h';
-    return 'hace ' . floor($s/86400) . ' d';
+    if ($d >= strtotime('today'))     return 'hoy ' . date('g:i A', $d);
+    if ($d >= strtotime('yesterday')) return 'ayer ' . date('g:i A', $d);
+    if (date('Y', $d) === date('Y'))  return (int)date('j', $d) . ' ' . $_meses_ab[(int)date('n', $d)];
+    return date('d/m/y', $d);
 };
 
 // Mapa HUMANO (sin tecnicismos): icono · nombre · qué hizo

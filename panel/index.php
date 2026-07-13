@@ -116,6 +116,16 @@ $fq = $pdo->prepare("SELECT agente, created_at FROM crecer_ia_log WHERE marca_id
 $fq->execute([$marca_id]);
 $feed = $fq->fetchAll();
 
+// Etiqueta de día en boricua: Hoy / Ayer / "5 jul" / "5/1/25".
+$_meses_ab = [1=>'ene',2=>'feb',3=>'mar',4=>'abr',5=>'may',6=>'jun',7=>'jul',8=>'ago',9=>'sep',10=>'oct',11=>'nov',12=>'dic'];
+$dia_rel = function ($ts) use ($_meses_ab) {
+    $d = strtotime((string)$ts); if (!$d) return '';
+    if ($d >= strtotime('today'))     return 'Hoy';
+    if ($d >= strtotime('yesterday')) return 'Ayer';
+    if (date('Y', $d) === date('Y'))  return (int)date('j', $d) . ' ' . $_meses_ab[(int)date('n', $d)];
+    return date('d/m/y', $d);
+};
+
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 $ICON = '/crecer/assets/icons';
 
@@ -181,7 +191,9 @@ $nodos = ['Negocio','Contenido','Tu OK','Publicado'];
   .ix-feed ol{list-style:none;margin:0;padding:0}
   .ix-feed li{display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid var(--line)}
   .ix-feed li:last-child{border-bottom:0}
-  .ix-feed .t{font-size:12px;font-weight:700;color:var(--muted);width:62px;flex:none;font-variant-numeric:tabular-nums}
+  .ix-feed .t{display:flex;flex-direction:column;line-height:1.2;width:64px;flex:none;font-variant-numeric:tabular-nums}
+  .ix-feed .t .d{font-size:11px;font-weight:800;color:var(--tinta)}
+  .ix-feed .t .hr{font-size:11.5px;font-weight:700;color:var(--muted)}
   .ix-feed img.ic{width:24px;height:24px;flex:none}
   .ix-feed .m{font-size:14px;color:#473b46;line-height:1.35}
   .ix-feed .more{display:inline-block;margin-top:14px;color:var(--teal);font-weight:800;font-size:13.5px;text-decoration:none}
@@ -271,7 +283,10 @@ $nodos = ['Negocio','Contenido','Tu OK','Publicado'];
       <li><span class="m" style="color:var(--muted)">El corillo está listo pa' arrancar. Pídele algo y metemos mano.</span></li>
     <?php else: foreach ($feed as $fa): [$fic,$fnm,$fmsg] = $feed_map[$fa['agente']] ?? ['bolt','El Corillo','metió mano']; ?>
       <li>
-        <span class="t"><?= date('g:i A', strtotime($fa['created_at'])) ?></span>
+        <span class="t">
+          <span class="d"><?= $h($dia_rel($fa['created_at'])) ?></span>
+          <span class="hr"><?= date('g:i A', strtotime($fa['created_at'])) ?></span>
+        </span>
         <img class="ic" src="<?= $ICON ?>/<?= $h($fic) ?>.svg" alt="">
         <span class="m"><b><?= $h($fnm) ?></b> <?= $h($fmsg) ?></span>
       </li>
