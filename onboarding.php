@@ -122,7 +122,17 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   h1{font-family:var(--font-impact);text-transform:uppercase;letter-spacing:.5px;line-height:.96;font-size:clamp(30px,7vw,44px);color:var(--tinta)}
   h1 span{color:var(--terracota)}
   .lede{color:var(--muted);font-size:15.5px;margin:8px 0 22px}
-  .step{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:18px;margin-bottom:14px;box-shadow:var(--shadow-sm)}
+  /* Wizard: una pantalla a la vez */
+  .prog{display:flex;gap:6px;margin:2px 0 20px}
+  .prog i{height:6px;flex:1;background:var(--crema-2);border-radius:99px;transition:background .3s}
+  .prog i.on{background:linear-gradient(90deg,var(--coral),var(--magenta))}
+  .step{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:20px;box-shadow:var(--shadow-sm);display:none;animation:fadein .3s ease}
+  .step.on{display:block}
+  @keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .wiznav{display:flex;gap:12px;margin-top:16px}
+  .wback{flex:none;border:1.5px solid var(--line);background:#fff;cursor:pointer;font-family:inherit;font-weight:800;font-size:15px;color:var(--tinta);padding:0 20px;border-radius:14px}
+  .wnext{flex:1;border:0;cursor:pointer;font-family:var(--font-impact);text-transform:uppercase;letter-spacing:.04em;font-size:18px;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));padding:15px;border-radius:14px}
+  .wiznav .go{flex:1;width:auto;margin-top:0}
   .step .n{font-family:var(--font-impact);color:var(--terracota);font-size:13px}
   .step label{display:block;font-weight:800;font-size:15px;margin:2px 0 10px}
   input[type=text], select{width:100%;font-family:inherit;font-size:15px;border:1.5px solid var(--line);border-radius:12px;padding:11px 13px;background:#fff}
@@ -163,9 +173,10 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   <h1>Háblame de <span>tu negocio</span></h1>
   <p class="lede">No llenes formularios largos. Grábate 40 segundos contándome de tu negocio y el corillo arma tu primer post — en tu propia voz boricua.</p>
 
+  <div class="prog"><i class="on"></i><i></i><i></i></div>
   <div class="err" id="err"></div>
 
-  <div class="step">
+  <div class="step on" data-step="1">
     <div class="n">PASO 1</div>
     <label>¿Cómo se llama tu negocio?</label>
     <input type="text" id="nombre" placeholder="Ej. El Palo Dulce" maxlength="120">
@@ -176,7 +187,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     </select>
   </div>
 
-  <div class="step">
+  <div class="step" data-step="2">
     <div class="n">PASO 2</div>
     <label>Cuéntame de tu negocio</label>
     <div id="bloque-voz">
@@ -193,7 +204,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <textarea id="texto" rows="4" placeholder="Escribe: qué vendes, a quién, qué te hace especial, alguna promo…" style="display:none;width:100%;font-family:inherit;font-size:15px;border:1.5px solid var(--line);border-radius:12px;padding:11px 13px;margin-top:10px"></textarea>
   </div>
 
-  <div class="step">
+  <div class="step" data-step="3">
     <div class="n">PASO 3 · OPCIONAL</div>
     <label style="display:inline-flex;align-items:center;gap:8px"><img src="/crecer/assets/icons/foto.svg" alt="" style="width:22px;height:22px"> ¿Tienes una foto de tu producto? <span style="color:var(--muted);font-weight:500">(opcional)</span></label>
     <label class="uploader" id="foto-drop" for="foto">
@@ -205,7 +216,11 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <div class="hint">Si tienes una foto real de lo que vendes, la IA la convierte en tu post de muestra. <b>Si no tienes ahora, no hay lío</b> — el corillo te arma el caption igual y la foto la subes después desde tu panel.</div>
   </div>
 
-  <button class="go" id="go">Crea mi primer post →</button>
+  <div class="wiznav">
+    <button type="button" class="wback" id="wback" style="display:none">← Atrás</button>
+    <button type="button" class="wnext" id="wnext">Siguiente →</button>
+    <button class="go" id="go" style="display:none">Crea mi primer post →</button>
+  </div>
   <div class="hint" style="text-align:center;margin-top:14px">Gratis · sin tarjeta · tu logo y más posts se desbloquean luego con un plan</div>
 </div>
 
@@ -318,6 +333,33 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       })
       .catch(function(){ clearInterval(dotTimer); load.classList.remove('show'); showErr('Error de conexión. Intenta de nuevo.'); });
   });
+
+  // ── Wizard: una pantalla a la vez ──
+  (function(){
+    var steps=[].slice.call(document.querySelectorAll('.step'));
+    var bars=[].slice.call(document.querySelectorAll('.prog i'));
+    var wback=document.getElementById('wback'), wnext=document.getElementById('wnext'), goBtn=document.getElementById('go');
+    var errEl=document.getElementById('err');
+    var cur=1, total=steps.length;
+    function paint(){
+      steps.forEach(function(s){ s.classList.toggle('on', +s.dataset.step===cur); });
+      bars.forEach(function(b,i){ b.classList.toggle('on', i<cur); });
+      wback.style.display = cur>1 ? '' : 'none';
+      wnext.style.display = cur<total ? '' : 'none';
+      goBtn.style.display = cur===total ? '' : 'none';
+      if(errEl) errEl.style.display='none';
+      window.scrollTo({top:0, behavior:'smooth'});
+    }
+    wnext.addEventListener('click', function(){
+      if(cur===1){
+        var nom=document.getElementById('nombre');
+        if(!nom.value.trim()){ if(typeof showErr==='function') showErr('Ponle el nombre a tu negocio para seguir.'); nom.focus(); return; }
+      }
+      if(cur<total){ cur++; paint(); }
+    });
+    wback.addEventListener('click', function(){ if(cur>1){ cur--; paint(); } });
+    paint();
+  })();
 </script>
 </body>
 </html>
