@@ -36,9 +36,10 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <link href="/crecer/assets/encuentralo-ui.css?v=11" rel="stylesheet">
 <style>
   body{background:#f7f7fb;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#1a1a24;margin:0}
-  .wrap{max-width:920px;margin:0 auto;padding:32px 18px 64px}
-  .top{display:flex;align-items:center;gap:10px;margin-bottom:8px}
-  .top img{width:30px;height:30px}.top b{font-family:'Poppins';font-weight:900;font-size:19px}
+  .wrap{max-width:920px;margin:0 auto;padding:0 18px 64px}
+  .top{display:flex;align-items:center;gap:9px;position:sticky;top:0;z-index:20;background:#f7f7fb;padding:16px 0 12px;margin:0 0 6px}
+  .top img{width:34px;height:36px;object-fit:contain}.top b{font-family:'Poppins';font-weight:900;font-size:19px;letter-spacing:-.01em}
+  .top b span{color:#00a49f}
   h1{font-family:'Poppins';font-weight:900;font-size:30px;line-height:1.1;margin:18px 0 6px}
   .sub{color:#6b6b7b;font-size:15.5px;margin:0 0 6px}
   .trialnote{display:inline-flex;align-items:center;gap:8px;background:#eafaf0;color:#0d7a44;font-weight:700;
@@ -67,7 +68,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 </head>
 <body>
 <div class="wrap">
-  <div class="top"><img src="/crecer/assets/brand/encuentralo-pin.svg" alt=""><b>encuéntralo</b></div>
+  <div class="top"><img src="/crecer/assets/brand/crecer-mark.svg" alt=""><b>encuéntralo <span>crecer</span></b></div>
   <h1>Pon el corillo a trabajar tu negocio<?php if ($activa): ?> <span class="cur"><?= $h(suscripcion_etiqueta($su)) ?></span><?php endif; ?></h1>
   <p class="sub">Un equipo digital que te planifica, redacta y diseña el contenido — en boricua de verdad.</p>
   <div class="trialnote"><?= ico('gift') ?> Tu primer post va por la casa · suscríbete para desbloquear el logo y todo lo demás · cancela cuando quieras</div>
