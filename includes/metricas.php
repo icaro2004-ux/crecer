@@ -242,21 +242,25 @@ function metricas_refrescar_insights(PDO $pdo, int $marca_id, int $max = 10, int
 
     // Último intento OK por (post, red) de posts publicados, cuya métrica
     // no exista todavía o esté más vieja que la ventana de frescura.
-    $q = $pdo->prepare(
-        "SELECT p.contenido_id, p.plataforma, p.external_id
-         FROM crecer_publicaciones p
-         JOIN crecer_contenido c ON c.id = p.contenido_id AND c.estado='publicado'
-         LEFT JOIN crecer_metricas m
-                ON m.contenido_id = p.contenido_id AND m.plataforma = p.plataforma
-         WHERE p.marca_id = ? AND p.estado='ok' AND p.external_id IS NOT NULL
-           AND p.id = (SELECT MAX(p2.id) FROM crecer_publicaciones p2
-                       WHERE p2.contenido_id = p.contenido_id
-                         AND p2.plataforma = p.plataforma AND p2.estado='ok')
-           AND (m.id IS NULL OR m.actualizado_at < (NOW() - INTERVAL {$stale} HOUR))
-         ORDER BY c.publicado_at DESC
-         LIMIT {$max}");
-    $q->execute([$marca_id]);
-    $filas = $q->fetchAll(PDO::FETCH_ASSOC);
+    try {
+        $q = $pdo->prepare(
+            "SELECT p.contenido_id, p.plataforma, p.external_id
+             FROM crecer_publicaciones p
+             JOIN crecer_contenido c ON c.id = p.contenido_id AND c.estado='publicado'
+             LEFT JOIN crecer_metricas m
+                    ON m.contenido_id = p.contenido_id AND m.plataforma = p.plataforma
+             WHERE p.marca_id = ? AND p.estado='ok' AND p.external_id IS NOT NULL
+               AND p.id = (SELECT MAX(p2.id) FROM crecer_publicaciones p2
+                           WHERE p2.contenido_id = p.contenido_id
+                             AND p2.plataforma = p.plataforma AND p2.estado='ok')
+               AND (m.id IS NULL OR m.actualizado_at < (NOW() - INTERVAL {$stale} HOUR))
+             ORDER BY c.publicado_at DESC
+             LIMIT {$max}");
+        $q->execute([$marca_id]);
+        $filas = $q->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return ['ok'=>false, 'motivo'=>'error', 'n'=>0, 'revisadas'=>0, 'errores'=>[$e->getMessage()]];
+    }
 
     $n = 0; $errores = [];
     foreach ($filas as $f) {

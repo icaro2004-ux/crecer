@@ -34,15 +34,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'refre
     if (function_exists('csrf_ok') && !csrf_ok()) {
         $flash = ['err', 'La sesión expiró. Recarga la página e intenta otra vez.'];
     } else {
-        $r = metricas_refrescar_insights($pdo, $marca_id, 12, 0); // 0h = forzar al pedirlo a mano
-        if (!empty($r['ok'])) {
-            $flash = ['ok', $r['n'] > 0
-                ? "Métricas al día · traje datos de {$r['n']} post" . ($r['n']==1?'':'s') . " de Meta."
-                : 'Ya estabas al día — Meta no tenía nada nuevo que darte.'];
-        } elseif (($r['motivo'] ?? '') === 'sin_conexion') {
-            $flash = ['err', 'Conecta Instagram/Facebook primero para traer métricas.'];
-        } else {
-            $flash = ['err', 'La app de Meta aún no está configurada en el servidor.'];
+        // Trae insights de Meta = varias llamadas a la Graph API. Subir el límite
+        // de tiempo (evita el fatal 500 por timeout) y lote chico para ir rápido.
+        @set_time_limit(90);
+        @ignore_user_abort(true);
+        try {
+            $r = metricas_refrescar_insights($pdo, $marca_id, 6, 0); // lote chico; el cron completa el resto
+            if (!empty($r['ok'])) {
+                $flash = ['ok', $r['n'] > 0
+                    ? "Métricas al día · traje datos de {$r['n']} post" . ($r['n']==1?'':'s') . " de Meta."
+                    : 'Ya estabas al día — Meta no tenía nada nuevo por ahora. Si acabas de publicar, dale unos minutos.'];
+            } elseif (($r['motivo'] ?? '') === 'sin_conexion') {
+                $flash = ['err', 'Conecta Instagram/Facebook primero para traer métricas.'];
+            } elseif (($r['motivo'] ?? '') === 'sin_app') {
+                $flash = ['err', 'La app de Meta aún no está configurada en el servidor.'];
+            } else {
+                $flash = ['ok', 'Listo.'];
+            }
+        } catch (Throwable $e) {
+            error_log('resultados refrescar_metricas: ' . $e->getMessage());
+            $flash = ['err', 'No pude actualizar las métricas ahora mismo. Intenta de nuevo en un momento.'];
         }
     }
 }
