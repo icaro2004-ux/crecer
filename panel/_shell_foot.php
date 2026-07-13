@@ -16,12 +16,12 @@
      En Inicio NO se muestra: allí la mascota (El Estratega) es el recibidor
      y dos orbes flotantes recargan la pantalla. En el resto de páginas, sí. -->
 <?php if (($active ?? '') !== 'inicio'): ?>
-<button class="asis-fab" id="asisFab" aria-label="Habla con el copiloto" title="Habla con el copiloto">
-  <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor"><path d="M12 3C6.5 3 2 6.58 2 11c0 2.05.98 3.92 2.6 5.34-.12 1.27-.6 2.5-1.4 3.5 1.6-.2 3.1-.7 4.32-1.5 1.32.43 2.77.66 4.48.66 5.5 0 10-3.58 10-8s-4.5-8-10-8z"/></svg>
+<button class="asis-fab" id="asisFab" aria-label="Habla con el Copiloto" title="Habla con el Copiloto">
+  <img src="/crecer/assets/brand/copiloto.png" alt="Copiloto">
 </button>
 <div class="asis-panel" id="asisPanel" aria-hidden="true">
   <div class="asis-head">
-    <span class="asis-orb"><?= ico('chat') ?></span>
+    <span class="asis-orb"><img src="/crecer/assets/brand/copiloto.png" alt=""></span>
     <div><div class="asis-t">Copiloto</div><div class="asis-i">Radar y ayuda del panel</div></div>
     <button class="asis-x" id="asisX" aria-label="Cerrar">✕</button>
   </div>
@@ -34,14 +34,16 @@
   </form>
 </div>
 <style>
-  .asis-fab{position:fixed;right:20px;bottom:24px;z-index:120;width:56px;height:56px;border-radius:50%;border:0;cursor:pointer;
-    background:var(--terracota,#e3683f);color:#fff;box-shadow:0 10px 26px -8px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center}
+  .asis-fab{position:fixed;right:20px;bottom:24px;z-index:120;width:62px;height:62px;border-radius:50%;border:2px solid var(--teal,#00a49f);cursor:pointer;padding:0;overflow:hidden;
+    background:#fff;box-shadow:0 12px 28px -8px rgba(0,0,0,.4);display:block}
+  .asis-fab img{width:100%;height:100%;object-fit:cover;object-position:center 26%;display:block}
+  .asis-orb img{width:100%;height:100%;object-fit:cover;object-position:center 26%;border-radius:50%}
   .asis-panel{position:fixed;right:20px;bottom:90px;z-index:121;width:min(380px,calc(100vw - 32px));height:min(540px,calc(100vh - 130px));
     background:#fff;border:1px solid var(--line,#eadfce);border-radius:18px;box-shadow:0 24px 60px -18px rgba(0,0,0,.45);
     display:none;flex-direction:column;overflow:hidden}
   .asis-panel.show{display:flex}
   .asis-head{display:flex;align-items:center;gap:10px;padding:13px 14px;background:var(--tinta,#1b1622);color:#fff}
-  .asis-orb{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-size:17px;flex:none}
+  .asis-orb{width:36px;height:36px;border-radius:50%;background:#fff;overflow:hidden;display:flex;align-items:center;justify-content:center;flex:none}
   .asis-t{font-weight:800;font-size:15px;line-height:1.1}
   .asis-i{font-size:12px;color:#cfc7d6}
   .asis-x{margin-left:auto;background:0;border:0;color:#cfc7d6;font-size:16px;cursor:pointer;padding:4px}
