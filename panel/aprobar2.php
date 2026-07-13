@@ -506,11 +506,18 @@ require __DIR__ . '/_shell.php';
   .viewtoggle{display:flex;gap:6px;margin:6px 0 10px}
   .vt{font-weight:700;font-size:13.5px;text-decoration:none;color:var(--muted);padding:8px 16px;border-radius:99px;border:1.5px solid var(--line)}
   .vt.on{color:#fff;background:linear-gradient(135deg,var(--teal),var(--teal-700));border-color:transparent}
-  .subtabs{display:flex;gap:8px;max-width:600px;margin:14px 0 4px;border-bottom:1.5px solid var(--line);padding-bottom:0}
-  .st{display:flex;align-items:center;gap:7px;font-weight:800;font-size:14px;text-decoration:none;color:var(--muted);padding:10px 14px;border-bottom:3px solid transparent;margin-bottom:-1.5px}
+  .subtabs{display:flex;gap:8px;max-width:600px;margin:14px 0 4px;border-bottom:1.5px solid var(--line);padding-bottom:0;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .subtabs::-webkit-scrollbar{display:none}
+  .st{display:flex;align-items:center;gap:7px;font-weight:800;font-size:14px;text-decoration:none;color:var(--muted);padding:10px 14px;border-bottom:3px solid transparent;margin-bottom:-1.5px;white-space:nowrap;flex:none}
   .st.on{color:var(--teal-700);border-bottom-color:var(--teal)}
   .st .b{font-size:11.5px;font-weight:800;background:var(--crema-2);color:var(--muted);border-radius:99px;padding:1px 9px;min-width:20px;text-align:center}
   .st.on .b{background:var(--teal);color:#fff}
+  @media(max-width:430px){
+    .subtabs{gap:0}
+    .st{padding:9px 7px;font-size:12.5px;gap:5px}
+    .st svg{width:15px;height:15px}
+    .st .b{padding:1px 5px;min-width:0;font-size:10.5px}
+  }
   .mesnav{max-width:600px;display:flex;align-items:center;gap:10px;margin:14px 0 4px}
   .mesnav select{font-family:inherit;font-size:13.5px;font-weight:700;border:1.5px solid var(--line);border-radius:99px;padding:9px 14px;background:#fff}
   .okbar{max-width:600px;background:var(--okk-bg);color:var(--okk-ink);font-weight:700;font-size:14px;padding:11px 14px;border-radius:12px;margin-top:14px}
