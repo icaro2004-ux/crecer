@@ -590,6 +590,14 @@ require __DIR__ . '/_shell.php';
   /* Modal estudio de arte */
   .art-ov{display:none;position:fixed;inset:0;background:rgba(20,12,8,.72);z-index:95;align-items:flex-start;justify-content:center;padding:30px 16px;overflow:auto}
   .art-ov.show{display:flex}
+  .art-modosel{display:flex;gap:6px;margin:12px 0 16px}
+  .art-mtab{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1.5px solid var(--line);background:#fff;color:var(--muted);font-family:inherit;font-weight:800;font-size:13px;padding:11px 6px;border-radius:12px;cursor:pointer;white-space:nowrap}
+  .art-mtab svg{width:16px;height:16px;flex:none}
+  .art-mtab.on{border-color:transparent;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));box-shadow:0 8px 18px -8px rgba(255,43,133,.5)}
+  .art-modo[hidden]{display:none}
+  .art-modo-h{display:flex;flex-direction:column;gap:3px;font-weight:800;font-size:15px;color:var(--tinta);margin:2px 0 13px}
+  .art-modo-h span{color:var(--muted);font-weight:500;font-size:12.5px;line-height:1.4}
+  .art-modo-h svg{width:18px;height:18px;color:var(--terracota)}
   .art-box{background:var(--card);border-radius:var(--r-xl);max-width:480px;width:100%;padding:22px;position:relative}
   .art-box h3{font-family:var(--font-display);font-weight:800;font-size:20px;margin-bottom:2px}
   .art-box .sub{font-size:13px;color:var(--muted);margin-bottom:6px}
@@ -1089,6 +1097,13 @@ $cf = [
     <input type="hidden" name="accion" value="arte">
     <input type="hidden" name="id" id="art-id" value="">
 
+    <div class="art-modosel">
+      <button type="button" class="art-mtab on" data-modo="ia"><?= ico('sparkles') ?> Con IA</button>
+      <button type="button" class="art-mtab" data-modo="imagen"><?= ico('paperclip') ?> Imagen</button>
+      <button type="button" class="art-mtab" data-modo="video"><?= ico('camera') ?> Video</button>
+    </div>
+
+    <div class="art-modo" data-modo="ia">
     <?php if ($graficas): ?>
     <label class="fl" style="margin-top:8px;display:inline-flex;align-items:center;gap:6px"><?= ico('refresh') ?> Reusar un arte que ya creaste <span style="color:var(--muted);font-weight:500">(tócalo para usarlo — no gasta del límite)</span></label>
     <div class="reuse-strip">
@@ -1145,21 +1160,26 @@ $cf = [
     <a href="#" class="art-skip" id="art-skip" style="display:none">Aprobar solo con el texto (sin imagen) →</a>
     <div class="art-note"><?= ico("calendar") ?> Te quedan <b id="art-rest" style="color:var(--terracota)"><?= $restantes_sem ?></b> de <?= CRECER_IMG_SEMANA ?> generaciones esta semana<?php if($reset_fecha): ?> · se recargan el <span id="art-reset"><?= $h($reset_fecha) ?></span><?php endif; ?>. Con texto = modelo Pro.</div>
 
-    <div class="art-divider"><span>o usa lo tuyo</span></div>
-    <label class="fl" style="margin-top:0;display:inline-flex;align-items:center;gap:6px"><?= ico('paperclip') ?> Subir mi propia imagen tal cual <span style="color:var(--muted);font-weight:500">(sin IA, sin gastar límite)</span></label>
+    </div><!-- /modo ia -->
+
+    <div class="art-modo" data-modo="imagen" hidden>
+      <div class="art-modo-h"><?= ico('paperclip') ?> Sube tu propia imagen <span>(tal cual, sin IA y sin gastar del límite)</span></div>
     <div style="display:flex;gap:8px;align-items:center">
       <input type="file" id="art-directa-file" class="fp-in" accept="image/png,image/jpeg,image/webp">
       <label for="art-directa-file" class="filepick" style="flex:1"><?= ico('paperclip') ?><span class="fp-tx" data-default="Escoge tu imagen">Escoge tu imagen</span></label>
       <button type="button" class="fbnew" id="art-directa-btn" style="white-space:nowrap">Usar esta</button>
     </div>
 
-    <div class="art-divider"><span>o sube tu video</span></div>
-    <label class="fl" style="margin-top:0;display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap"><?= ico('camera') ?> Subir mi propio video <span style="color:var(--muted);font-weight:500">(no creamos video — lo subes tú · MP4 o MOV, hasta 100MB)</span></label>
+    </div><!-- /modo imagen -->
+
+    <div class="art-modo" data-modo="video" hidden>
+      <div class="art-modo-h"><?= ico('camera') ?> Sube tu propio video <span>No creamos video — lo subes tú. MP4 o MOV, hasta 100MB. Sale como Reel (IG) y video (FB).</span></div>
     <div style="display:flex;gap:8px;align-items:center">
       <input type="file" id="art-video-file" class="fp-in" accept="video/mp4,video/quicktime">
       <label for="art-video-file" class="filepick" style="flex:1"><?= ico('camera') ?><span class="fp-tx" data-default="Escoge tu video (MP4/MOV)">Escoge tu video (MP4/MOV)</span></label>
       <button type="button" class="fbnew" id="art-video-btn" style="white-space:nowrap">Usar este</button>
     </div>
+    </div><!-- /modo video -->
   </form>
 </div>
 
@@ -1605,8 +1625,15 @@ $cf = [
     actualizarLimitePost(card);
     var instr=document.getElementById('art-instr');
     if(instr && !instr.value.trim()) sugerirArte('');   // Director de Arte propone la idea
+    if(window.setArtModo) setArtModo('ia');              // siempre abre en "Con IA"
     artov.classList.add('show');
   }
+  // Selector Con IA / Imagen / Video (arriba del estudio)
+  window.setArtModo=function(m){
+    document.querySelectorAll('.art-mtab').forEach(function(t){ t.classList.toggle('on', t.dataset.modo===m); });
+    document.querySelectorAll('.art-modo').forEach(function(s){ s.hidden = (s.dataset.modo!==m); });
+  };
+  document.querySelectorAll('.art-mtab').forEach(function(t){ t.addEventListener('click', function(){ setArtModo(t.dataset.modo); }); });
   // Director de Arte: pide una idea de arte alineada al caption y la pone en la caja.
   function sugerirArte(ajuste){
     var id=document.getElementById('art-id').value; if(!id) return;
