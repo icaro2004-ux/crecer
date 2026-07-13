@@ -23,6 +23,9 @@ $acceso_full = $pagado
     || (function_exists('activacion_de_prueba') && activacion_de_prueba($usuario['email'] ?? null));
 $posts_total = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$marca_id}")->fetchColumn();
 $puede_crear = $acceso_full || $posts_total < 1;   // tope de 1 post en free/prueba
+// Cupo semanal de publicaciones (cada publicar/re-publicar consume 1). Admin exento.
+$cupo_exento = (($usuario['rol'] ?? '') === 'admin');
+$cupo = cupo_estado($pdo, $marca_id, $cupo_exento);
 // ¿Redes conectadas? Si sí, "Publicar" va por la Graph API a la Página conectada
 // (un botón). Si no, cae al flujo manual de compartir.
 $redes_ok = false;
@@ -55,6 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $chk->execute([$id, $marca_id]);
         if (!$chk->fetchColumn()) { echo json_encode(['ok'=>false,'err'=>'Post no encontrado.']); exit; }
         if (!marca_conectada($pdo, $marca_id)) { echo json_encode(['ok'=>false,'err'=>'no_conectado']); exit; }
+        if ($cupo['lleno']) { echo json_encode(['ok'=>false,'err'=>'cupo_semana','reset'=>$cupo['reset'],'limite'=>$cupo['limite']]); exit; }
         // Plataformas elegidas (IG / FB / ambas). Si no vienen, publicar_pieza usa las de la pieza.
         $plat = [];
         foreach (explode(',', (string)($_POST['plataformas'] ?? '')) as $x) {
@@ -340,11 +344,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $nuevo  = ['aprobar'=>'aprobado','rechazar'=>'rechazado','reabrir'=>'borrador','marcar_publicado'=>'publicado'][$accion] ?? null;
     if ($id && $nuevo) {
+        // Marcar como publicado a mano también consume del cupo semanal.
+        if ($nuevo === 'publicado' && $cupo['lleno']) {
+            if (!empty($_POST['ajax'])) { header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'cupo_semana','reset'=>$cupo['reset'],'limite'=>$cupo['limite']]); }
+            else { header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&tab=listos&cupo=lleno"); }
+            exit;
+        }
         if ($nuevo === 'publicado') {
             // Al marcar publicado, SIEMPRE completar publicado_at (la analítica
             // de "publicados este mes" depende de esta fecha, no de updated_at).
             $pdo->prepare("UPDATE crecer_contenido SET estado='publicado', publicado_at=NOW(), updated_at=NOW() WHERE id=? AND marca_id=?")
                 ->execute([$id, $marca_id]);
+            cupo_registrar_publicacion($pdo, $marca_id, $id, 'manual');
         } else {
             $pdo->prepare("UPDATE crecer_contenido SET estado=?, updated_at=NOW() WHERE id=? AND marca_id=?")
                 ->execute([$nuevo, $id, $marca_id]);
@@ -518,6 +529,11 @@ require __DIR__ . '/_shell.php';
     .st svg{width:15px;height:15px}
     .st .b{padding:1px 5px;min-width:0;font-size:10.5px}
   }
+  .cupobar{max-width:600px;display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);background:var(--crema-2);border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:12px 0 2px;line-height:1.4}
+  .cupobar svg{width:15px;height:15px;flex:none;color:var(--teal)}
+  .cupobar b{color:var(--tinta)}
+  .cupobar.full{background:#fdeaea;border-color:#f5c2c0;color:#b42318}
+  .cupobar.full svg{color:#b42318}.cupobar.full b{color:#b42318}
   .mesnav{max-width:600px;display:flex;align-items:center;gap:10px;margin:14px 0 4px}
   .mesnav select{font-family:inherit;font-size:13.5px;font-weight:700;border:1.5px solid var(--line);border-radius:99px;padding:9px 14px;background:#fff}
   .okbar{max-width:600px;background:var(--okk-bg);color:var(--okk-ink);font-weight:700;font-size:14px;padding:11px 14px;border-radius:12px;margin-top:14px}
@@ -830,6 +846,19 @@ $cf = [
   <a class="st <?= $tab==='listos'?'on':'' ?>" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=listos"><?= ico('check-circle') ?> Listos <span class="b" id="cnt-aprob"><?= $n_listos ?></span></a>
   <a class="st <?= $tab==='biblioteca'?'on':'' ?>" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=biblioteca"><?= ico('image') ?> Biblioteca <span class="b" id="cnt-bib"><?= $n_biblioteca ?></span></a>
 </div>
+
+<?php if (!$cupo['exento']): ?>
+  <div class="cupobar<?= $cupo['lleno']?' full':'' ?>">
+    <?= ico('calendar') ?>
+    <span<?= $cupo['lleno']?'':' id="cupoTxt"' ?>>
+      <?php if ($cupo['lleno']): ?>
+        Llegaste a tus <b><?= (int)$cupo['limite'] ?> posts</b> de la semana.<?= $cupo['reset'] ? ' Se libera espacio el <b>'.$h($cupo['reset']).'</b>.' : '' ?>
+      <?php else: ?>
+        Publicados esta semana: <b><?= (int)$cupo['usados'] ?> de <?= (int)$cupo['limite'] ?></b> · publicar y <b>re-publicar</b> cuentan igual.
+      <?php endif; ?>
+    </span>
+  </div>
+<?php endif; ?>
 
 <?php if ($tab === 'revisar'): ?>
   <div class="factorybar">
@@ -1807,7 +1836,11 @@ $cf = [
   // Publicación REAL por la Graph API a la Página/IG conectados (un botón).
   function publicarPorAPI(card, btn){
     var id = card.dataset.id;
-    if(!confirm('¿Publicar este post a tus redes conectadas (Instagram/Facebook)?')) return;
+    var yaPub = (card.dataset.estado === 'publicado');
+    var msg = yaPub
+      ? '¿Re-publicar este post? Cuenta como 1 de tus posts de la semana.'
+      : '¿Publicar este post a tus redes (Instagram/Facebook)? Cuenta 1 de tus posts de la semana.';
+    if(!confirm(msg)) return;
     if(btn) btn.disabled = true;
     pubLoading();                                                // muestra "Publicando…"
     var fd = new FormData(); fd.append('accion','publicar_api'); fd.append('id', id); fd.append('ajax','1'); fd.append('csrf', CSRF);
@@ -1815,11 +1848,20 @@ $cf = [
       .then(function(r){ return r.json(); })
       .then(function(d){
         if(btn) btn.disabled = false;
-        if(d.ok){ pubOk('Tu post ya salió a Instagram/Facebook.', _permalink(d.resultados)); }
+        if(d.ok){ pubOk('Tu post ya salió a Instagram/Facebook.', _permalink(d.resultados)); actualizarCupo(1); }
         else if(d.err === 'no_conectado'){ pubCerrar(false); abrirPublicar(card); }   // sin conexión → flujo manual
+        else if(d.err === 'cupo_semana'){ pubErr('Llegaste a tus '+(d.limite||<?= (int)$cupo['limite'] ?>)+' posts de la semana.'+(d.reset?' Se libera espacio el '+d.reset+'.':''), card); }
         else { pubErr(d.err || 'No se pudo publicar', card); }                          // falló → ofrece publicar a mano
       })
       .catch(function(){ if(btn) btn.disabled = false; pubErr('La conexión con tus redes falló.', card); });
+  }
+  // Actualiza el contador de cupo en vivo tras publicar.
+  function actualizarCupo(n){
+    var el=document.getElementById('cupoTxt'); if(!el) return;
+    var lim=<?= (int)$cupo['limite'] ?>;
+    var m=el.innerHTML.match(/<b>(\d+) de/); var cur=m?parseInt(m[1],10):0;
+    var nu=Math.min(lim, cur+(n||1));
+    el.innerHTML='Publicados esta semana: <b>'+nu+' de '+lim+'</b> · publicar y <b>re-publicar</b> cuentan igual.';
   }
   if(feed) feed.addEventListener('click', function(e){
     var b=e.target.closest('.publicarbtn'); if(!b) return; e.preventDefault();

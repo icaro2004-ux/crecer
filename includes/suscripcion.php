@@ -143,6 +143,62 @@ function trial_dias_restantes(?array $su): ?int {
     return max(0, $dias);
 }
 
+// ============================================================
+//  CUPO DE PUBLICACIONES — límite semanal de posts que salen a las
+//  redes. Cada publicación (o re-publicación) consume 1. Ventana de
+//  7 días (rolling), como el tope de imágenes. ~20/mes.
+// ============================================================
+if (!defined('CRECER_POSTS_SEMANA')) define('CRECER_POSTS_SEMANA', 5);
+
+/** Posts publicados por la marca en los últimos 7 días (cuentan re-publicaciones). */
+function cupo_posts_usados(PDO $pdo, int $marca_id): int {
+    try {
+        $q = $pdo->prepare(
+            "SELECT COUNT(*) FROM crecer_publicacion_cupo
+             WHERE marca_id=? AND created_at >= (NOW() - INTERVAL 7 DAY)");
+        $q->execute([$marca_id]);
+        return (int)$q->fetchColumn();
+    } catch (Throwable $e) { return 0; }
+}
+
+/** Registra una publicación que consume cupo (idempotencia NO — cada llamada = 1). */
+function cupo_registrar_publicacion(PDO $pdo, int $marca_id, ?int $contenido_id, string $via = 'api'): void {
+    try {
+        $pdo->prepare(
+            "INSERT INTO crecer_publicacion_cupo (marca_id, contenido_id, via) VALUES (?,?,?)"
+        )->execute([$marca_id, $contenido_id, in_array($via,['api','manual'],true)?$via:'api']);
+    } catch (Throwable $e) { /* si falta la tabla, no bloquear la publicación */ }
+}
+
+/**
+ * Estado del cupo para pintar/gatear. $exento=true (admin) => nunca bloquea.
+ * @return array ['usados'=>int,'limite'=>int,'restantes'=>int,'lleno'=>bool,'exento'=>bool,'reset'=>?string]
+ */
+function cupo_estado(PDO $pdo, int $marca_id, bool $exento = false): array {
+    $lim = (int)CRECER_POSTS_SEMANA;
+    $usados = cupo_posts_usados($pdo, $marca_id);
+    $reset = null;
+    if ($usados >= $lim && !$exento) {
+        // Cuándo se libera un espacio: el más viejo de los últimos 7 días + 7 días.
+        try {
+            $q = $pdo->prepare(
+                "SELECT created_at FROM crecer_publicacion_cupo
+                 WHERE marca_id=? AND created_at >= (NOW() - INTERVAL 7 DAY)
+                 ORDER BY created_at ASC LIMIT 1");
+            $q->execute([$marca_id]);
+            if ($f = $q->fetchColumn()) $reset = date('d/m', strtotime($f . ' +7 day'));
+        } catch (Throwable $e) {}
+    }
+    return [
+        'usados'    => $usados,
+        'limite'    => $lim,
+        'restantes' => max(0, $lim - $usados),
+        'lleno'     => (!$exento && $usados >= $lim),
+        'exento'    => $exento,
+        'reset'     => $reset,
+    ];
+}
+
 /** Etiqueta corta del estado para el panel (ej. "Crecer · prueba: 5 días"). */
 function suscripcion_etiqueta(?array $su): string {
     if (!suscripcion_activa($su)) return 'Sin plan activo';

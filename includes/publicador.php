@@ -19,6 +19,7 @@
 // ============================================================
 
 require_once __DIR__ . '/meta.php';
+require_once __DIR__ . '/suscripcion.php';   // cupo_registrar_publicacion()
 
 /** Resuelve grafica_path (URL relativa o ruta) a URL ABSOLUTA HTTPS pública. */
 function imagen_url_publica(?string $grafica_path): string {
@@ -263,12 +264,20 @@ function publicar_pieza(PDO $pdo, int $contenido_id, array $override_plataformas
 /** Cierra el ciclo: marca la pieza publicado/fallido, suelta el lock. */
 function finalizar_pieza(PDO $pdo, int $contenido_id, string $tok, bool $ok, array $errores, array $resultados): array {
     if ($ok) {
-        $pdo->prepare(
+        $upd = $pdo->prepare(
             "UPDATE crecer_contenido
                 SET estado='publicado', publicado_at=NOW(), pub_error=NULL,
                     lock_token=NULL, lock_at=NULL
-              WHERE id=? AND lock_token=?")
-            ->execute([$contenido_id, $tok]);
+              WHERE id=? AND lock_token=?");
+        $upd->execute([$contenido_id, $tok]);
+        // Consume 1 del cupo semanal (solo si esta llamada de verdad publicó algo,
+        // no si todo era "ya publicada"). Cubre botón, cron/autopilot y re-publicar.
+        $salio = false;
+        foreach ($resultados as $rp) { if ($rp !== 'ya publicada') { $salio = true; break; } }
+        if ($salio && function_exists('cupo_registrar_publicacion')) {
+            $mid = (int)($pdo->query("SELECT marca_id FROM crecer_contenido WHERE id=" . (int)$contenido_id)->fetchColumn() ?: 0);
+            if ($mid) cupo_registrar_publicacion($pdo, $mid, $contenido_id, 'api');
+        }
         return ['ok' => true, 'estado' => 'publicado', 'resultados' => $resultados, 'motivo' => ''];
     }
     $err = implode(' | ', array_map(fn($k, $v) => "$k: $v", array_keys($errores), array_values($errores)));
