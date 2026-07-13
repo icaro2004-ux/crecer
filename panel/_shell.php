@@ -42,7 +42,7 @@ $nav_perfil = [
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Poppins:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=9" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=11" rel="stylesheet">
 </head>
 <body>
 <div class="layout">
@@ -97,11 +97,9 @@ $nav_perfil = [
     <div class="ptop">
       <a href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit">
         <img src="/crecer/assets/brand/crecer-mark.svg" alt="Inicio"><b>encuéntralo <span style="color:var(--teal)">crecer</span></b></a>
-      <button id="burger" aria-label="Perfil y ajustes"
-        style="margin-left:auto;width:38px;height:38px;border-radius:50%;border:0;cursor:pointer;
-        background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;font-weight:800;font-size:15px;
-        display:grid;place-items:center;font-family:inherit;flex:none">
-        <?= $h(mb_strtoupper(mb_substr($marca['nombre_negocio'],0,1))) ?>
+      <button id="burger" class="ptop-menu" aria-label="Abrir menú">
+        <span class="bars" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="av"><?= $h(mb_strtoupper(mb_substr($marca['nombre_negocio'],0,1))) ?></span>
       </button>
     </div>
     <div class="content">
