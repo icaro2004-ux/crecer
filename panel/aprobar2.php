@@ -578,6 +578,9 @@ require __DIR__ . '/_shell.php';
   .artwrap{position:relative}
   .artph{width:100%;border:0;border-top:1px dashed var(--line);border-bottom:1px dashed var(--line);background:repeating-linear-gradient(45deg,var(--crema),var(--crema) 10px,#fff 10px,#fff 20px);cursor:pointer;font-family:inherit;font-weight:800;font-size:14px;color:var(--terracota);padding:26px 12px;display:flex;flex-direction:column;align-items:center;gap:6px}
   .artph:hover{color:var(--terracota-700)}
+  .art-cambiar{position:absolute;top:9px;right:9px;display:inline-flex;align-items:center;gap:5px;background:rgba(15,10,20,.66);color:#fff;border:0;border-radius:99px;padding:8px 13px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer;z-index:2}
+  .art-cambiar svg{width:14px;height:14px}
+  .art-cambiar:hover{background:rgba(15,10,20,.85)}
   .checklist{display:flex;gap:8px;flex-wrap:wrap;padding:0 17px 10px}
   .schedrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 17px 12px;font-size:12.5px;color:var(--muted)}
   .schedrow .ic{width:15px;height:15px;color:var(--terracota);flex:none}
@@ -969,8 +972,11 @@ $cf = [
           <img class="zoomable" src="<?= $h($p['grafica_path']) ?>" alt="arte" style="width:100%;display:block">
         <?php else: ?>
           <button type="button" class="artph artbtn" data-id="<?= $p['id'] ?>">
-            <span><?= ico('image','ic-lg') ?></span><span>Crear el arte de este post</span>
+            <span><?= ico('image','ic-lg') ?></span><span>Añadir imagen o video</span>
           </button>
+        <?php endif; ?>
+        <?php if ($has_art): ?>
+          <button type="button" class="art-cambiar artbtn" data-id="<?= $p['id'] ?>"><?= ico('image') ?> Imagen / Video</button>
         <?php endif; ?>
       </div>
       <div class="caption" id="cap-<?= $p['id'] ?>"><?= $h($p['caption']) ?: '<span style="color:var(--muted)">Sin texto todavía — toca «Editar» o pídele a la IA que lo escriba.</span>' ?></div>
