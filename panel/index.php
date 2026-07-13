@@ -299,13 +299,24 @@ $nodos = ['Negocio','Contenido','Tu OK','Publicado'];
 // ── Copiloto flotante (solo en Inicio) — te recibe y conversa ──
 $estr_img = '/crecer/assets/brand/estratega.png'; // avatar de La Estratega
 $negocio  = $marca['nombre_negocio'] ?? 'mi gente';
+
+// Parte del día: hechos reales + una sugerencia concreta (determinista).
+$parte = crecer_parte_del_dia($pdo, $marca_id, [
+    'negocio' => $negocio, 'prod' => $prod, 'racha' => $racha,
+    'cuenta'  => $cuenta,  'meta_ok' => $meta_ok,
+]);
+$parte_b1 = $parte['saludo'];
+if (!empty($parte['hechos'])) $parte_b1 .= "\n" . implode("\n", $parte['hechos']);
 ?>
 <div class="estr" id="estr">
   <div class="estr-bubble" id="estrBubble">
     <button class="estr-x" id="estrBx" aria-label="Cerrar">&times;</button>
-    <div class="estr-kicker"><?= ico('sparkles') ?> La Estratega</div>
+    <div class="estr-kicker"><?= ico('sparkles') ?> La Estratega · Parte del día</div>
     <div class="estr-msgs" id="estrMsgs">
-      <div class="estr-m ia">Soy <b>La Estratega</b>, pendiente a <b><?= $h($negocio) ?></b>. Puedo mirar tu contenido, detectar qué falta y ayudarte a decidir el próximo movimiento.</div>
+      <div class="estr-m ia"><?= $h($parte_b1) ?></div>
+      <?php if (!empty($parte['sugerencia'])): ?>
+      <div class="estr-m ia"><b>Para hoy:</b> <?= $h($parte['sugerencia']) ?></div>
+      <?php endif; ?>
     </div>
     <div class="estr-chips" id="estrChips">
       <button type="button">Qué hago ahora</button>
@@ -363,8 +374,9 @@ $negocio  = $marca['nombre_negocio'] ?? 'mi gente';
   function open(o){ abierto=o; bubble.classList.toggle('show',o); if(o) setTimeout(function(){input.focus();},60); }
   face.addEventListener('click', function(){ open(!abierto); });
   bx.addEventListener('click', function(e){ e.stopPropagation(); open(false); });
-  // Saludo automático la primera vez de la sesión (te "recibe").
-  try{ if(!sessionStorage.getItem('estr_hi')){ setTimeout(function(){ open(true); sessionStorage.setItem('estr_hi','1'); }, 900); } }catch(e){}
+  // Parte del día: te recibe automático la primera vez de CADA día.
+  try{ var _dk='estr_hi_'+new Date().toISOString().slice(0,10);
+    if(!localStorage.getItem(_dk)){ setTimeout(function(){ open(true); localStorage.setItem(_dk,'1'); }, 900); } }catch(e){}
   function bubbleMsg(t,cls){ var d=document.createElement('div'); d.className='estr-m '+cls; d.textContent=t; msgs.appendChild(d); msgs.scrollTop=msgs.scrollHeight; return d; }
   function preguntar(q){
     if(busy||!q.trim()) return;

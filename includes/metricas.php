@@ -273,6 +273,133 @@ function metricas_refrescar_insights(PDO $pdo, int $marca_id, int $max = 10, int
     return ['ok'=>true, 'motivo'=>null, 'n'=>$n, 'revisadas'=>count($filas), 'errores'=>$errores];
 }
 
+// ============================================================
+//  PARTE DEL DÍA — saludo proactivo de La Estratega en Inicio.
+//  100% determinista: hechos reales de la BD + una sugerencia por
+//  reglas (calendario boricua / quincena / fin de semana / estado).
+//  NUNCA inventa cifras: si no hay dato, esa línea no aparece.
+// ============================================================
+
+/** El post publicado más reciente del que YA tenemos métricas de Meta. */
+function metricas_ultimo_post_con_datos(PDO $pdo, int $marca_id): ?array {
+    try {
+        $q = $pdo->prepare(
+            "SELECT c.caption, c.publicado_at,
+                    SUM(m.alcance) AS alcance, SUM(m.me_gusta) AS me_gusta
+             FROM crecer_metricas m
+             JOIN crecer_contenido c ON c.id = m.contenido_id
+             WHERE m.marca_id = ? AND c.estado='publicado' AND m.alcance IS NOT NULL
+             GROUP BY c.id
+             ORDER BY c.publicado_at DESC, c.id DESC
+             LIMIT 1");
+        $q->execute([$marca_id]);
+        $r = $q->fetch(PDO::FETCH_ASSOC);
+        if (!$r || $r['alcance'] === null) return null;
+        return [
+            'caption'      => (string)($r['caption'] ?? ''),
+            'publicado_at' => $r['publicado_at'] ?? null,
+            'alcance'      => (int)$r['alcance'],
+            'me_gusta'     => $r['me_gusta'] !== null ? (int)$r['me_gusta'] : null,
+        ];
+    } catch (Throwable $e) { return null; }
+}
+
+/** Sugerencia concreta para HOY (una sola frase), por reglas. */
+function _crecer_sugerencia_hoy(DateTime $ahora, array $cuenta, array $prod): string {
+    $anio = (int)$ahora->format('Y');
+    $dia  = (int)$ahora->format('j');
+    $fin  = (int)$ahora->format('t');       // último día del mes
+    $dow  = (int)$ahora->format('N');       // 1=lun … 7=dom
+    $hoy0 = (clone $ahora)->setTime(0,0,0)->getTimestamp();
+
+    // 1) Fecha boricua cercana (dentro de 5 días) — lo que más jala.
+    $eventos = [
+        ["$anio-01-06",                                    "Reyes — la gente compra pa' los nenes. Tira una promo de Reyes."],
+        ["$anio-02-14",                                    "San Valentín — arma un combo o regalo pa' parejas."],
+        [@strtotime("second sunday of may $anio"),         "Día de las Madres — el día más fuerte del año pa' vender. Prepara una oferta especial."],
+        [@strtotime("third sunday of june $anio"),         "Día de los Padres — saca un combo o regalo pa' papá."],
+        ["$anio-07-04",                                    "fin de semana del 4 de julio — mucha gente janguea. Postea algo hoy."],
+        ["$anio-10-31",                                    "Halloween — tira algo temático, que la gente lo comparte."],
+        [@strtotime("fourth thursday of november $anio"),  "Acción de Gracias — arma tu oferta de la temporada."],
+        ["$anio-12-24",                                    "Navidad — es tu pico de ventas. Empuja tus combos navideños."],
+        ["$anio-12-31",                                    "fin de año — última llamada pa' cerrar el mes fuerte."],
+    ];
+    foreach ($eventos as $ev) {
+        $ets = is_int($ev[0]) ? $ev[0] : @strtotime($ev[0]);
+        if (!$ets) continue;
+        $dif = ($ets - $hoy0) / 86400;
+        if ($dif >= 0 && $dif <= 5) return "Se acerca " . $ev[1];
+    }
+
+    // 2) Quincena (1, 14–15, o los 2 últimos del mes): hay chavos frescos.
+    if ($dia === 1 || $dia === 14 || $dia === 15 || $dia >= $fin - 1) {
+        return "Es quincena — la gente tiene chavos frescos. Buen día pa' una promo.";
+    }
+
+    // 3) Fin de semana (vie/sáb): la gente sale y compra.
+    if ($dow === 5 || $dow === 6) {
+        return "Es fin de semana, la gente janguea — postea algo hoy pa' agarrar ese tráfico.";
+    }
+
+    // 4) Estado del negocio.
+    if (!empty($cuenta['borrador'])) {
+        return "Aprueba lo que tienes en cola pa' que salga y no se enfríe.";
+    }
+    if (empty($prod['publicados_mes']) && empty($cuenta['aprobado']) && empty($cuenta['programado'])) {
+        return "Pídele al corillo contenido nuevo pa' esta semana y montamos el ritmo.";
+    }
+    return "Buen día pa' sacar algo fresco y mantener el ritmo de publicación.";
+}
+
+/**
+ * Arma el "parte del día" de La Estratega. Devuelve:
+ *   ['saludo'=>str, 'hechos'=>string[], 'sugerencia'=>str]
+ * $ctx: ['negocio'=>str,'prod'=>array,'racha'=>int,'cuenta'=>array,'meta_ok'=>bool]
+ */
+function crecer_parte_del_dia(PDO $pdo, int $marca_id, array $ctx): array {
+    $negocio = trim((string)($ctx['negocio'] ?? '')) ?: 'tu negocio';
+    $prod    = $ctx['prod']   ?? [];
+    $racha   = (int)($ctx['racha'] ?? 0);
+    $cuenta  = $ctx['cuenta'] ?? [];
+    $meta_ok = !empty($ctx['meta_ok']);
+
+    try { $ahora = new DateTime('now', new DateTimeZone('America/Puerto_Rico')); }
+    catch (Throwable $e) { $ahora = new DateTime(); }
+    $hh = (int)$ahora->format('G');
+    $saludo = $hh < 12 ? 'Buenos días' : ($hh < 19 ? 'Buenas tardes' : 'Buenas noches');
+
+    $hechos = [];
+
+    // Cómo rindió tu último post (solo si Meta conectado + hay métricas).
+    $ultimo = metricas_ultimo_post_con_datos($pdo, $marca_id);
+    if ($ultimo) {
+        $f = "Tu último post llegó a " . number_format($ultimo['alcance']) . " personas";
+        if ($ultimo['me_gusta'] !== null) $f .= " y " . number_format($ultimo['me_gusta']) . " me gusta";
+        $hechos[] = $f . ".";
+    }
+
+    // Lo pendiente (lo más urgente primero).
+    if (!empty($cuenta['fallido'])) {
+        $n = (int)$cuenta['fallido'];
+        $hechos[] = "Ojo: {$n} post" . ($n==1?'':'s') . " no se pudo publicar — hay que resolverlo.";
+    } elseif (!empty($cuenta['borrador'])) {
+        $n = (int)$cuenta['borrador'];
+        $hechos[] = "Tienes {$n} post" . ($n==1?'':'s') . " esperando tu OK.";
+    }
+
+    // Racha (refuerzo positivo).
+    if ($racha >= 2) $hechos[] = "Llevas {$racha} semanas seguidas publicando — no rompas la racha.";
+
+    // Sin datos de rendimiento y sin Meta: invita a conectar (una vez).
+    if (!$ultimo && !$meta_ok) $hechos[] = "Conecta tus redes y te digo cuánta gente ve cada post.";
+
+    return [
+        'saludo'     => "{$saludo}. Aquí, pendiente a {$negocio}.",
+        'hechos'     => $hechos,
+        'sugerencia' => _crecer_sugerencia_hoy($ahora, $cuenta, $prod),
+    ];
+}
+
 /**
  * Observación útil — SOLO HECHOS antes de Meta (nada de "mueve la aguja" ni
  * impacto externo). Devuelve null si no hay nada honesto que decir.
