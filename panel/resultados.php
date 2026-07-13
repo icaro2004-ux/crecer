@@ -28,6 +28,43 @@ $meta_ok = metricas_meta_conectado($pdo, $marca_id);
 $redes   = metricas_redes_de_posts($pdo, $marca_id, array_column($pubs, 'id')); // estado por red
 $conx    = metricas_conexion_detalle($pdo, $marca_id);                          // ig/fb enganchadas
 
+// ── Botón "Actualizar métricas": trae insights frescos de Meta ──
+$flash = null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'refrescar_metricas') {
+    if (function_exists('csrf_ok') && !csrf_ok()) {
+        $flash = ['err', 'La sesión expiró. Recarga la página e intenta otra vez.'];
+    } else {
+        $r = metricas_refrescar_insights($pdo, $marca_id, 12, 0); // 0h = forzar al pedirlo a mano
+        if (!empty($r['ok'])) {
+            $flash = ['ok', $r['n'] > 0
+                ? "Métricas al día · traje datos de {$r['n']} post" . ($r['n']==1?'':'s') . " de Meta."
+                : 'Ya estabas al día — Meta no tenía nada nuevo que darte.'];
+        } elseif (($r['motivo'] ?? '') === 'sin_conexion') {
+            $flash = ['err', 'Conecta Instagram/Facebook primero para traer métricas.'];
+        } else {
+            $flash = ['err', 'La app de Meta aún no está configurada en el servidor.'];
+        }
+    }
+}
+
+// Insights ya guardados (cache) para pintar números reales — sin llamar a Meta.
+$insights = metricas_insights_de_posts($pdo, $marca_id, array_column($pubs, 'id'));
+$tot_ins  = metricas_totales_insights($pdo, $marca_id);
+$hay_ins  = $tot_ins['n'] > 0;
+
+// Combina las redes de un post en un set de números (para la lista).
+$post_ins = function (int $pid) use ($insights): ?array {
+    if (empty($insights[$pid])) return null;
+    $a = ['alcance'=>null,'me_gusta'=>null,'comentarios'=>null,'guardados'=>null];
+    $hay = false;
+    foreach ($insights[$pid] as $row) {
+        foreach ($a as $k => $_) {
+            if (isset($row[$k]) && $row[$k] !== null) { $a[$k] = (int)$a[$k] + (int)$row[$k]; $hay = true; }
+        }
+    }
+    return $hay ? $a : null;
+};
+
 // Consistencia: publicaciones por semana (últimas 8 semanas ISO), datos reales.
 $semsql = $pdo->prepare(
     "SELECT YEARWEEK(publicado_at,3) wk, COUNT(*) n
@@ -115,10 +152,27 @@ require __DIR__ . '/_shell.php';
   .rz-net{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
   .rz-net:last-child{border-bottom:0}.rz-net .e{font-size:18px}
   .rz-net .st{margin-left:auto;font-size:12.5px;color:var(--muted);font-weight:700}
+  /* números reales de Meta bajo cada post */
+  .rz-mx{display:flex;flex-wrap:wrap;gap:13px;margin-top:7px}
+  .rz-mx span{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;color:var(--tinta)}
+  .rz-mx svg{width:14px;height:14px;color:var(--teal);flex:none}
+  /* botón "Actualizar métricas" */
+  .rz-refresh{display:inline-flex;align-items:center;gap:7px;border:1.5px solid color-mix(in srgb,var(--teal) 45%,var(--line));
+    background:#fff;color:var(--teal-dark,#087));font-family:'Oswald',sans-serif;font-weight:700;text-transform:uppercase;
+    letter-spacing:.03em;font-size:12.5px;padding:8px 14px;border-radius:10px;cursor:pointer}
+  .rz-refresh:hover{background:color-mix(in srgb,var(--teal) 7%,#fff)}
+  .rz-refresh svg{width:15px;height:15px}
+  .rz-updated{font-size:11.5px;color:var(--muted);margin-top:8px}
+  /* flash tras actualizar */
+  .rz-flash{border-radius:12px;padding:11px 15px;font-size:13.5px;font-weight:700;margin:0 0 14px;line-height:1.4}
+  .rz-flash.ok{background:color-mix(in srgb,var(--teal) 9%,#fff);border:1px solid color-mix(in srgb,var(--teal) 30%,#fff);color:var(--tinta)}
+  .rz-flash.err{background:#fdeaea;border:1px solid #f5c2c0;color:#b42318}
 </style>
 
 <h1 class="rz-h1"><?= ico('chart') ?> Resultados</h1>
 <p class="rz-lede">Cómo te está yendo. Hoy ves tu producción y consistencia (datos reales); al conectar tus redes se encienden alcance e interacciones.</p>
+
+<?php if ($flash): ?><div class="rz-flash <?= $flash[0] ?>"><?= $h($flash[1]) ?></div><?php endif; ?>
 
 <div class="rz-tabs" role="tablist">
   <button class="rz-tab on" data-pane="resumen" role="tab">Resumen</button>
@@ -163,15 +217,36 @@ require __DIR__ . '/_shell.php';
     <?php endif; ?>
   </div>
 
-  <div class="rz-card rz-lock">
-    <div class="lk"><?= ico('lock') ?> Alcance e interacciones</div>
-    <?php if ($meta_ok): ?>
-      <p>Tus redes están conectadas. El alcance y las interacciones de cada post están en camino — el corillo los traerá de Meta.</p>
-    <?php else: ?>
+  <?php if ($hay_ins): ?>
+    <div class="rz-card">
+      <h2><?= ico('eye') ?> Alcance e interacciones · este mes</h2>
+      <div class="rz-flow">
+        <span><b><?= number_format($tot_ins['alcance']) ?></b>personas alcanzadas</span>
+        <span class="arw">·</span>
+        <span><b><?= number_format($tot_ins['interacciones']) ?></b>interacciones</span>
+      </div>
+      <div class="rz-sub">Directo de Meta · <?= (int)$tot_ins['n'] ?> post<?= $tot_ins['n']==1?'':'s' ?> con datos este mes. Abajo, en <b>Publicaciones</b>, ves el detalle de cada uno.</div>
+      <form method="post" style="margin-top:12px">
+        <?= csrf_field() ?><input type="hidden" name="accion" value="refrescar_metricas">
+        <button class="rz-refresh" type="submit"><?= ico('refresh') ?> Actualizar métricas</button>
+      </form>
+    </div>
+  <?php elseif ($meta_ok): ?>
+    <div class="rz-card rz-lock">
+      <div class="lk"><?= ico('eye') ?> Alcance e interacciones</div>
+      <p>Tus redes están conectadas. Toca <b>Actualizar</b> para traer de Meta el alcance y las reacciones de tus posts publicados.</p>
+      <form method="post">
+        <?= csrf_field() ?><input type="hidden" name="accion" value="refrescar_metricas">
+        <button class="rz-refresh" type="submit"><?= ico('refresh') ?> Actualizar métricas</button>
+      </form>
+    </div>
+  <?php else: ?>
+    <div class="rz-card rz-lock">
+      <div class="lk"><?= ico('lock') ?> Alcance e interacciones</div>
       <p>Conecta Instagram y Facebook y aquí verás a cuántas personas llegaste y cómo reaccionaron — directo de Meta.</p>
       <a class="rz-cta" href="<?= $BASE ?>/conectar.php?marca=<?= $marca_id ?>">Conectar mis redes →</a>
-    <?php endif; ?>
-  </div>
+    </div>
+  <?php endif; ?>
 </section>
 
 <!-- ── PUBLICACIONES ─────────────────────────────────────── -->
@@ -216,20 +291,35 @@ require __DIR__ . '/_shell.php';
                 <?php endif;
             endforeach; ?>
           </div>
+          <?php $mi = $post_ins((int)$p['id']); if ($mi): ?>
+            <div class="rz-mx">
+              <?php if ($mi['alcance']     !== null): ?><span title="Personas alcanzadas"><?= ico('eye') ?><?= number_format($mi['alcance']) ?></span><?php endif; ?>
+              <?php if ($mi['me_gusta']    !== null): ?><span title="Me gusta / reacciones"><?= ico('heart') ?><?= number_format($mi['me_gusta']) ?></span><?php endif; ?>
+              <?php if ($mi['comentarios'] !== null): ?><span title="Comentarios"><?= ico('chat') ?><?= number_format($mi['comentarios']) ?></span><?php endif; ?>
+              <?php if ($mi['guardados']   !== null): ?><span title="Guardados"><?= ico('bookmark') ?><?= number_format($mi['guardados']) ?></span><?php endif; ?>
+            </div>
+          <?php endif; ?>
         </div>
       </div>
     <?php endforeach; endif; ?>
   </div>
 
-  <div class="rz-card rz-lock">
-    <div class="lk"><?= ico('lock') ?> Cómo rindió cada post</div>
-    <?php if ($meta_ok): ?>
-      <p>Tus redes están conectadas. Los likes, comentarios, guardados y alcance de cada post están en camino.</p>
-    <?php else: ?>
+  <?php if ($hay_ins): ?>
+    <div class="rz-card" style="text-align:center">
+      <p class="rz-updated" style="margin:0"><?= ico('check-circle') ?> Cada post muestra su alcance y reacciones directo de Meta.</p>
+    </div>
+  <?php elseif ($meta_ok): ?>
+    <div class="rz-card rz-lock">
+      <div class="lk"><?= ico('eye') ?> Cómo rindió cada post</div>
+      <p>Tus redes están conectadas. En <b>Resumen</b> toca <b>Actualizar métricas</b> y aquí aparecen los likes, comentarios, guardados y alcance de cada post.</p>
+    </div>
+  <?php else: ?>
+    <div class="rz-card rz-lock">
+      <div class="lk"><?= ico('lock') ?> Cómo rindió cada post</div>
       <p>Al conectar tus redes verás likes, comentarios, guardados y alcance de cada publicación — y el corillo te dirá qué tipo de post funciona mejor.</p>
       <a class="rz-cta" href="<?= $BASE ?>/conectar.php?marca=<?= $marca_id ?>">Conectar Instagram y Facebook →</a>
-    <?php endif; ?>
-  </div>
+    </div>
+  <?php endif; ?>
 </section>
 
 <!-- ── REDES ─────────────────────────────────────────────── -->
@@ -242,16 +332,31 @@ require __DIR__ . '/_shell.php';
       <p style="font-size:12.5px;color:#b3123b;font-weight:700;margin-top:10px;line-height:1.45">Tu Instagram está conectado pero <b>falta enganchar una Página de Facebook</b> — por eso los posts salen solo en IG. Vuelve a <a href="<?= $BASE ?>/conectar.php?marca=<?= $marca_id ?>" style="color:#b3123b;text-decoration:underline">conectar</a> y elige tu Página.</p>
     <?php endif; ?>
   </div>
-  <div class="rz-card rz-lock">
-    <?php if ($meta_ok): ?>
-      <div class="lk"><?= ico('check-circle') ?> Redes conectadas</div>
-      <p>Tus métricas de alcance, interacciones y crecimiento de seguidores están en camino — el corillo las traerá de Meta.</p>
-    <?php else: ?>
+  <?php if ($hay_ins): ?>
+    <div class="rz-card">
+      <div class="lk" style="display:flex;align-items:center;gap:8px;font-weight:800;color:var(--tinta);font-size:14.5px"><?= ico('check-circle') ?> Este mes</div>
+      <div class="rz-flow" style="margin-top:10px">
+        <span><b><?= number_format($tot_ins['alcance']) ?></b>alcance</span>
+        <span class="arw">·</span>
+        <span><b><?= number_format($tot_ins['interacciones']) ?></b>interacciones</span>
+      </div>
+      <form method="post" style="margin-top:12px">
+        <?= csrf_field() ?><input type="hidden" name="accion" value="refrescar_metricas">
+        <button class="rz-refresh" type="submit"><?= ico('refresh') ?> Actualizar métricas</button>
+      </form>
+    </div>
+  <?php elseif ($meta_ok): ?>
+    <div class="rz-card rz-lock">
+      <div class="lk"><?= ico('eye') ?> Enciende tus métricas</div>
+      <p>Tus redes están conectadas. En <b>Resumen</b> toca <b>Actualizar métricas</b> para traer de Meta tu alcance e interacciones.</p>
+    </div>
+  <?php else: ?>
+    <div class="rz-card rz-lock">
       <div class="lk"><?= ico('bolt') ?> Enciende tus métricas de redes</div>
       <p>Conecta Instagram y Facebook para ver alcance, interacciones y crecimiento de seguidores. Mientras tanto, en <b>Resumen</b> ya ves tu producción y consistencia, que son reales.</p>
       <a class="rz-cta" href="<?= $BASE ?>/conectar.php?marca=<?= $marca_id ?>">Conectar mis redes →</a>
-    <?php endif; ?>
-  </div>
+    </div>
+  <?php endif; ?>
 </section>
 
 <script>

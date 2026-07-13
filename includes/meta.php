@@ -216,6 +216,92 @@ function meta_publicar_fb(string $page_id, string $page_token, string $caption, 
     return ['id' => $post_id, 'permalink' => 'https://www.facebook.com/' . $post_id];
 }
 
+// ── INSIGHTS (alcance / interacciones de un post ya publicado) ─
+//  Solo lectura. Para la PROPIA cuenta del dueño esto funciona
+//  aun con la app de Meta en modo desarrollo (App Review solo hace
+//  falta para operar cuentas de TERCEROS). Todo es tolerante: si
+//  Meta no da una métrica, queda null (nunca cero inventado).
+
+/** Suma las interacciones disponibles (ignora las que vengan null). */
+function _meta_interacciones(array $o): ?int {
+    $p = array_filter(
+        [$o['me_gusta'] ?? null, $o['comentarios'] ?? null, $o['guardados'] ?? null, $o['compartidos'] ?? null],
+        fn($x) => $x !== null
+    );
+    return $p ? array_sum($p) : null;
+}
+
+/**
+ * Insights de UN media de Instagram. Combina conteos del nodo
+ * (like_count/comments_count, fiables) con el edge /insights
+ * (reach, saved, shares — puede variar por tipo de media).
+ * @return array claves alcance,me_gusta,comentarios,guardados,compartidos,interacciones,crudo
+ */
+function meta_insights_ig(string $media_id, string $token): array {
+    $o = ['alcance'=>null,'me_gusta'=>null,'comentarios'=>null,'guardados'=>null,'compartidos'=>null,'crudo'=>null];
+    // 1) Conteos directos del nodo (siempre disponibles).
+    try {
+        $n = meta_api('GET', $media_id, ['fields'=>'like_count,comments_count','access_token'=>$token]);
+        if (isset($n['like_count']))     $o['me_gusta']    = (int)$n['like_count'];
+        if (isset($n['comments_count'])) $o['comentarios'] = (int)$n['comments_count'];
+    } catch (MetaError $e) { /* nodo sin permiso: seguimos con insights */ }
+    // 2) Insights: reach + saved + shares (tolerante a métricas ausentes).
+    $crudo = null;
+    try {
+        $r = meta_api('GET', "$media_id/insights", ['metric'=>'reach,saved,shares','access_token'=>$token]);
+        foreach ($r['data'] ?? [] as $m) {
+            $val = $m['values'][0]['value'] ?? null;
+            if ($val === null) continue;
+            if ($m['name']==='reach')  $o['alcance']     = (int)$val;
+            if ($m['name']==='saved')  $o['guardados']   = (int)$val;
+            if ($m['name']==='shares') $o['compartidos'] = (int)$val;
+        }
+        $crudo = $r;
+    } catch (MetaError $e) {
+        // Fallback: pedir solo reach (la métrica más universal).
+        try {
+            $r = meta_api('GET', "$media_id/insights", ['metric'=>'reach','access_token'=>$token]);
+            $val = $r['data'][0]['values'][0]['value'] ?? null;
+            if ($val !== null) $o['alcance'] = (int)$val;
+            $crudo = $r;
+        } catch (MetaError $e2) { /* sin insights: quedan null */ }
+    }
+    $o['crudo']         = $crudo ? json_encode($crudo, JSON_UNESCAPED_UNICODE) : null;
+    $o['interacciones'] = _meta_interacciones($o);
+    return $o;
+}
+
+/**
+ * Insights de UN post de una Página de Facebook. Reacciones /
+ * comentarios / shares vienen por summary; el alcance por el edge
+ * de insights (post_impressions_unique).
+ */
+function meta_insights_fb(string $post_id, string $token): array {
+    $o = ['alcance'=>null,'me_gusta'=>null,'comentarios'=>null,'guardados'=>null,'compartidos'=>null,'crudo'=>null];
+    $crudo = [];
+    // 1) Reacciones / comentarios / shares (summary, sin traer las listas).
+    try {
+        $n = meta_api('GET', $post_id, [
+            'fields'       => 'reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0),shares',
+            'access_token' => $token,
+        ]);
+        if (isset($n['reactions']['summary']['total_count'])) $o['me_gusta']    = (int)$n['reactions']['summary']['total_count'];
+        if (isset($n['comments']['summary']['total_count']))  $o['comentarios'] = (int)$n['comments']['summary']['total_count'];
+        if (isset($n['shares']['count']))                     $o['compartidos'] = (int)$n['shares']['count'];
+        $crudo['nodo'] = $n;
+    } catch (MetaError $e) { /* seguimos con el alcance */ }
+    // 2) Alcance (personas únicas alcanzadas).
+    try {
+        $r = meta_api('GET', "$post_id/insights/post_impressions_unique", ['access_token'=>$token]);
+        $val = $r['data'][0]['values'][0]['value'] ?? null;
+        if ($val !== null) $o['alcance'] = (int)$val;
+        $crudo['insights'] = $r;
+    } catch (MetaError $e) { /* alcance no disponible: null */ }
+    $o['crudo']         = $crudo ? json_encode($crudo, JSON_UNESCAPED_UNICODE) : null;
+    $o['interacciones'] = _meta_interacciones($o);
+    return $o;
+}
+
 // ── LECTURA DE LA CONEXIÓN GUARDADA ──────────────────────────
 
 /** La conexión Meta de una marca (o null). */

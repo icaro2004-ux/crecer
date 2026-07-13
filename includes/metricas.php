@@ -146,6 +146,133 @@ function metricas_meta_conectado(PDO $pdo, int $marca_id): bool {
     } catch (Throwable $e) { return false; }
 }
 
+// ============================================================
+//  INSIGHTS DE META — alcance / interacciones por post publicado.
+//  Fuente: crecer_metricas (cache). Se refresca desde Meta por
+//  cron o botón. Los lectores NO llaman a Meta (solo leen cache);
+//  quien llama a la API es metricas_refrescar_insights().
+// ============================================================
+
+/**
+ * Insights guardados de un conjunto de posts.
+ * @return array [contenido_id => ['instagram'=>row, 'facebook'=>row]]
+ *   donde row tiene alcance,me_gusta,comentarios,guardados,compartidos,
+ *   interacciones,actualizado_at.
+ */
+function metricas_insights_de_posts(PDO $pdo, int $marca_id, array $ids): array {
+    $ids = array_values(array_unique(array_map('intval', $ids)));
+    if (!$ids) return [];
+    $in  = implode(',', array_fill(0, count($ids), '?'));
+    $out = [];
+    try {
+        $q = $pdo->prepare(
+            "SELECT contenido_id, plataforma, alcance, me_gusta, comentarios,
+                    guardados, compartidos, interacciones, actualizado_at
+             FROM crecer_metricas
+             WHERE marca_id=? AND contenido_id IN ($in)");
+        $q->execute(array_merge([$marca_id], $ids));
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int)$r['contenido_id']][$r['plataforma']] = $r;
+        }
+    } catch (Throwable $e) {}
+    return $out;
+}
+
+/** Totales de alcance/interacciones del MES en curso (posts publicados). */
+function metricas_totales_insights(PDO $pdo, int $marca_id): array {
+    try {
+        $q = $pdo->prepare(
+            "SELECT COALESCE(SUM(m.alcance),0)       AS alcance,
+                    COALESCE(SUM(m.interacciones),0) AS interacciones,
+                    COUNT(*)                         AS n
+             FROM crecer_metricas m
+             JOIN crecer_contenido c ON c.id = m.contenido_id
+             WHERE m.marca_id=? AND c.estado='publicado' AND c.publicado_at IS NOT NULL
+               AND YEAR(c.publicado_at)=YEAR(NOW()) AND MONTH(c.publicado_at)=MONTH(NOW())");
+        $q->execute([$marca_id]);
+        $r = $q->fetch(PDO::FETCH_ASSOC) ?: [];
+        return [
+            'alcance'       => (int)($r['alcance']       ?? 0),
+            'interacciones' => (int)($r['interacciones'] ?? 0),
+            'n'             => (int)($r['n']             ?? 0),
+        ];
+    } catch (Throwable $e) {
+        return ['alcance'=>0, 'interacciones'=>0, 'n'=>0];
+    }
+}
+
+/** Guarda (upsert) el insight de un post en una red. */
+function metricas_guardar_insight(PDO $pdo, int $contenido_id, int $marca_id, string $plataforma, ?string $external_id, array $ins): void {
+    $pdo->prepare(
+        "INSERT INTO crecer_metricas
+            (contenido_id, marca_id, plataforma, external_id,
+             alcance, me_gusta, comentarios, guardados, compartidos, interacciones, crudo)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)
+         ON DUPLICATE KEY UPDATE
+            external_id=VALUES(external_id), alcance=VALUES(alcance), me_gusta=VALUES(me_gusta),
+            comentarios=VALUES(comentarios), guardados=VALUES(guardados), compartidos=VALUES(compartidos),
+            interacciones=VALUES(interacciones), crudo=VALUES(crudo), actualizado_at=NOW()"
+    )->execute([
+        $contenido_id, $marca_id, $plataforma, $external_id,
+        $ins['alcance'] ?? null, $ins['me_gusta'] ?? null, $ins['comentarios'] ?? null,
+        $ins['guardados'] ?? null, $ins['compartidos'] ?? null, $ins['interacciones'] ?? null,
+        $ins['crudo'] ?? null,
+    ]);
+}
+
+/**
+ * Refresca desde Meta los insights de los posts publicados de una marca
+ * cuya métrica falta o está vieja (> $stale_horas). Llama a la Graph API;
+ * úsalo desde cron o desde un botón (nunca en el render normal de la página).
+ *
+ * @return array ['ok'=>bool, 'motivo'=>?string, 'n'=>int (guardados),
+ *                'revisadas'=>int, 'errores'=>string[]]
+ */
+function metricas_refrescar_insights(PDO $pdo, int $marca_id, int $max = 10, int $stale_horas = 6): array {
+    require_once __DIR__ . '/meta.php';
+    if (!meta_configurado()) return ['ok'=>false, 'motivo'=>'sin_app', 'n'=>0];
+
+    $conx = conexion_de_marca($pdo, $marca_id);
+    if (!$conx || ($conx['estado'] ?? '') !== 'activa' || empty($conx['page_access_token'])) {
+        return ['ok'=>false, 'motivo'=>'sin_conexion', 'n'=>0];
+    }
+    $token = (string)$conx['page_access_token'];
+    $max   = max(1, min(50, $max));
+    $stale = max(0, (int)$stale_horas);
+
+    // Último intento OK por (post, red) de posts publicados, cuya métrica
+    // no exista todavía o esté más vieja que la ventana de frescura.
+    $q = $pdo->prepare(
+        "SELECT p.contenido_id, p.plataforma, p.external_id
+         FROM crecer_publicaciones p
+         JOIN crecer_contenido c ON c.id = p.contenido_id AND c.estado='publicado'
+         LEFT JOIN crecer_metricas m
+                ON m.contenido_id = p.contenido_id AND m.plataforma = p.plataforma
+         WHERE p.marca_id = ? AND p.estado='ok' AND p.external_id IS NOT NULL
+           AND p.id = (SELECT MAX(p2.id) FROM crecer_publicaciones p2
+                       WHERE p2.contenido_id = p.contenido_id
+                         AND p2.plataforma = p.plataforma AND p2.estado='ok')
+           AND (m.id IS NULL OR m.actualizado_at < (NOW() - INTERVAL {$stale} HOUR))
+         ORDER BY c.publicado_at DESC
+         LIMIT {$max}");
+    $q->execute([$marca_id]);
+    $filas = $q->fetchAll(PDO::FETCH_ASSOC);
+
+    $n = 0; $errores = [];
+    foreach ($filas as $f) {
+        try {
+            $ins = ($f['plataforma'] === 'facebook')
+                 ? meta_insights_fb((string)$f['external_id'], $token)
+                 : meta_insights_ig((string)$f['external_id'], $token);
+            metricas_guardar_insight($pdo, (int)$f['contenido_id'], $marca_id, $f['plataforma'], $f['external_id'], $ins);
+            $n++;
+        } catch (Throwable $e) {
+            $errores[] = "#{$f['contenido_id']}/{$f['plataforma']}: " . $e->getMessage();
+        }
+    }
+    return ['ok'=>true, 'motivo'=>null, 'n'=>$n, 'revisadas'=>count($filas), 'errores'=>$errores];
+}
+
 /**
  * Observación útil — SOLO HECHOS antes de Meta (nada de "mueve la aguja" ni
  * impacto externo). Devuelve null si no hay nada honesto que decir.
