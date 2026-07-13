@@ -133,6 +133,17 @@
 <?php endif; ?>
 
 <script>
+  // File pickers estilizados: muestra el nombre del archivo al escoger.
+  document.querySelectorAll('input.fp-in').forEach(function(f){
+    f.addEventListener('change',function(){
+      var lab=document.querySelector('label[for="'+f.id+'"]'); if(!lab) return;
+      var tx=lab.querySelector('.fp-tx'); if(!tx) return;
+      if(f.files && f.files[0]){ tx.textContent=f.files[0].name; lab.classList.add('has'); }
+      else { tx.textContent=tx.getAttribute('data-default')||'Escoge un archivo'; lab.classList.remove('has'); }
+    });
+  });
+</script>
+<script>
   var side=document.getElementById('side'),bd=document.getElementById('bd'),bg=document.getElementById('burger');
   function _open(o){side.classList.toggle('open',o);bd.classList.toggle('show',o);}
   if(bg)bg.addEventListener('click',function(){_open(true);});

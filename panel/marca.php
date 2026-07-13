@@ -336,24 +336,12 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
   <p class="subline" style="margin-bottom:10px">¿Ya tienes logo? Súbelo (principal y/o secundarios). La IA lo usará como referencia en tus posts. Lo ideal: <b>PNG con fondo transparente</b>.</p>
   <form method="post" enctype="multipart/form-data" onsubmit="var b=this.querySelector('.genbtn');b.textContent='Subiendo…';b.disabled=true;">
     <input type="hidden" name="accion" value="subir_logo">
-    <input type="file" id="logoFile" name="logo_file" accept="image/png,image/jpeg,image/webp" required hidden>
-    <label for="logoFile" class="filepick" id="logoPick">
-      <?= ico('upload') ?><span class="fp-tx" id="logoPickTx">Escoge tu logo (PNG, JPG o WEBP)</span>
+    <input type="file" id="logoFile" name="logo_file" class="fp-in" accept="image/png,image/jpeg,image/webp" required>
+    <label for="logoFile" class="filepick" style="margin-bottom:10px">
+      <?= ico('upload') ?><span class="fp-tx" data-default="Escoge tu logo (PNG, JPG o WEBP)">Escoge tu logo (PNG, JPG o WEBP)</span>
     </label>
     <label class="chip-opt" style="display:inline-flex;margin-bottom:10px"><input type="checkbox" name="principal" value="1" checked><span>Usar como logo principal</span></label>
     <button class="genbtn" type="submit">Subir logo</button>
-    <style>
-      .filepick{display:flex;align-items:center;gap:9px;width:100%;border:1.5px dashed var(--line);background:#fff;border-radius:12px;padding:12px 14px;cursor:pointer;font-size:13.5px;margin-bottom:10px;transition:.12s}
-      .filepick:hover{border-color:var(--terracota);background:#fff7f4}
-      .filepick svg{width:18px;height:18px;color:var(--terracota);flex:none}
-      .filepick .fp-tx{color:var(--muted);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .filepick.has{border-style:solid;border-color:var(--terracota)}
-      .filepick.has .fp-tx{color:var(--tinta);font-weight:700}
-    </style>
-    <script>
-      (function(){var f=document.getElementById('logoFile'),t=document.getElementById('logoPickTx'),p=document.getElementById('logoPick');
-        if(!f)return;f.addEventListener('change',function(){if(f.files&&f.files[0]){t.textContent=f.files[0].name;p.classList.add('has');}else{t.textContent='Escoge tu logo (PNG, JPG o WEBP)';p.classList.remove('has');}});})();
-    </script>
   </form>
 </div>
 

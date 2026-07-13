@@ -1076,7 +1076,8 @@ $cf = [
       <label class="pk"><input type="radio" name="foto" value="" <?= !$fotos?'checked':'' ?>><span class="none">Sin foto<br>(generar)</span></label>
     </div>
     <label class="fl">…o sube una foto nueva ahora</label>
-    <input type="file" name="foto_nueva" accept="image/png,image/jpeg,image/webp">
+    <input type="file" id="fpFotoNueva" name="foto_nueva" class="fp-in" accept="image/png,image/jpeg,image/webp">
+    <label for="fpFotoNueva" class="filepick"><?= ico('upload') ?><span class="fp-tx" data-default="Escoge una foto (PNG, JPG o WEBP)">Escoge una foto (PNG, JPG o WEBP)</span></label>
 
     <label class="fl">¿Texto sobre la imagen?</label>
     <div class="chips">
@@ -1116,7 +1117,8 @@ $cf = [
     <div class="art-divider"><span>o usa lo tuyo</span></div>
     <label class="fl" style="margin-top:0;display:inline-flex;align-items:center;gap:6px"><?= ico('paperclip') ?> Subir mi propia imagen tal cual <span style="color:var(--muted);font-weight:500">(sin IA, sin gastar límite)</span></label>
     <div style="display:flex;gap:8px;align-items:center">
-      <input type="file" id="art-directa-file" accept="image/png,image/jpeg,image/webp" style="flex:1">
+      <input type="file" id="art-directa-file" class="fp-in" accept="image/png,image/jpeg,image/webp">
+      <label for="art-directa-file" class="filepick" style="flex:1"><?= ico('paperclip') ?><span class="fp-tx" data-default="Escoge tu imagen">Escoge tu imagen</span></label>
       <button type="button" class="fbnew" id="art-directa-btn" style="white-space:nowrap">Usar esta</button>
     </div>
   </form>

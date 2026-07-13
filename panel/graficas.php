@@ -182,7 +182,9 @@ require __DIR__ . '/_shell.php';
   <div class="d">Sube fotos reales de tus productos (la IA nunca inventa tu producto).</div>
   <form class="card2" method="post" enctype="multipart/form-data">
     <input type="hidden" name="accion" value="subir">
-    <div class="uprow" style="display:flex;align-items:center;gap:8px"><?= ico('camera') ?> <input type="file" name="foto" accept="image/png,image/jpeg,image/webp" required>
+    <div class="uprow" style="display:flex;align-items:center;gap:8px">
+      <input type="file" id="fpGrafFoto" name="foto" class="fp-in" accept="image/png,image/jpeg,image/webp" required>
+      <label for="fpGrafFoto" class="filepick" style="flex:1"><?= ico('camera') ?><span class="fp-tx" data-default="Escoge una foto de tu producto">Escoge una foto de tu producto</span></label>
       <button class="btnp" type="submit">Subir</button></div>
   </form>
 </div>
