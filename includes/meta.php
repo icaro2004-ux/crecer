@@ -192,6 +192,68 @@ function meta_publicar_ig(string $ig_user_id, string $page_token, string $image_
 }
 
 /**
+ * Publica un REEL en Instagram (video que el dueño subió; nosotros NO
+ * generamos video). 2 pasos + poll, igual que la imagen pero el
+ * procesamiento del video tarda más. Requiere URL pública del .mp4.
+ *
+ * @return array ['id'=>media_id, 'permalink'=>url]
+ */
+function meta_publicar_ig_reel(string $ig_user_id, string $page_token, string $video_url, string $caption): array {
+    // 1) Crear el contenedor de REEL.
+    $c = meta_api('POST', "$ig_user_id/media", [
+        'media_type'   => 'REELS',
+        'video_url'    => $video_url,
+        'caption'      => $caption,
+        'access_token' => $page_token,
+    ]);
+    $creation_id = $c['id'] ?? '';
+    if ($creation_id === '') throw new MetaError('IG no devolvió creation_id para el Reel.');
+
+    // 2) Esperar a que Meta procese el video. Más lento que una foto:
+    //    hasta ~80s (16×5s) — dentro del límite del proxy. Si no termina,
+    //    se avisa para reintentar (el video queda subido, no se pierde).
+    $listo = false;
+    for ($i = 0; $i < 16; $i++) {
+        sleep(5);
+        $st = meta_api('GET', $creation_id, ['fields' => 'status_code', 'access_token' => $page_token]);
+        $sc = $st['status_code'] ?? '';
+        if ($sc === 'FINISHED') { $listo = true; break; }
+        if ($sc === 'ERROR' || $sc === 'EXPIRED') throw new MetaError("IG rechazó el Reel (estado $sc). Revisa que el video cumpla el formato de Reels.");
+    }
+    if (!$listo) throw new MetaError('Meta todavía está procesando el video. Espera un momento y vuelve a darle Publicar.');
+
+    // 3) Publicar el contenedor.
+    $p = meta_api('POST', "$ig_user_id/media_publish", ['creation_id' => $creation_id, 'access_token' => $page_token]);
+    $media_id = $p['id'] ?? '';
+    if ($media_id === '') throw new MetaError('IG no devolvió media_id al publicar el Reel.');
+
+    $permalink = '';
+    try {
+        $pl = meta_api('GET', $media_id, ['fields' => 'permalink', 'access_token' => $page_token]);
+        $permalink = $pl['permalink'] ?? '';
+    } catch (MetaError $e) { /* el Reel ya salió; permalink opcional */ }
+
+    return ['id' => $media_id, 'permalink' => $permalink];
+}
+
+/**
+ * Publica un VIDEO en una Página de Facebook (video subido por el dueño).
+ * FB procesa el video de forma asíncrona; devuelve el id al instante.
+ *
+ * @return array ['id'=>video_id, 'permalink'=>url]
+ */
+function meta_publicar_fb_video(string $page_id, string $page_token, string $caption, string $video_url): array {
+    $r = meta_api('POST', "$page_id/videos", [
+        'file_url'     => $video_url,
+        'description'  => $caption,
+        'access_token' => $page_token,
+    ]);
+    $vid = $r['id'] ?? '';
+    if ($vid === '') throw new MetaError('FB no devolvió el id del video.');
+    return ['id' => $vid, 'permalink' => 'https://www.facebook.com/' . $page_id . '/videos/' . $vid];
+}
+
+/**
  * Publica en una Página de Facebook. Con imagen (URL pública) usa
  * /photos; sin imagen, /feed (solo texto).
  *

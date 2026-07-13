@@ -280,7 +280,9 @@ require __DIR__ . '/_shell.php';
       $rp = $redes[(int)$p['id']] ?? [];
     ?>
       <div class="rz-pub">
-        <?php if (!empty($p['grafica_path'])): ?>
+        <?php if (!empty($p['grafica_path']) && preg_match('#\.(mp4|mov|m4v)$#i', (string)$p['grafica_path'])): ?>
+          <video class="th" src="<?= $h($p['grafica_path']) ?>" muted playsinline preload="metadata"></video>
+        <?php elseif (!empty($p['grafica_path'])): ?>
           <img class="th" src="<?= $h($p['grafica_path']) ?>" alt="">
         <?php else: ?><span class="th ph"><?= $p['plataforma']==='facebook'?ico('facebook'):ico('instagram') ?></span><?php endif; ?>
         <div class="tx">

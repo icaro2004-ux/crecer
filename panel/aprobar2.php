@@ -26,6 +26,8 @@ $puede_crear = $acceso_full || $posts_total < 1;   // tope de 1 post en free/pru
 // Cupo semanal de publicaciones (cada publicar/re-publicar consume 1). Admin exento.
 $cupo_exento = (($usuario['rol'] ?? '') === 'admin');
 $cupo = cupo_estado($pdo, $marca_id, $cupo_exento);
+// ¿El media adjunto es un video subido por el dueño? (para renderizar <video>)
+$esVideo = fn($p) => (bool)preg_match('#\.(mp4|mov|m4v)$#i', (string)$p);
 // ¿Redes conectadas? Si sí, "Publicar" va por la Graph API a la Página conectada
 // (un botón). Si no, cae al flujo manual de compartir.
 $redes_ok = false;
@@ -229,6 +231,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'No se pudo subir (usa JPG/PNG/WebP, máx 12MB).']); exit;
+    }
+
+    // ── Usar VIDEO propio TAL CUAL (no producimos video; el dueño lo sube) ──
+    if ($accion === 'video_directo') {
+        header('Content-Type: application/json');
+        $MAXV = 100 * 1024 * 1024;   // 100 MB (el server puede tener límite menor)
+        $f = $_FILES['video'] ?? null;
+        if (!$f || ($f['error'] ?? 1) !== UPLOAD_ERR_OK || empty($f['tmp_name'])) {
+            $why = ($f && in_array($f['error'] ?? 0, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true))
+                 ? 'El video excede el límite del servidor. Prueba uno más liviano.'
+                 : 'No se recibió el video. Intenta de nuevo.';
+            echo json_encode(['ok'=>false,'err'=>$why]); exit;
+        }
+        if ($f['size'] > $MAXV) { echo json_encode(['ok'=>false,'err'=>'El video es muy grande (máx 100 MB).']); exit; }
+        $ext = strtolower(pathinfo((string)$f['name'], PATHINFO_EXTENSION));
+        $mime = '';
+        if (function_exists('finfo_open')) { $fi = finfo_open(FILEINFO_MIME_TYPE); $mime = (string)@finfo_file($fi, $f['tmp_name']); finfo_close($fi); }
+        $ext_ok  = in_array($ext, ['mp4','mov','m4v'], true);
+        $mime_ok = ($mime === '' || in_array($mime, ['video/mp4','video/quicktime','video/x-m4v'], true));
+        if (!$ext_ok || !$mime_ok) { echo json_encode(['ok'=>false,'err'=>'Formato no válido. Sube un video MP4 o MOV.']); exit; }
+        $dir = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/videos";
+        @mkdir($dir, 0775, true);
+        $fn  = 'vid_' . uniqid() . '.' . ($ext === 'mov' ? 'mov' : 'mp4');
+        if (!move_uploaded_file($f['tmp_name'], $dir . '/' . $fn)) { echo json_encode(['ok'=>false,'err'=>'No se pudo guardar el video.']); exit; }
+        $url = rtrim(UPLOADS_URL, '/') . "/marca_{$marca_id}/videos/" . $fn;
+        if ($id) $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$url, $id, $marca_id]);
+        echo json_encode(['ok'=>true,'id'=>$id,'video'=>$url]); exit;
     }
 
     // ── Pedir un post a la IA (tema sugerido / borrador a pulir / random) ──
@@ -926,7 +955,9 @@ $cf = [
         <span class="date"><?= $fecha ?></span>
       </div>
       <div class="artwrap" id="art-<?= $p['id'] ?>">
-        <?php if ($has_art): ?>
+        <?php if ($has_art && $esVideo($p['grafica_path'])): ?>
+          <video src="<?= $h($p['grafica_path']) ?>" controls muted playsinline style="width:100%;display:block"></video>
+        <?php elseif ($has_art): ?>
           <img class="zoomable" src="<?= $h($p['grafica_path']) ?>" alt="arte" style="width:100%;display:block">
         <?php else: ?>
           <button type="button" class="artph artbtn" data-id="<?= $p['id'] ?>">
@@ -1120,6 +1151,14 @@ $cf = [
       <input type="file" id="art-directa-file" class="fp-in" accept="image/png,image/jpeg,image/webp">
       <label for="art-directa-file" class="filepick" style="flex:1"><?= ico('paperclip') ?><span class="fp-tx" data-default="Escoge tu imagen">Escoge tu imagen</span></label>
       <button type="button" class="fbnew" id="art-directa-btn" style="white-space:nowrap">Usar esta</button>
+    </div>
+
+    <div class="art-divider"><span>o sube tu video</span></div>
+    <label class="fl" style="margin-top:0;display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap"><?= ico('camera') ?> Subir mi propio video <span style="color:var(--muted);font-weight:500">(no creamos video — lo subes tú · MP4 o MOV, hasta 100MB)</span></label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="file" id="art-video-file" class="fp-in" accept="video/mp4,video/quicktime">
+      <label for="art-video-file" class="filepick" style="flex:1"><?= ico('camera') ?><span class="fp-tx" data-default="Escoge tu video (MP4/MOV)">Escoge tu video (MP4/MOV)</span></label>
+      <button type="button" class="fbnew" id="art-video-btn" style="white-space:nowrap">Usar este</button>
     </div>
   </form>
 </div>
@@ -1666,6 +1705,27 @@ $cf = [
       if(thenApprove){ enviarAccion(card,'aprobar').then(function(){ toast('✅ Post completo y aprobado'); }); }
       else toast('📎 Imagen propia añadida');
     }).catch(function(){ btn.disabled=false; btn.textContent='Usar esta'; toast('Error de conexión.'); });
+  });
+  var vbtn=document.getElementById('art-video-btn');
+  if(vbtn) vbtn.addEventListener('click', function(){
+    if(!artCard) return;
+    var fileEl=document.getElementById('art-video-file');
+    if(!fileEl.files.length){ toast('Escoge un video primero.'); return; }
+    var f=fileEl.files[0];
+    if(f.size > 100*1024*1024){ toast('El video es muy grande (máx 100MB).'); return; }
+    var btn=this; btn.disabled=true; btn.textContent='Subiendo…';
+    var card=artCard;
+    var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','video_directo'); fd.append('id',card.dataset.id); fd.append('video',f);
+    fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+      btn.disabled=false; btn.textContent='Usar este';
+      if(!d.ok){ toast(d.err||'No se pudo subir el video.'); return; }
+      var wrap=card.querySelector('.artwrap');
+      if(wrap) wrap.innerHTML='<video src="'+d.video+'?t='+Date.now()+'" controls muted playsinline style="width:100%;display:block"></video>';
+      card.dataset.img='1'; setChk(card,'art',true);
+      var tl=card.querySelector('.toolrow .artbtn'); if(tl) tl.innerHTML=ICO_IMG+' Cambiar media';
+      fileEl.value=''; cerrarArte();
+      toast('🎬 Video añadido');
+    }).catch(function(){ btn.disabled=false; btn.textContent='Usar este'; toast('Error de conexión (¿video muy pesado?).'); });
   });
   document.getElementById('art-skip').addEventListener('click', function(e){
     e.preventDefault(); var card=artCard; cerrarArte(); if(card) enviarAccion(card,'aprobar').then(function(){ toast('✓ Aprobado (solo texto)'); });

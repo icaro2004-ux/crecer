@@ -21,6 +21,11 @@
 require_once __DIR__ . '/meta.php';
 require_once __DIR__ . '/suscripcion.php';   // cupo_registrar_publicacion()
 
+/** ¿El media adjunto es un VIDEO subido por el dueño? (por extensión). */
+function es_video_path(?string $p): bool {
+    return (bool)preg_match('#\.(mp4|mov|m4v)(\?.*)?$#i', trim((string)$p));
+}
+
 /** Resuelve grafica_path (URL relativa o ruta) a URL ABSOLUTA HTTPS pública. */
 function imagen_url_publica(?string $grafica_path): string {
     $p = trim((string)$grafica_path);
@@ -184,14 +189,25 @@ function publicar_pieza(PDO $pdo, int $contenido_id, array $override_plataformas
     $caption   = (string)($pieza['caption'] ?? '');
     // Si el post tiene gráfica pero el ARCHIVO no está en el servidor, avisar claro
     // (evita quemar intentos con el error críptico de Meta "Missing/invalid image").
+    $es_video = es_video_path($pieza['grafica_path'] ?? null);
     $g_abs = grafica_ruta_abs($pieza['grafica_path'] ?? null);
     if ($g_abs !== null && !is_file($g_abs)) {
         return finalizar_pieza($pdo, $contenido_id, $tok, false,
-            ['_imagen' => 'La imagen de este post no está en el servidor. Regenera el arte ("Cambiar arte") y vuelve a publicar.'], []);
+            ['_media' => $es_video
+                ? 'El video de este post no está en el servidor. Vuelve a subirlo y publica de nuevo.'
+                : 'La imagen de este post no está en el servidor. Regenera el arte ("Cambiar arte") y vuelve a publicar.'], []);
     }
-    // IG solo acepta JPEG → convertir la gráfica (png/webp) a jpg antes de publicar.
-    $grafica_pub = asegurar_jpeg_publicable($pieza['grafica_path'] ?? null);
-    $image_url = imagen_url_publica($grafica_pub);
+    if ($es_video) {
+        // Video subido por el dueño: se publica como Reel (IG) / video (FB).
+        // No hay conversión a JPEG; se usa la URL pública del .mp4 tal cual.
+        $media_url = imagen_url_publica($pieza['grafica_path'] ?? null);
+        $image_url = '';
+    } else {
+        // IG solo acepta JPEG → convertir la gráfica (png/webp) a jpg antes de publicar.
+        $grafica_pub = asegurar_jpeg_publicable($pieza['grafica_path'] ?? null);
+        $image_url = imagen_url_publica($grafica_pub);
+        $media_url = $image_url;
+    }
     // Plataformas: el override (elegido por el dueño en el preview: IG/FB/ambas)
     // manda; si no viene, se usan las de la pieza.
     $destinos  = $override_plataformas
@@ -231,12 +247,21 @@ function publicar_pieza(PDO $pdo, int $contenido_id, array $override_plataformas
         $t0 = microtime(true);
         try {
             if ($pl === 'instagram') {
-                if ($image_url === '') throw new MetaError('Instagram requiere una imagen (URL pública).');
                 if (empty($conx['ig_user_id'])) throw new MetaError('No hay cuenta de IG Business conectada.');
-                $r = meta_publicar_ig($conx['ig_user_id'], $conx['page_access_token'], $image_url, $caption);
+                if ($es_video) {
+                    if ($media_url === '') throw new MetaError('El Reel necesita el video (URL pública).');
+                    $r = meta_publicar_ig_reel($conx['ig_user_id'], $conx['page_access_token'], $media_url, $caption);
+                } else {
+                    if ($image_url === '') throw new MetaError('Instagram requiere una imagen (URL pública).');
+                    $r = meta_publicar_ig($conx['ig_user_id'], $conx['page_access_token'], $image_url, $caption);
+                }
             } else { // facebook
                 if (empty($conx['fb_page_id'])) throw new MetaError('No hay Página de Facebook conectada.');
-                $r = meta_publicar_fb($conx['fb_page_id'], $conx['page_access_token'], $caption, $image_url);
+                if ($es_video) {
+                    $r = meta_publicar_fb_video($conx['fb_page_id'], $conx['page_access_token'], $caption, $media_url);
+                } else {
+                    $r = meta_publicar_fb($conx['fb_page_id'], $conx['page_access_token'], $caption, $image_url);
+                }
             }
             $lat = (int)round((microtime(true) - $t0) * 1000);
             log_publicacion($pdo, $contenido_id, $marca_id, $pl, 'ok', [
