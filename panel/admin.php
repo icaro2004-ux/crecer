@@ -143,11 +143,20 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
   body{background:var(--crema,#fbf6ee);color:var(--tinta,#1b1622);font-family:'Plus Jakarta Sans',sans-serif;margin:0}
   body::before{content:"";position:fixed;top:0;left:0;right:0;height:4px;z-index:60;background:var(--grad)}
   .disp{font-family:'Anton',sans-serif;text-transform:uppercase;letter-spacing:.02em}
-  .top{display:flex;align-items:center;gap:12px;padding:16px 26px;background:#140a16;color:#fff}
+  .top{display:flex;align-items:center;flex-wrap:wrap;gap:10px 12px;padding:14px 22px;background:#140a16;color:#fff}
   .top img{height:28px}
   .top b{font-family:var(--font-display);font-weight:800;text-transform:lowercase;letter-spacing:-.03em;font-size:19px}
-  .top .tag{font-family:'Anton';text-transform:uppercase;font-size:12px;letter-spacing:.08em;color:#ffcaa8;border:1px solid rgba(255,255,255,.18);padding:4px 10px;border-radius:99px}
-  .top .sp{flex:1}.top a{color:#cdc5d6;text-decoration:none;font-size:13.5px;font-weight:600}
+  .top .tag{font-family:'Anton';text-transform:uppercase;font-size:12px;letter-spacing:.08em;color:#ffcaa8;border:1px solid rgba(255,255,255,.18);padding:4px 10px;border-radius:99px;white-space:nowrap}
+  .top a{color:#cdc5d6;text-decoration:none;font-size:13.5px;font-weight:600;white-space:nowrap}
+  .op-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;margin-left:auto}
+  .op-hi{font-size:13px;color:#9f96b0;white-space:nowrap}
+  .op-salir{color:#fff!important;background:rgba(255,255,255,.12);padding:6px 12px;border-radius:8px;font-weight:700}
+  @media(max-width:720px){
+    .top{padding:12px 15px;gap:8px 10px}
+    .op-actions{width:100%;margin-left:0;gap:7px 14px;padding-top:9px;border-top:1px solid rgba(255,255,255,.1)}
+    .op-hi{display:none}
+    .op-salir{margin-left:auto}
+  }
   .wrap{max-width:1180px;margin:0 auto;padding:24px 26px 70px}
   h1.page-h{font-family:'Anton';text-transform:uppercase;font-size:clamp(26px,4vw,38px);letter-spacing:.02em;margin:6px 0 2px}
   .lede{color:var(--muted);font-size:14.5px;margin:0 0 20px}
@@ -186,12 +195,13 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
 <div class="top">
   <img src="/crecer/assets/brand/encuentralo-pin.svg" alt=""><b>encuéntralo</b>
   <span class="tag">⚙ Operaciones</span>
-  <span class="sp"></span>
-  <span style="font-size:13px;color:#9f96b0">Hola, <?= $h($usuario['nombre']) ?></span>
-  <a href="/crecer/panel/admin_soporte.php" style="margin-left:14px">Soporte</a>
-  <a href="/crecer/panel/admin_equipo.php" style="margin-left:14px">Equipo</a>
-  <a href="#clientes" style="margin-left:14px">Ver clientes ↓</a>
-  <a href="/crecer/logout.php" style="margin-left:14px;color:#fff;background:rgba(255,255,255,.12);padding:6px 12px;border-radius:8px;font-weight:700">🚪 Salir</a>
+  <div class="op-actions">
+    <span class="op-hi">Hola, <?= $h($usuario['nombre']) ?></span>
+    <a href="/crecer/panel/admin_soporte.php">Soporte</a>
+    <a href="/crecer/panel/admin_equipo.php">Equipo</a>
+    <a href="#clientes">Ver clientes ↓</a>
+    <a class="op-salir" href="/crecer/logout.php">🚪 Salir</a>
+  </div>
 </div>
 
 <div class="wrap">
