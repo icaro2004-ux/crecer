@@ -15,7 +15,7 @@ requiere_login();
 
 $usuario = usuario_actual($pdo);
 $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (int)$_GET['marca'] : null);
-if (!$marca) { header('Location: /crecer/intake.php'); exit; }
+if (!$marca) { header('Location: /crecer/onboarding.php'); exit; }
 $marca_id = (int)$marca['id'];
 $sid  = $_GET['session_id'] ?? '';
 $dest = '/crecer/panel/index.php?marca=' . $marca_id;

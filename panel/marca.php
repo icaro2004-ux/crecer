@@ -10,7 +10,7 @@ require __DIR__ . '/../includes/suscripcion.php';
 requiere_login();
 $usuario = usuario_actual($pdo);
 $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (int)$_GET['marca'] : null);
-if (!$marca) { header('Location: /crecer/intake.php'); exit; }
+if (!$marca) { header('Location: /crecer/onboarding.php'); exit; }
 $marca_id = (int)$marca['id'];
 $pagado = marca_es_pagada($pdo, $marca_id);  // el LOGO solo se desbloquea pagando
 

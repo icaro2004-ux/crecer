@@ -8,7 +8,7 @@ require __DIR__ . '/../includes/auth.php';
 requiere_login();
 $usuario = usuario_actual($pdo);
 $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (int)$_GET['marca'] : null);
-if (!$marca) { header('Location: /crecer/intake.php'); exit; }
+if (!$marca) { header('Location: /crecer/onboarding.php'); exit; }
 $marca_id = (int)$marca['id'];
 
 $secs = [
