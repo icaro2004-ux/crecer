@@ -11,6 +11,12 @@
 require_once __DIR__ . '/ia.php';
 require_once __DIR__ . '/memoria.php';   // El Cerebro del Negocio (RAG + escritura)
 
+if (!defined('CRECER_COPILOTO_HORA'))       define('CRECER_COPILOTO_HORA', 3);         // mensajes por negocio / hora con plan
+if (!defined('CRECER_COPILOTO_DIA'))        define('CRECER_COPILOTO_DIA', 8);         // mensajes por negocio / dia con plan
+if (!defined('CRECER_COPILOTO_FREE_DIA'))   define('CRECER_COPILOTO_FREE_DIA', 3);    // mensajes por negocio / dia sin plan
+if (!defined('CRECER_COPILOTO_GLOBAL_DIA')) define('CRECER_COPILOTO_GLOBAL_DIA', 80); // fusible de todo Crecer / dia
+if (!defined('CRECER_COPILOTO_MODEL'))      define('CRECER_COPILOTO_MODEL', 'gemini-2.5-flash-lite');
+
 // Límites de generación de imágenes (control de costos)
 if (!defined('CRECER_IMG_SEMANA')) define('CRECER_IMG_SEMANA', 10); // máximo por semana (ventana 7 días)
 if (!defined('CRECER_IMG_POST'))   define('CRECER_IMG_POST', 2);    // máximo de generaciones IA por post
@@ -21,6 +27,67 @@ function slugify(string $s): string {
     $s = strtr($s, ['á'=>'a','é'=>'e','í'=>'i','ó'=>'o','ú'=>'u','ü'=>'u','ñ'=>'n']);
     $s = preg_replace('/[^a-z0-9]+/', '-', $s);
     return trim($s, '-') ?: 'negocio';
+}
+
+/**
+ * Freno de costo para el Copiloto. No requiere migracion: usa crecer_ia_log,
+ * que ya registra cada llamada. Se chequea ANTES de llamar al modelo.
+ */
+function copiloto_limite_uso(PDO $pdo, int $marca_id): array {
+    $agentes = "('asistente','estratega')";
+    try {
+        $limite_dia = CRECER_COPILOTO_FREE_DIA;
+        $limite_hora = min(CRECER_COPILOTO_HORA, CRECER_COPILOTO_FREE_DIA);
+        try {
+            $s = $pdo->prepare(
+                "SELECT estado, periodo_fin
+                 FROM crecer_suscripciones
+                 WHERE marca_id=?
+                 ORDER BY id DESC LIMIT 1"
+            );
+            $s->execute([$marca_id]);
+            if ($su = $s->fetch(PDO::FETCH_ASSOC)) {
+                $activa = in_array((string)$su['estado'], ['trial','activa'], true)
+                    || ((string)$su['estado'] === 'cancelada' && !empty($su['periodo_fin']) && $su['periodo_fin'] >= date('Y-m-d'));
+                if ($activa) {
+                    $limite_dia = CRECER_COPILOTO_DIA;
+                    $limite_hora = CRECER_COPILOTO_HORA;
+                }
+            }
+        } catch (Throwable $e) {}
+
+        $hora = $pdo->prepare(
+            "SELECT COUNT(*) FROM crecer_ia_log
+             WHERE marca_id=? AND agente IN {$agentes}
+               AND created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)"
+        );
+        $hora->execute([$marca_id]);
+        if ((int)$hora->fetchColumn() >= $limite_hora) {
+            return ['ok' => false, 'err' => 'Usaste bastante el Copiloto en esta hora. Dale unos minutos y volvemos a meterle mano.'];
+        }
+
+        $dia = $pdo->prepare(
+            "SELECT COUNT(*) FROM crecer_ia_log
+             WHERE marca_id=? AND agente IN {$agentes}
+               AND created_at >= CURDATE()"
+        );
+        $dia->execute([$marca_id]);
+        if ((int)$dia->fetchColumn() >= $limite_dia) {
+            return ['ok' => false, 'err' => 'Llegaste al limite diario del Copiloto. Manana se activa otra vez.'];
+        }
+
+        $global = (int)$pdo->query(
+            "SELECT COUNT(*) FROM crecer_ia_log
+             WHERE agente IN {$agentes}
+               AND created_at >= CURDATE()"
+        )->fetchColumn();
+        if ($global >= CRECER_COPILOTO_GLOBAL_DIA) {
+            return ['ok' => false, 'err' => 'El Copiloto alcanzo el limite general de hoy. Esto protege el costo del sistema.'];
+        }
+    } catch (Throwable $e) {
+        error_log('copiloto_limite_uso: ' . $e->getMessage());
+    }
+    return ['ok' => true, 'err' => ''];
 }
 
 /**
@@ -339,13 +406,93 @@ function sugerir_estilo_visual(PDO $pdo, int $marca_id, string $ajuste = ''): st
 }
 
 /**
- * EL ESTRATEGA: consejero de negocio. Conoce el negocio (perfil + Cerebro) y
- * aconseja sobre contenido, promociones, crecimiento y modelo de negocio. Tips de
- * dinero SOLO generales/educativos y con disclaimer (nada de impuestos/Hacienda).
+ * COPILOTO: snapshot + consejero de negocio. Conoce el negocio (perfil +
+ * Cerebro + estado operativo) y aconseja sobre el proximo paso, contenido,
+ * promociones, crecimiento y modelo de negocio.
  */
+function asistente_snapshot_operacional(PDO $pdo, int $marca_id): string {
+    $lineas = [];
+    try {
+        $q = $pdo->prepare(
+            "SELECT
+                SUM(estado='borrador') AS borrador,
+                SUM(estado='aprobado') AS aprobado,
+                SUM(estado='programado') AS programado,
+                SUM(estado='publicando') AS publicando,
+                SUM(estado='publicado') AS publicado,
+                SUM(estado='fallido') AS fallido
+             FROM crecer_contenido WHERE marca_id=?"
+        );
+        $q->execute([$marca_id]);
+        $c = $q->fetch(PDO::FETCH_ASSOC) ?: [];
+        $lineas[] = "Contenido: "
+            . (int)($c['borrador'] ?? 0) . " esperando OK, "
+            . (int)($c['aprobado'] ?? 0) . " aprobado(s), "
+            . (int)($c['programado'] ?? 0) . " programado(s), "
+            . (int)($c['publicando'] ?? 0) . " publicando, "
+            . (int)($c['publicado'] ?? 0) . " publicado(s), "
+            . (int)($c['fallido'] ?? 0) . " fallido(s).";
+    } catch (Throwable $e) {}
+
+    try {
+        $q = $pdo->prepare(
+            "SELECT fecha_programada, caption, plataforma, estado
+             FROM crecer_contenido
+             WHERE marca_id=? AND fecha_programada IS NOT NULL
+               AND estado IN ('aprobado','programado')
+             ORDER BY fecha_programada ASC LIMIT 1"
+        );
+        $q->execute([$marca_id]);
+        if ($p = $q->fetch(PDO::FETCH_ASSOC)) {
+            $lineas[] = "Proximo post: {$p['fecha_programada']} ({$p['estado']}, {$p['plataforma']}) "
+                . mb_strimwidth(trim((string)$p['caption']), 0, 90, '...');
+        }
+    } catch (Throwable $e) {}
+
+    try {
+        $q = $pdo->prepare("SELECT estado, ig_username FROM crecer_conexiones WHERE marca_id=? ORDER BY id DESC LIMIT 1");
+        $q->execute([$marca_id]);
+        if ($cx = $q->fetch(PDO::FETCH_ASSOC)) {
+            $ig = trim((string)($cx['ig_username'] ?? ''));
+            $lineas[] = "Redes: conexion {$cx['estado']}" . ($ig !== '' ? " con IG @{$ig}" : '') . ".";
+        } else {
+            $lineas[] = "Redes: no hay conexion activa detectada.";
+        }
+    } catch (Throwable $e) {}
+
+    try {
+        $q = $pdo->prepare(
+            "SELECT s.estado, p.nombre, p.slug
+             FROM crecer_suscripciones s
+             LEFT JOIN crecer_planes p ON p.id=s.plan_id
+             WHERE s.marca_id=?
+             ORDER BY s.id DESC LIMIT 1"
+        );
+        $q->execute([$marca_id]);
+        if ($s = $q->fetch(PDO::FETCH_ASSOC)) {
+            $lineas[] = "Plan: " . trim(($s['nombre'] ?: $s['slug'] ?: 'sin nombre') . " ({$s['estado']}).");
+        } else {
+            $lineas[] = "Plan: no hay suscripcion registrada.";
+        }
+    } catch (Throwable $e) {}
+
+    try {
+        $q = $pdo->prepare("SELECT agente, accion, created_at FROM crecer_ia_log WHERE marca_id=? AND estado='ok' ORDER BY id DESC LIMIT 4");
+        $q->execute([$marca_id]);
+        $acts = [];
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $a) {
+            $acts[] = "{$a['created_at']}: {$a['agente']} - {$a['accion']}";
+        }
+        if ($acts) $lineas[] = "Actividad reciente IA:\n- " . implode("\n- ", $acts);
+    } catch (Throwable $e) {}
+
+    return $lineas ? implode("\n", $lineas) : "Snapshot operacional no disponible.";
+}
+
 function estratega_responder(PDO $pdo, int $marca_id, string $pregunta, array $historial = []): array {
     $m = leer_marca($pdo, $marca_id);
     $ctx = marca_contexto($m);
+    $snapshot = asistente_snapshot_operacional($pdo, $marca_id);
 
     $sistema = <<<SYS
 Eres EL ESTRATEGA de Crecer: un consultor de negocio y marketing para
@@ -369,6 +516,12 @@ Estilo: boricua cálido y directo, lo tuteas. Práctico y CONCRETO (pasos o una
 lista corta, no discursos). Aterriza todo a SU negocio con lo que sabes de él.
 Si te falta un dato, dilo y pregúntalo. No inventes cifras ni datos del negocio.
 SYS;
+    $sistema .= "\n\nMODO COPILOTO DE ENCUENTRALO:\n"
+        . "- No eres un FAQ. Eres un asistente ejecutivo de mando para el dueno.\n"
+        . "- Mira el estado real del panel antes de recomendar ideas nuevas.\n"
+        . "- Si hay posts esperando OK, fallos, redes sin conectar o plan inactivo, prioriza eso.\n"
+        . "- Da siempre un proximo paso claro, corto y accionable.\n"
+        . "- Suena premium, sereno y boricua; no menciones ni imites a Jarvis ni a personajes existentes.\n";
     if (function_exists('tono_instruccion'))   $sistema .= tono_instruccion($m);
     if (function_exists('memoria_para_prompt')) $sistema .= memoria_para_prompt($pdo, $marca_id);
 
@@ -385,12 +538,16 @@ SYS;
         if ($txt !== '') $mensajes[] = ['role' => $rol, 'texto' => $txt];
     }
 
-    $prompt = "Perfil del negocio:\n{$ctx}\n\nEl dueño pregunta/plantea:\n\"{$pregunta}\"\n\nDale tu consejo de estratega, concreto y aterrizado a su negocio.";
+    $prompt = "Perfil del negocio:\n{$ctx}\n\n"
+        . "Snapshot operacional actual:\n{$snapshot}\n\n"
+        . "El dueño pregunta/plantea:\n\"{$pregunta}\"\n\n"
+        . "Responde como copiloto ejecutivo de Encuentralo: diagnostico breve, proximo paso y, si hace falta, una pregunta.";
     $r = ia_ejecutar($pdo, 'estratega', 'Consejo de negocio', $prompt, [
         'marca_id' => $marca_id, 'sistema' => $sistema,
-        'temperatura' => 0.85, 'max_tokens' => 700, 'thinking_budget' => 0,
+        'modelo' => CRECER_COPILOTO_MODEL,
+        'temperatura' => 0.75, 'max_tokens' => 520, 'thinking_budget' => 0,
         'historial' => $mensajes,
-        'mock_texto' => "Pa' tu barra, prueba un 'jueves de after-work': combo de 2 tragos de la casa a precio fijo de 5 a 7pm, y lo anuncias el martes por IG y WhatsApp. Aprovecha la quincena. Y saca un 'trago del mes' pa' que la gente vuelva a probar algo nuevo.\n\nOjo: esto son ideas generales, no asesoría financiera — para números serios, un contable.",
+        'mock_texto' => "Ahora mismo yo miraria dos cosas: primero, si tienes posts esperando OK, aprobarlos para que no se tranque la maquina; segundo, sacar una promo sencilla para esta semana.\n\nMi recomendacion: publica un post con una oferta clara, mandalo tambien por WhatsApp y mide cuanta gente pregunta. Si me dices que vendes y en que pueblo estas, te armo la promo exacta.",
     ]);
     return ['ok' => true, 'respuesta' => trim((string)$r['texto'])];
 }
@@ -582,6 +739,39 @@ function tono_instruccion(array $m): string {
 }
 
 /**
+ * Instrucción de CTA (llamado a la acción de contacto) para el prompt del
+ * creador, según la preferencia del dueño y sus datos REALES.
+ *
+ * Regla anti-misrepresentación: SOLO se menciona WhatsApp si hay número
+ * configurado. Nunca se inventa un número ni se empuja un canal que el
+ * dueño no puso. Sin preferencia elegida => DM (siempre existe en la red).
+ */
+function contacto_instruccion(array $m): string {
+    $wa   = trim((string)($m['whatsapp'] ?? ''));
+    $tiene_wa = $wa !== '';
+    $pref = (string)($m['contacto_preferencia'] ?? '');
+    // Normaliza: si la preferencia pide WhatsApp pero no hay número, cae a DM.
+    if (in_array($pref, ['whatsapp','ambas','todas'], true) && !$tiene_wa) {
+        $pref = 'dm';
+    }
+    switch ($pref) {
+        case 'whatsapp':
+            return "- CIERRA con un llamado a la acción para que le escriban por WhatsApp al {$wa}. NO uses otro canal.\n";
+        case 'ambas':
+            return "- CIERRA invitando a escribir por mensaje directo (DM) aquí en la red O por WhatsApp al {$wa}.\n";
+        case 'todas':
+            return "- CIERRA invitando a contactar por la vía que le quede fácil: DM aquí en la red o WhatsApp al {$wa}.\n";
+        case 'dm':
+            return "- CIERRA invitando a escribir por mensaje directo (DM) aquí en la red. NO menciones WhatsApp ni inventes un número de teléfono.\n";
+        default: // el dueño no ha elegido preferencia
+            if ($tiene_wa) {
+                return "- CIERRA invitando a escribir por mensaje directo (DM) aquí en la red o por WhatsApp al {$wa}.\n";
+            }
+            return "- CIERRA invitando a escribir por mensaje directo (DM) aquí en la red. NO menciones WhatsApp ni inventes un número de teléfono.\n";
+    }
+}
+
+/**
  * AGENTE PLANIFICADOR. Le pide a Gemini un plan de contenido para el
  * mes y lo materializa: crea/actualiza crecer_calendario + N borradores
  * en crecer_contenido. Devuelve [calendario_id, piezas[], ia_log_id].
@@ -733,9 +923,10 @@ sociales de microempresas boricuas. Reglas:
 - Español puertorriqueño AUTÉNTICO, nunca traducido ni "AI slop".
 - Vocabulario local (bizcocho, no "tarta"; chavos; nene/nena; etc.).
 - Tono según la voz del negocio. 1-2 emojis máximo.
-- Llamado a la acción por WhatsApp y 3-4 hashtags locales.
+- Cierra con un llamado a la acción (según la vía de contacto de abajo) y 3-4 hashtags locales.
 - Máximo 60 palabras. Devuelve SOLO el caption, sin comillas ni explicación.
 SYS;
+    $sistema .= "\n" . contacto_instruccion($m);
     if (!empty($m['glosario'])) {
         $sistema .= "\n\nVOCABULARIO DEL NEGOCIO (el dueño lo corrigió — RESPÉTALO SIEMPRE, no repitas los errores):\n" . $m['glosario'];
     }
@@ -783,9 +974,10 @@ sociales de microempresas boricuas. Reglas:
 - Español puertorriqueño AUTÉNTICO, nunca traducido ni "AI slop".
 - Vocabulario local (bizcocho, no "tarta"; chavos; nene/nena; etc.).
 - Tono según la voz del negocio. 1-2 emojis máximo.
-- Llamado a la acción por WhatsApp y 3-4 hashtags locales.
+- Cierra con un llamado a la acción (según la vía de contacto de abajo) y 3-4 hashtags locales.
 - Máximo 60 palabras. Devuelve SOLO el caption, sin comillas ni explicación.
 SYS;
+    $sistema .= "\n" . contacto_instruccion($m);
     if (!empty($m['glosario'])) {
         $sistema .= "\n\nVOCABULARIO DEL NEGOCIO (el dueño lo corrigió — RESPÉTALO SIEMPRE, no repitas los errores):\n" . $m['glosario'];
     }
@@ -850,6 +1042,7 @@ function redactar_calendario(PDO $pdo, int $calendario_id): array {
 function asistente_responder(PDO $pdo, int $marca_id, string $pregunta, array $historial = []): array {
     $m = leer_marca($pdo, $marca_id);
     $ctx = marca_contexto($m);
+    $snapshot = asistente_snapshot_operacional($pdo, $marca_id);
 
     $sistema = <<<SYS
 Eres el ASISTENTE de Crecer (también le decimos "el corillo"): un departamento
@@ -879,6 +1072,12 @@ REGLAS CLAVE QUE DEBES SABER EXPLICAR:
 - Las imágenes salen de fotos reales del negocio o las genera la IA y el dueño
   las aprueba. Nunca se inventa el producto.
 SYS;
+    $sistema .= "\n\nMODO COPILOTO DE ENCUENTRALO:\n"
+        . "- Eres una presencia tipo asistente ejecutivo de mando, no un FAQ pasivo.\n"
+        . "- Si pregunta que hacer, usa el snapshot operacional y recomienda una prioridad.\n"
+        . "- Si pregunta como usar algo, dale la ruta exacta y el siguiente toque.\n"
+        . "- Si hay fallos, posts esperando OK, redes sin conectar o plan inactivo, dilo con calma y da el proximo paso.\n"
+        . "- No menciones ni imites a Jarvis ni a personajes existentes.\n";
     if (!empty($m['glosario'])) {
         $sistema .= "\n\nVocabulario propio de este negocio (respétalo):\n" . $m['glosario'];
     }
@@ -904,18 +1103,19 @@ SYS;
     }
 
     $prompt = "Contexto del negocio del dueño:\n{$ctx}\n\n"
+        . "Snapshot operacional actual:\n{$snapshot}\n\n"
         . ($hist !== '' ? "Conversación hasta ahora:\n{$hist}\n" : '')
         . "Pregunta del dueño: {$pregunta}\n\n"
-        . "Responde corto y útil.";
+        . "Responde como copiloto de Encuentralo: corto, util y con proximo paso.";
 
     $r = ia_ejecutar($pdo, 'asistente', 'Responder duda del dueño', $prompt, [
         'marca_id'        => $marca_id,
         'sistema'         => $sistema,
+        'modelo'          => CRECER_COPILOTO_MODEL,
         'temperatura'     => 0.6,
-        'max_tokens'      => 500,
+        'max_tokens'      => 360,
         'thinking_budget' => 0,
-        'mock_texto'      => '¡Claro! (respuesta de prueba — falta la credencial de IA). '
-                           . 'Pregúntame cómo crear un post, montar tu logo o conectar tus redes.',
+        'mock_texto'      => 'Estoy contigo. Primero mira si hay posts esperando tu OK; si los hay, entra a Contenido y aprueba el mejor. Si no hay nada pendiente, el proximo movimiento es pedir una pieza nueva o revisar Resultados para decidir que empujar esta semana.',
     ]);
 
     return ['respuesta' => trim($r['texto']), 'ia_log_id' => $r['ia_log_id']];

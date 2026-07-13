@@ -44,11 +44,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $mun = ($_POST['municipio_id'] ?? '') !== '' ? (int)$_POST['municipio_id'] : null;
         $cat = ($_POST['categoria_id'] ?? '') !== '' ? (int)$_POST['categoria_id'] : null;
+        $pref = $_POST['contacto_preferencia'] ?? '';
+        if (!in_array($pref, ['whatsapp','dm','ambas','todas'], true)) $pref = null;
         $pdo->prepare(
             "UPDATE crecer_marca SET
                 nombre_negocio=?, descripcion=?, voz=?, productos=?, publico_objetivo=?,
                 ofertas=?, municipio_id=?, categoria_id=?, instagram=?, facebook=?, whatsapp=?,
-                updated_at=NOW()
+                contacto_preferencia=?, updated_at=NOW()
              WHERE id=? AND usuario_id=?"
         )->execute([
             trim($_POST['nombre_negocio'] ?? '') ?: $marca['nombre_negocio'],
@@ -61,6 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             trim($_POST['instagram'] ?? '') ?: null,
             trim($_POST['facebook'] ?? '') ?: null,
             trim($_POST['whatsapp'] ?? '') ?: null,
+            $pref,
             $marca_id, $USUARIO_ID,
         ]);
         header('Location: ' . $volver . 'negocio&ok=1'); exit;
@@ -230,6 +233,36 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
           <div><label>Instagram</label><input type="text" name="instagram" value="<?= $h($m['instagram']) ?>" placeholder="@tunegocio"></div>
           <div><label>Facebook</label><input type="text" name="facebook" value="<?= $h($m['facebook']) ?>" placeholder="Tu página"></div>
           <div><label>WhatsApp</label><input type="text" name="whatsapp" value="<?= $h($m['whatsapp']) ?>" placeholder="787-000-0000"></div>
+        </div>
+
+        <div style="margin-top:18px">
+          <label style="display:block;font-weight:800;font-size:13.5px;color:var(--tinta);margin-bottom:3px">¿Cómo quieres que la gente te contacte?</label>
+          <p style="font-size:12px;color:var(--muted);margin:0 0 10px;line-height:1.45">Esto define el cierre de tus posts. Si <b>no</b> pones un WhatsApp arriba, la IA <b>nunca</b> lo menciona ni inventa un número — usa el mensaje directo (DM) de la red.</p>
+          <style>
+            .cfg-pref{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+            .cfg-pref label{display:flex;flex-direction:column;gap:2px;border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:11px 13px;cursor:pointer;transition:.12s}
+            .cfg-pref label:has(input:checked){border-color:var(--terracota);background:#fff5f7}
+            .cfg-pref .t{display:flex;align-items:center;gap:8px;font-weight:800;font-size:13.5px;color:var(--tinta)}
+            .cfg-pref .d{font-size:11.5px;color:var(--muted);line-height:1.35;padding-left:25px}
+            @media(max-width:520px){.cfg-pref{grid-template-columns:1fr}}
+          </style>
+          <div class="cfg-pref">
+            <?php
+              $pref_actual = (string)($m['contacto_preferencia'] ?? '');
+              $pref_opts = [
+                'dm'       => ['Mensaje directo (DM)', 'Que me escriban por la red donde publico'],
+                'whatsapp' => ['WhatsApp',             'Que me busquen directo por WhatsApp'],
+                'ambas'    => ['Ambas',                'DM o WhatsApp, como prefiera el cliente'],
+                'todas'    => ['Cualquier vía',        'La que le quede más fácil'],
+              ];
+              foreach ($pref_opts as $val => $o):
+            ?>
+              <label>
+                <span class="t"><input type="radio" name="contacto_preferencia" value="<?= $val ?>" <?= $pref_actual===$val?'checked':'' ?>> <?= $h($o[0]) ?></span>
+                <span class="d"><?= $h($o[1]) ?></span>
+              </label>
+            <?php endforeach; ?>
+          </div>
         </div>
 
         <button class="cfg-save" type="submit">Guardar cambios</button>
