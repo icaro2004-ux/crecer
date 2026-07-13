@@ -27,10 +27,10 @@ $ago = function($ts){
 
 // Mapa HUMANO (sin tecnicismos): icono · nombre · qué hizo
 $humano = [
-  'planificador'=>['estratega','El Estratega','cuadró tu plan de contenido'],
+  'planificador'=>['estratega','La Estratega','cuadró tu plan de contenido'],
   'creador'     =>['creativa','La Creativa','escribió un post nuevo'],
   'diseñador'   =>['disenador','El Diseñador','preparó un arte'],
-  'intake'      =>['estratega','El Estratega','aprendió de tu negocio'],
+  'intake'      =>['estratega','La Estratega','aprendió de tu negocio'],
   'aprendiz'    =>['creativa','La Creativa','aprendió tu vocabulario'],
   'editor'      =>['creativa','La Creativa','pulió un texto'],
   'analitica'   =>['analista','El Analista','revisó cómo va tu contenido'],

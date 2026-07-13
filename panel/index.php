@@ -104,11 +104,11 @@ if (!$plan) {
 
 // ── Actividad del corillo (feed HUMANO — sin tokens/costos/modelos) ──
 $feed_map = [
-  'planificador'=>['estratega','El Estratega','cuadró el plan del mes'],
+  'planificador'=>['estratega','La Estratega','cuadró el plan del mes'],
   'creador'     =>['creativa','La Creativa','escribió contenido nuevo'],
   'diseñador'   =>['disenador','El Diseñador','preparó un arte'],
   'analitica'   =>['analista','El Analista','revisó tus números'],
-  'intake'      =>['estratega','El Estratega','aprendió de tu negocio'],
+  'intake'      =>['estratega','La Estratega','aprendió de tu negocio'],
   'aprendiz'    =>['creativa','La Creativa','aprendió tu vocabulario'],
   'editor'      =>['creativa','La Creativa','pulió un texto'],
 ];
@@ -282,15 +282,15 @@ $nodos = ['Negocio','Contenido','Tu OK','Publicado'];
 
 <?php
 // ── Copiloto flotante (solo en Inicio) — te recibe y conversa ──
-$estr_img = '/crecer/assets/crecer-contenido/creativa_character_clean.png'; // placeholder; cambiar por el asset final del copiloto
+$estr_img = '/crecer/assets/brand/estratega.png'; // avatar de La Estratega
 $negocio  = $marca['nombre_negocio'] ?? 'mi gente';
 ?>
 <div class="estr" id="estr">
   <div class="estr-bubble" id="estrBubble">
     <button class="estr-x" id="estrBx" aria-label="Cerrar">&times;</button>
-    <div class="estr-kicker"><?= ico('sparkles') ?> Copiloto de Encuéntralo</div>
+    <div class="estr-kicker"><?= ico('sparkles') ?> La Estratega</div>
     <div class="estr-msgs" id="estrMsgs">
-      <div class="estr-m ia">Estoy pendiente a <b><?= $h($negocio) ?></b>. Puedo mirar tu contenido, detectar qué falta y ayudarte a decidir el próximo movimiento.</div>
+      <div class="estr-m ia">Soy <b>La Estratega</b>, pendiente a <b><?= $h($negocio) ?></b>. Puedo mirar tu contenido, detectar qué falta y ayudarte a decidir el próximo movimiento.</div>
     </div>
     <div class="estr-chips" id="estrChips">
       <button type="button">Qué hago ahora</button>
@@ -303,8 +303,8 @@ $negocio  = $marca['nombre_negocio'] ?? 'mi gente';
     </form>
     <a class="estr-full" href="<?= $BASE ?>/estratega.php?marca=<?= $marca_id ?>">Abrir centro de mando →</a>
   </div>
-  <button class="estr-face" id="estrFace" aria-label="Habla con el Copiloto de Encuéntralo">
-    <img src="<?= $estr_img ?>" alt="Copiloto de Encuéntralo">
+  <button class="estr-face" id="estrFace" aria-label="Habla con La Estratega">
+    <img src="<?= $estr_img ?>" alt="La Estratega">
     <span class="estr-ping"></span>
   </button>
 </div>

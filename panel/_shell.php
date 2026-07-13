@@ -26,7 +26,7 @@ $nav = [
 ];
 // Perfil (secundario, abajo): config, facturación, soporte.
 $nav_perfil = [
-  ['key'=>'estratega',   'ic'=>'sparkles','lb'=>'Copiloto', 'hr'=>"$BASE/estratega.php?marca=$marca_id"],
+  ['key'=>'estratega',   'ic'=>'sparkles','lb'=>'La Estratega', 'hr'=>"$BASE/estratega.php?marca=$marca_id"],
   ['key'=>'config',      'ic'=>'settings','lb'=>'Configuración','hr'=>"$BASE/configuracion.php?marca=$marca_id"],
   ['key'=>'facturacion', 'ic'=>'wallet',  'lb'=>'Facturación',  'hr'=>"$BASE/precios.php?marca=$marca_id"],
   ['key'=>'soporte',     'ic'=>'chat',    'lb'=>'Soporte',      'hr'=>"$BASE/soporte.php?marca=$marca_id"],

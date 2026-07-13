@@ -419,12 +419,12 @@ if ($es_hub) {
 // ── Datos de la PORTADA (hub) ──
 $publicados_mes = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$marca_id} AND estado='publicado' AND publicado_at IS NOT NULL AND YEAR(publicado_at)=YEAR(NOW()) AND MONTH(publicado_at)=MONTH(NOW())")->fetchColumn();
 $feed_map = [
-  'planificador'=>['estratega','El Estratega','cuadró el plan'],
+  'planificador'=>['estratega','La Estratega','cuadró el plan'],
   'creador'     =>['creativa','La Creativa','escribió contenido'],
   'diseñador'   =>['disenador','El Diseñador','preparó un arte'],
   'analitica'   =>['analista','El Analista','revisó tus números'],
   'retencion'   =>['vendedor','El Vendedor','le escribió a un cliente'],
-  'intake'      =>['estratega','El Estratega','aprendió de tu negocio'],
+  'intake'      =>['estratega','La Estratega','aprendió de tu negocio'],
   'asistente'   =>['creativa','El Asistente','resolvió una duda'],
   'aprendiz'    =>['creativa','La Creativa','aprendió tu vocabulario'],
   'editor'      =>['creativa','La Creativa','pulió un texto'],

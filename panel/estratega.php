@@ -1,7 +1,7 @@
 <?php
 // ============================================================
-//  ENCUÉNTRALO · CRECER — El Estratega (consejero de negocio)
-//  panel/estratega.php  ·  chat que aconseja crecimiento/marketing
+//  ENCUÉNTRALO · CRECER — Copiloto de Encuentralo
+//  panel/estratega.php  ·  asistente ejecutivo para estado + crecimiento
 //  (tips de dinero generales con disclaimer; nada de Hacienda).
 // ============================================================
 require __DIR__ . '/../includes/db.php';
@@ -14,7 +14,7 @@ $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (i
 if (!$marca) { header('Location: /crecer/onboarding.php'); exit; }
 $marca_id = (int)$marca['id'];
 
-// ── AJAX: pregunta al Estratega ──
+// ── AJAX: pregunta al copiloto ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json; charset=utf-8');
     if (!csrf_ok()) { echo json_encode(['ok'=>false,'err'=>'Sesión expiró. Recarga la página.']); exit; }
@@ -22,6 +22,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($pregunta === '') { echo json_encode(['ok'=>false,'err'=>'Escribe tu pregunta.']); exit; }
     $historial = json_decode((string)($_POST['historial'] ?? '[]'), true);
     if (!is_array($historial)) $historial = [];
+    $limite = copiloto_limite_uso($pdo, $marca_id);
+    if (empty($limite['ok'])) { echo json_encode(['ok'=>false, 'err'=>$limite['err']], JSON_UNESCAPED_UNICODE); exit; }
     try {
         $r = estratega_responder($pdo, $marca_id, mb_substr($pregunta, 0, 1000), $historial);
         echo json_encode($r, JSON_UNESCAPED_UNICODE);
@@ -32,15 +34,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $active = 'estratega';
-$page_title = 'El Estratega';
+$page_title = 'La Estratega';
 require __DIR__ . '/_shell.php';
 ?>
 <style>
   .es-head{display:flex;align-items:center;gap:12px;margin-bottom:6px}
-  .es-orb{width:46px;height:46px;border-radius:14px;flex:none;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta))}
-  .es-orb svg{width:24px;height:24px}
+  .es-orb{width:48px;height:48px;border-radius:50%;flex:none;overflow:hidden;background:#fff;border:2px solid var(--terracota);display:grid;place-items:center}
+  .es-orb img{width:100%;height:100%;object-fit:cover;object-position:center 26%}
   .es-h1{font-family:'Oswald',sans-serif;font-weight:700;font-size:24px;letter-spacing:.4px;color:var(--tinta);margin:0;line-height:1}
-  .es-sub{font-size:13.5px;color:var(--muted);margin:2px 0 16px;max-width:640px;line-height:1.45}
+  .es-sub{font-size:13.5px;color:var(--muted);margin:2px 0 16px;max-width:680px;line-height:1.45}
+  .es-radar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:14px 0 16px}
+  .es-radar div{background:#fff;border:1px solid var(--line);border-radius:12px;padding:11px 12px;box-shadow:var(--shadow-sm);font-size:12.5px;color:var(--muted);line-height:1.35}
+  .es-radar b{display:block;color:var(--tinta);font-size:13px;margin-bottom:2px}
   .es-chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
   .es-chip{border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-family:inherit;font-weight:700;font-size:13px;padding:9px 13px;border-radius:99px;cursor:pointer;text-align:left}
   .es-chip:hover{border-color:var(--terracota)}
@@ -54,26 +59,33 @@ require __DIR__ . '/_shell.php';
   .es-form button{border:0;cursor:pointer;background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;font-weight:800;padding:0 20px;border-radius:14px;font-family:inherit;font-size:15px}
   .es-form button:disabled{opacity:.55;cursor:default}
   .es-disc{font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.4}
+  @media(max-width:720px){.es-radar{grid-template-columns:1fr}}
 </style>
 
 <div class="es-head">
-  <div class="es-orb"><?= ico('lightbulb') ?></div>
-  <div><h1 class="es-h1">El Estratega</h1><div class="es-sub" style="margin:2px 0 0">Tu consultor de negocio. Conoce tu marca y te aconseja cómo crecer, promocionar y vender más.</div></div>
+  <div class="es-orb"><img src="/crecer/assets/brand/estratega.png" alt=""></div>
+  <div><h1 class="es-h1">La Estratega</h1><div class="es-sub" style="margin:2px 0 0">Tu asesora de negocio. Mira tu negocio, entiende el panel y te ayuda a decidir el próximo movimiento.</div></div>
+</div>
+
+<div class="es-radar">
+  <div><b>Radar</b>Detecta pendientes, fallos, redes y contenido esperando tu OK.</div>
+  <div><b>Estrategia</b>Convierte ideas sueltas en promociones, posts y pasos concretos.</div>
+  <div><b>Memoria</b>Usa lo aprendido de tu marca para hablar y recomendar con contexto.</div>
 </div>
 
 <div class="es-chips" id="es-chips">
-  <button type="button" class="es-chip">¿Qué promoción hago este mes?</button>
-  <button type="button" class="es-chip">Ideas para conseguir más clientes</button>
-  <button type="button" class="es-chip">¿Cómo hago que la gente vuelva?</button>
-  <button type="button" class="es-chip">Un combo o servicio nuevo para vender más</button>
+  <button type="button" class="es-chip">Qué necesita atención ahora</button>
+  <button type="button" class="es-chip">Qué promoción hago esta semana</button>
+  <button type="button" class="es-chip">Cómo consigo más clientes</button>
+  <button type="button" class="es-chip">Qué aprendiste de mi marca</button>
 </div>
 
 <div class="es-msgs" id="es-msgs">
-  <div class="es-m ia">¡Wepa! Soy El Estratega. Cuéntame qué quieres lograr en tu negocio — más clientes, una promo que jale, una idea nueva — y te doy un plan concreto, hecho pa' lo tuyo. Toca una idea de arriba o escríbeme.</div>
+  <div class="es-m ia">Estoy en línea. Puedo revisar qué necesita atención, ayudarte a planificar contenido o convertir una meta de negocio en próximos pasos. Toca una opción o escríbeme lo que quieres lograr.</div>
 </div>
 
 <form class="es-form" id="es-form" autocomplete="off">
-  <input type="text" id="es-input" placeholder="Escríbele al Estratega…" maxlength="1000">
+  <input type="text" id="es-input" placeholder="Dile a La Estratega qué quieres resolver…" maxlength="1000">
   <button type="submit" id="es-send"><?= ico('send') ?></button>
 </form>
 <div class="es-disc">Los consejos de dinero son ideas generales, no asesoría financiera profesional. Para números serios (impuestos, contabilidad), consulta un contable.</div>
@@ -90,7 +102,7 @@ require __DIR__ . '/_shell.php';
     if(busy || !q.trim()) return;
     bubble(q,'user'); hist.push({rol:'user',texto:q}); input.value='';
     busy=true; send.disabled=true;
-    var load=bubble('El Estratega está pensando…','load');
+    var load=bubble('Analizando tu negocio…','load');
     var fd=new FormData(); fd.append('csrf',CSRF); fd.append('pregunta',q); fd.append('historial',JSON.stringify(hist.slice(-8)));
     fetch(location.pathname+'?marca='+MARCA,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
       load.remove();
