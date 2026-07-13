@@ -143,7 +143,7 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
   body{background:var(--crema,#fbf6ee);color:var(--tinta,#1b1622);font-family:'Plus Jakarta Sans',sans-serif;margin:0}
   body::before{content:"";position:fixed;top:0;left:0;right:0;height:4px;z-index:60;background:var(--grad)}
   .disp{font-family:'Anton',sans-serif;text-transform:uppercase;letter-spacing:.02em}
-  .top{display:flex;align-items:center;flex-wrap:wrap;gap:10px 12px;padding:14px 22px;background:#140a16;color:#fff}
+  .top{position:sticky;top:0;z-index:50;display:flex;align-items:center;flex-wrap:wrap;gap:10px 12px;padding:14px 22px;background:#140a16;color:#fff;box-shadow:0 6px 20px -12px rgba(0,0,0,.5)}
   .top img{height:28px}
   .top b{font-family:var(--font-display);font-weight:800;text-transform:lowercase;letter-spacing:-.03em;font-size:19px}
   .top .tag{font-family:'Anton';text-transform:uppercase;font-size:12px;letter-spacing:.08em;color:#ffcaa8;border:1px solid rgba(255,255,255,.18);padding:4px 10px;border-radius:99px;white-space:nowrap}
