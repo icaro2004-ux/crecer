@@ -622,7 +622,8 @@ require __DIR__ . '/_shell.php';
   .art-box .ck{display:flex;align-items:center;gap:7px;font-weight:700;font-size:13.5px}
   .art-go{width:100%;border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:15px;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));padding:13px;border-radius:99px;margin-top:18px}
   .art-go:disabled{opacity:.6;cursor:default}
-  .art-skip{display:block;text-align:center;margin-top:12px;font-size:13px;font-weight:700;color:var(--muted);text-decoration:none}
+  .art-skip{display:block;width:100%;text-align:center;margin-top:12px;font-size:13px;font-weight:700;color:var(--muted);text-decoration:none;border:0;background:none;cursor:pointer;font-family:inherit;padding:8px}
+  .art-skip:hover{color:var(--tinta)}
   .art-note{font-size:11.5px;color:var(--muted);margin-top:10px;text-align:center}
   .sug-btn{width:100%;border:1.5px dashed var(--terracota);background:#fff7f2;color:var(--terracota);cursor:pointer;font-family:inherit;font-weight:800;font-size:13.5px;padding:11px;border-radius:14px;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:6px}
   .sug-btn:disabled{opacity:.7;cursor:default}
@@ -1527,9 +1528,12 @@ $cf = [
       if(d && d.ok && d.idea){ ta.value=d.idea; }
     }).catch(function(){ if(b){ b.disabled=false; } ta.placeholder='Describe qué debe mostrar la imagen…'; });
   }
+  function wizEsVideo(u){ return /\.(mp4|mov|m4v)(\?.*)?$/i.test(u||''); }
   function wizPintaArte(img){
     wizImg=img;
-    document.getElementById('wiz-art').innerHTML='<img src="'+img+'?t='+Date.now()+'" alt="arte">';
+    document.getElementById('wiz-art').innerHTML = wizEsVideo(img)
+      ? '<video src="'+img+'?t='+Date.now()+'" controls muted playsinline style="width:100%;border-radius:14px;display:block"></video>'
+      : '<img src="'+img+'?t='+Date.now()+'" alt="arte">';
     document.getElementById('wiz-next2').style.display='block';
   }
   function wizArteErr(d){
@@ -1593,9 +1597,23 @@ $cf = [
         loaderHide(); if(!d.ok){ wizArteErr(d); return; } wizPintaArte(d.img);
       }).catch(function(){ loaderHide(); toast('Error de conexión.'); });
     });
+    var wv=document.getElementById('wiz-video');
+    if(wv) wv.addEventListener('change', function(){
+      if(!wizId || !this.files[0]) return;
+      var f=this.files[0]; this.value='';
+      if(f.size > 100*1024*1024){ toast('El video es muy grande (máx 100MB).'); return; }
+      loaderShow('Subiendo tu video…', 'Puede tardar según el tamaño. Un momento…');
+      var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','video_directo'); fd.append('id',wizId); fd.append('video',f);
+      fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+        loaderHide(); if(!d.ok){ toast(d.err||'No se pudo subir el video.'); return; } wizPintaArte(d.video);
+      }).catch(function(){ loaderHide(); toast('Error de conexión (¿video muy pesado?).'); });
+    });
     document.getElementById('wiz-next2').addEventListener('click', function(){
       var cap=document.getElementById('wiz-cap').textContent;
-      document.getElementById('wiz-prev').innerHTML=(wizImg?'<img src="'+wizImg+'?t='+Date.now()+'" alt="arte" style="width:100%;border-radius:14px;display:block;margin-bottom:10px">':'')+'<div class="wiz-cap">'+_esc(cap)+'</div>';
+      var wmedia = wizImg ? (wizEsVideo(wizImg)
+        ? '<video src="'+wizImg+'?t='+Date.now()+'" controls muted playsinline style="width:100%;border-radius:14px;display:block;margin-bottom:10px"></video>'
+        : '<img src="'+wizImg+'?t='+Date.now()+'" alt="arte" style="width:100%;border-radius:14px;display:block;margin-bottom:10px">') : '';
+      document.getElementById('wiz-prev').innerHTML=wmedia+'<div class="wiz-cap">'+_esc(cap)+'</div>';
       wizPaso(3);
     });
     document.getElementById('wiz-pub').addEventListener('click', function(){
@@ -2024,7 +2042,9 @@ $cf = [
       <div class="wiz-artbtns">
         <button type="button" class="art-go" id="wiz-gen"><?= ico('palette') ?> Generar la imagen con esta idea</button>
         <label class="fbnew wiz-upl"><?= ico('camera') ?> Subir mi foto<input type="file" id="wiz-file" accept="image/png,image/jpeg,image/webp" style="display:none"></label>
+        <label class="fbnew wiz-upl"><?= ico('camera') ?> Subir mi video<input type="file" id="wiz-video" accept="video/mp4,video/quicktime" style="display:none"></label>
       </div>
+      <div style="font-size:11.5px;color:var(--muted);text-align:center;margin-top:-4px">No creamos video — lo subes tú (MP4/MOV, hasta 100MB). Sale como Reel/video.</div>
       <button type="button" class="art-go wiz-ok" id="wiz-next2" style="display:none">Usar este arte →</button>
       <button type="button" class="art-skip" id="wiz-back2">← Volver a la idea</button>
     </div>
