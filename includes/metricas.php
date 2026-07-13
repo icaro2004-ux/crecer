@@ -314,15 +314,15 @@ function _crecer_sugerencia_hoy(DateTime $ahora, array $cuenta, array $prod): st
 
     // 1) Fecha boricua cercana (dentro de 5 días) — lo que más jala.
     $eventos = [
-        ["$anio-01-06",                                    "Reyes — la gente compra pa' los nenes. Tira una promo de Reyes."],
-        ["$anio-02-14",                                    "San Valentín — arma un combo o regalo pa' parejas."],
-        [@strtotime("second sunday of may $anio"),         "Día de las Madres — el día más fuerte del año pa' vender. Prepara una oferta especial."],
-        [@strtotime("third sunday of june $anio"),         "Día de los Padres — saca un combo o regalo pa' papá."],
-        ["$anio-07-04",                                    "fin de semana del 4 de julio — mucha gente janguea. Postea algo hoy."],
-        ["$anio-10-31",                                    "Halloween — tira algo temático, que la gente lo comparte."],
-        [@strtotime("fourth thursday of november $anio"),  "Acción de Gracias — arma tu oferta de la temporada."],
-        ["$anio-12-24",                                    "Navidad — es tu pico de ventas. Empuja tus combos navideños."],
-        ["$anio-12-31",                                    "fin de año — última llamada pa' cerrar el mes fuerte."],
+        ["$anio-01-06",                                    "Reyes — la gente compra para los niños. Buen momento para una promoción de Reyes."],
+        ["$anio-02-14",                                    "San Valentín — prepara un combo o regalo para parejas."],
+        [@strtotime("second sunday of may $anio"),         "Día de las Madres — el día más fuerte del año para vender. Prepara una oferta especial."],
+        [@strtotime("third sunday of june $anio"),         "Día de los Padres — considera un combo o regalo para papá."],
+        ["$anio-07-04",                                    "fin de semana del 4 de julio — hay mucho movimiento. Publica algo hoy."],
+        ["$anio-10-31",                                    "Halloween — publica algo temático; suele compartirse bastante."],
+        [@strtotime("fourth thursday of november $anio"),  "Acción de Gracias — prepara tu oferta de temporada."],
+        ["$anio-12-24",                                    "Navidad — es tu pico de ventas. Impulsa tus combos navideños."],
+        ["$anio-12-31",                                    "fin de año — última oportunidad para cerrar el mes con fuerza."],
     ];
     foreach ($eventos as $ev) {
         $ets = is_int($ev[0]) ? $ev[0] : @strtotime($ev[0]);
@@ -331,24 +331,24 @@ function _crecer_sugerencia_hoy(DateTime $ahora, array $cuenta, array $prod): st
         if ($dif >= 0 && $dif <= 5) return "Se acerca " . $ev[1];
     }
 
-    // 2) Quincena (1, 14–15, o los 2 últimos del mes): hay chavos frescos.
+    // 2) Quincena (1, 14–15, o los 2 últimos del mes): más liquidez.
     if ($dia === 1 || $dia === 14 || $dia === 15 || $dia >= $fin - 1) {
-        return "Es quincena — la gente tiene chavos frescos. Buen día pa' una promo.";
+        return "Es quincena — hay más liquidez. Buen momento para una promoción.";
     }
 
-    // 3) Fin de semana (vie/sáb): la gente sale y compra.
+    // 3) Fin de semana (vie/sáb): más movimiento.
     if ($dow === 5 || $dow === 6) {
-        return "Es fin de semana, la gente janguea — postea algo hoy pa' agarrar ese tráfico.";
+        return "Es fin de semana, hay más movimiento — publica algo hoy para aprovecharlo.";
     }
 
     // 4) Estado del negocio.
     if (!empty($cuenta['borrador'])) {
-        return "Aprueba lo que tienes en cola pa' que salga y no se enfríe.";
+        return "Aprueba lo que tienes en cola para que salga y no pierda vigencia.";
     }
     if (empty($prod['publicados_mes']) && empty($cuenta['aprobado']) && empty($cuenta['programado'])) {
-        return "Pídele al corillo contenido nuevo pa' esta semana y montamos el ritmo.";
+        return "Pídele al corillo contenido nuevo para esta semana y mantén el ritmo.";
     }
-    return "Buen día pa' sacar algo fresco y mantener el ritmo de publicación.";
+    return "Buen momento para publicar algo nuevo y mantener la constancia.";
 }
 
 /**
@@ -381,17 +381,17 @@ function crecer_parte_del_dia(PDO $pdo, int $marca_id, array $ctx): array {
     // Lo pendiente (lo más urgente primero).
     if (!empty($cuenta['fallido'])) {
         $n = (int)$cuenta['fallido'];
-        $hechos[] = "Ojo: {$n} post" . ($n==1?'':'s') . " no se pudo publicar — hay que resolverlo.";
+        $hechos[] = "Atención: {$n} post" . ($n==1?'':'s') . " no se pudo publicar — conviene resolverlo.";
     } elseif (!empty($cuenta['borrador'])) {
         $n = (int)$cuenta['borrador'];
-        $hechos[] = "Tienes {$n} post" . ($n==1?'':'s') . " esperando tu OK.";
+        $hechos[] = "Tienes {$n} post" . ($n==1?'':'s') . " esperando tu aprobación.";
     }
 
     // Racha (refuerzo positivo).
-    if ($racha >= 2) $hechos[] = "Llevas {$racha} semanas seguidas publicando — no rompas la racha.";
+    if ($racha >= 2) $hechos[] = "Llevas {$racha} semanas seguidas publicando — mantén la constancia.";
 
     // Sin datos de rendimiento y sin Meta: invita a conectar (una vez).
-    if (!$ultimo && !$meta_ok) $hechos[] = "Conecta tus redes y te digo cuánta gente ve cada post.";
+    if (!$ultimo && !$meta_ok) $hechos[] = "Conecta tus redes y podré mostrarte cuánta gente ve cada post.";
 
     return [
         'saludo'     => "{$saludo}. Aquí, pendiente a {$negocio}.",
