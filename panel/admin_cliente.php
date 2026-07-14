@@ -125,7 +125,7 @@ $reconectar = "/crecer/panel/conectar.php?marca={$mid}";
   .tag.e{color:#b42318;background:#fdeaea}
 </style></head>
 <body>
-<?php $op_active='clientes'; require __DIR__.'/_ops_top.php'; ?>
+<?php $op_active='analitica'; require __DIR__.'/_ops_top.php'; ?>
 <div class="wrap">
   <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-top:8px">
     <h1 style="margin:0"><?= $h($marca['nombre_negocio']) ?></h1>

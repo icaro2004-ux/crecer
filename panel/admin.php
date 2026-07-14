@@ -186,17 +186,27 @@ $serie_posts = []; foreach ($meses6 as $m) $serie_posts[$m] = $tp[$m] ?? 0;
 $max_posts = max(1, max($serie_posts));
 
 // ── Clientes (tabla) ─────────────────────────────────────────
-$clientes = $pdo->query("SELECT m.id, m.nombre_negocio, m.created_at, m.autopilot,
+$_cli_base = "SELECT m.id, m.nombre_negocio, m.created_at, m.autopilot,
         u.nombre dueno, u.email, u.telefono, u.rol dueno_rol,
         p.slug plan, p.nombre plan_nombre, s.estado sub_estado, s.es_early_adopter, s.stripe_subscription_id stripe_sub,
         (SELECT COUNT(*) FROM crecer_contenido c WHERE c.marca_id=m.id) posts,
         (SELECT COUNT(*) FROM crecer_contenido c WHERE c.marca_id=m.id AND c.estado='publicado') publicados,
         (SELECT COALESCE(SUM(costo_usd),0) FROM crecer_ia_log l WHERE l.marca_id=m.id) ia,
-        (SELECT MAX(created_at) FROM crecer_ia_log l WHERE l.marca_id=m.id) ult
-    FROM crecer_marca m JOIN usuarios u ON u.id=m.usuario_id
+        (SELECT MAX(created_at) FROM crecer_ia_log l WHERE l.marca_id=m.id) ult";
+$_cli_from = " FROM crecer_marca m JOIN usuarios u ON u.id=m.usuario_id
     LEFT JOIN crecer_suscripciones s ON s.marca_id=m.id
     LEFT JOIN crecer_planes p ON p.id=s.plan_id
-    ORDER BY (u.rol='admin') DESC, ult DESC, m.id DESC")->fetchAll();
+    ORDER BY (u.rol='admin') DESC, ult DESC, m.id DESC";
+try {
+    $clientes = $pdo->query($_cli_base . ",
+        (SELECT COALESCE(SUM(alcance),0) FROM crecer_metricas g WHERE g.marca_id=m.id) alcance,
+        (SELECT COALESCE(SUM(interacciones),0) FROM crecer_metricas g WHERE g.marca_id=m.id) inter" . $_cli_from)->fetchAll();
+} catch (Throwable $e) {
+    $clientes = $pdo->query($_cli_base . ", 0 alcance, 0 inter" . $_cli_from)->fetchAll();
+}
+// Totales de alcance/interacciones (para KPIs).
+$alcance_tot = 0; $inter_tot = 0;
+try { $alcance_tot=(int)$pdo->query("SELECT COALESCE(SUM(alcance),0) FROM crecer_metricas")->fetchColumn(); $inter_tot=(int)$pdo->query("SELECT COALESCE(SUM(interacciones),0) FROM crecer_metricas")->fetchColumn(); } catch (Throwable $e) {}
 // Detección de negocios duplicados (mismo nombre) → badge de aviso.
 $dup_nombres = array_count_values(array_map(fn($c)=>mb_strtolower(trim((string)$c['nombre_negocio'])), $clientes));
 
@@ -228,7 +238,6 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
   :root{--grad:linear-gradient(120deg,var(--coral,#ff5c39),var(--magenta,#c0395f))}
   *{box-sizing:border-box}
   body{background:var(--crema,#fbf6ee);color:var(--tinta,#1b1622);font-family:'Plus Jakarta Sans',sans-serif;margin:0}
-  body::before{content:"";position:fixed;top:0;left:0;right:0;height:4px;z-index:60;background:var(--grad)}
   .disp{font-family:'Anton',sans-serif;text-transform:uppercase;letter-spacing:.02em}
   .top{position:sticky;top:0;z-index:50;display:flex;align-items:center;flex-wrap:wrap;gap:10px 12px;padding:14px 22px;background:#140a16;color:#fff;box-shadow:0 6px 20px -12px rgba(0,0,0,.5)}
   .top img{height:28px}
@@ -244,16 +253,16 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
     .op-hi{display:none}
     .op-salir{margin-left:auto}
   }
-  .wrap{max-width:1180px;margin:0 auto;padding:24px 26px 70px}
-  h1.page-h{font-family:'Anton';text-transform:uppercase;font-size:clamp(26px,4vw,38px);letter-spacing:.02em;margin:6px 0 2px}
-  .lede{color:var(--muted);font-size:14.5px;margin:0 0 20px}
+  .wrap{max-width:1180px;margin:0 auto;padding:22px 24px 70px}
+  h1.page-h{font-family:'Anton';text-transform:uppercase;font-size:26px;letter-spacing:.02em;margin:8px 0 2px}
+  .lede{color:var(--muted);font-size:13.5px;margin:0 0 18px}
   .sec{display:flex;align-items:center;gap:10px;margin:30px 0 14px}
   .sec h2{font-family:'Anton';text-transform:uppercase;font-size:18px;letter-spacing:.03em;margin:0}
   .sec:after{content:"";flex:1;height:1px;background:var(--line)}
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
   .kpi{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow-sm)}
-  .kpi .l{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
-  .kpi .v{font-family:'Anton';font-size:34px;line-height:1;margin-top:6px;color:var(--tinta)}
+  .kpi .l{font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+  .kpi .v{font-family:'Anton';font-size:28px;line-height:1;margin-top:6px;color:var(--tinta);font-variant-numeric:tabular-nums}
   .kpi .d{font-size:12px;font-weight:700;margin-top:4px}
   .kpi .d.up{color:#0d7a44}.kpi .d.down{color:#9b1c1c}.kpi .d.flat{color:var(--muted)}
   .kpi.hot{background:linear-gradient(135deg,#241633,#0e0a16);color:#fff}.kpi.hot .v{color:#fff}.kpi.hot .l{color:#bdb4c9}
@@ -279,11 +288,11 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
 </style>
 </head>
 <body>
-<?php $op_active='clientes'; require __DIR__.'/_ops_top.php'; ?>
+<?php $op_active='analitica'; require __DIR__.'/_ops_top.php'; ?>
 
 <div class="wrap">
-  <h1 class="page-h">Centro de Operaciones</h1>
-  <p class="lede">Tu negocio Crecer de un vistazo — clientes, ventas, lo que cuesta la IA y lo que produce.</p>
+  <h1 class="page-h">Analítica</h1>
+  <p class="lede">Tu negocio Crecer de un vistazo — clientes, ventas, alcance, y lo que cuesta la IA.</p>
 
   <!-- KPIs -->
   <div class="kpis">
@@ -297,6 +306,10 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
       <div class="d flat">MRR − gasto IA</div></div>
     <div class="kpi"><div class="l">Posts producidos</div><div class="v"><?= $total_posts ?></div>
       <div class="d flat"><?= $cont['publicado'] ?> publicados · <?= $total_artes ?> artes</div></div>
+    <div class="kpi"><div class="l">Alcance total</div><div class="v"><?= number_format($alcance_tot) ?></div>
+      <div class="d flat">personas alcanzadas</div></div>
+    <div class="kpi"><div class="l">Interacciones</div><div class="v"><?= number_format($inter_tot) ?></div>
+      <div class="d flat">likes · coment · guardados</div></div>
   </div>
 
   <!-- VENTAS -->
@@ -366,9 +379,16 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
     <div style="background:#fdeaea;border:1px solid #f5c2c0;color:#b42318;border-radius:12px;padding:11px 15px;margin:14px 0 0;font-weight:700;font-size:13.5px">⚠️ No se pudo: <?= $h($_GET['dinero_err']) ?></div>
   <?php endif; ?>
   <div class="sec" id="clientes"><h2>👥 Clientes (<?= $total_clientes ?>)</h2></div>
+  <div style="margin:0 0 10px"><input type="text" id="cliFiltro" placeholder="🔎 Filtrar negocio…" oninput="cliFiltrar()" style="width:100%;max-width:320px;font-family:inherit;font-size:14px;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px"> <span style="font-size:12px;color:var(--muted)">Toca un encabezado para ordenar.</span></div>
   <div class="card scrollx">
-    <table>
-      <tr><th>Negocio</th><th>Dueño</th><th>Plan</th><th>Posts</th><th>Pub.</th><th>Gasto IA</th><th>Activo</th><th>Auto</th><th>Cortesía</th></tr>
+    <table id="cliTabla">
+      <thead><tr>
+        <th data-c="0" data-t="s">Negocio</th><th>Dueño</th><th>Plan</th>
+        <th data-c="3" data-t="n">Posts</th><th data-c="4" data-t="n">Pub.</th>
+        <th data-c="5" data-t="n">Alcance</th><th data-c="6" data-t="n">Interac.</th>
+        <th data-c="7" data-t="n">Gasto IA</th><th>Activo</th><th>Auto</th><th>Acciones</th>
+      </tr></thead>
+      <tbody id="cliBody">
       <?php foreach ($clientes as $c):
         $pc = $c['plan']==='despegar'?'desp':($c['plan']==='crecer'?'cre':'none');
         $se = $c['sub_estado']==='activa'?'act':($c['sub_estado']==='trial'?'trial':'none');
@@ -378,9 +398,11 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
           <td><a href="/crecer/panel/index.php?marca=<?= (int)$c['id'] ?>" style="color:var(--tinta);font-weight:800;text-decoration:none" title="Abrir panel de este negocio">🔗 <?= $h($c['nombre_negocio']) ?></a><?php if (($c['dueno_rol'] ?? '') === 'admin'): ?> <span style="background:#fff4d6;border:1px solid #f2d488;color:#8a5a00;border-radius:99px;padding:1px 8px;font-size:10.5px;font-weight:800;white-space:nowrap">⭐ Tu negocio</span><?php endif; ?><?php if (($dup_nombres[mb_strtolower(trim((string)$c['nombre_negocio']))] ?? 1) > 1): ?> <span title="Hay otro negocio con este mismo nombre — posible duplicado" style="background:#fdeaea;border:1px solid #f4b8c6;color:#b3123b;border-radius:99px;padding:1px 8px;font-size:10.5px;font-weight:800;white-space:nowrap">⚠️ duplicado</span><?php endif; ?><br><a href="/crecer/panel/admin_cliente.php?marca=<?= (int)$c['id'] ?>" style="color:var(--terracota);font-weight:700;font-size:11.5px;text-decoration:none">🔍 Diagnóstico</a></td>
           <td><?= $h($c['dueno']) ?><br><span style="color:var(--muted);font-size:11px"><?= $h($c['email']) ?></span></td>
           <td><?php if($c['plan']): ?><span class="pill <?= $pc ?>"><?= $h($c['plan_nombre']) ?></span> <span class="pill <?= $se ?>"><?= $h($c['sub_estado']?:'—') ?></span><?php if($c['es_early_adopter']):?><span class="rel">allegado</span><?php endif;?><?php else: ?><span class="pill none">sin plan</span><?php endif; ?></td>
-          <td class="num"><?= (int)$c['posts'] ?></td>
-          <td class="num"><?= (int)$c['publicados'] ?></td>
-          <td class="num"><?= $money($c['ia']) ?></td>
+          <td class="num" data-v="<?= (int)$c['posts'] ?>"><?= (int)$c['posts'] ?></td>
+          <td class="num" data-v="<?= (int)$c['publicados'] ?>"><?= (int)$c['publicados'] ?></td>
+          <td class="num" data-v="<?= (int)($c['alcance'] ?? 0) ?>"><?= number_format((int)($c['alcance'] ?? 0)) ?></td>
+          <td class="num" data-v="<?= (int)($c['inter'] ?? 0) ?>"><?= number_format((int)($c['inter'] ?? 0)) ?></td>
+          <td class="num" data-v="<?= (float)$c['ia'] ?>"><?= $money($c['ia']) ?></td>
           <td style="color:var(--muted)"><?= $ago($c['ult']) ?></td>
           <td><?= $c['autopilot']?'🌙':'—' ?></td>
           <td>
@@ -418,8 +440,31 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
           </td>
         </tr>
       <?php endforeach; ?>
+      </tbody>
     </table>
   </div>
+  <script>
+    function cliFiltrar(){
+      var q=(document.getElementById('cliFiltro').value||'').toLowerCase();
+      document.querySelectorAll('#cliBody tr').forEach(function(tr){
+        tr.style.display = tr.cells[0].textContent.toLowerCase().indexOf(q)>=0 ? '' : 'none';
+      });
+    }
+    var _cliDir={};
+    document.querySelectorAll('#cliTabla thead th[data-c]').forEach(function(th){
+      th.style.cursor='pointer';
+      th.addEventListener('click', function(){
+        var ci=+th.dataset.c, tipo=th.dataset.t, dir=_cliDir[ci]=!_cliDir[ci];
+        var tb=document.getElementById('cliBody');
+        [].slice.call(tb.querySelectorAll('tr')).sort(function(a,b){
+          var va,vb;
+          if(tipo==='n'){ va=parseFloat(a.cells[ci].dataset.v||'0'); vb=parseFloat(b.cells[ci].dataset.v||'0'); }
+          else { va=a.cells[ci].textContent.toLowerCase(); vb=b.cells[ci].textContent.toLowerCase(); }
+          return (va<vb?-1:va>vb?1:0)*(dir?1:-1);
+        }).forEach(function(r){ tb.appendChild(r); });
+      });
+    });
+  </script>
 
   <!-- SOPORTE (chat interno con clientes) -->
   <div class="sec"><h2>💬 Soporte — chat con tus clientes <?php if($soporte_sin_leer):?><span class="pill trial" style="font-size:12px"><?= $soporte_sin_leer ?> sin leer</span><?php endif;?></h2></div>
