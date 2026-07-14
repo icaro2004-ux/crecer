@@ -103,12 +103,7 @@ $admins = $pdo->query("SELECT id, nombre, email, activo, created_at FROM usuario
 </style>
 </head>
 <body>
-<div class="top">
-  <img src="/crecer/assets/brand/encuentralo-pin.svg" alt=""><b>encuéntralo</b>
-  <span class="tag">⚙ Equipo</span><span class="sp"></span>
-  <a href="/crecer/panel/admin.php">← Operaciones</a>
-  <a href="/crecer/logout.php" style="margin-left:14px;color:#fff;background:rgba(255,255,255,.12);padding:6px 12px;border-radius:8px;font-weight:700">🚪 Salir</a>
-</div>
+<?php $op_active='equipo'; require __DIR__.'/_ops_top.php'; ?>
 <div class="wrap">
   <h1>Equipo</h1>
   <p class="lede">Administradores con acceso a tu Centro de Operaciones.</p>

@@ -100,12 +100,7 @@ $total_sin_leer = 0; foreach ($convs as $c) $total_sin_leer += (int)$c['sin_leer
 </style>
 </head>
 <body>
-<div class="top">
-  <img src="/crecer/assets/brand/encuentralo-pin.svg" alt=""><b>encuéntralo</b>
-  <span class="tag">⚙ Soporte</span><span class="sp"></span>
-  <a href="/crecer/panel/admin.php">← Operaciones</a>
-  <a href="/crecer/logout.php" style="margin-left:14px;color:#fff;background:rgba(255,255,255,.12);padding:6px 12px;border-radius:8px;font-weight:700">🚪 Salir</a>
-</div>
+<?php $op_active='soporte'; require __DIR__.'/_ops_top.php'; ?>
 <div class="wrap">
 <?php if ($thread !== null && $marca_sel): ?>
   <a class="back" href="/crecer/panel/admin_soporte.php">← Todas las conversaciones</a>

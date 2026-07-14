@@ -279,19 +279,7 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
 </style>
 </head>
 <body>
-<div class="top">
-  <img src="/crecer/assets/brand/encuentralo-pin.svg" alt=""><b>encuéntralo</b>
-  <span class="tag">⚙ Operaciones</span>
-  <div class="op-actions">
-    <span class="op-hi">Hola, <?= $h($usuario['nombre']) ?></span>
-    <a href="/crecer/panel/admin_soporte.php">Soporte</a>
-    <a href="/crecer/panel/admin_equipo.php">Equipo</a>
-    <a href="/crecer/panel/admin_salud.php">Salud</a>
-    <a href="/crecer/panel/admin_evidencia.php">Evidencia</a>
-    <a href="#clientes">Ver clientes ↓</a>
-    <a class="op-salir" href="/crecer/logout.php">🚪 Salir</a>
-  </div>
-</div>
+<?php $op_active='clientes'; require __DIR__.'/_ops_top.php'; ?>
 
 <div class="wrap">
   <h1 class="page-h">Centro de Operaciones</h1>

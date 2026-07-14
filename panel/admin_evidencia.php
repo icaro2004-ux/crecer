@@ -78,7 +78,7 @@ $por_agente = $pdo->query("SELECT agente, COUNT(*) n, COALESCE(SUM(costo_usd),0)
   .row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13.5px}.row:last-child{border-bottom:0}.row .k{color:var(--muted)}
   .btn{display:inline-block;border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:14px;color:#fff;background:var(--tinta);padding:11px 18px;border-radius:11px;text-decoration:none}
 </style></head><body>
-<div class="top"><a href="/crecer/panel/admin.php">← Operaciones</a> <b>Evidencia · XPRIZE</b></div>
+<?php $op_active='evidencia'; require __DIR__.'/_ops_top.php'; ?>
 <div class="wrap">
   <h1>Evidencia del criterio #2</h1>
   <p class="sub">La IA operando el negocio, con datos reales de la BD. Nada inventado.</p>

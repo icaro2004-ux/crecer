@@ -125,14 +125,13 @@ $reconectar = "/crecer/panel/conectar.php?marca={$mid}";
   .tag.e{color:#b42318;background:#fdeaea}
 </style></head>
 <body>
-<div class="top">
-  <a href="/crecer/panel/admin.php#clientes">← Operaciones</a>
-  <b>Diagnóstico</b>
-  <a href="/crecer/panel/index.php?marca=<?= $mid ?>" style="margin-left:auto">Abrir su panel →</a>
-</div>
+<?php $op_active='clientes'; require __DIR__.'/_ops_top.php'; ?>
 <div class="wrap">
-  <h1><?= $h($marca['nombre_negocio']) ?></h1>
-  <p class="sub">Estado real para resolver "no postea" o "la IA hizo algo raro".</p>
+  <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-top:8px">
+    <h1 style="margin:0"><?= $h($marca['nombre_negocio']) ?></h1>
+    <a href="/crecer/panel/index.php?marca=<?= $mid ?>" style="color:var(--terracota);font-weight:800;font-size:13px;text-decoration:none">Abrir su panel →</a>
+  </div>
+  <p class="sub">Diagnóstico — estado real para resolver "no postea" o "la IA hizo algo raro".</p>
   <?php if ($flash): ?><div class="flash <?= $flash[0] ?>"><?= $h($flash[1]) ?></div><?php endif; ?>
 
   <!-- COSTO, USO Y MARGEN -->

@@ -89,7 +89,7 @@ $err_pub = $pdo->query("SELECT p.created_at, p.plataforma, p.error_msg, m.nombre
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:680px){.grid2{grid-template-columns:1fr}}
   .big{font-family:'Anton',sans-serif;font-size:22px}
 </style></head><body>
-<div class="top"><a href="/crecer/panel/admin.php">← Operaciones</a> <b>Salud del sistema</b></div>
+<?php $op_active='salud'; require __DIR__.'/_ops_top.php'; ?>
 <div class="wrap">
   <h1>Salud del sistema</h1>
   <?php if ($flash): ?><div style="background:#e6f6ee;border:1px solid #b9eccf;color:#0d7a44;border-radius:12px;padding:11px 15px;margin-bottom:14px;font-weight:700;font-size:13.5px"><?= $h($flash[1]) ?></div><?php endif; ?>
