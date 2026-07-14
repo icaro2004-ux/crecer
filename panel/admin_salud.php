@@ -13,10 +13,23 @@ require_once __DIR__ . '/../includes/iconos.php';
 require_once __DIR__ . '/../includes/ia.php';       // ia_transporte(), openai_configurado()
 require_once __DIR__ . '/../includes/meta.php';     // meta_configurado()
 require_once __DIR__ . '/../includes/stripe.php';   // stripe_configurado()
+require_once __DIR__ . '/../includes/metricas.php'; // refrescar insights de todos
 requiere_login();
 $usuario = usuario_actual($pdo);
 if (($usuario['rol'] ?? '') !== 'admin') { http_response_code(403); exit('Acceso solo para administradores.'); }
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+
+// ── Refrescar métricas de TODOS los clientes conectados (un toque) ──
+$flash = null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'refrescar_todo' && csrf_ok()) {
+    @set_time_limit(150); @ignore_user_abort(true);
+    $marcas = $pdo->query("SELECT marca_id FROM crecer_conexiones WHERE estado='activa' AND page_access_token IS NOT NULL")->fetchAll(PDO::FETCH_COLUMN);
+    $nm = 0; $ng = 0;
+    foreach ($marcas as $cmid) { try { $r = metricas_refrescar_insights($pdo, (int)$cmid, 8, 0); $nm++; $ng += (int)($r['n'] ?? 0); } catch (Throwable $e) {} }
+    header("Location: /crecer/panel/admin_salud.php?ok=1&nm={$nm}&ng={$ng}"); exit;
+}
+if (isset($_GET['ok'])) $flash = ['ok', '✓ Métricas refrescadas de Meta: '.(int)($_GET['ng'] ?? 0).' posts en '.(int)($_GET['nm'] ?? 0).' negocios conectados.'];
+$csrf = csrf_token();
 
 $ago = function($ts) {
     if (!$ts) return 'nunca';
@@ -79,6 +92,7 @@ $err_pub = $pdo->query("SELECT p.created_at, p.plataforma, p.error_msg, m.nombre
 <div class="top"><a href="/crecer/panel/admin.php">← Operaciones</a> <b>Salud del sistema</b></div>
 <div class="wrap">
   <h1>Salud del sistema</h1>
+  <?php if ($flash): ?><div style="background:#e6f6ee;border:1px solid #b9eccf;color:#0d7a44;border-radius:12px;padding:11px 15px;margin-bottom:14px;font-weight:700;font-size:13.5px"><?= $h($flash[1]) ?></div><?php endif; ?>
 
   <div class="card">
     <h2>🔌 Integraciones</h2>
@@ -99,6 +113,11 @@ $err_pub = $pdo->query("SELECT p.created_at, p.plataforma, p.error_msg, m.nombre
       <div class="row"><span class="k">Última métrica refrescada</span><span class="st <?= $ult_met?'ok':'none' ?>"><?= $h($ago($ult_met)) ?></span></div>
       <div class="row"><span class="k">Última actividad de IA</span><span class="st <?= $ult_ia?'ok':'none' ?>"><?= $h($ago($ult_ia)) ?></span></div>
       <div class="row"><span class="k">Errores de IA (24h)</span><span><span class="st <?= $ia_err_24>0?'warn':'ok' ?>"><?= $ia_err_24 ?></span></span></div>
+      <form method="post" style="margin-top:12px" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Trayendo de Meta… (aguanta)'">
+        <input type="hidden" name="csrf" value="<?= $h($csrf) ?>"><input type="hidden" name="accion" value="refrescar_todo">
+        <button type="submit" style="width:100%;border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:13.5px;color:#fff;background:var(--teal-700,#087);padding:11px;border-radius:11px"><?= ico('refresh') ?> Actualizar métricas de TODOS ahora</button>
+      </form>
+      <p style="font-size:11px;color:var(--muted);margin:7px 0 0;line-height:1.4">Trae de Meta el alcance/interacciones de todos los negocios conectados. Sin tener que entrar a cada Resultados.</p>
     </div>
   </div>
 
