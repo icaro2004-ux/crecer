@@ -680,7 +680,9 @@ require __DIR__ . '/_shell.php';
   .fb-text{padding:0 12px 10px;font-size:14px;line-height:1.4;white-space:pre-wrap}
   .fb-bar{display:flex;justify-content:space-around;padding:10px;border-top:1px solid #eee;font-size:13px;color:#555}
   .prev-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:16px}
-  .pa{border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;border-radius:99px;padding:9px 14px;text-decoration:none}
+  .pa{border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;border-radius:99px;padding:9px 14px;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+  .pa-wa{border-color:#25D366;color:#0e7a54}
+  .pa-wa:hover{background:rgba(37,211,102,.08)}
   .prev-note{font-size:11.5px;color:var(--muted);text-align:center;margin-top:12px}
 </style>
 
@@ -1213,8 +1215,10 @@ $cf = [
     </div>
     <div class="prev-actions">
       <button type="button" class="pa" onclick="copiarCopy()"><?= ico('copy') ?> Copiar copy</button>
-      <a class="pa" id="pa-dl" href="" download><?= ico("download") ?> Descargar imagen</a>
+      <a class="pa" id="pa-dl" href="" download><?= ico("download") ?> Descargar</a>
+      <button type="button" class="pa pa-wa" onclick="compartirWhatsAppEstado()"><img src="/crecer/assets/icons/whatsapp.svg" alt="" style="width:16px;height:16px;vertical-align:-.2em"> A mi Estado de WhatsApp</button>
     </div>
+    <div class="prev-note" style="text-align:center">El Estado de WhatsApp se sube desde el <b>celular</b>: toca el botón, escoge <b>WhatsApp</b> y luego <b>“Estado”</b>. (WhatsApp no permite publicar al Estado automático — lo pones tú.)</div>
     <?php if ($redes_ok): ?>
     <div class="prev-pub">
       <div class="prev-pub-h"><?= ico("share") ?> Publicar ahora a tus redes conectadas</div>
@@ -1894,6 +1898,27 @@ $cf = [
       navigator.share({text:cap}).catch(function(){});
     } else {
       toast('Tu navegador no comparte directo — usa Copiar y Descargar.');
+    }
+  }
+  // Compartir el post a MI Estado de WhatsApp. WhatsApp no tiene API de Estado:
+  // en celular abrimos el compartir nativo (escoges WhatsApp → Estado); en PC
+  // descargamos + copiamos el copy (el Estado solo existe en el teléfono).
+  function compartirWhatsAppEstado(){
+    var url=(document.getElementById('pa-dl')||{}).href||'';
+    var cap=(document.getElementById('copybuffer')||{}).value||'';
+    if(!url){ toast('Este post no tiene imagen o video para el Estado.'); return; }
+    if(navigator.clipboard && cap) navigator.clipboard.writeText(cap).catch(function(){});   // deja el copy listo para pegar
+    if(puedeCompartirArchivo()){
+      fetch(url).then(function(r){return r.blob();}).then(function(b){
+        var esVid=(b.type||'').indexOf('video')===0;
+        var file=new File([b], 'crecer-estado.'+(esVid?'mp4':'png'), {type:b.type||'image/png'});
+        var data={files:[file], text:cap};
+        if(navigator.canShare && navigator.canShare(data)) navigator.share(data).catch(function(){});
+        else navigator.share({text:cap}).catch(function(){});
+      }).catch(function(){ toast('No pude preparar el archivo. Usa “Descargar”.'); });
+    } else {
+      var a=document.getElementById('pa-dl'); if(a) a.click();
+      toast('📥 Descargado + copy copiado. Súbelo a tu Estado de WhatsApp desde el celular.');
     }
   }
   // ¿El dispositivo puede compartir un ARCHIVO (imagen) nativo? = celular moderno.
