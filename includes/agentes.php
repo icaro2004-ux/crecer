@@ -311,7 +311,7 @@ function generar_logo(PDO $pdo, int $marca_id, array $opts = []): array {
  * generar_grafica como 'instrucciones' → el arte coincide con lo prometido.
  * Es una llamada de TEXTO (barata): sugerir ideas no quema generaciones de imagen.
  */
-function sugerir_arte(PDO $pdo, int $marca_id, string $caption, string $ajuste = ''): string {
+function sugerir_arte(PDO $pdo, int $marca_id, string $caption, string $ajuste = '', string $evitar = ''): string {
     $m = leer_marca($pdo, $marca_id);
     $ctx = marca_contexto($m);
     $sistema = "Eres el DIRECTOR DE ARTE de Crecer. Tomas lo que el dueño quiere y lo conviertes "
@@ -324,12 +324,11 @@ function sugerir_arte(PDO $pdo, int $marca_id, string $caption, string $ajuste =
         . "con harina espolvoreada y un paño de lino al lado\", NO \"en una mesa\"). Realista, "
         . "apetitoso, premium. Sin texto dentro de la imagen salvo que ayude; deja aire arriba por "
         . "si va texto encima.\n\n"
-        . "VARIEDAD OBLIGATORIA (crítico): NO repitas el mismo tipo de escena post tras post. "
-        . "PROHIBIDO el cliché gastado de teléfono / tablet / laptop mostrando redes sociales o apps, "
-        . "'persona en un escritorio con café', pantallas, notificaciones flotantes, iconos de 'me gusta' "
-        . "volando — eso se ve genérico, de banco de imágenes, y aburre. Salvo que el post sea LITERALMENTE "
-        . "sobre una pantalla, NO uses dispositivos.\n"
-        . "En su lugar escoge UNA dirección visual distinta según lo que pida ESTE post, y rótala entre estas: "
+        . "SÉ CREATIVO Y SORPRENDE — no repitas el mismo tipo de escena post tras post. "
+        . "No caigas POR DEFECTO en el cliché gastado de teléfono / tablet / laptop con redes sociales o apps, "
+        . "'persona en un escritorio con café', pantallas o notificaciones flotantes — se ve genérico y aburre. "
+        . "Si el post lo pide de verdad, úsalo; si no, busca algo más fresco.\n"
+        . "Escoge UNA dirección visual según lo que pida ESTE post, y rótala entre estas: "
         . "(a) el producto o servicio EN ACCIÓN / primer plano; (b) las MANOS del dueño creando o trabajando; "
         . "(c) el LOCAL o el ambiente real del negocio; (d) un CLIENTE disfrutando el resultado; "
         . "(e) los INGREDIENTES o materiales crudos; (f) la CALLE, la plaza o el pueblo boricua; "
@@ -339,10 +338,15 @@ function sugerir_arte(PDO $pdo, int $marca_id, string $caption, string $ajuste =
     if (function_exists('tono_instruccion')) $sistema .= tono_instruccion($m);
     $prompt = "Perfil del negocio:\n{$ctx}\n\nTexto del post (la imagen TIENE que pegar con esto):\n\"{$caption}\"\n";
     if (trim($ajuste) !== '') $prompt .= "\nLO QUE PIDE EL DUEÑO (es lo más importante — EXPÁNDELO con detalle visual, no lo ignores): {$ajuste}\n";
+    if (trim($evitar) !== '') {
+        $prompt .= "\nEL DUEÑO YA VIO esta idea y pidió OTRA — dale algo CATEGÓRICAMENTE DISTINTO: "
+                 . "cambia el TIPO de escena, el ángulo, el lugar y los props por completo. NO la reconfigures "
+                 . "ni la parafrasees; invéntate algo fresco y diferente de esto:\n\"" . mb_substr(trim($evitar), 0, 400) . "\"\n";
+    }
     $prompt .= "\nDescribe en 2-3 frases, con detalle concreto, qué va a mostrar la imagen.";
     $r = ia_ejecutar($pdo, 'diseñador', 'Sugerir idea de arte', $prompt, [
         'marca_id' => $marca_id, 'sistema' => $sistema,
-        'temperatura' => 0.85, 'max_tokens' => 300, 'thinking_budget' => 0,
+        'temperatura' => (trim($evitar) !== '' ? 1.15 : 0.9), 'max_tokens' => 300, 'thinking_budget' => 0,
         'mock_texto' => 'Un bizcocho de guayaba en primer plano sobre una mesa de madera, con luz cálida de tarde y un fondo simple; se ve fresco y apetitoso, con espacio arriba por si le quieres poner texto.',
     ]);
     return trim((string)$r['texto']);

@@ -100,8 +100,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $cap = $c->fetchColumn();
         if ($cap === false) { echo json_encode(['ok'=>false,'err'=>'Post no encontrado.']); exit; }
         $ajuste = trim((string)($_POST['ajuste'] ?? ''));
+        $evitar = trim((string)($_POST['evitar'] ?? ''));   // idea anterior → dame otra distinta
         try {
-            $idea = sugerir_arte($pdo, $marca_id, (string)$cap, $ajuste);
+            $idea = sugerir_arte($pdo, $marca_id, (string)$cap, $ajuste, $evitar);
             echo json_encode(['ok'=>true, 'idea'=>$idea], JSON_UNESCAPED_UNICODE);
         } catch (Throwable $e) {
             echo json_encode(['ok'=>false, 'err'=>substr($e->getMessage(),0,160)], JSON_UNESCAPED_UNICODE);
@@ -1549,9 +1550,11 @@ $cf = [
   function wizSugerirArte(ajuste){
     if(!wizId) return;
     var ta=document.getElementById('wiz-arteidea'), b=document.getElementById('wiz-arte-sug');
+    var prev=(ta.value||'').trim();
     if(!ajuste) ta.value=''; ta.placeholder='💭 El Diseñador está pensando la idea…';
     if(b){ b.disabled=true; }
-    var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','sugerir_arte'); fd.append('id',wizId); if(ajuste) fd.append('ajuste',ajuste);
+    var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','sugerir_arte'); fd.append('id',wizId);
+    if(ajuste) fd.append('ajuste',ajuste); else if(prev) fd.append('evitar',prev);   // "otra idea" → distinta a la anterior
     fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
       if(b){ b.disabled=false; }
       ta.placeholder='Describe qué debe mostrar la imagen…';
@@ -1732,9 +1735,11 @@ $cf = [
     var id=document.getElementById('art-id').value; if(!id) return;
     var ta=document.getElementById('art-instr'), btn=document.getElementById('art-sug');
     if(!ta) return;
+    var prev=(ta.value||'').trim();
     var oldph=ta.placeholder; ta.placeholder='✍️ El Diseñador está pensando una idea…';
     if(btn) btn.disabled=true;
-    var fd=new FormData(); fd.append('accion','sugerir_arte'); fd.append('id',id); if(ajuste) fd.append('ajuste',ajuste);
+    var fd=new FormData(); fd.append('accion','sugerir_arte'); fd.append('id',id);
+    if(ajuste) fd.append('ajuste',ajuste); else if(prev) fd.append('evitar',prev);   // "otra idea" → distinta a la anterior
     fetch(location.pathname+location.search,{method:'POST',body:fd})
       .then(function(r){return r.json();})
       .then(function(d){ if(btn) btn.disabled=false; ta.placeholder=oldph; if(d.ok && d.idea){ ta.value=d.idea; } })
