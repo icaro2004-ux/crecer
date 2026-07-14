@@ -284,6 +284,7 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
     <span class="op-hi">Hola, <?= $h($usuario['nombre']) ?></span>
     <a href="/crecer/panel/admin_soporte.php">Soporte</a>
     <a href="/crecer/panel/admin_equipo.php">Equipo</a>
+    <a href="/crecer/panel/admin_salud.php">Salud</a>
     <a href="#clientes">Ver clientes ↓</a>
     <a class="op-salir" href="/crecer/logout.php">🚪 Salir</a>
   </div>
