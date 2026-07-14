@@ -159,6 +159,8 @@ require __DIR__ . '/_shell.php';
   .rz-nb svg{width:13px;height:13px;flex:none}
   .rz-nb.ok{color:var(--teal-dark);background:color-mix(in srgb,var(--teal) 8%,#fff);border-color:color-mix(in srgb,var(--teal) 28%,#fff)}
   .rz-nb.err{color:#b3123b;background:#ffe0e6;border-color:#f4b8c6}
+  .rz-fallo{display:flex;align-items:flex-start;gap:6px;margin-top:6px;font-size:11.5px;line-height:1.4;color:#b3123b;background:#fff0f3;border:1px solid #f4b8c6;border-radius:8px;padding:6px 9px}
+  .rz-fallo svg{width:13px;height:13px;flex:none;margin-top:1px;color:#b3123b}
   .rz-nb.none{color:var(--muted);background:var(--crema-2)}
   .rz-net{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
   .rz-net:last-child{border-bottom:0}.rz-net .e{font-size:18px}
@@ -304,6 +306,15 @@ require __DIR__ . '/_shell.php';
                 <?php endif;
             endforeach; ?>
           </div>
+          <?php
+            $_fallos = [];
+            foreach (['instagram'=>'Instagram','facebook'=>'Facebook'] as $net=>$lbl2) {
+                $inf = $rp[$net] ?? null;
+                if ($inf && ($inf['estado'] ?? '') === 'error') $_fallos[] = $lbl2 . ': ' . ($inf['error'] ?? 'error al publicar');
+            }
+            if ($_fallos): ?>
+            <div class="rz-fallo"><?= ico('bolt') ?> <span><?= $h(implode(' · ', $_fallos)) ?></span></div>
+          <?php endif; ?>
           <?php $mi = $post_ins((int)$p['id']); if ($mi): ?>
             <div class="rz-mx">
               <?php if ($mi['alcance']     !== null): ?><span title="Personas alcanzadas"><?= ico('eye') ?><?= number_format($mi['alcance']) ?></span><?php endif; ?>
