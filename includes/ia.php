@@ -473,7 +473,8 @@ function ia_imagen(PDO $pdo, string $agente, string $accion, string $prompt, str
     $lat = (int)round((microtime(true) - $t0) * 1000);
     $costo = $estado === 'ok' ? (['gemini-3-pro-image'=>0.134, 'gemini-2.5-flash-image'=>0.039, 'gpt-image-1'=>0.04][$modelo] ?? CRECER_IMG_PRECIO) : 0;
     // La decisión del Director de Arte queda en la acción (evidencia del ruteo).
-    $accion_log = $razon ? ($accion . ' · ' . $razon) : $accion;
+    // OJO: crecer_ia_log.accion es VARCHAR(80) → truncar para no romper el INSERT.
+    $accion_log = mb_substr($razon ? ($accion . ' · ' . $razon) : $accion, 0, 80);
     $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,costo_usd,latencia_ms,estado,error_msg)
                    VALUES (?,?,?,?,?,?,?,?,?,?)")
         ->execute([$opts['marca_id'] ?? null, $agente, $accion_log, $modelo, $prompt, $rel, $costo, $lat, $estado, $err]);
