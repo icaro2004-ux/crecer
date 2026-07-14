@@ -41,6 +41,9 @@ function stripe_api(string $metodo, string $path, array $params = []): array {
     if (strtoupper($metodo) === 'POST') {
         $opts[CURLOPT_POST]       = true;
         $opts[CURLOPT_POSTFIELDS] = http_build_query($params);
+    } elseif (strtoupper($metodo) === 'DELETE') {
+        $opts[CURLOPT_CUSTOMREQUEST] = 'DELETE';
+        if ($params) $opts[CURLOPT_URL] = $url . '?' . http_build_query($params);
     } else {
         if ($params) $opts[CURLOPT_URL] = $url . '?' . http_build_query($params);
     }
@@ -119,4 +122,35 @@ function stripe_verificar_webhook(string $payload, string $sig_header, string $s
     $data = json_decode($payload, true);
     if (!is_array($data)) throw new StripeError('Payload de webhook ilegible.');
     return $data;
+}
+
+// ── ADMIN: reembolsos y cancelación (soporte de Operaciones) ─────────────────
+
+/** Último cargo del cliente (para reembolsar). Devuelve null si no hay ninguno. */
+function stripe_ultimo_cargo(string $customer_id): ?array {
+    $r = stripe_api('GET', 'charges', ['customer' => $customer_id, 'limit' => 1]);
+    $c = $r['data'][0] ?? null;
+    if (!$c) return null;
+    return [
+        'id'          => (string)$c['id'],
+        'monto'       => (int)($c['amount'] ?? 0),          // centavos
+        'reembolsado' => (int)($c['amount_refunded'] ?? 0), // centavos ya devueltos
+        'moneda'      => strtoupper($c['currency'] ?? 'usd'),
+        'pagado'      => !empty($c['paid']),
+    ];
+}
+
+/** Reembolsa un cargo: total (monto null) o parcial (centavos). */
+function stripe_reembolsar(string $charge_id, ?int $monto_centavos = null): array {
+    $p = ['charge' => $charge_id];
+    if ($monto_centavos !== null && $monto_centavos > 0) $p['amount'] = $monto_centavos;
+    return stripe_api('POST', 'refunds', $p);
+}
+
+/** Cancela la suscripción: al final del período (seguro, default) o de inmediato. */
+function stripe_cancelar_suscripcion(string $sub_id, bool $al_final = true): array {
+    if ($al_final) {
+        return stripe_api('POST', 'subscriptions/' . rawurlencode($sub_id), ['cancel_at_period_end' => 'true']);
+    }
+    return stripe_api('DELETE', 'subscriptions/' . rawurlencode($sub_id));
 }

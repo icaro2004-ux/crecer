@@ -12,6 +12,7 @@
 // ============================================================
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/stripe.php';   // reembolsos / cancelar (dinero)
 requiere_login();
 $usuario = usuario_actual($pdo);
 if (($usuario['rol'] ?? '') !== 'admin') {
@@ -71,6 +72,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'reset
         } catch (Throwable $e) {}
     }
     header('Location: /crecer/panel/admin.php?reset='.$n.'&modo='.$modo.'#clientes'); exit;
+}
+
+// ── DINERO: reembolso (total/parcial) del último cargo del cliente ───────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'stripe_refund' && csrf_ok()) {
+    $mid   = (int)($_POST['marca_id'] ?? 0);
+    $montoTxt = trim((string)($_POST['monto'] ?? ''));   // dólares; vacío = total
+    try {
+        if (!stripe_configurado()) throw new RuntimeException('Stripe no está configurado.');
+        $su = $pdo->prepare("SELECT stripe_customer_id, stripe_subscription_id FROM crecer_suscripciones WHERE marca_id=?");
+        $su->execute([$mid]); $s = $su->fetch(PDO::FETCH_ASSOC);
+        if (!$s || empty($s['stripe_customer_id'])) throw new RuntimeException('Este cliente no tiene cliente de Stripe.');
+        $cargo = stripe_ultimo_cargo((string)$s['stripe_customer_id']);
+        if (!$cargo) throw new RuntimeException('No encontré un cargo para reembolsar.');
+        $disponible = $cargo['monto'] - $cargo['reembolsado'];   // centavos que aún se pueden devolver
+        if ($disponible <= 0) throw new RuntimeException('Ese cargo ya está reembolsado por completo.');
+        $centavos = null;
+        if ($montoTxt !== '') {
+            $centavos = (int) round(((float)str_replace(['$',','], '', $montoTxt)) * 100);
+            if ($centavos <= 0) throw new RuntimeException('Monto inválido.');
+            if ($centavos > $disponible) throw new RuntimeException('El monto excede lo disponible ($'.number_format($disponible/100,2).').');
+        }
+        $ref = stripe_reembolsar($cargo['id'], $centavos);
+        $refCent = (int)($ref['amount'] ?? ($centavos ?? $disponible));
+        // Registrar en pagos como ajuste negativo (best-effort; Stripe es la fuente).
+        try {
+            $uid = (int)$pdo->query("SELECT usuario_id FROM crecer_marca WHERE id=".$mid)->fetchColumn();
+            $pdo->prepare("INSERT INTO pagos (usuario_id, producto, marca_id, plan, monto, estado, stripe_subscription_id, stripe_customer_id, created_at)
+                           VALUES (?, 'crecer', ?, 'crecer', ?, 'reembolso', ?, ?, NOW())")
+                ->execute([$uid, $mid, -($refCent/100), $s['stripe_subscription_id'], $s['stripe_customer_id']]);
+        } catch (Throwable $e) {}
+        try { $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,costo_usd,latencia_ms,estado) VALUES (?,?,?,?,?,?,0,0,'ok')")
+            ->execute([$mid,'admin','stripe_refund $'.number_format($refCent/100,2),'-','admin: '.($usuario['email'] ?? ''), (string)($ref['id'] ?? '')]); } catch (Throwable $e) {}
+        header('Location: /crecer/panel/admin.php?dinero=refund&amt='.number_format($refCent/100,2,'.','').'#clientes'); exit;
+    } catch (Throwable $e) {
+        header('Location: /crecer/panel/admin.php?dinero_err='.urlencode(substr($e->getMessage(),0,150)).'#clientes'); exit;
+    }
+}
+
+// ── DINERO: cancelar la suscripción (al final del período o de inmediato) ────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'stripe_cancel' && csrf_ok()) {
+    $mid    = (int)($_POST['marca_id'] ?? 0);
+    $cuando = ($_POST['cuando'] ?? '') === 'ya' ? 'ya' : 'fin';
+    try {
+        if (!stripe_configurado()) throw new RuntimeException('Stripe no está configurado.');
+        $sub = $pdo->prepare("SELECT stripe_subscription_id FROM crecer_suscripciones WHERE marca_id=?");
+        $sub->execute([$mid]); $sid = (string)$sub->fetchColumn();
+        if ($sid === '') throw new RuntimeException('Este cliente no tiene suscripción de Stripe.');
+        stripe_cancelar_suscripcion($sid, $cuando === 'fin');
+        if ($cuando === 'ya') $pdo->prepare("UPDATE crecer_suscripciones SET estado='cancelada', updated_at=NOW() WHERE marca_id=?")->execute([$mid]);
+        try { $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,costo_usd,latencia_ms,estado) VALUES (?,?,?,?,?,?,0,0,'ok')")
+            ->execute([$mid,'admin','stripe_cancel:'.$cuando,'-','admin: '.($usuario['email'] ?? ''), $sid]); } catch (Throwable $e) {}
+        header('Location: /crecer/panel/admin.php?dinero=cancel&cuando='.$cuando.'#clientes'); exit;
+    } catch (Throwable $e) {
+        header('Location: /crecer/panel/admin.php?dinero_err='.urlencode(substr($e->getMessage(),0,150)).'#clientes'); exit;
+    }
 }
 
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
@@ -308,6 +364,15 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
   <?php if (isset($_GET['reset'])): $rn=(int)$_GET['reset']; $rmodo=($_GET['modo']??'')==='borrador'?'devueltos a borrador':'destrabados y listos para reintentar'; ?>
     <div style="background:#e6f6ee;border:1px solid #b9eccf;color:#0d7a44;border-radius:12px;padding:11px 15px;margin:14px 0 0;font-weight:700;font-size:13.5px">✓ <?= $rn ?> post<?= $rn===1?'':'s' ?> <?= $h($rmodo) ?>. El cliente ya puede intentar de nuevo.</div>
   <?php endif; ?>
+  <?php if (isset($_GET['dinero'])):
+    $dm = $_GET['dinero']==='refund'
+        ? '↩ Reembolso de $'.$h($_GET['amt'] ?? '').' procesado en Stripe.'
+        : 'Suscripción cancelada'.((($_GET['cuando']??'')==='ya')?' de inmediato.':' al final del período.'); ?>
+    <div style="background:#e6f6ee;border:1px solid #b9eccf;color:#0d7a44;border-radius:12px;padding:11px 15px;margin:14px 0 0;font-weight:700;font-size:13.5px">✓ <?= $h($dm) ?></div>
+  <?php endif; ?>
+  <?php if (isset($_GET['dinero_err'])): ?>
+    <div style="background:#fdeaea;border:1px solid #f5c2c0;color:#b42318;border-radius:12px;padding:11px 15px;margin:14px 0 0;font-weight:700;font-size:13.5px">⚠️ No se pudo: <?= $h($_GET['dinero_err']) ?></div>
+  <?php endif; ?>
   <div class="sec" id="clientes"><h2>👥 Clientes (<?= $total_clientes ?>)</h2></div>
   <div class="card scrollx">
     <table>
@@ -329,6 +394,16 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
           <td>
             <?php if ($real_paid): ?>
               <span class="pill act">💳 paga</span>
+              <form method="post" data-n="<?= $h($c['nombre_negocio']) ?>" onsubmit="return confirm('REEMBOLSO REAL de dinero a: '+this.dataset.n+'\n\nMonto: '+(this.monto.value.trim()===''?'TOTAL del último cargo':'$'+this.monto.value.trim())+'\n\nEsto devuelve dinero en Stripe. ¿Confirmas?')" style="display:flex;gap:4px;align-items:center;margin-top:5px">
+                <?= csrf_field() ?><input type="hidden" name="accion" value="stripe_refund"><input type="hidden" name="marca_id" value="<?= (int)$c['id'] ?>">
+                <input type="text" name="monto" placeholder="$ vacío=total" style="width:82px;font-size:10.5px;border:1.5px solid var(--line);border-radius:7px;padding:3px 5px;font-family:inherit">
+                <button type="submit" title="Reembolsar" style="border:1.5px solid #f4b8c6;cursor:pointer;background:#fff;color:#b3123b;font-weight:800;font-size:11px;padding:4px 8px;border-radius:8px">↩$</button>
+              </form>
+              <form method="post" data-n="<?= $h($c['nombre_negocio']) ?>" onsubmit="return confirm('CANCELAR la suscripción de: '+this.dataset.n+'\n\n'+(this.cuando.value==='ya'?'DE INMEDIATO (pierde acceso ya).':'Al final del período (sigue hasta que termine lo pagado).')+'\n\n¿Confirmas?')" style="display:flex;gap:4px;align-items:center;margin-top:4px">
+                <?= csrf_field() ?><input type="hidden" name="accion" value="stripe_cancel"><input type="hidden" name="marca_id" value="<?= (int)$c['id'] ?>">
+                <select name="cuando" style="font-size:10.5px;border:1.5px solid var(--line);border-radius:7px;padding:3px 4px;font-family:inherit"><option value="fin">Cancel: fin período</option><option value="ya">Cancel: ya</option></select>
+                <button type="submit" title="Cancelar suscripción" style="border:1.5px solid var(--line);cursor:pointer;background:#fff;color:var(--tinta);font-weight:800;font-size:11px;padding:4px 8px;border-radius:8px">✕</button>
+              </form>
             <?php elseif ($cort): ?>
               <form method="post" style="display:inline">
                 <?= csrf_field() ?><input type="hidden" name="accion" value="cortesia"><input type="hidden" name="marca_id" value="<?= (int)$c['id'] ?>"><input type="hidden" name="on" value="0">
