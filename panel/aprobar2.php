@@ -1484,6 +1484,32 @@ $cf = [
       card.querySelector('.wiz-card-go').addEventListener('click', function(){ wizCrear((it.tema?it.tema+': ':'')+(it.idea||'')); });
       cont.appendChild(card);
     });
+    wizCarActivar(cont);
+  }
+  // Desktop: arrastrar el carrusel con el mouse + rueda horizontal + flechas.
+  function wizCarActivar(el){
+    var al=document.getElementById('wiz-arrow-l'), ar=document.getElementById('wiz-arrow-r');
+    var paso=function(){ var c=el.querySelector('.wiz-card'); return c ? c.offsetWidth+12 : 300; };
+    if(al) al.onclick=function(){ el.scrollBy({left:-paso(),behavior:'smooth'}); };
+    if(ar) ar.onclick=function(){ el.scrollBy({left: paso(),behavior:'smooth'}); };
+    if(el._caron) return; el._caron=true;   // listeners de scroll/drag una sola vez
+    var down=false, sx=0, sl=0, moved=false;
+    el.addEventListener('pointerdown', function(e){
+      if(e.target.closest('.wiz-card-go')) return;   // no arrancar drag sobre el botón
+      down=true; moved=false; sx=e.clientX; sl=el.scrollLeft;
+      try{ el.setPointerCapture(e.pointerId); }catch(_){}
+    });
+    el.addEventListener('pointermove', function(e){
+      if(!down) return; var dx=e.clientX-sx; if(Math.abs(dx)>4) moved=true; el.scrollLeft=sl-dx;
+    });
+    ['pointerup','pointercancel','pointerleave'].forEach(function(ev){ el.addEventListener(ev, function(){ down=false; }); });
+    // Si arrastró, cancela el click (para no "escoger" una idea sin querer).
+    el.addEventListener('click', function(e){ if(moved){ e.stopPropagation(); e.preventDefault(); moved=false; } }, true);
+    // Rueda vertical del mouse → scroll horizontal del carrusel.
+    el.addEventListener('wheel', function(e){
+      if(el.scrollWidth<=el.clientWidth) return;
+      if(Math.abs(e.deltaY) > Math.abs(e.deltaX)){ el.scrollLeft += e.deltaY; e.preventDefault(); }
+    }, {passive:false});
   }
   function wizCargarIdeas(force){
     if(!force && wizIdeasCache){ wizRenderIdeas(wizIdeasCache); return; }   // reusar caché
@@ -2015,8 +2041,12 @@ $cf = [
     <div class="wiz-pane" data-pane="1">
       <h3>¿De qué hacemos el post?</h3>
       <p class="wiz-sub">Toca una idea o escribe la tuya. Yo escribo el caption en tu voz.</p>
-      <div class="wiz-swipe-hint" id="wiz-hint">Desliza para ver más ideas →</div>
-      <div id="wiz-ideas"></div>
+      <div class="wiz-swipe-hint" id="wiz-hint">Arrástralas con el mouse o desliza para ver más →</div>
+      <div class="wiz-carwrap">
+        <button type="button" class="wiz-arrow" id="wiz-arrow-l" aria-label="Ideas anteriores">‹</button>
+        <div id="wiz-ideas"></div>
+        <button type="button" class="wiz-arrow" id="wiz-arrow-r" aria-label="Más ideas">›</button>
+      </div>
       <button type="button" id="wiz-mas" class="sug-btn"><?= ico('lightbulb') ?> Dame otras ideas</button>
       <label class="fl">O escribe tu propia idea</label>
       <textarea id="wiz-tema" rows="2" placeholder="Ej: promo del bizcocho de guayaba para el Día de las Madres"></textarea>
@@ -2086,6 +2116,16 @@ $cf = [
   .wiz-swipe-hint{display:none;font-size:12px;font-weight:700;color:var(--muted);margin:2px 0 8px}
   .wiz-car{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding:2px 2px 14px;margin:0 -20px 6px;padding-left:20px;padding-right:20px;scrollbar-width:none}
   .wiz-car::-webkit-scrollbar{display:none}
+  .wiz-carwrap{position:relative}
+  .wiz-arrow{display:none}
+  @media(min-width:761px){
+    .wiz-car{cursor:grab}
+    .wiz-car:active{cursor:grabbing}
+    .wiz-arrow{display:grid;place-items:center;position:absolute;top:44%;transform:translateY(-50%);width:40px;height:40px;border-radius:50%;border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-size:24px;line-height:1;font-weight:700;cursor:pointer;z-index:4;box-shadow:0 8px 20px -8px rgba(0,0,0,.35)}
+    #wiz-arrow-l{left:-8px}
+    #wiz-arrow-r{right:-8px}
+    .wiz-arrow:hover{border-color:var(--terracota);color:var(--terracota)}
+  }
   .wiz-card{flex:0 0 84%;scroll-snap-align:center;min-height:186px;background:linear-gradient(158deg,#ffffff,#fff4ec);border:1.5px solid var(--line);border-radius:20px;padding:16px 16px 15px;display:flex;flex-direction:column;gap:9px;box-shadow:0 14px 32px -18px rgba(40,25,12,.5)}
   .wiz-card-top{display:flex;align-items:center;justify-content:space-between;min-height:22px}
   .wiz-chip{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));border-radius:99px;padding:4px 10px}
