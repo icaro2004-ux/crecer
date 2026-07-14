@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS crecer_planes (
 -- Stripe, no como plan aparte.
 INSERT INTO crecer_planes (slug, nombre, descripcion, precio_mensual, trial_dias, orden, features)
 VALUES
- ('crecer',  'Crecer',  'El corillo te trabaja el marketing', 49.00, 3, 1,
+ ('crecer',  'Crecer',  'El corillo te trabaja el marketing', 39.00, 3, 1,
   JSON_ARRAY('Marca y logo con IA','Fábrica de posts (captions boricuas + arte)','Calendario unificado','Órdenes y agenda + página pública con QR','~10 imágenes IA por semana')),
  ('despegar','Despegar', 'El corillo además te ayuda a vender', 89.00, 3, 2,
   JSON_ARRAY('Todo lo de Crecer','Agente de WhatsApp','Publicación automática a IG/FB','Analítica de impacto','CRM ligero + recordatorios de cobro','Más imágenes IA por semana'))
