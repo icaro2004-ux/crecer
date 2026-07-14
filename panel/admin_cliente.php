@@ -53,6 +53,25 @@ $pubs = $pdo->prepare("SELECT p.plataforma, p.estado, p.error_msg, p.permalink, 
 $pubs->execute([$mid]); $pubs = $pubs->fetchAll(PDO::FETCH_ASSOC);
 $logs = $pdo->prepare("SELECT agente, accion, modelo, estado, error_msg, created_at FROM crecer_ia_log WHERE marca_id=? ORDER BY id DESC LIMIT 14");
 $logs->execute([$mid]); $logs = $logs->fetchAll(PDO::FETCH_ASSOC);
+
+// ── Costo, uso y margen (mes en curso / semana) ──
+$mes_ini   = date('Y-m-01 00:00:00');
+$q = $pdo->prepare("SELECT COALESCE(SUM(costo_usd),0) FROM crecer_ia_log WHERE marca_id=? AND created_at>=?"); $q->execute([$mid,$mes_ini]);
+$costo_mes = (float)$q->fetchColumn();
+$q = $pdo->prepare("SELECT COALESCE(SUM(costo_usd),0) FROM crecer_ia_log WHERE marca_id=? AND created_at>=? AND accion LIKE 'Crear arte%'"); $q->execute([$mid,$mes_ini]);
+$costo_img = (float)$q->fetchColumn();
+$costo_txt = max(0, $costo_mes - $costo_img);
+// Ingreso = MRR del plan activo (trial cuenta como potencial, se marca aparte).
+$sub = $pdo->prepare("SELECT s.estado, p.precio_mensual, p.nombre FROM crecer_suscripciones s LEFT JOIN crecer_planes p ON p.id=s.plan_id WHERE s.marca_id=?");
+$sub->execute([$mid]); $sub = $sub->fetch(PDO::FETCH_ASSOC);
+$rev_activo = ($sub && ($sub['estado'] ?? '')==='activa') ? (float)$sub['precio_mensual'] : 0;
+$en_trial   = ($sub && ($sub['estado'] ?? '')==='trial');
+$margen     = $rev_activo - $costo_mes;
+// Uso esta semana (posts publicados que consumen cupo + imágenes generadas).
+$posts_sem = 0; try { $q=$pdo->prepare("SELECT COUNT(*) FROM crecer_publicacion_cupo WHERE marca_id=? AND created_at>=(NOW()-INTERVAL 7 DAY)"); $q->execute([$mid]); $posts_sem=(int)$q->fetchColumn(); } catch (Throwable $e) {}
+$img_sem = 0;  try { $q=$pdo->prepare("SELECT COUNT(*) FROM crecer_graficas WHERE marca_id=? AND created_at>=(NOW()-INTERVAL 7 DAY)"); $q->execute([$mid]); $img_sem=(int)$q->fetchColumn(); } catch (Throwable $e) {}
+$cupo_sem = defined('CRECER_POSTS_SEMANA') ? (int)CRECER_POSTS_SEMANA : 5;
+
 $csrf = csrf_token();
 $reconectar = "/crecer/panel/conectar.php?marca={$mid}";
 ?>
@@ -96,6 +115,24 @@ $reconectar = "/crecer/panel/conectar.php?marca={$mid}";
   <h1><?= $h($marca['nombre_negocio']) ?></h1>
   <p class="sub">Estado real para resolver "no postea" o "la IA hizo algo raro".</p>
   <?php if ($flash): ?><div class="flash <?= $flash[0] ?>"><?= $h($flash[1]) ?></div><?php endif; ?>
+
+  <!-- COSTO, USO Y MARGEN -->
+  <?php $money = fn($n)=>'$'.number_format((float)$n,2); ?>
+  <div class="card">
+    <h2><?= ico('chart') ?> Costo, uso y margen · este mes</h2>
+    <div class="row"><span class="k">Ingreso (plan)</span><span><?php
+      if ($rev_activo>0) echo '<b>'.$money($rev_activo).'</b>/mes';
+      elseif ($en_trial) echo '<span class="st warn">en prueba</span> '.($sub['precio_mensual']?('($'.number_format((float)$sub['precio_mensual'],0).' al cobrar)'):'');
+      else echo '<span class="st none">sin plan pago</span>';
+    ?></span></div>
+    <div class="row"><span class="k">Costo IA del mes</span><span><b><?= $money($costo_mes) ?></b> <span style="color:var(--muted);font-size:12px">(imagen <?= $money($costo_img) ?> · texto <?= $money($costo_txt) ?>)</span></span></div>
+    <div class="row"><span class="k">Margen</span><span><?php
+      if ($rev_activo>0) { $cls=$margen>=0?'ok':'bad'; echo '<span class="st '.$cls.'">'.($margen>=0?'✓ ':'✕ ').$money($margen).'</span>'; }
+      else echo '<span class="st none">— (sin cobro este mes)</span>';
+    ?></span></div>
+    <div class="row"><span class="k">Uso esta semana</span><span><b><?= $posts_sem ?>/<?= $cupo_sem ?></b> posts · <b><?= $img_sem ?></b> imágenes IA</span></div>
+    <?php if ($rev_activo>0 && $margen<0): ?><div class="hint">⚠️ Este cliente está <b>en pérdida</b> este mes (gasta más en IA de lo que paga). Revisa si está generando imágenes de más.</div><?php endif; ?>
+  </div>
 
   <!-- CONEXIÓN META -->
   <div class="card">
