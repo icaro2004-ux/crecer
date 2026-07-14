@@ -30,6 +30,7 @@ if (isset($pdo)) { try { $op_prob = (int)$pdo->query("SELECT COUNT(DISTINCT marc
   <nav>
     <a class="<?= $_opl('clientes') ?>"  href="/crecer/panel/admin.php">Clientes</a>
     <a class="<?= $_opl('problemas') ?>" href="/crecer/panel/admin_alertas.php">Problemas<?php if ($op_prob>0): ?> <span class="opbadge"><?= $op_prob ?></span><?php endif; ?></a>
+    <a class="<?= $_opl('analitica') ?>" href="/crecer/panel/admin_analitica.php">Analítica</a>
     <a class="<?= $_opl('soporte') ?>"   href="/crecer/panel/admin_soporte.php">Soporte</a>
     <a class="<?= $_opl('equipo') ?>"    href="/crecer/panel/admin_equipo.php">Equipo</a>
     <a class="<?= $_opl('salud') ?>"     href="/crecer/panel/admin_salud.php">Salud</a>
