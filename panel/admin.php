@@ -44,6 +44,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'corte
     header('Location: /crecer/panel/admin.php'); exit;
 }
 
+// ── SOPORTE: arreglar/resetear los posts de un cliente ───────────────────────
+//  "retry"    = destraba fallidos/trabados → 'aprobado' (para reintentar publicar).
+//  "borrador" = devuelve a 'borrador' lo no publicado (para rehacer si la IA hizo
+//               algo raro). NUNCA toca lo ya 'publicado' (no se puede despublicar).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'reset_posts' && csrf_ok()) {
+    $mid  = (int)($_POST['marca_id'] ?? 0);
+    $modo = in_array($_POST['modo'] ?? '', ['retry','borrador'], true) ? $_POST['modo'] : 'retry';
+    $n = 0;
+    if ($mid) {
+        if ($modo === 'borrador') {
+            $st = $pdo->prepare("UPDATE crecer_contenido
+                SET estado='borrador', lock_token=NULL, lock_at=NULL, pub_error=NULL, pub_intentos=0, updated_at=NOW()
+                WHERE marca_id=? AND estado IN ('fallido','aprobado','programado','publicando')");
+        } else {
+            $st = $pdo->prepare("UPDATE crecer_contenido
+                SET estado='aprobado', lock_token=NULL, lock_at=NULL, pub_error=NULL, pub_intentos=0, updated_at=NOW()
+                WHERE marca_id=? AND estado IN ('fallido','publicando')");
+        }
+        $st->execute([$mid]); $n = $st->rowCount();
+        // Traza (auditoría) en crecer_ia_log.
+        try {
+            $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,costo_usd,latencia_ms,estado)
+                           VALUES (?,?,?,?,?,?,0,0,'ok')")
+                ->execute([$mid,'admin','reset_posts:'.$modo.' ('.$n.' posts)','-','admin: '.($usuario['email'] ?? ''), (string)$n]);
+        } catch (Throwable $e) {}
+    }
+    header('Location: /crecer/panel/admin.php?reset='.$n.'&modo='.$modo.'#clientes'); exit;
+}
+
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 $money = fn($n) => '$' . number_format((float)$n, 2);
 $MES = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -276,6 +305,9 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
   </div>
 
   <!-- CLIENTES -->
+  <?php if (isset($_GET['reset'])): $rn=(int)$_GET['reset']; $rmodo=($_GET['modo']??'')==='borrador'?'devueltos a borrador':'destrabados y listos para reintentar'; ?>
+    <div style="background:#e6f6ee;border:1px solid #b9eccf;color:#0d7a44;border-radius:12px;padding:11px 15px;margin:14px 0 0;font-weight:700;font-size:13.5px">✓ <?= $rn ?> post<?= $rn===1?'':'s' ?> <?= $h($rmodo) ?>. El cliente ya puede intentar de nuevo.</div>
+  <?php endif; ?>
   <div class="sec" id="clientes"><h2>👥 Clientes (<?= $total_clientes ?>)</h2></div>
   <div class="card scrollx">
     <table>
@@ -308,6 +340,14 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
                 <button type="submit" title="Dar Despegar gratis" style="border:0;cursor:pointer;background:var(--palma,#16b86a);color:#fff;font-weight:800;font-size:11px;padding:5px 10px;border-radius:8px">Dar gratis</button>
               </form>
             <?php endif; ?>
+            <form method="post" data-n="<?= $h($c['nombre_negocio']) ?>" onsubmit="return confirm('Arreglar posts de: '+this.dataset.n+'\n\n· Destrabar+reintentar → pone los fallidos/trabados como «Listos» para reintentar publicar.\n· Devolver a borrador → manda lo NO publicado a borrador para rehacer.\n\nNo toca lo ya publicado. ¿Seguir?')" style="display:block;margin-top:5px;white-space:nowrap">
+              <?= csrf_field() ?><input type="hidden" name="accion" value="reset_posts"><input type="hidden" name="marca_id" value="<?= (int)$c['id'] ?>">
+              <select name="modo" style="font-size:10.5px;border:1.5px solid var(--line);border-radius:7px;padding:3px 4px;font-family:inherit;color:var(--tinta)">
+                <option value="retry">Destrabar+reintentar</option>
+                <option value="borrador">Devolver a borrador</option>
+              </select>
+              <button type="submit" title="Arreglar posts de este cliente" style="border:1.5px solid var(--line);cursor:pointer;background:#fff;color:var(--tinta);font-weight:800;font-size:11px;padding:4px 8px;border-radius:8px">🔧</button>
+            </form>
           </td>
         </tr>
       <?php endforeach; ?>
