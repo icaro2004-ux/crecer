@@ -1702,7 +1702,8 @@ $cf = [
     document.getElementById('wiz-later').addEventListener('click', function(){
       wizCerrar(); toast('✅ Guardado. Lo ves en Contenido → Revisar.'); setTimeout(function(){ location.reload(); }, 1000);
     });
-    document.getElementById('wizov').addEventListener('click', function(e){ if(e.target===this) wizCerrar(); });
+    // OJO: NO cerrar el wizard al tocar el fondo — se perdía el trabajo por un
+    // clic accidental. Solo cierra con la X (arriba a la derecha).
   }
 
   // ===== Estudio de arte (modal) — fábrica de posts =====
