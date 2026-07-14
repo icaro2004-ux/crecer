@@ -1645,22 +1645,60 @@ $cf = [
         : '<img src="'+wizImg+'?t='+Date.now()+'" alt="arte" style="width:100%;border-radius:14px;display:block;margin-bottom:10px">') : '';
       document.getElementById('wiz-prev').innerHTML=wmedia+'<div class="wiz-cap">'+_esc(cap)+'</div>';
       wizPaso(3);
+      wizPubChoice();   // el dueño elige dónde publicar (no manda a todas por default)
     });
-    document.getElementById('wiz-pub').addEventListener('click', function(){
+    // Paso 3: elegir RED (IG / FB / Ambas), igual que al revisar un post.
+    function wizPubChoice(){
+      var box=document.getElementById('wiz-pub-choice'), h=document.getElementById('wiz-pubh'); if(!box) return;
+      var nets=REDES_CONECTADAS||[];
+      var hasIG=nets.indexOf('instagram')>=0, hasFB=nets.indexOf('facebook')>=0;
+      if(h) h.style.display='';
+      var html='<div class="wiz-pub-btns">';
+      if(hasIG) html+='<button type="button" class="wpub" data-pl="instagram">Instagram</button>';
+      if(hasFB) html+='<button type="button" class="wpub" data-pl="facebook">Facebook</button>';
+      if(hasIG&&hasFB) html+='<button type="button" class="wpub both" data-pl="instagram,facebook">Ambas</button>';
+      html+='<button type="button" class="wpub wpub-wa" data-pl="whatsapp"><img src="/crecer/assets/icons/whatsapp.svg" alt="" style="width:15px;height:15px;vertical-align:-.2em"> Estado</button>';
+      html+='</div>';
+      html += (!hasIG && !hasFB)
+        ? '<div class="wiz-pub-note">Aún no conectas IG/FB — <a href="/crecer/panel/conectar.php?marca=<?= $marca_id ?>" style="color:var(--terracota);font-weight:800;text-decoration:none">conéctalas →</a>. El <b>Estado</b> de WhatsApp se sube a mano desde el celular.</div>'
+        : '<div class="wiz-pub-note">El <b>Estado</b> de WhatsApp es manual (lo subes desde el celular).</div>';
+      box.innerHTML=html;
+      box.querySelectorAll('.wpub').forEach(function(b){ b.onclick=function(){ b.dataset.pl==='whatsapp' ? wizWhatsApp() : wizPublicar(b.dataset.pl); }; });
+    }
+    // Estado de WhatsApp desde el wizard = compartir manual (no hay API de Estado).
+    function wizWhatsApp(){
+      var url=wizImg||'', cap=(document.getElementById('wiz-cap')||{}).textContent||'';
+      if(navigator.clipboard && cap) navigator.clipboard.writeText(cap).catch(function(){});
+      var cerrar=function(msg){ wizCerrar(); toast(msg); setTimeout(function(){ location.reload(); }, 1200); };
+      if(url && puedeCompartirArchivo()){
+        fetch(url).then(function(r){return r.blob();}).then(function(bl){
+          var esVid=(bl.type||'').indexOf('video')===0;
+          var file=new File([bl],'crecer-estado.'+(esVid?'mp4':'png'),{type:bl.type||'image/png'});
+          var data={files:[file], text:cap};
+          if(navigator.canShare && navigator.canShare(data)) navigator.share(data).catch(function(){});
+          else navigator.share({text:cap}).catch(function(){});
+          cerrar('📲 Escoge WhatsApp → Estado. Lo guardamos en Contenido.');
+        }).catch(function(){ cerrar('Guardado en Contenido. Compártelo a mano desde el celular.'); });
+      } else {
+        if(url){ var a=document.createElement('a'); a.href=url; a.download='crecer-estado'; document.body.appendChild(a); a.click(); a.remove(); }
+        cerrar('📥 Descargado + copy copiado. Súbelo a tu Estado desde el celular.');
+      }
+    }
+    function wizPublicar(plataformas){
       if(!wizId) return;
       wizCerrar();
       loaderShow('Publicando…', 'Subiendo tu post a las redes. No cierres la app.');
       var fa=new FormData(); fa.append('ajax','1'); fa.append('accion','aprobar'); fa.append('id',wizId);
       fetch(location.pathname+location.search,{method:'POST',body:fa}).then(function(r){return r.json();}).then(function(){
         var fp=new FormData(); fp.append('ajax','1'); fp.append('accion','publicar_api'); fp.append('id',wizId); fp.append('csrf',CSRF);
-        if(REDES_CONECTADAS && REDES_CONECTADAS.length) fp.append('plataformas', REDES_CONECTADAS.join(','));   // publica a TODAS las conectadas (IG+FB)
+        fp.append('plataformas', plataformas);   // SOLO la(s) red(es) que el dueño eligió
         return fetch(location.pathname+location.search,{method:'POST',body:fp}).then(function(r){return r.json();});
       }).then(function(d){
         if(d && d.ok){ pubOk('Tu post ya salió a tus redes.', _permalink(d.resultados)); }
         else if(d && d.err==='no_conectado'){ pubErr('No tienes redes conectadas. Conéctalas primero (Conectar redes).'); }
         else { pubErr((d&&d.err)||'No se pudo publicar'); }
       }).catch(function(){ pubErr('Error de conexión. Intenta otra vez.'); });
-    });
+    }
     document.getElementById('wiz-later').addEventListener('click', function(){
       wizCerrar(); toast('✅ Guardado. Lo ves en Contenido → Revisar.'); setTimeout(function(){ location.reload(); }, 1000);
     });
@@ -2107,7 +2145,8 @@ $cf = [
     <div class="wiz-pane" data-pane="3" style="display:none">
       <h3>¡Listo para publicar!</h3>
       <div class="wiz-prev" id="wiz-prev"></div>
-      <button type="button" class="art-go" id="wiz-pub"><?= ico('share') ?> Publicar ahora</button>
+      <div class="wiz-pubh" id="wiz-pubh"><?= ico('share') ?> ¿Dónde lo publicamos?</div>
+      <div id="wiz-pub-choice"></div>
       <button type="button" class="art-skip" id="wiz-later">Guardar para después</button>
       <button type="button" class="art-skip" id="wiz-back3">← Volver al arte</button>
     </div>
@@ -2128,6 +2167,15 @@ $cf = [
   .wiz-pane .fl{display:block;font-size:12.5px;font-weight:700;color:var(--muted);margin:14px 0 6px}
   .wiz-pane textarea{width:100%;font-family:inherit;font-size:14px;color:var(--tinta);border:1.5px solid var(--line);border-radius:12px;padding:11px 13px}
   .wiz-cap{background:var(--crema-2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.5;color:var(--tinta);white-space:pre-wrap;margin-bottom:14px}
+  .wiz-pubh{font-size:13.5px;font-weight:800;color:var(--tinta);text-align:center;margin:4px 0 11px;display:flex;align-items:center;justify-content:center;gap:6px}
+  .wiz-pubh svg{width:16px;height:16px}
+  .wiz-pub-btns{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  .wpub{flex:1;min-width:86px;display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-family:inherit;font-weight:800;font-size:13.5px;cursor:pointer;border-radius:13px;padding:13px 8px}
+  .wpub:hover{border-color:var(--terracota);color:var(--terracota)}
+  .wpub.both{border-color:transparent;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta))}
+  .wpub-wa{border-color:#25D366;color:#0e7a54}
+  .wpub-wa:hover{border-color:#25D366;color:#0e7a54;background:rgba(37,211,102,.08)}
+  .wiz-pub-note{font-size:11.5px;color:var(--muted);text-align:center;line-height:1.45;margin-top:2px}
   .wiz-art{margin-bottom:14px}
   .wiz-art img{width:100%;border-radius:14px;display:block}
   .wiz-artbtns{display:flex;flex-direction:column;gap:10px}

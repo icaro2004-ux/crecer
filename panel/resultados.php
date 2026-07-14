@@ -341,6 +341,8 @@ require __DIR__ . '/_shell.php';
     <h2>Tus redes</h2>
     <div class="rz-net"><span class="e"><?= ico('instagram') ?></span> Instagram <span class="st" style="color:<?= $conx['ig']?'var(--teal-dark)':'var(--muted)' ?>"><?= $conx['ig'] ? 'conectado' : 'no conectado' ?></span></div>
     <div class="rz-net"><span class="e"><?= ico('facebook') ?></span> Facebook <span class="st" style="color:<?= $conx['fb']?'var(--teal-dark)':'var(--muted)' ?>"><?= $conx['fb'] ? 'conectado' : 'no conectado' ?></span></div>
+    <div class="rz-net"><span class="e"><img src="/crecer/assets/icons/whatsapp.svg" alt="" style="width:18px;height:18px;vertical-align:-.2em"></span> WhatsApp (Estado) <span class="st" style="color:var(--muted)">manual</span></div>
+    <p style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5">El <b>Estado de WhatsApp</b> no se conecta ni se publica automático — <b>Meta no lo permite</b> por API. En cada post, con <b>“A mi Estado de WhatsApp”</b> (en «Ver en redes») lo subes tú desde el celular en un toque.</p>
     <?php if ($meta_ok && !$conx['fb']): ?>
       <p style="font-size:12.5px;color:#b3123b;font-weight:700;margin-top:10px;line-height:1.45">Tu Instagram está conectado pero <b>falta enganchar una Página de Facebook</b> — por eso los posts salen solo en IG. Vuelve a <a href="<?= $BASE ?>/conectar.php?marca=<?= $marca_id ?>" style="color:#b3123b;text-decoration:underline">conectar</a> y elige tu Página.</p>
     <?php endif; ?>
