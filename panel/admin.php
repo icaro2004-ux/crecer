@@ -197,6 +197,8 @@ $clientes = $pdo->query("SELECT m.id, m.nombre_negocio, m.created_at, m.autopilo
     LEFT JOIN crecer_suscripciones s ON s.marca_id=m.id
     LEFT JOIN crecer_planes p ON p.id=s.plan_id
     ORDER BY (u.rol='admin') DESC, ult DESC, m.id DESC")->fetchAll();
+// Detección de negocios duplicados (mismo nombre) → badge de aviso.
+$dup_nombres = array_count_values(array_map(fn($c)=>mb_strtolower(trim((string)$c['nombre_negocio'])), $clientes));
 
 // ── Quejas / mensajes (DMs entrantes) ────────────────────────
 $msgs_pend = (int)$pdo->query("SELECT COUNT(*) FROM crecer_mensajes WHERE estado='pendiente'")->fetchColumn();
@@ -384,7 +386,7 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
         $real_paid = !empty($c['stripe_sub']);
         $cort = (!$real_paid && (int)$c['es_early_adopter']===1 && $c['sub_estado']==='activa'); ?>
         <tr>
-          <td><a href="/crecer/panel/index.php?marca=<?= (int)$c['id'] ?>" style="color:var(--tinta);font-weight:800;text-decoration:none" title="Abrir panel de este negocio">🔗 <?= $h($c['nombre_negocio']) ?></a><?php if (($c['dueno_rol'] ?? '') === 'admin'): ?> <span style="background:#fff4d6;border:1px solid #f2d488;color:#8a5a00;border-radius:99px;padding:1px 8px;font-size:10.5px;font-weight:800;white-space:nowrap">⭐ Tu negocio</span><?php endif; ?><br><a href="/crecer/panel/admin_cliente.php?marca=<?= (int)$c['id'] ?>" style="color:var(--terracota);font-weight:700;font-size:11.5px;text-decoration:none">🔍 Diagnóstico</a></td>
+          <td><a href="/crecer/panel/index.php?marca=<?= (int)$c['id'] ?>" style="color:var(--tinta);font-weight:800;text-decoration:none" title="Abrir panel de este negocio">🔗 <?= $h($c['nombre_negocio']) ?></a><?php if (($c['dueno_rol'] ?? '') === 'admin'): ?> <span style="background:#fff4d6;border:1px solid #f2d488;color:#8a5a00;border-radius:99px;padding:1px 8px;font-size:10.5px;font-weight:800;white-space:nowrap">⭐ Tu negocio</span><?php endif; ?><?php if (($dup_nombres[mb_strtolower(trim((string)$c['nombre_negocio']))] ?? 1) > 1): ?> <span title="Hay otro negocio con este mismo nombre — posible duplicado" style="background:#fdeaea;border:1px solid #f4b8c6;color:#b3123b;border-radius:99px;padding:1px 8px;font-size:10.5px;font-weight:800;white-space:nowrap">⚠️ duplicado</span><?php endif; ?><br><a href="/crecer/panel/admin_cliente.php?marca=<?= (int)$c['id'] ?>" style="color:var(--terracota);font-weight:700;font-size:11.5px;text-decoration:none">🔍 Diagnóstico</a></td>
           <td><?= $h($c['dueno']) ?><br><span style="color:var(--muted);font-size:11px"><?= $h($c['email']) ?></span></td>
           <td><?php if($c['plan']): ?><span class="pill <?= $pc ?>"><?= $h($c['plan_nombre']) ?></span> <span class="pill <?= $se ?>"><?= $h($c['sub_estado']?:'—') ?></span><?php if($c['es_early_adopter']):?><span class="rel">allegado</span><?php endif;?><?php else: ?><span class="pill none">sin plan</span><?php endif; ?></td>
           <td class="num"><?= (int)$c['posts'] ?></td>

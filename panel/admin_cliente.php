@@ -32,6 +32,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'retry
         $flash = !empty($r['ok']) ? ['ok', '✓ Reintento OK — salió a las redes.'] : ['err', 'No salió: ' . ($r['motivo'] ?: 'sin detalle')];
     } catch (Throwable $e) { $flash = ['err', 'Error: ' . substr($e->getMessage(), 0, 160)]; }
 }
+// ── Acción: editar la marca del cliente (por él) ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'editar_marca' && csrf_ok()) {
+    $prods = array_values(array_filter(array_map('trim', explode("\n", (string)($_POST['productos'] ?? '')))));
+    $pref  = in_array($_POST['contacto_preferencia'] ?? '', ['whatsapp','dm','ambas','todas'], true) ? $_POST['contacto_preferencia'] : null;
+    $pdo->prepare("UPDATE crecer_marca SET descripcion=?, voz=?, productos=?, whatsapp=?, contacto_preferencia=?, updated_at=NOW() WHERE id=?")
+        ->execute([trim($_POST['descripcion'] ?? '') ?: null, trim($_POST['voz'] ?? '') ?: null,
+                   $prods ? json_encode($prods, JSON_UNESCAPED_UNICODE) : null,
+                   trim($_POST['whatsapp'] ?? '') ?: null, $pref, $mid]);
+    header("Location: ?marca={$mid}&ok=marca"); exit;
+}
+// ── Acción: forzar email verificado (desbloquea login) ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'verificar' && csrf_ok()) {
+    $pdo->prepare("UPDATE usuarios SET verificado=1, verif_token=NULL WHERE id=(SELECT usuario_id FROM crecer_marca WHERE id=?)")->execute([$mid]);
+    header("Location: ?marca={$mid}&ok=verif"); exit;
+}
+if (isset($_GET['ok'])) {
+    $flash = ['ok', $_GET['ok']==='marca' ? '✓ Marca actualizada.' : ($_GET['ok']==='verif' ? '✓ Cuenta marcada como verificada (ya puede entrar).' : '✓ Listo.')];
+}
+$owner = $pdo->prepare("SELECT id, nombre, email, verificado FROM usuarios WHERE id=?"); $owner->execute([(int)$marca['usuario_id']]); $owner = $owner->fetch(PDO::FETCH_ASSOC);
 
 // ── Conexión Meta + verificación EN VIVO del token ──
 $conx = $pdo->prepare("SELECT * FROM crecer_conexiones WHERE marca_id=?"); $conx->execute([$mid]); $conx = $conx->fetch(PDO::FETCH_ASSOC);
@@ -206,6 +225,49 @@ $reconectar = "/crecer/panel/conectar.php?marca={$mid}";
         <?php if ($l['estado']==='error' && !empty($l['error_msg'])): ?><div class="err"><?= $h(mb_substr($l['error_msg'],0,180)) ?></div><?php endif; ?>
       </div>
     <?php endforeach; endif; ?>
+  </div>
+
+  <!-- EDITAR MARCA + CUENTA -->
+  <?php
+    $prods_txt = '';
+    $pj = json_decode((string)$marca['productos'], true);
+    if (is_array($pj)) $prods_txt = implode("\n", array_map(fn($x)=>is_array($x)?($x['nombre'] ?? '') : (string)$x, $pj));
+    $pref_act = (string)($marca['contacto_preferencia'] ?? '');
+  ?>
+  <div class="card">
+    <h2><?= ico('palette') ?> Editar su marca (por él)</h2>
+    <form method="post" style="display:flex;flex-direction:column;gap:10px">
+      <input type="hidden" name="csrf" value="<?= $h($csrf) ?>"><input type="hidden" name="accion" value="editar_marca">
+      <label style="font-size:12.5px;font-weight:800;color:var(--muted)">Descripción<textarea name="descripcion" rows="2" style="width:100%;font-family:inherit;font-size:13.5px;border:1.5px solid var(--line);border-radius:10px;padding:9px 11px;margin-top:4px"><?= $h($marca['descripcion']) ?></textarea></label>
+      <label style="font-size:12.5px;font-weight:800;color:var(--muted)">Voz / tono<textarea name="voz" rows="2" style="width:100%;font-family:inherit;font-size:13.5px;border:1.5px solid var(--line);border-radius:10px;padding:9px 11px;margin-top:4px"><?= $h($marca['voz']) ?></textarea></label>
+      <label style="font-size:12.5px;font-weight:800;color:var(--muted)">Productos (uno por línea)<textarea name="productos" rows="3" style="width:100%;font-family:inherit;font-size:13.5px;border:1.5px solid var(--line);border-radius:10px;padding:9px 11px;margin-top:4px"><?= $h($prods_txt) ?></textarea></label>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <label style="font-size:12.5px;font-weight:800;color:var(--muted);flex:1;min-width:150px">WhatsApp<input type="tel" name="whatsapp" value="<?= $h($marca['whatsapp']) ?>" placeholder="787-000-0000" style="width:100%;font-family:inherit;font-size:13.5px;border:1.5px solid var(--line);border-radius:10px;padding:9px 11px;margin-top:4px"></label>
+        <label style="font-size:12.5px;font-weight:800;color:var(--muted);flex:1;min-width:150px">Contacto preferido<select name="contacto_preferencia" style="width:100%;font-family:inherit;font-size:13.5px;border:1.5px solid var(--line);border-radius:10px;padding:9px 11px;margin-top:4px">
+          <option value="" <?= $pref_act===''?'selected':'' ?>>— sin definir</option>
+          <?php foreach (['dm'=>'DM','whatsapp'=>'WhatsApp','ambas'=>'Ambas','todas'=>'Cualquiera'] as $v=>$lb): ?>
+            <option value="<?= $v ?>" <?= $pref_act===$v?'selected':'' ?>><?= $lb ?></option>
+          <?php endforeach; ?>
+        </select></label>
+      </div>
+      <button type="submit" class="btn" style="align-self:flex-start">Guardar marca</button>
+    </form>
+  </div>
+
+  <!-- CUENTA -->
+  <div class="card">
+    <h2><?= ico('users') ?> Cuenta del dueño</h2>
+    <div class="row"><span class="k"><?= $h($owner['nombre'] ?? '') ?></span><span style="color:var(--muted)"><?= $h($owner['email'] ?? '') ?></span></div>
+    <div class="row"><span class="k">Email</span><span>
+      <?php if (!empty($owner['verificado'])): ?><span class="st ok">✓ verificado</span>
+      <?php else: ?><span class="st warn">sin verificar</span>
+        <form method="post" style="display:inline;margin-left:8px" onsubmit="return confirm('¿Marcar como verificado? Le desbloquea el login.')">
+          <input type="hidden" name="csrf" value="<?= $h($csrf) ?>"><input type="hidden" name="accion" value="verificar">
+          <button type="submit" class="btn ghost">Marcar verificado</button>
+        </form>
+      <?php endif; ?>
+    </span></div>
+    <div class="hint">¿No puede entrar por contraseña? Dile que use <b>"¿Olvidaste tu contraseña?"</b> en el login (<a href="/crecer/recuperar.php" style="color:#8a5a00;font-weight:800">recuperar.php</a>).</div>
   </div>
 </div>
 </body></html>
