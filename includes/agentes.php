@@ -623,6 +623,34 @@ function aprender_estilo_visual(PDO $pdo, int $marca_id): bool {
     return false;
 }
 
+/**
+ * Normaliza una foto subida por el cliente ANTES de mandarla a Gemini:
+ * la re-codifica a un JPEG limpio de máx 1536px sobre blanco. Evita el error
+ * "Unable to process input image" (por CMYK, JPEG progresivo, alfa, o fotos
+ * gigantes del celular). Si GD no está o falla, devuelve la imagen cruda.
+ * @return array ['data'=>base64, 'mime'=>string]
+ */
+function foto_para_ia(string $abs): array {
+    $raw  = (string)@file_get_contents($abs);
+    $mime = (function_exists('mime_content_type') ? @mime_content_type($abs) : null) ?: 'image/jpeg';
+    if ($raw === '' || !function_exists('imagecreatefromstring') || !function_exists('imagejpeg')) {
+        return ['data' => base64_encode($raw), 'mime' => $mime];
+    }
+    $im = @imagecreatefromstring($raw);
+    if (!$im) return ['data' => base64_encode($raw), 'mime' => $mime];   // formato raro: que decida Gemini
+    $w = imagesx($im); $h = imagesy($im); $MAX = 1536;
+    $esc = min(1.0, $MAX / max(1, max($w, $h)));
+    $nw = max(1, (int)round($w * $esc)); $nh = max(1, (int)round($h * $esc));
+    $canvas = imagecreatetruecolor($nw, $nh);
+    $white  = imagecolorallocate($canvas, 255, 255, 255);   // aplana alfa sobre blanco
+    imagefilledrectangle($canvas, 0, 0, $nw, $nh, $white);
+    imagecopyresampled($canvas, $im, 0, 0, 0, 0, $nw, $nh, $w, $h);
+    ob_start(); $ok = imagejpeg($canvas, null, 88); $jpg = (string)ob_get_clean();
+    imagedestroy($im); imagedestroy($canvas);
+    return ($ok && $jpg !== '') ? ['data' => base64_encode($jpg), 'mime' => 'image/jpeg']
+                                : ['data' => base64_encode($raw), 'mime' => $mime];
+}
+
 function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts = []): array {
     $m = leer_marca($pdo, $marca_id);
     $copy      = trim($opts['copy'] ?? '');         // el texto del post (coherencia)
@@ -633,8 +661,7 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
     // Imágenes de entrada: foto del producto (si hay) + logo (si se pide)
     $imagenes = [];
     if ($foto_abs && is_file($foto_abs)) {
-        $imagenes[] = ['data' => base64_encode((string)file_get_contents($foto_abs)),
-                       'mime' => (function_exists('mime_content_type') ? mime_content_type($foto_abs) : null) ?: 'image/jpeg'];
+        $imagenes[] = foto_para_ia($foto_abs);   // re-codifica a JPEG limpio (evita "Unable to process input image")
     }
     $logo_abs = null;
     if ($con_logo && !empty($m['logo_path'])) {
