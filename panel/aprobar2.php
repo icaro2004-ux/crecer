@@ -1754,7 +1754,8 @@ $cf = [
     }
   }
   function cerrarArte(){ artov.classList.remove('show'); artCard=null; artThenApprove=false; }
-  artov.addEventListener('click', function(e){ if(e.target===artov) cerrarArte(); });
+  // NO cerrar el estudio de arte al tocar el fondo (se perdía la subida/edición por
+  // un clic accidental). Solo cierra con la X.
   if(feed) feed.addEventListener('click', function(e){
     var b=e.target.closest('.artbtn'); if(!b) return; e.preventDefault();
     abrirArte(b.closest('.post'), false);

@@ -323,7 +323,19 @@ function sugerir_arte(PDO $pdo, int $marca_id, string $caption, string $ajuste =
         . "Sé ESPECÍFICO, no genérico: nombra cosas concretas (ej. \"sobre tabla de madera rústica "
         . "con harina espolvoreada y un paño de lino al lado\", NO \"en una mesa\"). Realista, "
         . "apetitoso, premium. Sin texto dentro de la imagen salvo que ayude; deja aire arriba por "
-        . "si va texto encima.";
+        . "si va texto encima.\n\n"
+        . "VARIEDAD OBLIGATORIA (crítico): NO repitas el mismo tipo de escena post tras post. "
+        . "PROHIBIDO el cliché gastado de teléfono / tablet / laptop mostrando redes sociales o apps, "
+        . "'persona en un escritorio con café', pantallas, notificaciones flotantes, iconos de 'me gusta' "
+        . "volando — eso se ve genérico, de banco de imágenes, y aburre. Salvo que el post sea LITERALMENTE "
+        . "sobre una pantalla, NO uses dispositivos.\n"
+        . "En su lugar escoge UNA dirección visual distinta según lo que pida ESTE post, y rótala entre estas: "
+        . "(a) el producto o servicio EN ACCIÓN / primer plano; (b) las MANOS del dueño creando o trabajando; "
+        . "(c) el LOCAL o el ambiente real del negocio; (d) un CLIENTE disfrutando el resultado; "
+        . "(e) los INGREDIENTES o materiales crudos; (f) la CALLE, la plaza o el pueblo boricua; "
+        . "(g) un MOMENTO de vida cotidiana; (h) un CONCEPTO gráfico audaz y colorido. "
+        . "Si el negocio es un SERVICIO (sin producto físico), muestra el RESULTADO real, la gente o el "
+        . "impacto — nunca un dispositivo con pantalla como muleta.";
     if (function_exists('tono_instruccion')) $sistema .= tono_instruccion($m);
     $prompt = "Perfil del negocio:\n{$ctx}\n\nTexto del post (la imagen TIENE que pegar con esto):\n\"{$caption}\"\n";
     if (trim($ajuste) !== '') $prompt .= "\nLO QUE PIDE EL DUEÑO (es lo más importante — EXPÁNDELO con detalle visual, no lo ignores): {$ajuste}\n";
@@ -639,7 +651,8 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
     if ($tiene_foto) {
         $prompt .= "- Usa la FOTO REAL (primera imagen) como protagonista; NO la inventes ni la cambies, solo realza composición, luz y fondo.\n";
     } else {
-        $prompt .= "- Genera una imagen realista y atractiva que represente ese tema y encaje con el negocio.\n";
+        $prompt .= "- Genera una imagen realista y atractiva que represente ese tema y encaje con el negocio.\n"
+                 . "- VARÍA la escena: NO caigas en el cliché de teléfono/tablet/laptop mostrando redes sociales, ni 'escritorio con café'. Muestra el producto o servicio real, las manos del dueño trabajando, el local, un cliente disfrutando, los ingredientes, la calle boricua, o un concepto gráfico audaz — la que mejor cuente ESTE post.\n";
     }
     if ($con_logo && $logo_abs) {
         $le = $opts['logo_estilo'] ?? 'esquina';
@@ -667,7 +680,7 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
              . "  · Fotografía profesional real: iluminación natural suave y direccional (golden hour / softbox), sombras creíbles.\n"
              . "  · Composición intencional (regla de tercios), profundidad de campo con fondo desenfocado (bokeh), foco nítido en el protagonista.\n"
              . "  · Texturas y detalles ricos y reales; colores cálidos boricuas pero NATURALES (sin sobresaturar); acabado editorial premium.\n"
-             . "  · EVITA a toda costa: look plástico/CGI, objetos deformes o flotando, texto inventado, watermarks falsos, simetría artificial, ruido.\n"
+             . "  · EVITA a toda costa: look plástico/CGI, objetos deformes o flotando, texto inventado, watermarks falsos, simetría artificial, ruido, y el cliché de pantallas de celular/tablet/laptop con redes sociales o notificaciones flotantes (a menos que el post sea literalmente sobre eso).\n"
              . "  · Meta: una foto que un fotógrafo profesional tomaría para redes, sobre EL TEMA del post — nítida, con alma, lista para publicar.";
 
     // Calidad make-or-break: SIEMPRE el Pro (Nano Banana Pro). Antes el "sin texto"
