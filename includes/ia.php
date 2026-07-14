@@ -379,25 +379,104 @@ function gemini_imagen(string $prompt, array $opts = []): array {
     throw new IaError('Gemini no devolvió imagen.');
 }
 
+// ── Motor de imagen OpenAI (opcional) ────────────────────────────────────
+//  El Director de Arte (Gemini) puede enrutar aquí el arte conceptual desde
+//  cero. Si no hay OPENAI_API_KEY, TODO cae a Gemini (degrada con gracia).
+if (!defined('OPENAI_API_KEY'))   define('OPENAI_API_KEY', '');
+if (!defined('OPENAI_IMG_MODEL')) define('OPENAI_IMG_MODEL', 'gpt-image-1');
+
+function openai_configurado(): bool { return OPENAI_API_KEY !== ''; }
+
+/** Genera una imagen con OpenAI (gpt-image-1). Devuelve ['data','mime','modelo']. */
+function openai_imagen(string $prompt, array $opts = []): array {
+    if (!openai_configurado()) throw new IaSinCredenciales('Falta OPENAI_API_KEY.');
+    $modelo = $opts['modelo_openai'] ?? OPENAI_IMG_MODEL;
+    $aspect = $opts['aspect'] ?? '1:1';
+    // gpt-image-1 y dall-e-3 usan tamaños y params distintos. Soportamos ambos:
+    // gpt-image-1 = más nuevo (requiere verificación de organización);
+    // dall-e-3 = sin verificación (fallback fácil).
+    $es_dalle = (stripos($modelo, 'dall-e') !== false);
+    if ($es_dalle) {
+        $size = ['1:1'=>'1024x1024','4:5'=>'1024x1792','9:16'=>'1024x1792','3:4'=>'1024x1792','16:9'=>'1792x1024','4:3'=>'1792x1024'][$aspect] ?? '1024x1024';
+        $body = ['model'=>$modelo, 'prompt'=>$prompt, 'n'=>1, 'size'=>$size, 'response_format'=>'b64_json'];
+    } else {
+        $size = ['1:1'=>'1024x1024','4:5'=>'1024x1536','9:16'=>'1024x1536','3:4'=>'1024x1536','16:9'=>'1536x1024','4:3'=>'1536x1024'][$aspect] ?? '1024x1024';
+        $body = ['model'=>$modelo, 'prompt'=>$prompt, 'n'=>1, 'size'=>$size];
+    }
+    $resp = ia_http_post_retry(
+        'https://api.openai.com/v1/images/generations',
+        ['Content-Type: application/json', 'Authorization: Bearer ' . OPENAI_API_KEY],
+        json_encode($body, JSON_UNESCAPED_UNICODE), $opts['max_reintentos'] ?? 2);
+    $d = json_decode($resp, true);
+    if (isset($d['error'])) throw new IaError('OpenAI imagen: ' . ($d['error']['message'] ?? 'error'));
+    $b64 = $d['data'][0]['b64_json'] ?? '';
+    if ($b64 === '') throw new IaError('OpenAI no devolvió imagen.');
+    return ['data'=>base64_decode($b64), 'mime'=>'image/png', 'modelo'=>$modelo];
+}
+
+/**
+ * EL DIRECTOR DE ARTE decide qué motor usar para esta imagen (por fortaleza):
+ *  - editar/realzar la FOTO REAL del negocio → Gemini (Nano Banana: excelente
+ *    editando imágenes y alineado con la regla de IP);
+ *  - arte conceptual/promocional DESDE CERO → OpenAI (si está configurado).
+ * @return array ['motor'=>'gemini'|'openai', 'razon'=>string]
+ */
+function motor_imagen_elegir(array $opts): array {
+    if (isset($opts['motor']) && in_array($opts['motor'], ['gemini','openai'], true)) {
+        return ['motor'=>$opts['motor'], 'razon'=>'Motor forzado por la petición.'];
+    }
+    $tiene_foto = !empty($opts['imagen_base64']) || !empty($opts['imagenes']);
+    if ($tiene_foto) {
+        return ['motor'=>'gemini', 'razon'=>'Edición sobre la foto real del negocio → Gemini (Nano Banana).'];
+    }
+    if (openai_configurado()) {
+        return ['motor'=>'openai', 'razon'=>'Arte conceptual desde cero → motor generativo dedicado.'];
+    }
+    return ['motor'=>'gemini', 'razon'=>'Arte desde cero → Gemini (OpenAI no configurado).'];
+}
+
+/**
+ * Dispatcher con RESPALDO automático: el Director de Arte elige motor, genera,
+ * y si el elegido falla, cae al otro (si está disponible). Nunca se traba la
+ * fábrica de contenido. Devuelve ['data','mime','modelo','motor','razon'].
+ */
+function motor_imagen(string $prompt, array $opts = []): array {
+    $dec = motor_imagen_elegir($opts);
+    $primero = $dec['motor'];
+    $gen = fn($m) => $m === 'openai' ? openai_imagen($prompt, $opts) : gemini_imagen($prompt, $opts);
+    try {
+        $r = $gen($primero); $r['motor'] = $primero; $r['razon'] = $dec['razon']; return $r;
+    } catch (Throwable $e) {
+        $alt = $primero === 'openai' ? 'gemini' : 'openai';
+        $alt_ok = ($alt === 'openai') ? openai_configurado() : (ia_transporte() === 'gemini_api');
+        if (!$alt_ok) throw $e;
+        error_log("motor_imagen: {$primero} falló ({$e->getMessage()}); respaldo a {$alt}");
+        $r = $gen($alt); $r['motor'] = $alt; $r['razon'] = "Respaldo automático: {$primero} falló, se usó {$alt}."; return $r;
+    }
+}
+
 /**
  * Wrapper: genera imagen, la guarda en uploads/$destino_rel y la registra en
  * crecer_ia_log. Devuelve ['archivo'=>url, 'costo', 'modelo'].
  */
 function ia_imagen(PDO $pdo, string $agente, string $accion, string $prompt, string $destino_rel, array $opts = []): array {
-    $t0 = microtime(true); $estado = 'ok'; $err = null; $modelo = 'gemini-2.5-flash-image'; $rel = null;
+    $t0 = microtime(true); $estado = 'ok'; $err = null; $modelo = 'gemini-2.5-flash-image'; $rel = null; $razon = null;
     try {
-        $img = gemini_imagen($prompt, $opts); $modelo = $img['modelo'];
+        $img = motor_imagen($prompt, $opts); $modelo = $img['modelo']; $razon = $img['razon'] ?? null;
         $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . $destino_rel;
         @mkdir(dirname($abs), 0775, true);
         file_put_contents($abs, $img['data']);
         $rel = rtrim(UPLOADS_URL, '/') . '/' . str_replace('\\', '/', $destino_rel);
     } catch (IaSinCredenciales $e) { $estado='error'; $err='sin credenciales de imagen'; }
       catch (IaError $e)        { $estado='error'; $err=$e->getMessage(); }
+      catch (Throwable $e)      { $estado='error'; $err=substr($e->getMessage(),0,200); }
     $lat = (int)round((microtime(true) - $t0) * 1000);
-    $costo = $estado === 'ok' ? (['gemini-3-pro-image'=>0.134, 'gemini-2.5-flash-image'=>0.039][$modelo] ?? CRECER_IMG_PRECIO) : 0;
+    $costo = $estado === 'ok' ? (['gemini-3-pro-image'=>0.134, 'gemini-2.5-flash-image'=>0.039, 'gpt-image-1'=>0.04][$modelo] ?? CRECER_IMG_PRECIO) : 0;
+    // La decisión del Director de Arte queda en la acción (evidencia del ruteo).
+    $accion_log = $razon ? ($accion . ' · ' . $razon) : $accion;
     $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,costo_usd,latencia_ms,estado,error_msg)
                    VALUES (?,?,?,?,?,?,?,?,?,?)")
-        ->execute([$opts['marca_id'] ?? null, $agente, $accion, $modelo, $prompt, $rel, $costo, $lat, $estado, $err]);
+        ->execute([$opts['marca_id'] ?? null, $agente, $accion_log, $modelo, $prompt, $rel, $costo, $lat, $estado, $err]);
     if ($estado === 'error') throw new IaError($err);
     return ['archivo' => $rel, 'costo' => $costo, 'modelo' => $modelo];
 }

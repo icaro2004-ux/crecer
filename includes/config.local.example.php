@@ -32,6 +32,14 @@ define('GOOGLE_APPLICATION_CREDENTIALS', '');
 define('GCP_PROJECT_ID', '');
 define('GCP_LOCATION',   'us-central1');
 define('GEMINI_MODEL',   'gemini-2.5-flash'); // 2.0-flash no tiene free tier; 2.5 sí
+
+// ── OpenAI (imágenes) — OPCIONAL ──
+// El Director de Arte (Gemini) enruta el arte conceptual DESDE CERO a OpenAI y
+// deja la edición de fotos reales en Gemini (Nano Banana). Si dejas esto vacío,
+// TODO corre en Gemini (nada se rompe). Con respaldo automático entre motores.
+// La llave sale de platform.openai.com → API keys (requiere billing activo).
+define('OPENAI_API_KEY',  '');
+define('OPENAI_IMG_MODEL','gpt-image-1');
 // Copiloto de Encuentralo: limites de costo/abuso. Puedes usar otro modelo
 // solo para el chat sin afectar planificador, creador ni imagenes.
 // define('CRECER_COPILOTO_MODEL', 'gemini-2.5-flash-lite');
