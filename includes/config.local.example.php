@@ -48,6 +48,10 @@ define('OPENAI_IMG_MODEL','gpt-image-1');
 // define('CRECER_COPILOTO_FREE_DIA', 3);     // por negocio sin plan
 // define('CRECER_COPILOTO_GLOBAL_DIA', 80);  // todo Crecer
 
+// ── CRECER Kernel v1 (orquestación experimental) ────────────────────────────
+// OFF por defecto. Al prenderlo, Inicio puede consumir el briefing del Kernel.
+// define('CRECER_KERNEL_V1_ENABLED', false);
+
 // ── Stripe ──
 define('STRIPE_SECRET_KEY',      '');
 define('STRIPE_PUBLISHABLE_KEY',  '');

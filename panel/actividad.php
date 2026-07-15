@@ -38,14 +38,19 @@ $humano = [
   'aprendiz'    =>['creativa','La Creativa','aprendió tu vocabulario'],
   'editor'      =>['creativa','La Creativa','pulió un texto'],
   'analitica'   =>['analista','El Analista','revisó cómo va tu contenido'],
+  'estratega'   =>['estratega','La Estratega','te dio una recomendación'],
+  'asistente'   =>['bolt','El Copiloto','respondió tus dudas'],
+  'retencion'   =>['estratega','La Estratega','preparó un mensaje para un cliente'],
 ];
 $hf = fn($a) => $humano[$a] ?? ['bolt','El Corillo','metió mano por tu negocio'];
 
 // Cuántas cosas ha hecho el corillo por este negocio (acciones ok).
-$total = (int)$pdo->query("SELECT COUNT(*) FROM crecer_ia_log WHERE marca_id={$marca_id} AND estado='ok'")->fetchColumn();
+$total = (int)$pdo->query("SELECT COUNT(*) FROM crecer_ia_log WHERE marca_id={$marca_id} AND estado='ok' AND agente<>'kernel'")->fetchColumn();
 
 // Timeline humano (solo acciones reconocidas, sin metadatos técnicos).
-$ev = $pdo->prepare("SELECT agente, created_at FROM crecer_ia_log WHERE marca_id=? AND estado='ok' ORDER BY id DESC LIMIT 60");
+// Excluye agente='kernel' (decisiones internas del orquestador; siguen en la
+// tabla para admin/auditoría, pero no son trabajo visible del corillo).
+$ev = $pdo->prepare("SELECT agente, created_at FROM crecer_ia_log WHERE marca_id=? AND estado='ok' AND agente<>'kernel' ORDER BY id DESC LIMIT 60");
 $ev->execute([$marca_id]); $eventos = $ev->fetchAll();
 
 // Publicaciones a redes, en términos humanos.

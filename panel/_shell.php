@@ -20,9 +20,10 @@ $viendo_como_admin = ($es_admin && (int)$marca['usuario_id'] !== (int)($u_actual
 // menú (siguen accesibles por URL / por el perfil; reversible).
 $nav = [
   ['key'=>'inicio',    'ic'=>'home',    'lb'=>'Inicio',     'hr'=>"$BASE/index.php?marca=$marca_id"],
-  ['key'=>'contenido', 'ic'=>'calendar','lb'=>'Contenido',  'hr'=>"$BASE/aprobar2.php?marca=$marca_id"],
+  ['key'=>'contenido', 'ic'=>'image','lb'=>'Propuestas',  'hr'=>"$BASE/propuestas.php?marca=$marca_id"],
   ['key'=>'resultados','ic'=>'chart',   'lb'=>'Resultados', 'hr'=>"$BASE/resultados.php?marca=$marca_id"],
   ['key'=>'marca',     'ic'=>'palette', 'lb'=>'Mi marca',   'hr'=>"$BASE/marca.php?marca=$marca_id"],
+  ['key'=>'biblioteca','ic'=>'foto',    'lb'=>'Biblioteca', 'hr'=>"$BASE/biblioteca.php?marca=$marca_id"],
 ];
 // Perfil (secundario, abajo): config, facturación, soporte.
 $nav_perfil = [
@@ -42,7 +43,7 @@ $nav_perfil = [
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Poppins:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=12" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=13" rel="stylesheet">
 </head>
 <body>
 <div class="layout">

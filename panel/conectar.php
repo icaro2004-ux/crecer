@@ -102,7 +102,7 @@ $paginas = $_SESSION['meta_paginas'][$marca_id] ?? [];
 <title>Conectar redes · <?= $h($marca['nombre_negocio']) ?></title>
 <link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/encuentralo-pin.svg">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=11" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=13" rel="stylesheet">
 <style>
   body{background:var(--crema)}
   .wrap{max-width:560px;margin:0 auto;padding:26px 20px 70px}

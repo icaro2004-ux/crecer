@@ -35,3 +35,8 @@ scripts/_preview_*.png
 
 # === Dumps / backups de base de datos (NUNCA a GitHub) ===
 migrations/_backup_*.sql
+
+# === Skills de agentes (locales — no van al repo ni al deploy) ===
+.agents/
+design-system/
+skills-lock.json

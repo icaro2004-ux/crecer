@@ -42,6 +42,9 @@ $chk = $pdo->prepare("SELECT id FROM crecer_marca WHERE id=? AND usuario_id=?");
 $chk->execute([$marca_id, $USUARIO_ID]);
 if (!$chk->fetchColumn()) { http_response_code(403); echo json_encode(['ok'=>false,'err'=>'Negocio no válido.']); exit; }
 
+$limite = copiloto_limite_uso($pdo, $marca_id);
+if (empty($limite['ok'])) { echo json_encode(['ok'=>false, 'err'=>$limite['err']], JSON_UNESCAPED_UNICODE); exit; }
+
 try {
     $r = asistente_responder($pdo, $marca_id, $pregunta, $historial);
     echo json_encode(['ok'=>true, 'respuesta'=>$r['respuesta']], JSON_UNESCAPED_UNICODE);

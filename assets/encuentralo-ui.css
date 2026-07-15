@@ -29,6 +29,24 @@
   --muted:#6E6A67;        /* texto secundario (gris neutro) */
   --line:#E9E7E4;         /* hairlines neutras sobre blanco */
 
+  /* ── CAPA SEMÁNTICA DE ROLES (usa los colores por INTENCIÓN, no por tono) ──
+     El problema de la monotonía no era la paleta, era que todo agarraba rosa.
+     Regla de distribución (60/30/10), usada de forma consistente:
+       · NAVY  (--ink)       → 60%: texto, dato neutro, estructura.
+       · TEAL  (--accent-2)  → 30%: navegación, info, ayuda, progreso, enlaces,
+                                     "conectado/al día", datos de crecimiento.
+       · ROSA  (--accent)    → 10% RESERVADO: acción primaria / conversión /
+                                     "te necesita" / marca. Escaso = sigue especial.
+       · VERDE (--positive)  → éxito / aprobar / crecimiento (+).
+     Los tonos siguen siendo los de marca; solo se les asigna un trabajo. */
+  --accent:          var(--terracota);      /* ROSA — acción primaria / atención (reservado) */
+  --accent-strong:   var(--terracota-700);
+  --accent-2:        var(--teal);           /* TEAL — estructura / info / progreso / enlaces */
+  --accent-2-strong: var(--teal-700);
+  --ink:             var(--tinta);          /* NAVY — texto / dato neutro */
+  --positive:        var(--palma);          /* VERDE — éxito / crecimiento */
+  --attention:       var(--terracota);      /* ROSA — "te necesita ahora" */
+
   /* ── Pills de estado (tintes tropicales) ── */
   --amber-ink:#9A6A0E; --amber-bg:#FDEAC2;
   --okk-ink:#0F7A45;   --okk-bg:#D6F2E2;
@@ -291,13 +309,13 @@ img.zoomable{cursor:zoom-in}
 .chk-off{width:17px;height:17px;color:var(--muted);flex:none;margin-top:1px}
 .ic-lg{width:28px;height:28px}
 .ic-xl{width:40px;height:40px}
-.empty .big svg, .empty-g svg{width:46px;height:46px;color:var(--terracota)}
+.empty .big svg, .empty-g svg{width:46px;height:46px;color:var(--accent-2)}/* estado vacío = info, no alarma → teal */
 /* tabs/botones con ícono + texto alineados */
 .vt,.st{display:inline-flex;align-items:center;gap:7px}
 
 /* ── Guía del corillo (overlay flotante por página) ── */
 .guia-btn{position:fixed;top:68px;right:18px;z-index:60;width:42px;height:42px;border-radius:50%;
-  border:1.5px solid var(--line);background:var(--card);color:var(--terracota);display:grid;place-items:center;
+  border:1.5px solid var(--line);background:var(--card);color:var(--accent-2);display:grid;place-items:center;
   cursor:pointer;box-shadow:var(--shadow-sm);transition:transform .15s}
 .guia-btn:hover{transform:scale(1.08)}
 .guia-btn svg{width:21px;height:21px}
@@ -309,15 +327,15 @@ img.zoomable{cursor:zoom-in}
   padding:24px;box-shadow:0 30px 70px rgba(0,0,0,.32);position:relative}
 .guia-x{position:absolute;top:14px;right:16px;border:0;background:none;font-size:20px;cursor:pointer;color:var(--muted)}
 .guia-h{display:flex;gap:14px;align-items:center;margin-bottom:16px}
-.guia-orb{width:56px;height:56px;border-radius:50%;flex:none;display:grid;place-items:center;color:var(--terracota);
-  background:radial-gradient(circle,#fff 0 40%,color-mix(in srgb,var(--terracota) 14%,#fff));
-  box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--terracota) 14%,#fff)}
+.guia-orb{width:56px;height:56px;border-radius:50%;flex:none;display:grid;place-items:center;color:var(--accent-2);
+  background:radial-gradient(circle,#fff 0 40%,color-mix(in srgb,var(--accent-2) 14%,#fff));
+  box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--accent-2) 14%,#fff)}
 .guia-orb svg{width:30px;height:30px}
 .guia-t{font-family:var(--font-impact);text-transform:uppercase;font-size:20px;line-height:1}
 .guia-i{color:var(--muted);font-size:14px;margin-top:4px}
 .guia-pasos{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
 .guia-pasos li{display:flex;align-items:center;gap:11px;font-size:14px;color:#3a2f26}
-.guia-pasos .gn{width:24px;height:24px;border-radius:50%;background:var(--terracota);color:#fff;font-weight:800;font-size:12px;display:grid;place-items:center;flex:none}
+.guia-pasos .gn{width:24px;height:24px;border-radius:50%;background:var(--accent-2);color:#fff;font-weight:800;font-size:12px;display:grid;place-items:center;flex:none}
 .guia-pasos li svg{width:18px;height:18px;color:var(--teal);flex:none}
 .guia-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:22px;flex-wrap:wrap}
 .guia-ok{border:0;cursor:pointer;font-family:var(--font-impact);text-transform:uppercase;letter-spacing:.03em;font-size:15px;color:#fff;background:var(--palma);padding:11px 22px;border-radius:12px}
@@ -403,8 +421,8 @@ img.zoomable{cursor:zoom-in}
    El JS global (en _shell_foot) muestra el nombre del archivo al escoger. */
 .fp-in{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 .filepick{display:inline-flex;align-items:center;gap:9px;width:100%;border:1.5px dashed var(--line);background:#fff;border-radius:12px;padding:12px 14px;cursor:pointer;font-size:13.5px;transition:.12s}
-.filepick:hover{border-color:var(--terracota);background:#fff7f4}
-.filepick svg{width:18px;height:18px;color:var(--terracota);flex:none}
+.filepick:hover{border-color:var(--accent-2);background:#f2fbfa}
+.filepick svg{width:18px;height:18px;color:var(--accent-2);flex:none}
 .filepick .fp-tx{color:var(--muted);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.filepick.has{border-style:solid;border-color:var(--terracota)}
+.filepick.has{border-style:solid;border-color:var(--accent-2)}
 .filepick.has .fp-tx{color:var(--tinta);font-weight:700}

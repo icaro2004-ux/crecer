@@ -52,7 +52,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <title>Recuperar contraseña · Encuéntralo</title>
 <link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/encuentralo-pin.svg">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=11" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=13" rel="stylesheet">
 <style>
   body::before{content:"";position:fixed;top:0;left:0;right:0;height:4px;z-index:60;background:linear-gradient(120deg,var(--coral),var(--magenta))}
   .auth{max-width:400px;margin:0 auto;padding:46px 22px 60px}

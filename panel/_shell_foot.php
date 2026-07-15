@@ -5,7 +5,7 @@
 <!-- Bottom nav (solo móvil) · EXACTAMENTE 4 destinos, sin FAB central · Perfil vive en el avatar del top-bar -->
 <nav class="botnav botnav-4">
   <a href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='inicio'?'on':'' ?>"><?= ico('home') ?>Inicio</a>
-  <a href="<?= $BASE ?>/aprobar2.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='contenido'?'on':'' ?>"><?= ico('calendar') ?>Contenido</a>
+  <a href="<?= $BASE ?>/propuestas.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='contenido'?'on':'' ?>"><?= ico('image') ?>Propuestas</a>
   <a href="<?= $BASE ?>/resultados.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='resultados'?'on':'' ?>"><?= ico('chart') ?>Resultados</a>
   <a href="<?= $BASE ?>/marca.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='marca'?'on':'' ?>"><?= ico('palette') ?>Mi marca</a>
 </nav>
@@ -15,7 +15,7 @@
 <!-- ── Asistente del corillo (helper conversacional) ─────────────
      En Inicio NO se muestra: allí la mascota (El Estratega) es el recibidor
      y dos orbes flotantes recargan la pantalla. En el resto de páginas, sí. -->
-<?php if (($active ?? '') !== 'inicio'): ?>
+<?php if (!in_array(($active ?? ''), ['inicio','contenido','biblioteca'], true)): ?>
 <button class="asis-fab" id="asisFab" aria-label="Habla con el Copiloto" title="Habla con el Copiloto">
   <img src="/crecer/assets/brand/copiloto.png" alt="Copiloto">
 </button>
