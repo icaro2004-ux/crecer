@@ -22,6 +22,33 @@ $mid  = "marca={$marca_id}";
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 $negocio = $marca['nombre_negocio'] ?? 'tu negocio';
 
+// ── El corillo mira PRIMERO la Biblioteca: atar una foto que ya existe a una
+//    propuesta (en vez de generar). Sin IA, sin match inteligente — solo pone la
+//    foto que el dueño escogió. ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'usar_activo') {
+    header('Content-Type: application/json; charset=utf-8');
+    if (!csrf_ok()) { echo json_encode(['ok'=>false,'err'=>'Sesión expiró. Recarga.']); exit; }
+    $pieza = (int)($_POST['pieza'] ?? 0); $activo = (int)($_POST['activo'] ?? 0);
+    $a = $pdo->prepare("SELECT archivo FROM crecer_activos WHERE id=? AND marca_id=? AND tipo='imagen' AND estado='activo'");
+    $a->execute([$activo, $marca_id]); $arch = $a->fetchColumn();
+    $ok_pieza = false;
+    if ($arch) { $c = $pdo->prepare("SELECT 1 FROM crecer_contenido WHERE id=? AND marca_id=?"); $c->execute([$pieza, $marca_id]); $ok_pieza = (bool)$c->fetchColumn(); }
+    if ($arch && $ok_pieza) {
+        $url = (defined('UPLOADS_URL') ? UPLOADS_URL : '/crecer/uploads') . '/' . $arch;
+        $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$url, $pieza, $marca_id]);
+        echo json_encode(['ok'=>true,'url'=>$url]); exit;
+    }
+    echo json_encode(['ok'=>false,'err'=>'No se pudo poner la foto.']); exit;
+}
+
+// Fotos que ya tiene el negocio (para ofrecerlas ANTES de generar).
+$biblioteca = [];
+try {
+    $bq = $pdo->prepare("SELECT id, archivo FROM crecer_activos WHERE marca_id=? AND tipo='imagen' AND estado='activo' ORDER BY id DESC LIMIT 8");
+    $bq->execute([$marca_id]); $biblioteca = $bq->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) { $biblioteca = []; }
+$UP_URL_BIB = (defined('UPLOADS_URL') ? UPLOADS_URL : '/crecer/uploads');
+
 // ── Las propuestas que esperan tu veredicto (borradores). Nada más. ──
 $props = [];
 try {
@@ -97,6 +124,17 @@ require __DIR__ . '/_shell.php';
   .est-vtag svg{width:30px;height:30px}
   .est-cap{font-size:16.5px;line-height:1.6;color:var(--tinta);white-space:pre-wrap;margin:0 0 18px;font-weight:400}
   .est-cap.hero{font-size:19px;line-height:1.7;margin-top:6px}   /* propuesta solo-texto: el caption es la obra */
+
+  /* El corillo mira primero la biblioteca — natural, no un módulo */
+  .est-bib{margin:0 0 20px}
+  .est-bib-say{font-size:14.5px;color:var(--tinta);font-weight:500;line-height:1.5;margin:0 0 13px}
+  .est-bib-row{display:flex;gap:9px;overflow-x:auto;padding-bottom:5px;-webkit-overflow-scrolling:touch}
+  .est-bib-t{flex:none;width:74px;height:74px;border-radius:12px;border:1px solid var(--line);cursor:pointer;padding:0;
+    background-size:cover;background-position:center;background-color:var(--crema-2);transition:transform .15s,box-shadow .15s}
+  .est-bib-t:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+  .est-bib-alt{margin-top:13px;font-size:13px;color:var(--muted)}
+  .est-bib-alt a{color:var(--teal-700);text-decoration:none;font-weight:500}
+  .est-bib-alt a:hover{text-decoration:underline}
   .est-cred{list-style:none;margin:0 0 26px;padding:14px 0 0;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:9px}
   .est-cred li{display:flex;align-items:flex-start;gap:10px;font-size:13.5px;color:var(--muted);line-height:1.35}
   .est-cred .ck{flex:none;margin-top:1px;color:var(--palma);display:inline-flex}
@@ -173,9 +211,19 @@ require __DIR__ . '/_shell.php';
           <?php if ($img): ?><img src="<?= $h($p['grafica_path']) ?>" alt="">
           <?php else: ?><span class="est-vtag"><?= ico('image') ?>Video</span><?php endif; ?>
         </div>
+        <?php elseif ($biblioteca): /* el corillo mira PRIMERO lo que el negocio ya tiene */ ?>
+        <div class="est-bib" data-piezabib="<?= (int)$p['id'] ?>">
+          <p class="est-bib-say">El corillo miró tu biblioteca primero. ¿Alguna de estas va con este post?</p>
+          <div class="est-bib-row">
+            <?php foreach ($biblioteca as $bx): $burl = $UP_URL_BIB . '/' . $bx['archivo']; ?>
+              <button type="button" class="est-bib-t" data-activo="<?= (int)$bx['id'] ?>" style="background-image:url('<?= $h($burl) ?>')" aria-label="Usar esta foto"></button>
+            <?php endforeach; ?>
+          </div>
+          <div class="est-bib-alt"><a href="<?= $BASE ?>/biblioteca.php?<?= $mid ?>">Ver toda la biblioteca</a> · <a href="<?= $BASE ?>/aprobar2.php?edit=<?= (int)$p['id'] ?>&<?= $mid ?>#cap-<?= (int)$p['id'] ?>">o que genere una nueva</a></div>
+        </div>
         <?php endif; ?>
 
-        <p class="est-cap<?= ($img || $video) ? '' : ' hero' ?>" data-cap><?= $h($cap !== '' ? $cap : '(sin texto todavía)') ?></p>
+        <p class="est-cap<?= ($img || $video || $biblioteca) ? '' : ' hero' ?>" data-cap><?= $h($cap !== '' ? $cap : '(sin texto todavía)') ?></p>
 
         <?php if ($cred): ?>
         <ul class="est-cred">
@@ -334,6 +382,25 @@ require __DIR__ . '/_shell.php';
           else alert((d && d.err) || 'No se pudo.');
         }).catch(function () { alert('Se cayó la conexión.'); })
           .finally(function () { busy = false; });
+      });
+    });
+  });
+
+  // ── El corillo mira la Biblioteca: usar una foto que YA existe (antes de generar) ──
+  var SELF = location.pathname + '?<?= $h($mid) ?>';
+  document.querySelectorAll('.est-bib').forEach(function (bib) {
+    var pieza = bib.getAttribute('data-piezabib');
+    bib.querySelectorAll('.est-bib-t').forEach(function (t) {
+      t.addEventListener('click', function () {
+        if (t.dataset.busy) return; t.dataset.busy = '1'; t.style.opacity = '.5';
+        var fd = new FormData(); fd.append('csrf', CSRF); fd.append('accion', 'usar_activo'); fd.append('pieza', pieza); fd.append('activo', t.getAttribute('data-activo'));
+        fetch(SELF, { method: 'POST', body: fd }).then(function (r) { return r.json(); }).then(function (d) {
+          if (d && d.ok && d.url) {
+            var art = document.createElement('div'); art.className = 'est-art';
+            art.innerHTML = '<img src="' + d.url + '" alt="">';
+            bib.replaceWith(art);   // "ya tenemos la foto" — la propuesta ahora la lleva
+          } else { t.style.opacity = ''; t.dataset.busy = ''; alert((d && d.err) || 'No se pudo poner la foto.'); }
+        }).catch(function () { t.style.opacity = ''; t.dataset.busy = ''; alert('Se cayó la conexión.'); });
       });
     });
   });
