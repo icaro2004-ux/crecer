@@ -20,6 +20,16 @@ $marca_id = (int)$marca['id'];
 $su     = suscripcion_de_marca($pdo, $marca_id);
 $activa = suscripcion_activa($su);
 
+// Pagos/recibos de este negocio (facturación). El webhook de Stripe los escribe
+// en `pagos`; los recibos oficiales descargables viven en el portal de Stripe.
+$pagos = [];
+if ($activa) {
+    try {
+        $pq = $pdo->prepare("SELECT created_at, monto, estado FROM pagos WHERE marca_id=? AND producto='crecer' ORDER BY created_at DESC LIMIT 12");
+        $pq->execute([$marca_id]); $pagos = $pq->fetchAll();
+    } catch (Throwable $e) { $pagos = []; }
+}
+
 $planes = $pdo->query("SELECT * FROM crecer_planes WHERE activo=1 ORDER BY orden")->fetchAll();
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 ?>
@@ -59,6 +69,17 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .now .btn{margin-top:20px}
   .change{display:block;width:100%;text-align:center;background:0;border:0;cursor:pointer;font-family:var(--font-display);font-weight:500;font-size:14px;color:var(--muted);padding:16px 0 2px}
   .change:hover{color:var(--ink-soft)}
+  /* pagos / recibos */
+  .pays{margin-top:24px;max-width:460px}
+  .pays-h{font-family:var(--font-display);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 10px}
+  .pay{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:8px}
+  .pay-d{font-family:var(--font-display);font-weight:600;font-size:14px;color:var(--ink-soft)}
+  .pay-s{font-size:12px;color:var(--muted);margin-top:1px;text-transform:capitalize}
+  .pay-a{font-family:var(--font-display);font-weight:600;font-size:15px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+  .pay-a.neg{color:var(--teal-dark,#00827e)}
+  .pay-empty{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;font-size:13.5px;color:var(--muted);line-height:1.5}
+  .pay-link{display:inline-block;margin-top:12px;font-family:var(--font-display);font-weight:500;font-size:14px;color:var(--teal-dark,#00827e);text-decoration:none}
+  .pay-link:hover{color:var(--ink-soft)}
   /* grid de planes */
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:6px}
   .grid.one{grid-template-columns:1fr;max-width:440px}
@@ -122,24 +143,33 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     if(!empty($_GET['error'])) $msgs.='<div class="msg err">'.$h($_GET['error']).'</div>';
   ?>
 
-  <?php if ($activa): /* ── FACTURACIÓN sobria: plan actual + acción; cambiar bajo demanda ── */ ?>
-    <h1>Tu plan</h1>
+  <?php if ($activa): /* ── FACTURACIÓN: plan actual + pagos/recibos (un solo plan) ── */ ?>
+    <h1>Facturación</h1>
     <?= $msgs ?>
     <div class="now">
       <div class="lbl">Plan actual</div>
       <div class="pn"><?= $h($plan_actual['nombre'] ?? suscripcion_etiqueta($su)) ?> <span class="pill">Activa</span></div>
       <div class="pr"><?php if($plan_actual): ?>$<?= number_format((float)$plan_actual['precio_mensual'],0) ?>/mes · se renueva solo<?php else: ?>Se renueva solo<?php endif; ?></div>
-      <a class="btn pri now-btn" style="margin-top:20px" href="/crecer/panel/portal.php?marca=<?= $marca_id ?>">Gestionar mi plan</a>
-      <button class="change" type="button" id="chgBtn" aria-expanded="false">¿Cambiar de plan? →</button>
+      <a class="btn pri" style="margin-top:20px" href="/crecer/panel/portal.php?marca=<?= $marca_id ?>">Gestionar mi plan</a>
     </div>
-    <div class="grid chg <?= count($planes)<=1?'one':'' ?>" id="chgGrid" hidden>
-      <?php foreach($planes as $p) echo $renderCard($p); ?>
+
+    <div class="pays">
+      <div class="pays-h">Tus pagos</div>
+      <?php if ($pagos): foreach ($pagos as $pg): $neg = (float)$pg['monto'] < 0 || ($pg['estado'] ?? '') === 'reembolso'; ?>
+        <div class="pay">
+          <div>
+            <div class="pay-d"><?= $h(date('d/m/Y', strtotime($pg['created_at']))) ?></div>
+            <div class="pay-s"><?= $h($pg['estado'] ?: 'pagado') ?></div>
+          </div>
+          <div class="pay-a <?= $neg ? 'neg' : '' ?>"><?= $neg ? '−' : '' ?>$<?= number_format(abs((float)$pg['monto']), 2) ?></div>
+        </div>
+      <?php endforeach; else: ?>
+        <div class="pay-empty">Todavía no hay pagos registrados aquí. Tus recibos oficiales —con factura descargable— viven en el portal de Stripe.</div>
+      <?php endif; ?>
+      <a class="pay-link" href="/crecer/panel/portal.php?marca=<?= $marca_id ?>">Ver recibos en Stripe →</a>
     </div>
-    <p class="foot">Gestiona tarjeta, próximo cobro y cancelación en el portal seguro de Stripe · <a href="/crecer/panel/index.php?marca=<?= $marca_id ?>">Volver al panel</a></p>
-    <script>
-      (function(){var b=document.getElementById('chgBtn'),g=document.getElementById('chgGrid');if(!b||!g)return;
-        b.addEventListener('click',function(){var open=g.hidden;g.hidden=!open;b.setAttribute('aria-expanded',open);b.textContent=open?'Ocultar planes':'¿Cambiar de plan? →';if(open)g.scrollIntoView({behavior:'smooth',block:'nearest'});});})();
-    </script>
+
+    <p class="foot">Cambia de tarjeta, revisa el próximo cobro o cancela desde el portal seguro de Stripe · <a href="/crecer/panel/index.php?marca=<?= $marca_id ?>">Volver al panel</a></p>
 
   <?php else: /* ── ACTIVACIÓN: coordinada, no landing ruidosa ── */ ?>
     <h1>Pon el corillo a trabajar tu negocio.</h1>

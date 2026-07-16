@@ -185,15 +185,15 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   <section class="stage wrap">
     <span class="demo">Demostración</span>
     <div class="biz jsname"><?= $h($biz) ?></div>
-    <h2 class="relevo">El Corillo ya está pensando.</h2>
-    <p class="relevo-sub">Preparó varias direcciones para arrancar con <b class="jsname"><?= $h($biz) ?></b>. Deslízalas.</p>
+    <h2 class="relevo">Tu Corillo prepararía varios posts.</h2>
+    <p class="relevo-sub">Cada uno con un enfoque distinto para <b class="jsname"><?= $h($biz) ?></b>. Deslízalos.</p>
     <div class="dirs" id="dirs">
-      <article class="dir"><div class="dir-n">Idea 01</div><h3>Darte a conocer</h3><p>Llegar a personas de tu zona que todavía no saben que existes.</p></article>
-      <article class="dir"><div class="dir-n">Idea 02</div><h3>Mostrar lo que haces</h3><p>Enseñar tu producto o tu servicio para que la gente lo quiera.</p></article>
-      <article class="dir"><div class="dir-n">Idea 03</div><h3>Que vuelvan</h3><p>Mantener cerca a tus clientes para que regresen y te recomienden.</p></article>
+      <article class="dir"><div class="dir-n">Enfoque 01</div><h3>Darte a conocer</h3><p>Llegar a personas de tu zona que todavía no saben que existes.</p></article>
+      <article class="dir"><div class="dir-n">Enfoque 02</div><h3>Mostrar lo que haces</h3><p>Enseñar tu producto o tu servicio para que la gente lo quiera.</p></article>
+      <article class="dir"><div class="dir-n">Enfoque 03</div><h3>Que vuelvan</h3><p>Mantener cerca a tus clientes para que regresen y te recomienden.</p></article>
     </div>
     <div class="dots" id="dots"><span class="dot on"></span><span class="dot"></span><span class="dot"></span></div>
-    <p class="team-line"><b>El Corillo</b> —La Creativa, El Diseñador y La Estratega— ya está pensando cómo ayudarte a empezar.</p>
+    <p class="team-line">Estos son los enfoques que trabajaría tu Corillo. <b>Tu primer post de verdad —en tu voz— lo creas gratis al entrar.</b></p>
   </section>
 
   <!-- 3 · APRENDE TU VOZ (la personalidad llega después de conocerte) -->
