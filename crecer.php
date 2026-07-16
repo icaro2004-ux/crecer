@@ -88,33 +88,36 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   body.revealed #ask{display:none}
   body.revealed #exp{display:block}
 
-  /* ── 2 · EL CORILLO TRABAJANDO (Home real, personalizado) ── */
-  .stage{padding:56px 0 60px}
+  /* ── 2 · EL CORILLO EMPIEZA A PENSAR (direcciones estratégicas, swipe) ── */
+  .stage{padding:56px 0 58px}
   .stage .demo{margin-bottom:16px}
   .biz{font-family:var(--disp);font-weight:600;font-size:15px;letter-spacing:-.01em;color:var(--ink);margin-bottom:6px}
   .relevo{font-family:var(--disp);font-weight:600;font-size:clamp(24px,5.2vw,34px);line-height:1.15;letter-spacing:-.02em;color:var(--ink);text-wrap:balance;max-width:20ch}
-  .credits{list-style:none;margin:26px 0 30px;display:flex;flex-direction:column;gap:16px}
-  .credits li{display:flex;align-items:flex-start;gap:12px;font-size:16.5px;line-height:1.35;color:var(--tinta)}
-  .ck{flex:none;width:21px;height:21px;margin-top:1px;color:var(--palma)}
-  .prop{border-radius:26px;overflow:hidden;background:#14121c;box-shadow:0 34px 80px -26px rgba(24,12,20,.55)}
-  .prop-top{padding:20px 20px 0}
-  .chip{display:inline-block;font-size:11px;font-weight:700;color:#fff;text-transform:capitalize;letter-spacing:.03em;
-    background:rgba(255,255,255,.14);backdrop-filter:blur(7px);padding:6px 12px;border-radius:999px}
-  .cap{padding:22px 22px 4px;color:#fff;font-size:19.5px;line-height:1.5;font-weight:400}
-  .cap b{font-weight:600}
-  .prop-foot{padding:20px 20px 22px}
-  .go{width:100%;border:0;cursor:pointer;font-family:var(--disp);font-weight:600;font-size:16px;color:#fff;
-    padding:16px;border-radius:16px;background:var(--grad);box-shadow:var(--glow);transition:transform .2s var(--ease),box-shadow .2s var(--ease)}
-  .go:active{transform:translateY(1px);box-shadow:var(--glow-active)}
-  .subacc{display:flex;justify-content:center;gap:22px;margin-top:12px}
-  .subacc span{color:rgba(255,255,255,.8);font-family:var(--disp);font-weight:500;font-size:13.5px}
-  .firma{margin-top:26px;font-family:var(--disp);font-style:italic;font-weight:400;font-size:15px;color:var(--muted)}
+  .relevo-sub{margin-top:12px;font-size:16px;color:var(--muted);line-height:1.5;max-width:36ch}
+  /* carrusel de direcciones — objetivos distintos, no versiones de un copy */
+  .dirs{display:flex;gap:14px;margin:26px 0 12px;overflow-x:auto;scroll-snap-type:x mandatory;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none;padding:4px 0 6px;cursor:grab}
+  .dirs::-webkit-scrollbar{display:none}
+  .dirs.drag{cursor:grabbing}
+  .dir{flex:0 0 78%;max-width:300px;scroll-snap-align:center;background:var(--card);border:1px solid var(--line);
+    border-radius:22px;padding:24px;box-shadow:0 2px 6px rgba(40,22,28,.05),0 20px 46px -26px rgba(40,22,28,.2);
+    display:flex;flex-direction:column;min-height:184px;user-select:none}
+  @media(min-width:640px){.dir{flex-basis:300px}}
+  .dir-n{font-family:var(--disp);font-weight:600;font-size:12px;letter-spacing:.05em;color:var(--magenta);text-transform:uppercase;margin-bottom:16px}
+  .dir h3{font-family:var(--disp);font-weight:600;font-size:21px;line-height:1.2;letter-spacing:-.015em;color:var(--ink);margin:0}
+  .dir p{margin:12px 0 0;font-size:15px;line-height:1.5;color:var(--muted)}
+  .dots{display:flex;gap:6px;margin-top:6px}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--line);transition:width .3s var(--ease),background .3s}
+  .dot.on{background:var(--magenta);width:20px;border-radius:3px}
+  .team-line{margin-top:28px;font-size:14px;color:var(--muted);line-height:1.55;max-width:42ch}
+  .team-line b{color:var(--ink);font-weight:600}
 
-  /* ── 3 · LA VOZ DEL NEGOCIO ── */
+  /* ── 3 · APRENDE TU VOZ (promesa; la personalidad llega tras conocerte) ── */
   .voz{padding:66px 0;border-top:1px solid var(--line)}
-  .voz .demo{margin-bottom:20px}
-  .voz .lbl{font-family:var(--disp);font-weight:600;font-size:15px;color:var(--muted);margin:16px 0 18px}
-  .voz q{quotes:none;font-family:var(--disp);font-weight:500;font-size:clamp(22px,5vw,30px);line-height:1.4;letter-spacing:-.015em;color:var(--ink);display:block}
+  .voz .demo{margin-bottom:16px}
+  .voz h2{font-family:var(--disp);font-weight:600;font-size:clamp(23px,5vw,30px);line-height:1.2;letter-spacing:-.02em;color:var(--ink);max-width:18ch}
+  .voz p{margin-top:16px;font-size:16.5px;line-height:1.55;color:var(--muted);max-width:42ch}
+  .voz p b{color:var(--ink);font-weight:600}
 
   /* ── 4 · RESULTADOS DEMOSTRATIVOS (honestos) ── */
   .res{padding:66px 0;border-top:1px solid var(--line)}
@@ -140,11 +143,10 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   /* Fichaje: el Home entra desde abajo (una vez, al revelar) */
   body.revealed.animate #exp{animation:riseIn .5s var(--ease) both}
   @keyframes riseIn{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}
-  body.revealed.animate .credits li{opacity:0;animation:riseIn .42s var(--ease) both}
-  body.revealed.animate .credits li:nth-child(1){animation-delay:.12s}
-  body.revealed.animate .credits li:nth-child(2){animation-delay:.20s}
-  body.revealed.animate .credits li:nth-child(3){animation-delay:.28s}
-  body.revealed.animate .prop{opacity:0;animation:riseIn .46s var(--ease) .34s both}
+  body.revealed.animate .dir{opacity:0;animation:riseIn .44s var(--ease) both}
+  body.revealed.animate .dir:nth-child(1){animation-delay:.16s}
+  body.revealed.animate .dir:nth-child(2){animation-delay:.24s}
+  body.revealed.animate .dir:nth-child(3){animation-delay:.32s}
 
   @media (prefers-reduced-motion:reduce){
     html{scroll-behavior:auto}
@@ -179,32 +181,26 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <!-- ── 2–5 · LA EXPERIENCIA (se revela al fichar) ── -->
 <main id="exp">
 
-  <!-- 2 · EL CORILLO TRABAJANDO -->
+  <!-- 2 · EL CORILLO EMPIEZA A PENSAR (direcciones estratégicas) -->
   <section class="stage wrap">
     <span class="demo">Demostración</span>
     <div class="biz jsname"><?= $h($biz) ?></div>
-    <h2 class="relevo">Tu Corillo ya tendría esto listo.</h2>
-    <ul class="credits">
-      <li><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.4 2.4 4.6-4.8"/></svg>La Creativa prepara tu propuesta del día.</li>
-      <li><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.4 2.4 4.6-4.8"/></svg>El Diseñador monta tu arte.</li>
-      <li><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.4 2.4 4.6-4.8"/></svg>La Estratega cuadra tu semana.</li>
-    </ul>
-    <article class="prop">
-      <div class="prop-top"><span class="chip">Instagram</span></div>
-      <p class="cap">¡Wepa! En <b class="jsname"><?= $h($biz) ?></b> tenemos algo bueno para ti hoy 🔥 Escríbenos por WhatsApp y te lo apartamos, mi gente 💛</p>
-      <div class="prop-foot">
-        <button class="go" type="button">Vamos con este</button>
-        <div class="subacc"><span>Ajústalo</span><span>No es esto</span></div>
-      </div>
-    </article>
-    <p class="firma">El corillo sigue trabajando.</p>
+    <h2 class="relevo">El Corillo ya está pensando.</h2>
+    <p class="relevo-sub">Preparó varias direcciones para arrancar con <b class="jsname"><?= $h($biz) ?></b>. Deslízalas.</p>
+    <div class="dirs" id="dirs">
+      <article class="dir"><div class="dir-n">Idea 01</div><h3>Darte a conocer</h3><p>Llegar a personas de tu zona que todavía no saben que existes.</p></article>
+      <article class="dir"><div class="dir-n">Idea 02</div><h3>Mostrar lo que haces</h3><p>Enseñar tu producto o tu servicio para que la gente lo quiera.</p></article>
+      <article class="dir"><div class="dir-n">Idea 03</div><h3>Que vuelvan</h3><p>Mantener cerca a tus clientes para que regresen y te recomienden.</p></article>
+    </div>
+    <div class="dots" id="dots"><span class="dot on"></span><span class="dot"></span><span class="dot"></span></div>
+    <p class="team-line"><b>El Corillo</b> —La Creativa, El Diseñador y La Estratega— ya está pensando cómo ayudarte a empezar.</p>
   </section>
 
-  <!-- 3 · LA VOZ DEL NEGOCIO -->
+  <!-- 3 · APRENDE TU VOZ (la personalidad llega después de conocerte) -->
   <section class="voz wrap">
-    <span class="demo">Demostración</span>
-    <div class="lbl">Habla como tú. Nunca traducido.</div>
-    <q>"Date el gusto: lo bueno de <b class="jsname"><?= $h($biz) ?></b>, como te lo mereces. Escríbenos hoy y te atendemos con cariño. 😋"</q>
+    <span class="demo">Más adelante</span>
+    <h2>Después, aprende a hablar como tú.</h2>
+    <p>Cuando le cuentes de tu negocio, <b>El Corillo</b> escribe con tu personalidad y tu forma de hablar. Por ahora, apenas te está conociendo.</p>
   </section>
 
   <!-- 4 · RESULTADOS DEMOSTRATIVOS (honestos) -->
@@ -276,6 +272,23 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     aplicarNombre(nombre);
     revelar();
   });
+
+  // Carrusel de direcciones: swipe táctil nativo + dots + arrastre con ratón.
+  var dirs = document.getElementById('dirs'), dots = document.getElementById('dots');
+  if (dirs) {
+    var cards = [].slice.call(dirs.querySelectorAll('.dir'));
+    var dotEls = dots ? [].slice.call(dots.querySelectorAll('.dot')) : [];
+    function sync(){
+      var c = dirs.scrollLeft + dirs.clientWidth / 2, idx = 0, best = 1e9;
+      cards.forEach(function(el, i){ var m = el.offsetLeft + el.offsetWidth / 2, d = Math.abs(m - c); if (d < best){ best = d; idx = i; } });
+      dotEls.forEach(function(d, i){ d.classList.toggle('on', i === idx); });
+    }
+    dirs.addEventListener('scroll', sync, { passive: true });
+    var down = false, sx = 0, sl = 0;
+    dirs.addEventListener('pointerdown', function(e){ if (e.pointerType && e.pointerType !== 'mouse') return; down = true; sx = e.clientX; sl = dirs.scrollLeft; dirs.classList.add('drag'); });
+    window.addEventListener('pointermove', function(e){ if (!down) return; dirs.scrollLeft = sl - (e.clientX - sx); });
+    window.addEventListener('pointerup', function(){ down = false; dirs.classList.remove('drag'); });
+  }
 })();
 </script>
 </body>
