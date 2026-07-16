@@ -113,11 +113,29 @@ $plan_lbl = ['crecer'=>'Crecer','despegar'=>'Despegar'][$plan_intent] ?? '';
   .legal a{color:var(--muted);text-decoration:none}
   .legal a:hover{color:var(--magenta)}
   .big-ic svg{width:46px;height:46px;color:var(--teal)}
+  /* Dos narrativas: por defecto (desktop) el móvil-only queda oculto */
+  .sub-m{display:none}
+  .after{display:none}
+  .after h2{font-family:var(--display);font-weight:600;font-size:17px;color:var(--ink-soft);letter-spacing:-.01em;margin:0 0 16px}
+  .steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:14px}
+  .steps li{display:flex;align-items:center;gap:13px;font-size:15.5px;color:var(--ink);line-height:1.35}
+  .steps .sn{flex:none;width:26px;height:26px;border-radius:50%;color:var(--magenta);font-family:var(--display);font-weight:600;font-size:13px;
+    display:grid;place-items:center;background:color-mix(in srgb,var(--magenta) 10%,#fff);border:1px solid color-mix(in srgb,var(--magenta) 22%,#fff)}
+  /* ── MÓVIL: nace para móvil. Menos texto, el formulario pegado al título,
+        la acción antes del primer scroll, y "¿Qué pasa después?" en 3 pasos. ── */
   @media(max-width:820px){
-    .auth{grid-template-columns:1fr;gap:26px;padding-top:24px;min-height:0}
-    .welcome{text-align:center}.welcome p{margin-inline:auto}
-    .bnf{align-items:center}.bnf .it{justify-content:flex-start;width:max-content;max-width:100%}
-    .welcome .chip-live{display:inline-flex}
+    .auth{grid-template-columns:1fr;gap:16px;padding-top:16px;min-height:0}
+    .welcome{text-align:center}
+    .welcome .eyebrow{margin-bottom:10px}
+    .welcome h1{font-size:clamp(30px,7.6vw,38px)}
+    .sub-d{display:none}
+    .sub-m{display:block;margin:14px auto 0;max-width:26ch;font-size:16px;color:var(--muted)}
+    .bnf{display:none}
+    .welcome .chip-live{display:none}
+    .form-h,.form-sub{display:none}
+    .formwrap .brand-card{margin-top:2px}
+    .after{display:block;margin-top:22px;width:100%;max-width:440px;margin-inline:auto;text-align:left}
+    .trust{font-weight:400}
   }
 </style>
 </head>
@@ -136,7 +154,8 @@ $plan_lbl = ['crecer'=>'Crecer','despegar'=>'Despegar'][$plan_intent] ?? '';
   <section class="welcome">
     <p class="eyebrow"><?= $negocio_intent ? 'El corillo de '.$h($negocio_intent).' te espera.' : ($plan_lbl ? 'Vas pa\' '.$h($plan_lbl).'.' : 'Tu corillo te espera.') ?></p>
     <h1>Monta tu <span class="teal u-teal">corillo</span> en un minuto.</h1>
-    <p>Creas tu cuenta, le hablas 40 segundos de tu negocio, y el corillo arranca a trabajarte el marketing. Tú solo apruebas.</p>
+    <p class="sub-d">Creas tu cuenta, le hablas 40 segundos de tu negocio, y el corillo arranca a trabajarte el marketing. Tú solo apruebas.</p>
+    <p class="sub-m">Cuéntanos sobre tu negocio. El Corillo hace el resto.</p>
     <div class="bnf">
       <div class="it"><?= ico('mic') ?> Onboarding por voz — sin formularios largos</div>
       <div class="it"><?= ico('pen') ?> Tu primer post listo, en tu voz boricua</div>
@@ -161,8 +180,8 @@ $plan_lbl = ['crecer'=>'Crecer','despegar'=>'Despegar'][$plan_intent] ?? '';
     </div>
     <p class="alt">¿Ya lo activaste? <a href="/crecer/login.php">Entra aquí</a></p>
     <?php else: ?>
-    <h1>Crea tu <span class="pink u-teal">cuenta</span></h1>
-    <p class="sub">Toma 1 minuto. Activas por correo (confirmamos que eres humano) y el corillo hace el resto.</p>
+    <h1 class="form-h">Crea tu <span class="pink u-teal">cuenta</span></h1>
+    <p class="sub form-sub">Toma 1 minuto. Activas por correo (confirmamos que eres humano) y el corillo hace el resto.</p>
 
     <form method="post" class="brand-card">
       <?= csrf_field() ?>
@@ -182,6 +201,15 @@ $plan_lbl = ['crecer'=>'Crecer','despegar'=>'Despegar'][$plan_intent] ?? '';
       <button class="btn-pink go-full" type="submit">Crear mi cuenta →</button>
       <p class="trust">Gratis · sin tarjeta · en 1 minuto lo tienes corriendo</p>
     </form>
+
+    <section class="after">
+      <h2>¿Qué pasa después?</h2>
+      <ol class="steps">
+        <li><span class="sn">1</span> Conocemos tu negocio.</li>
+        <li><span class="sn">2</span> El Corillo prepara las primeras propuestas.</li>
+        <li><span class="sn">3</span> Tú apruebas.</li>
+      </ol>
+    </section>
 
     <p class="alt">¿Ya tienes cuenta? <a href="/crecer/login.php">Entra aquí</a></p>
     <?php endif; ?>

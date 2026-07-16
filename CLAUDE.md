@@ -82,6 +82,32 @@ inauténtico = "AI slop"). Jerarquía de imágenes:
    Las gráficas promocionales / concepto / fondos / temáticas la IA las genera libre.
    Nunca prometer en imagen un producto que el negocio no entrega igual.
 
+## Diseño — Native Design (REGLA PERMANENTE, desde 2026-07-16)
+
+No pensar en "responsive". Pensar en **dos experiencias nativas** que comparten
+un mismo sistema visual. Desktop y móvil NO son la misma experiencia adaptada:
+son medios distintos y pueden contar la historia de forma distinta.
+
+**Antes de diseñar cualquier pantalla, responder dos preguntas:**
+1. ¿Cómo debería vivirse en **desktop**?
+2. ¿Cómo debería vivirse en **móvil**?
+Solo después, diseñar ambas.
+
+- **Desktop** → espacio, comparación, contexto, respiración, productividad,
+  composición horizontal. Aprovecha el espacio para *enriquecer* la experiencia.
+- **Móvil** → una mano, velocidad, foco, gestos, swipe, fullscreen, cards,
+  continuidad, acción inmediata. *Elimina* todo lo que no sea imprescindible para
+  empezar; la acción comienza **antes del primer scroll**.
+
+**Comparten siempre:** identidad visual, componentes, lenguaje, movimiento,
+sistema de diseño. **Pueden diferir:** contenido, densidad, narrativa, orden.
+
+Meta: no un responsive perfecto, sino **dos experiencias nativas que pertenecen
+al mismo producto**. Aplica a TODO (landing, login, registro, onboarding,
+cliente, HQ, biblioteca, resultados, configuración, soporte, y cualquier pantalla
+nueva). Ejemplo canónico: `registro.php` (desktop 2-columnas vs móvil form-first
++ "¿Qué pasa después?" en 3 pasos).
+
 ## Marca
 
 - "Crecer" es nombre de trabajo, **por confirmar**. La marca va **ligada a
