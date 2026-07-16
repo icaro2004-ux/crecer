@@ -31,13 +31,13 @@ $A = '/crecer/assets/encuentralo-hero';
 <link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/crecer-mark.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Poppins:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
     --ec-ink:#17131f; --ec-paper:rgba(255,255,255,.72); --ec-muted:#686173;
     --ec-pink:#ef3b7d; --ec-hot:#ff2f82; --ec-coral:#ff5b45; --ec-cyan:#00a7b7;
     --ec-line:#f1dece; --ec-shadow:0 28px 80px rgba(40,28,12,.13);
-    --ec-disp:'Anton', Impact, Haettenschweiler, "Arial Black", sans-serif;
+    --ec-disp:'Poppins', Impact, Haettenschweiler, "Arial Black", sans-serif;
   }
   *{box-sizing:border-box}
   body{margin:0;color:var(--ec-ink);font-family:'Plus Jakarta Sans',system-ui,sans-serif;min-height:100vh;

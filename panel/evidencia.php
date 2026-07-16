@@ -87,7 +87,7 @@ require __DIR__ . '/_shell.php';
   .ev-sys b{color:#c9b8ff}
   .ev-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
   .ev-kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px;box-shadow:var(--shadow-sm)}
-  .ev-kpi .v{font-family:var(--font-impact,'Anton');font-size:30px;color:var(--tinta);line-height:1}
+  .ev-kpi .v{font-family:var(--font-impact,'Poppins');font-size:30px;color:var(--tinta);line-height:1}
   .ev-kpi .l{font-size:12px;color:var(--muted);font-weight:700;margin-top:4px}
   .ev-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:16px;box-shadow:var(--shadow-sm)}
   .ev-card h2{font-size:15px;font-weight:800;color:var(--tinta);margin:0 0 14px;display:flex;align-items:center;gap:8px}

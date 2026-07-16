@@ -56,21 +56,21 @@ $por_agente = $pdo->query("SELECT agente, COUNT(*) n, COALESCE(SUM(costo_usd),0)
 <!DOCTYPE html><html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Evidencia XPRIZE — Operaciones</title>
-<link href="/crecer/assets/encuentralo-ui.css?v=17" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=18" rel="stylesheet">
 <style>
   *{box-sizing:border-box} body{background:var(--crema,#fbf6ee);color:var(--tinta,#1b1622);font-family:'Plus Jakarta Sans',system-ui,sans-serif;margin:0}
   .top{display:flex;align-items:center;gap:14px;padding:14px 20px;background:#140a16;color:#fff}
-  .top a{color:#cdc5d6;text-decoration:none;font-weight:700;font-size:13.5px}.top b{font-family:'Anton',sans-serif;text-transform:uppercase;font-size:16px}
+  .top a{color:#cdc5d6;text-decoration:none;font-weight:700;font-size:13.5px}.top b{font-family:'Poppins',sans-serif;text-transform:uppercase;font-size:16px}
   .wrap{max-width:940px;margin:0 auto;padding:20px 18px 70px}
-  h1{font-family:'Anton',sans-serif;text-transform:uppercase;font-size:26px;margin:8px 0 4px}
+  h1{font-family:'Poppins',sans-serif;text-transform:uppercase;font-size:26px;margin:8px 0 4px}
   .sub{color:var(--muted);font-size:13.5px;margin:0 0 16px}
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
   .kpi{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow-sm)}
   .kpi .l{font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
-  .kpi .v{font-family:'Anton',sans-serif;font-size:30px;line-height:1;margin-top:5px}
+  .kpi .v{font-family:'Poppins',sans-serif;font-size:30px;line-height:1;margin-top:5px}
   .kpi.hot{background:linear-gradient(135deg,#241633,#0e0a16);color:#fff}.kpi.hot .l{color:#bdb4c9}
   .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin-bottom:14px;box-shadow:var(--shadow-sm)}
-  .card h2{font-family:'Anton',sans-serif;text-transform:uppercase;font-size:15px;letter-spacing:.03em;margin:0 0 12px}
+  .card h2{font-family:'Poppins',sans-serif;text-transform:uppercase;font-size:15px;letter-spacing:.03em;margin:0 0 12px}
   .bars{display:flex;align-items:flex-end;gap:6px;height:96px}
   .bar{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;justify-content:flex-end;height:100%}
   .bar .col{width:100%;border-radius:5px 5px 0 0;background:linear-gradient(180deg,var(--teal),var(--teal-700));min-height:2px}

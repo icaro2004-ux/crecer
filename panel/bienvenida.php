@@ -35,17 +35,17 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/encuentralo-pin.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=17" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=18" rel="stylesheet">
 <style>
   body{background:var(--crema)}
   .wrap{max-width:560px;margin:0 auto;padding:30px 20px 70px;text-align:center}
   .top{display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:20px}
   .top img{height:30px}.top b{font-weight:800;font-size:19px}
-  .tag{display:inline-flex;align-items:center;gap:8px;font-family:'Anton';text-transform:uppercase;letter-spacing:.05em;
+  .tag{display:inline-flex;align-items:center;gap:8px;font-family:'Poppins';text-transform:uppercase;letter-spacing:.05em;
     font-size:12.5px;background:var(--okk-bg);color:var(--okk-ink);padding:8px 15px;border-radius:999px;margin-bottom:14px}
   .tag img{width:18px;height:18px}
-  h1{font-family:'Anton';text-transform:uppercase;letter-spacing:.5px;line-height:.98;font-size:clamp(30px,7vw,44px);color:var(--tinta);margin:0 0 8px}
+  h1{font-family:'Poppins';text-transform:uppercase;letter-spacing:.5px;line-height:.98;font-size:clamp(30px,7vw,44px);color:var(--tinta);margin:0 0 8px}
   h1 span{color:var(--terracota)}
   .lede{color:var(--muted);font-size:15.5px;margin:0 0 24px}
   /* tarjeta del post (mock IG) */
@@ -55,7 +55,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .post .hn{font-weight:800;font-size:14px}.post .hn small{display:block;color:var(--muted);font-weight:500;font-size:11.5px}
   .post .img{width:100%;display:block;background:var(--crema-2)}
   .post .cap{padding:14px;font-size:14.5px;line-height:1.5;color:#3a2f26;white-space:pre-wrap}
-  .cta{display:block;width:100%;border:0;cursor:pointer;font-family:'Anton';text-transform:uppercase;letter-spacing:.03em;
+  .cta{display:block;width:100%;border:0;cursor:pointer;font-family:'Poppins';text-transform:uppercase;letter-spacing:.03em;
     font-size:18px;color:#fff;background:linear-gradient(135deg,var(--coral),var(--terracota-700));padding:16px;border-radius:14px;
     box-shadow:0 14px 30px -12px rgba(239,67,117,.6);margin-top:24px;text-decoration:none}
   .cta .small{display:block;font-family:'Plus Jakarta Sans';text-transform:none;letter-spacing:0;font-size:12.5px;font-weight:600;opacity:.9;margin-top:2px}

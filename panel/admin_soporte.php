@@ -62,18 +62,18 @@ $total_sin_leer = 0; foreach ($convs as $c) $total_sin_leer += (int)$c['sin_leer
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Soporte · Operaciones · Crecer</title>
 <link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/encuentralo-pin.svg">
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Poppins:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=17" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=18" rel="stylesheet">
 <style>
   :root{--grad:linear-gradient(120deg,var(--coral,#ff5c39),var(--magenta,#c0395f))}
   *{box-sizing:border-box} body{background:var(--crema,#fbf6ee);color:var(--tinta,#1b1622);font-family:'Plus Jakarta Sans',sans-serif;margin:0}
   body::before{content:"";position:fixed;top:0;left:0;right:0;height:4px;z-index:60;background:var(--grad)}
   .top{display:flex;align-items:center;gap:12px;padding:15px 24px;background:#140a16;color:#fff}
   .top img{height:26px} .top b{font-family:var(--font-display);font-weight:800;text-transform:lowercase;letter-spacing:-.03em;font-size:18px}
-  .top .tag{font-family:'Anton';text-transform:uppercase;font-size:11px;letter-spacing:.08em;color:#ffcaa8;border:1px solid rgba(255,255,255,.18);padding:4px 10px;border-radius:99px}
+  .top .tag{font-family:'Poppins';text-transform:uppercase;font-size:11px;letter-spacing:.08em;color:#ffcaa8;border:1px solid rgba(255,255,255,.18);padding:4px 10px;border-radius:99px}
   .top .sp{flex:1} .top a{color:#cdc5d6;text-decoration:none;font-size:13px;font-weight:600}
   .wrap{max-width:760px;margin:0 auto;padding:22px 24px 60px}
-  h1{font-family:'Anton';text-transform:uppercase;font-size:28px;letter-spacing:.02em;margin:0 0 14px}
+  h1{font-family:'Poppins';text-transform:uppercase;font-size:28px;letter-spacing:.02em;margin:0 0 14px}
   .conv{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 15px;margin-bottom:10px;text-decoration:none;color:inherit;box-shadow:var(--shadow-sm)}
   .conv:hover{border-color:var(--terracota)}
   .conv .av{width:42px;height:42px;border-radius:50%;background:var(--crema);display:grid;place-items:center;font-weight:800;color:var(--terracota);flex:none}

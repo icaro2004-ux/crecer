@@ -124,7 +124,7 @@ if (!$es_despegar):
   .an-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
   .an-kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm)}
   .an-kpi .lb{font-size:12.5px;color:var(--muted);font-weight:700}
-  .an-kpi .v{font-family:var(--font-impact,'Anton');font-size:30px;color:var(--tinta);line-height:1.1;margin-top:4px}
+  .an-kpi .v{font-family:var(--font-impact,'Poppins');font-size:30px;color:var(--tinta);line-height:1.1;margin-top:4px}
   .an-kpi .d{font-size:12.5px;font-weight:800;margin-top:2px}
   .an-kpi .d.up{color:#0d7a44}.an-kpi .d.down{color:#9b1c1c}
   .an-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:16px;box-shadow:var(--shadow-sm)}

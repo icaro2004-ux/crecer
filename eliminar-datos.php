@@ -18,15 +18,15 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/encuentralo-pin.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{--tinta:#23202b;--muted:#6b6577;--magenta:#ff2b85;--crema:#fdf8f3;--line:#ece6df}
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:"Plus Jakarta Sans",system-ui,sans-serif;color:var(--tinta);background:var(--crema);line-height:1.65}
   .wrap{max-width:780px;margin:0 auto;padding:28px 22px 80px}
   .top{display:flex;align-items:center;gap:9px;padding:8px 0 28px;text-decoration:none;color:inherit}
-  .top img{height:30px}.top b{font-family:"Anton",sans-serif;font-weight:400;font-size:22px;text-transform:lowercase;letter-spacing:.5px}
-  h1{font-family:"Anton",sans-serif;font-weight:400;text-transform:uppercase;font-size:clamp(30px,5vw,44px);line-height:1.05;letter-spacing:.5px;margin-bottom:6px}
+  .top img{height:30px}.top b{font-family:'Poppins',sans-serif;font-weight:400;font-size:22px;text-transform:lowercase;letter-spacing:.5px}
+  h1{font-family:'Poppins',sans-serif;font-weight:400;text-transform:uppercase;font-size:clamp(30px,5vw,44px);line-height:1.05;letter-spacing:.5px;margin-bottom:6px}
   .vig{color:var(--muted);font-size:14px;margin-bottom:26px}
   h2{font-size:19px;margin:28px 0 8px}
   p,li{font-size:15.5px;color:#3d3747;margin-bottom:10px}

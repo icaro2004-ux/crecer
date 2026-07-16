@@ -101,14 +101,14 @@ $paginas = $_SESSION['meta_paginas'][$marca_id] ?? [];
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Conectar redes · <?= $h($marca['nombre_negocio']) ?></title>
 <link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/encuentralo-pin.svg">
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=17" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=18" rel="stylesheet">
 <style>
   body{background:var(--crema)}
   .wrap{max-width:560px;margin:0 auto;padding:26px 20px 70px}
   .top{display:flex;align-items:center;gap:9px;margin-bottom:18px}
   .top img{height:30px}.top b{font-weight:800;font-size:19px;color:var(--tinta)}
-  h1{font-family:var(--font-impact,'Anton');text-transform:uppercase;letter-spacing:.5px;line-height:.98;font-size:clamp(26px,6vw,38px);color:var(--tinta)}
+  h1{font-family:var(--font-impact,'Poppins');text-transform:uppercase;letter-spacing:.5px;line-height:.98;font-size:clamp(26px,6vw,38px);color:var(--tinta)}
   h1 span{color:var(--terracota)}
   .lede{color:var(--muted);font-size:15px;margin:8px 0 20px}
   .card{background:var(--card,#fff);border:1px solid var(--line);border-radius:var(--r-lg,16px);padding:18px;margin-bottom:14px;box-shadow:var(--shadow-sm)}

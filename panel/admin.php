@@ -232,17 +232,17 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Centro de Operaciones · Crecer</title>
 <link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/encuentralo-pin.svg">
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Poppins:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=17" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=18" rel="stylesheet">
 <style>
   :root{--grad:linear-gradient(120deg,var(--coral,#ff5c39),var(--magenta,#c0395f))}
   *{box-sizing:border-box}
   body{background:var(--crema,#fbf6ee);color:var(--tinta,#1b1622);font-family:'Plus Jakarta Sans',sans-serif;margin:0}
-  .disp{font-family:'Anton',sans-serif;text-transform:uppercase;letter-spacing:.02em}
+  .disp{font-family:'Poppins',sans-serif;font-weight:600;letter-spacing:-.01em}
   .top{position:sticky;top:0;z-index:50;display:flex;align-items:center;flex-wrap:wrap;gap:10px 12px;padding:14px 22px;background:#140a16;color:#fff;box-shadow:0 6px 20px -12px rgba(0,0,0,.5)}
   .top img{height:28px}
   .top b{font-family:var(--font-display);font-weight:800;text-transform:lowercase;letter-spacing:-.03em;font-size:19px}
-  .top .tag{font-family:'Anton';text-transform:uppercase;font-size:12px;letter-spacing:.08em;color:#ffcaa8;border:1px solid rgba(255,255,255,.18);padding:4px 10px;border-radius:99px;white-space:nowrap}
+  .top .tag{font-family:'Poppins';text-transform:uppercase;font-size:12px;letter-spacing:.08em;color:#ffcaa8;border:1px solid rgba(255,255,255,.18);padding:4px 10px;border-radius:99px;white-space:nowrap}
   .top a{color:#cdc5d6;text-decoration:none;font-size:13.5px;font-weight:600;white-space:nowrap}
   .op-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;margin-left:auto}
   .op-hi{font-size:13px;color:#9f96b0;white-space:nowrap}
@@ -254,16 +254,16 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
     .op-salir{margin-left:auto}
   }
   .wrap{max-width:1180px;margin:0 auto;padding:22px 24px 70px}
-  h1.page-h{font-family:'Anton';text-transform:uppercase;font-size:26px;letter-spacing:.02em;margin:8px 0 2px}
+  h1.page-h{font-family:'Poppins',sans-serif;font-weight:600;font-size:26px;letter-spacing:-.01em;color:var(--ink-soft);margin:8px 0 2px}
   .lede{color:var(--muted);font-size:13.5px;margin:0 0 18px}
   .sec{display:flex;align-items:center;gap:10px;margin:30px 0 14px}
-  .sec h2{font-family:'Anton';text-transform:uppercase;font-size:18px;letter-spacing:.03em;margin:0}
+  .sec h2{font-family:'Poppins',sans-serif;font-weight:600;font-size:17px;letter-spacing:-.01em;color:var(--ink-soft);margin:0}
   .sec:after{content:"";flex:1;height:1px;background:var(--line)}
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
   .kpi{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow-sm)}
   .kpi .l{font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
-  .kpi .v{font-family:'Anton';font-size:28px;line-height:1;margin-top:6px;color:var(--tinta);font-variant-numeric:tabular-nums}
-  .kpi .d{font-size:12px;font-weight:700;margin-top:4px}
+  .kpi .v{font-family:'Poppins',sans-serif;font-weight:600;font-size:28px;line-height:1;margin-top:6px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+  .kpi .d{font-size:12px;font-weight:600;margin-top:4px}
   .kpi .d.up{color:#0d7a44}.kpi .d.down{color:#9b1c1c}.kpi .d.flat{color:var(--muted)}
   .kpi.hot{background:linear-gradient(135deg,#241633,#0e0a16);color:#fff}.kpi.hot .v{color:#fff}.kpi.hot .l{color:#bdb4c9}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
@@ -281,7 +281,7 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
   .bar{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;justify-content:flex-end;height:100%}
   .bar .col{width:100%;max-width:42px;background:var(--grad);border-radius:6px 6px 0 0;min-height:3px}
   .bar .bl{font-size:10.5px;color:var(--muted);font-weight:700}.bar .bv{font-size:10.5px;font-weight:800}
-  .num{font-family:'Anton';font-size:13px;color:var(--tinta)}
+  .num{font-family:'Poppins',sans-serif;font-weight:600;font-size:13px;color:var(--ink-soft)}
   .gap{background:#fff;border:1px dashed var(--line);border-radius:14px;padding:16px;color:var(--muted);font-size:13.5px}
   .gap b{color:var(--tinta)}
   @media(max-width:820px){.grid2{grid-template-columns:1fr}.scrollx{overflow-x:auto}}
@@ -313,7 +313,7 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
   </div>
 
   <!-- VENTAS -->
-  <div class="sec"><h2>💰 Ventas</h2></div>
+  <div class="sec"><h2>Ventas</h2></div>
   <div class="grid2">
     <div class="card">
       <h3>Ingreso recurrente por plan</h3>
@@ -342,7 +342,7 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
   </div>
 
   <!-- GASTO EN BOTS -->
-  <div class="sec"><h2>🤖 Gasto en bots (IA)</h2></div>
+  <div class="sec"><h2>Gasto en bots (IA)</h2></div>
   <div class="grid2">
     <div class="card">
       <h3>Por agente</h3>
@@ -378,8 +378,8 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
   <?php if (isset($_GET['dinero_err'])): ?>
     <div style="background:#fdeaea;border:1px solid #f5c2c0;color:#b42318;border-radius:12px;padding:11px 15px;margin:14px 0 0;font-weight:700;font-size:13.5px">⚠️ No se pudo: <?= $h($_GET['dinero_err']) ?></div>
   <?php endif; ?>
-  <div class="sec" id="clientes"><h2>👥 Clientes (<?= $total_clientes ?>)</h2></div>
-  <div style="margin:0 0 10px"><input type="text" id="cliFiltro" placeholder="🔎 Filtrar negocio…" oninput="cliFiltrar()" style="width:100%;max-width:320px;font-family:inherit;font-size:14px;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px"> <span style="font-size:12px;color:var(--muted)">Toca un encabezado para ordenar.</span></div>
+  <div class="sec" id="clientes"><h2>Clientes (<?= $total_clientes ?>)</h2></div>
+  <div style="margin:0 0 10px"><input type="text" id="cliFiltro" placeholder="Filtrar negocio…" oninput="cliFiltrar()" style="width:100%;max-width:320px;font-family:inherit;font-size:14px;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px"> <span style="font-size:12px;color:var(--muted)">Toca un encabezado para ordenar.</span></div>
   <div class="card scrollx">
     <table id="cliTabla">
       <thead><tr>

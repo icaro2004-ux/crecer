@@ -98,17 +98,17 @@ $reconectar = "/crecer/panel/conectar.php?marca={$mid}";
 <html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Diagnóstico · <?= $h($marca['nombre_negocio']) ?> — Operaciones</title>
-<link href="/crecer/assets/encuentralo-ui.css?v=17" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=18" rel="stylesheet">
 <style>
   *{box-sizing:border-box} body{background:var(--crema,#fbf6ee);color:var(--tinta,#1b1622);font-family:'Plus Jakarta Sans',system-ui,sans-serif;margin:0}
   .top{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;padding:14px 20px;background:#140a16;color:#fff}
   .top a{color:#cdc5d6;text-decoration:none;font-weight:700;font-size:13.5px}
-  .top b{font-family:'Anton',sans-serif;text-transform:uppercase;letter-spacing:.03em;font-size:16px}
+  .top b{font-family:'Poppins',sans-serif;text-transform:uppercase;letter-spacing:.03em;font-size:16px}
   .wrap{max-width:900px;margin:0 auto;padding:20px 18px 70px}
-  h1{font-family:'Anton',sans-serif;text-transform:uppercase;font-size:26px;margin:8px 0 2px}
+  h1{font-family:'Poppins',sans-serif;text-transform:uppercase;font-size:26px;margin:8px 0 2px}
   .sub{color:var(--muted);font-size:13.5px;margin:0 0 16px}
   .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin-bottom:14px;box-shadow:var(--shadow-sm)}
-  .card h2{font-family:'Anton',sans-serif;text-transform:uppercase;font-size:15px;letter-spacing:.03em;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+  .card h2{font-family:'Poppins',sans-serif;text-transform:uppercase;font-size:15px;letter-spacing:.03em;margin:0 0 12px;display:flex;align-items:center;gap:8px}
   .st{display:inline-flex;align-items:center;gap:6px;font-weight:800;font-size:12.5px;border-radius:99px;padding:4px 11px}
   .st.ok{background:#e6f6ee;color:#0d7a44}.st.bad{background:#fdeaea;color:#b42318}.st.warn{background:#fff4d6;color:#8a5a00}.st.none{background:#f1edf5;color:#7a7088}
   .row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13.5px}.row:last-child{border-bottom:0}

@@ -75,7 +75,7 @@
   /* Tipografía — UNA familia coordinada: Poppins para todo el producto.
      (Se probó Fraunces serif y creaba "reguero" de fonts — revertido.) */
   --font-display:"Poppins","Plus Jakarta Sans",sans-serif;  /* titulares — sans limpio */
-  --font-impact:"Anton","Poppins",sans-serif;
+  --font-impact:"Poppins","Plus Jakarta Sans",sans-serif;  /* ONE CRECER: fuera Anton, todo Poppins */
   --font-ui:"Poppins","Plus Jakarta Sans",system-ui,sans-serif;
   --font-body:"Plus Jakarta Sans",system-ui,-apple-system,sans-serif;
 }

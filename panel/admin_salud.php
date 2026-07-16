@@ -69,16 +69,16 @@ $err_pub = $pdo->query("SELECT p.created_at, p.plataforma, p.error_msg, m.nombre
 <!DOCTYPE html><html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Salud del sistema — Operaciones</title>
-<link href="/crecer/assets/encuentralo-ui.css?v=17" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=18" rel="stylesheet">
 <style>
   *{box-sizing:border-box} body{background:var(--crema,#fbf6ee);color:var(--tinta,#1b1622);font-family:'Plus Jakarta Sans',system-ui,sans-serif;margin:0}
   .top{display:flex;align-items:center;gap:14px;padding:14px 20px;background:#140a16;color:#fff}
   .top a{color:#cdc5d6;text-decoration:none;font-weight:700;font-size:13.5px}
-  .top b{font-family:'Anton',sans-serif;text-transform:uppercase;letter-spacing:.03em;font-size:16px}
+  .top b{font-family:'Poppins',sans-serif;text-transform:uppercase;letter-spacing:.03em;font-size:16px}
   .wrap{max-width:900px;margin:0 auto;padding:20px 18px 70px}
-  h1{font-family:'Anton',sans-serif;text-transform:uppercase;font-size:26px;margin:8px 0 16px}
+  h1{font-family:'Poppins',sans-serif;text-transform:uppercase;font-size:26px;margin:8px 0 16px}
   .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin-bottom:14px;box-shadow:var(--shadow-sm)}
-  .card h2{font-family:'Anton',sans-serif;text-transform:uppercase;font-size:15px;letter-spacing:.03em;margin:0 0 12px}
+  .card h2{font-family:'Poppins',sans-serif;text-transform:uppercase;font-size:15px;letter-spacing:.03em;margin:0 0 12px}
   .row{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px}.row:last-child{border-bottom:0}
   .row .k{color:var(--muted)}
   .st{display:inline-flex;align-items:center;gap:6px;font-weight:800;font-size:12px;border-radius:99px;padding:3px 10px}
@@ -87,7 +87,7 @@ $err_pub = $pdo->query("SELECT p.created_at, p.plataforma, p.error_msg, m.nombre
   .item .neg{color:var(--muted);font-weight:800;margin-right:6px}
   .err{color:#b42318;word-break:break-word}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:680px){.grid2{grid-template-columns:1fr}}
-  .big{font-family:'Anton',sans-serif;font-size:22px}
+  .big{font-family:'Poppins',sans-serif;font-size:22px}
 </style></head><body>
 <?php $op_active='salud'; require __DIR__.'/_ops_top.php'; ?>
 <div class="wrap">

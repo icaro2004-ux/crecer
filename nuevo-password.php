@@ -39,33 +39,37 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Nueva contraseña · Encuéntralo</title>
 <link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/encuentralo-pin.svg">
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=17" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=18" rel="stylesheet">
 <style>
+  body{background:var(--crema)}
   body::before{content:"";position:fixed;top:0;left:0;right:0;height:4px;z-index:60;background:linear-gradient(120deg,var(--coral),var(--magenta))}
-  .auth{max-width:400px;margin:0 auto;padding:46px 22px 60px}
+  .auth{max-width:410px;margin:0 auto;padding:52px 22px 60px}
   .auth .top{text-align:center}
   .auth .top a{display:inline-flex;align-items:center;gap:9px;text-decoration:none;color:inherit}
-  .auth .top img{height:34px}
-  .auth .top b{font-family:var(--font-display);font-weight:800;font-size:22px;letter-spacing:-.03em;text-transform:lowercase}
-  .auth h1{font-family:var(--font-display);font-weight:800;font-size:26px;letter-spacing:-.025em;text-align:center;margin-top:20px}
-  .auth .sub{color:var(--muted);text-align:center;font-size:15px;margin-top:6px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-xl);padding:26px;box-shadow:var(--shadow);margin-top:20px}
-  label{display:block;font-weight:700;font-size:13.5px;margin:13px 0 6px}
+  .auth .top img{height:30px}
+  .auth .top b{font-family:var(--font-display);font-weight:600;font-size:17px;letter-spacing:-.02em}
+  .auth .top b i{color:var(--teal);font-style:normal}
+  .auth h1{font-family:var(--font-display);font-weight:600;font-size:clamp(24px,5.4vw,28px);letter-spacing:-.02em;color:var(--ink-soft);text-align:center;margin-top:22px}
+  .auth .sub{color:var(--muted);text-align:center;font-size:15px;margin-top:8px;line-height:1.5}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:26px;box-shadow:var(--shadow);margin-top:22px}
+  label{display:block;font-family:var(--font-display);font-weight:600;font-size:13.5px;margin:13px 0 6px;color:var(--ink-soft)}
   .pw{position:relative}
-  input{width:100%;font-family:inherit;font-size:16px;color:var(--tinta);background:#fff;border:1.5px solid var(--line);border-radius:13px;padding:12px 46px 12px 14px}
-  input:focus{outline:none;border-color:var(--terracota);box-shadow:0 0 0 4px rgba(239,67,117,.12)}
+  input{width:100%;font-family:var(--font-body);font-size:16px;color:var(--tinta);background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:12px 46px 12px 14px;transition:border-color .15s,box-shadow .15s}
+  input:focus{outline:none;border-color:color-mix(in srgb,var(--magenta) 45%,var(--line));box-shadow:0 0 0 3px color-mix(in srgb,var(--magenta) 15%,transparent)}
   .eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:0;cursor:pointer;font-size:18px;padding:6px;line-height:1;color:var(--muted)}
-  .go{margin-top:20px;width:100%;background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;border:0;cursor:pointer;font-weight:800;font-size:16px;padding:14px;border-radius:99px}
-  .err{background:var(--noo-bg);color:var(--noo-ink);font-weight:700;font-size:14px;padding:11px 14px;border-radius:12px;margin-bottom:10px}
+  .go{margin-top:20px;width:100%;background:var(--btn-grad);color:#fff;border:0;cursor:pointer;font-family:var(--font-display);font-weight:600;font-size:16px;padding:15px;border-radius:16px;box-shadow:var(--btn-glow);transition:transform .2s var(--ease),box-shadow .2s var(--ease)}
+  .go:active{transform:translateY(1px);box-shadow:var(--btn-glow-active)}
+  .err{background:#fdeaea;color:#b42318;font-weight:600;font-size:14px;padding:11px 14px;border-radius:12px;margin-bottom:10px;border:1px solid #f5c2c0}
   .alt{text-align:center;margin-top:16px;font-size:14px;color:var(--muted)}
-  .alt a{color:var(--terracota);font-weight:700;text-decoration:none}
+  .alt a{color:var(--teal-dark,#00827e);font-weight:600;text-decoration:none}
+  .alt a:hover{color:var(--ink-soft)}
 </style>
 </head>
 <body>
 <div class="auth">
-  <div class="top"><a href="/crecer/index.php"><img src="/crecer/assets/brand/encuentralo-pin.svg" alt=""><b>encuéntralo</b></a></div>
-  <h1>Crea tu contraseña nueva 🔐</h1>
+  <div class="top"><a href="/crecer/crecer.php"><img src="/crecer/assets/brand/crecer-mark.svg" alt=""><b>encuéntralo <i>crecer</i></b></a></div>
+  <h1>Crea tu contraseña nueva</h1>
 
   <div class="card">
     <?php if (!$ok_token): ?>

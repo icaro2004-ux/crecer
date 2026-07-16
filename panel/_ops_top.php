@@ -14,7 +14,7 @@ if (isset($pdo)) { try { $op_prob = (int)$pdo->query("SELECT COUNT(DISTINCT marc
 ?>
 <style>
   .optop{display:flex;align-items:center;flex-wrap:wrap;gap:8px 6px;padding:12px 18px;background:#140a16;color:#fff;position:sticky;top:0;z-index:50}
-  .optop .obr{font-family:'Anton',sans-serif;text-transform:uppercase;letter-spacing:.05em;color:#ffcaa8;border:1px solid rgba(255,255,255,.18);padding:5px 11px;border-radius:99px;font-size:12px;white-space:nowrap}
+  .optop .obr{font-family:'Poppins',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#ffcaa8;border:1px solid rgba(255,255,255,.18);padding:5px 11px;border-radius:99px;font-size:12px;white-space:nowrap}
   .optop .ohi{font-size:12.5px;color:#9f96b0;white-space:nowrap}
   .optop nav{display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-left:auto}
   .optop .opa{color:#cdc5d6;text-decoration:none;font-weight:700;font-size:13px;padding:7px 12px;border-radius:9px;white-space:nowrap}

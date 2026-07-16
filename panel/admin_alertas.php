@@ -49,14 +49,14 @@ $op_active = 'problemas';
 <!DOCTYPE html><html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Problemas — Operaciones</title>
-<link href="/crecer/assets/encuentralo-ui.css?v=17" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=18" rel="stylesheet">
 <style>
   *{box-sizing:border-box} body{background:var(--crema,#fbf6ee);color:var(--tinta,#1b1622);font-family:'Plus Jakarta Sans',system-ui,sans-serif;margin:0}
   .wrap{max-width:900px;margin:0 auto;padding:20px 18px 70px}
-  h1{font-family:'Anton',sans-serif;text-transform:uppercase;font-size:26px;margin:8px 0 4px}
+  h1{font-family:'Poppins',sans-serif;text-transform:uppercase;font-size:26px;margin:8px 0 4px}
   .sub{color:var(--muted);font-size:13.5px;margin:0 0 16px}
   .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin-bottom:14px;box-shadow:var(--shadow-sm)}
-  .card h2{font-family:'Anton',sans-serif;text-transform:uppercase;font-size:15px;letter-spacing:.03em;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+  .card h2{font-family:'Poppins',sans-serif;text-transform:uppercase;font-size:15px;letter-spacing:.03em;margin:0 0 12px;display:flex;align-items:center;gap:8px}
   .prob{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}.prob:last-child{border-bottom:0}
   .prob .info{flex:1;min-width:0}
   .prob .neg{font-weight:800;font-size:14px;color:var(--tinta)}
