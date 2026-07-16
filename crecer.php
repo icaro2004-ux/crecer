@@ -40,7 +40,7 @@ $nf = fn($n) => number_format((int)$n);
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Caveat:wght@600;700&family=Poppins:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=16" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=17" rel="stylesheet">
 <style>
   :root{
     --paper:#fff;

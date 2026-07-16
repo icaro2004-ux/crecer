@@ -49,7 +49,7 @@ $op_active = 'problemas';
 <!DOCTYPE html><html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Problemas — Operaciones</title>
-<link href="/crecer/assets/encuentralo-ui.css?v=16" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=17" rel="stylesheet">
 <style>
   *{box-sizing:border-box} body{background:var(--crema,#fbf6ee);color:var(--tinta,#1b1622);font-family:'Plus Jakarta Sans',system-ui,sans-serif;margin:0}
   .wrap{max-width:900px;margin:0 auto;padding:20px 18px 70px}

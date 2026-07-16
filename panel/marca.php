@@ -163,79 +163,98 @@ $Tpreset = (string)($marca['tono_preset'] ?? '');
 
 $active = 'marca';
 $page_title = 'Mi Marca';
-$guia = ['key'=>'marca','agente'=>'palette','titulo'=>'Tu marca y logo',
-  'intro'=>'El Diseñador te crea tu logo profesional con IA.',
-  'pasos'=>[
-    ['sparkles','Describe tu negocio y dale "Generar mi primer logo".'],
-    ['image','Genera varios, compáralos y escoge el que más te guste.'],
-    ['download','Descárgalo en todos los formatos que necesites.'],
-  ]];
+$guia = null; // El ADN se muestra, no se explica.
 require __DIR__ . '/_shell.php';
 ?>
 <style>
-  .subline{color:var(--muted);font-size:15px;margin-top:4px}
-  .subline b{color:var(--terracota)}
-  .ok-banner{background:var(--okk-bg);color:var(--okk-ink);font-weight:700;font-size:14px;padding:11px 14px;border-radius:12px;margin-top:14px}
-  .err-banner{background:var(--noo-bg);color:var(--noo-ink);font-weight:700;font-size:14px;padding:11px 14px;border-radius:12px;margin-top:14px}
+  /* ══ MI MARCA ══ el ADN visual del negocio. Mismo director: Poppins, ink-soft. */
+  .content{max-width:820px;font-family:'Poppins',var(--font-body)}
+  .asis-fab{display:none}
 
-  .genbox{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:18px;box-shadow:var(--shadow-sm);margin-top:16px;max-width:620px}
-  .genbox textarea{width:100%;font-family:inherit;font-size:14px;border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;resize:vertical;margin-bottom:10px}
-  .genbtn{border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:15px;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));padding:13px 22px;border-radius:99px;box-shadow:0 10px 24px rgba(255,43,133,.28)}
+  /* Hero ADN: el logo y el nombre lideran (el negocio es el protagonista) */
+  .mk-hero{display:flex;align-items:center;gap:16px;padding:6px 2px 2px}
+  .mk-av{width:64px;height:64px;border-radius:18px;overflow:hidden;flex:none;background:var(--crema-2);display:grid;place-items:center;box-shadow:0 8px 22px -10px rgba(40,22,28,.3)}
+  .mk-av img{width:100%;height:100%;object-fit:contain}
+  .mk-av .ini{font-family:var(--font-display);font-weight:600;font-size:28px;color:var(--magenta)}
+  .mk-name{font-family:var(--font-display);font-weight:600;font-size:clamp(22px,4.4vw,30px);line-height:1.1;letter-spacing:-.02em;color:var(--ink-soft)}
+  .mk-tagline{font-size:13.5px;color:var(--muted);margin-top:3px}
+
+  .subline{color:var(--muted);font-size:14.5px;margin-top:4px;line-height:1.5}
+  .subline b{color:var(--ink-soft)}
+  .sec-h{font-family:var(--font-display);font-weight:600;font-size:19px;color:var(--ink-soft);letter-spacing:-.01em;margin:30px 0 4px;display:flex;align-items:center;gap:9px}
+  .sec-h svg{width:20px;height:20px;color:var(--muted)}
+  .ok-banner{background:color-mix(in srgb,var(--teal) 10%,#fff);color:var(--ink-soft);font-weight:600;font-size:14px;padding:11px 15px;border-radius:12px;margin-top:14px;border:1px solid color-mix(in srgb,var(--teal) 25%,#fff)}
+  .err-banner{background:#fdeaea;color:#b42318;font-weight:600;font-size:14px;padding:11px 15px;border-radius:12px;margin-top:14px;border:1px solid #f5c2c0}
+
+  .genbox{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px;box-shadow:var(--shadow-sm);margin-top:16px;max-width:640px}
+  .genbox textarea{width:100%;box-sizing:border-box;font-family:var(--font-body);font-size:14px;border:1.5px solid var(--line);border-radius:12px;padding:11px 13px;resize:vertical;margin-bottom:10px}
+  .genbox textarea:focus{outline:0;border-color:color-mix(in srgb,var(--magenta) 45%,var(--line))}
+  .genbtn{border:0;cursor:pointer;font-family:'Poppins',sans-serif;font-weight:600;font-size:15px;color:#fff;background:var(--btn-grad);padding:14px 26px;border-radius:15px;box-shadow:var(--btn-glow);transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+  .genbtn:active{transform:translateY(1px);box-shadow:var(--btn-glow-active)}
   .genline{font-size:12.5px;color:var(--muted);margin-top:10px}
   .policy{font-size:11.5px;color:var(--muted);margin-top:4px}
-  .genbox textarea{width:100%}
-  .fl{display:block;font-weight:700;font-size:13px;margin:14px 0 7px}
+  .fl{display:block;font-weight:600;font-size:13px;margin:14px 0 7px;color:var(--ink-soft)}
   .chips{display:flex;flex-wrap:wrap;gap:7px}
   .chip-opt{cursor:pointer}
   .chip-opt input{position:absolute;opacity:0;pointer-events:none}
-  .chip-opt span{display:inline-block;padding:7px 13px;border-radius:99px;border:1.5px solid var(--line);background:#fff;font-weight:700;font-size:13px;transition:all .15s}
-  .chip-opt input:checked + span{border-color:transparent;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta))}
-  .slider{display:flex;align-items:center;gap:10px;margin:8px 0}
-  .slider span{font-size:12px;color:var(--muted);font-weight:700;width:64px}
+  .chip-opt span{display:inline-block;padding:8px 14px;border-radius:99px;border:1.5px solid var(--line);background:#fff;font-weight:600;font-size:13px;transition:all .15s}
+  .chip-opt input:checked + span{border-color:transparent;color:#fff;background:var(--btn-grad)}
+  .slider{display:flex;align-items:center;gap:10px;margin:9px 0}
+  .slider span{font-size:12px;color:var(--muted);font-weight:600;width:64px}
   .slider span:last-child{text-align:right}
-  .slider input[type=range]{flex:1;accent-color:var(--terracota)}
+  .slider input[type=range]{flex:1;accent-color:var(--magenta)}
+  .fbnew{border:1.5px solid var(--line);background:#fff;color:var(--ink-soft);font-family:'Poppins',sans-serif;font-weight:600;font-size:14px;border-radius:12px;padding:12px 18px;cursor:pointer}
+  .fbnew:hover{border-color:var(--teal)}
 
-  .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-top:22px}
-  .tile{background:var(--card);border:2px solid var(--line);border-radius:18px;padding:12px;text-align:center;transition:border-color .15s,opacity .15s}
-  .tile.sel{border-color:var(--terracota);box-shadow:0 10px 26px rgba(239,67,117,.16)}
+  .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px;margin-top:20px}
+  .tile{background:var(--card);border:1.5px solid var(--line);border-radius:18px;padding:12px;text-align:center;transition:border-color .15s,box-shadow var(--dur) var(--ease),opacity .15s}
+  .tile.sel{border-color:var(--magenta);box-shadow:0 14px 32px -14px rgba(239,67,117,.28)}
   .tile.locked{opacity:.45}
   .tile img{width:100%;border-radius:12px;display:block}
-  .tile .badge{display:inline-block;margin-top:9px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;color:var(--okk-ink);background:var(--okk-bg);padding:4px 10px;border-radius:99px}
-  .tile .pick{margin-top:9px;width:100%;border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;border-radius:99px;padding:8px}
-  .tile .pick:hover{border-color:var(--terracota);color:var(--terracota-700)}
+  .tile .badge{display:inline-block;margin-top:9px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--teal-dark);background:color-mix(in srgb,var(--teal) 12%,#fff);padding:4px 11px;border-radius:99px}
+  .tile .pick{margin-top:9px;width:100%;border:1.5px solid var(--line);background:#fff;color:var(--ink-soft);font-family:'Poppins',sans-serif;font-weight:600;font-size:13px;cursor:pointer;border-radius:99px;padding:9px}
+  .tile .pick:hover{border-color:var(--magenta);color:var(--magenta)}
 
-  .chosen{background:linear-gradient(135deg,rgba(255,107,61,.06),rgba(255,43,133,.06));border:1px solid var(--line);border-radius:var(--r-lg);padding:18px;margin-top:22px;max-width:620px}
-  .chosen h3{font-family:var(--font-display);font-weight:800;font-size:16px;margin-bottom:4px}
-  .dl{margin-top:10px}
-  .dl button{font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;border:1.5px solid var(--line);background:#fff;color:var(--tinta);border-radius:99px;padding:8px 14px;margin:3px}
-  .dl button:hover{border-color:var(--terracota);color:var(--terracota-700)}
-  .warn{font-size:12px;color:var(--muted);margin-top:8px}
-  .empty-g{color:var(--muted);font-size:15px;margin-top:22px}
-  /* El Cerebro — tarjetas de aprendizaje */
-  .cer-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;max-width:920px;margin-top:14px}
-  .cer-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px 16px;box-shadow:var(--shadow-sm)}
+  .chosen{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px;margin-top:22px;max-width:640px;box-shadow:var(--shadow-sm)}
+  .chosen h3{font-family:var(--font-display);font-weight:600;font-size:16px;margin-bottom:4px;color:var(--ink-soft);display:flex;align-items:center;gap:8px}
+  .dl{margin-top:12px}
+  .dl button{font-family:'Poppins',sans-serif;font-weight:600;font-size:13px;cursor:pointer;border:1.5px solid var(--line);background:#fff;color:var(--ink-soft);border-radius:99px;padding:9px 16px;margin:3px}
+  .dl button:hover{border-color:var(--magenta);color:var(--magenta)}
+  .warn{font-size:12px;color:var(--muted);margin-top:10px}
+  .empty-g{color:var(--muted);font-size:15px;margin-top:20px;line-height:1.5;max-width:44ch}
+
+  .cer-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;max-width:920px;margin-top:16px}
+  .cer-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:var(--shadow-sm)}
   .cer-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-  .cer-tag{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--teal-700);background:color-mix(in srgb,var(--teal) 11%,#fff);border-radius:99px;padding:3px 10px}
-  .cer-conf{font-size:11px;color:var(--muted);font-weight:700}
+  .cer-tag{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--teal-700);background:color-mix(in srgb,var(--teal) 11%,#fff);border-radius:99px;padding:3px 10px}
+  .cer-conf{font-size:11px;color:var(--muted);font-weight:600}
   .cer-det{margin:0;font-size:14px;color:var(--tinta);line-height:1.45}
   .cer-why{margin:7px 0 0;font-size:12px;color:var(--muted);font-style:italic}
-  .cer-acts{display:flex;gap:14px;margin-top:11px}
-  .cer-link{background:none;border:0;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;color:var(--teal-700);padding:0}
+  .cer-acts{display:flex;gap:16px;margin-top:11px}
+  .cer-link{background:none;border:0;cursor:pointer;font-family:'Poppins',sans-serif;font-weight:600;font-size:12.5px;color:var(--teal-700);padding:0}
   .cer-link.danger{color:var(--muted)}
-  .cer-editform textarea{width:100%;font-family:inherit;font-size:13.5px;border:1.5px solid var(--line);border-radius:10px;padding:8px;margin:8px 0}
-  .cer-editform .btn-save{background:var(--terracota);color:#fff;border:0;border-radius:9px;padding:7px 14px;font-weight:800;cursor:pointer;font-size:12.5px}
-  /* §8.4 — Mi marca en 3 vistas (Voz / Identidad / Lo aprendido) */
-  .mk-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 20px;max-width:680px}
-  .mk-tab{border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:10px 16px;cursor:pointer;font-family:inherit;font-weight:800;font-size:13.5px;color:var(--muted);transition:.15s}
+  .cer-editform textarea{width:100%;box-sizing:border-box;font-family:var(--font-body);font-size:13.5px;border:1.5px solid var(--line);border-radius:10px;padding:9px;margin:8px 0}
+  .cer-editform .btn-save{background:var(--btn-grad);color:#fff;border:0;border-radius:11px;padding:8px 16px;font-weight:600;cursor:pointer;font-size:12.5px}
+
+  .mk-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0 4px;max-width:680px}
+  .mk-tab{border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:10px 16px;cursor:pointer;font-family:'Poppins',sans-serif;font-weight:600;font-size:13.5px;color:var(--muted);transition:.15s;display:inline-flex;align-items:center;gap:7px}
+  .mk-tab svg{width:16px;height:16px}
   .mk-tab.on{border-color:transparent;background:linear-gradient(135deg,var(--teal),var(--teal-700));color:#fff;box-shadow:0 8px 20px -10px rgba(0,164,159,.45)}
+  .mk-tab.on svg{color:#fff}
   .mk-pane{display:none;animation:mkin .25s ease both}
   .mk-pane.on{display:block}
   @keyframes mkin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-  .mk-pane .sec-h:first-child{margin-top:0}
+  .mk-pane .sec-h:first-child{margin-top:14px}
 </style>
 
-<h1 class="page-h">Mi Marca</h1>
-<p class="subline" style="max-width:640px;margin-top:2px">Esto es lo que Crecer sabe de tu negocio y cómo lo representa. Ajústalo cuando quieras.</p>
+<?php $logo_url = (string)($marca['logo_path'] ?? '') ?: (string)($elegido['archivo'] ?? ''); ?>
+<div class="mk-hero">
+  <div class="mk-av"><?php if ($logo_url): ?><img src="<?= $h($logo_url) ?>" alt=""><?php else: ?><span class="ini"><?= $h(mb_strtoupper(mb_substr($marca['nombre_negocio'],0,1))) ?></span><?php endif; ?></div>
+  <div>
+    <div class="mk-name"><?= $h($marca['nombre_negocio']) ?></div>
+    <div class="mk-tagline">El ADN de tu negocio — voz, identidad, memoria.</div>
+  </div>
+</div>
 <?php if (!empty($_GET['tono'])): ?><div class="ok-banner" style="max-width:680px">✓ Tu tono quedó guardado. La Creativa escribirá así de ahora en adelante.</div><?php endif; ?>
 
 <div class="mk-tabs" role="tablist">
@@ -348,7 +367,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
 <?php if (!$pagado): ?>
   <div class="genbox" style="text-align:center;background:linear-gradient(135deg,rgba(255,107,61,.07),rgba(255,43,133,.07))">
     <div style="color:var(--terracota)"><?= ico('lock','ic-xl') ?></div>
-    <div style="font-family:var(--font-impact);text-transform:uppercase;font-size:22px;margin:6px 0">El logo es premium</div>
+    <div style="font-family:var(--font-display);font-weight:600;font-size:22px;color:var(--ink-soft);margin:6px 0">El logo es premium</div>
     <p style="color:var(--muted);font-size:14px;max-width:430px;margin:0 auto 16px">Tu logo profesional con IA, en los formatos que necesites, se desbloquea con un plan. (Tu post de muestra sí es gratis)</p>
     <a class="genbtn" href="/crecer/panel/precios.php?marca=<?= $marca_id ?>" style="text-decoration:none;display:inline-block">⚡ Desbloquear mi logo →</a>
   </div>

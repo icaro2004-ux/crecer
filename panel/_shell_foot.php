@@ -15,7 +15,7 @@
 <!-- ── Asistente del corillo (helper conversacional) ─────────────
      En Inicio NO se muestra: allí la mascota (El Estratega) es el recibidor
      y dos orbes flotantes recargan la pantalla. En el resto de páginas, sí. -->
-<?php if (!in_array(($active ?? ''), ['inicio','contenido','biblioteca'], true)): ?>
+<?php if (!in_array(($active ?? ''), ['inicio','contenido','biblioteca','resultados','marca','config'], true)): ?>
 <button class="asis-fab" id="asisFab" aria-label="Habla con el Copiloto" title="Habla con el Copiloto">
   <img src="/crecer/assets/brand/copiloto.png" alt="Copiloto">
 </button>

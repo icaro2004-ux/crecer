@@ -117,86 +117,85 @@ $fecha_larga = function ($ts) use ($_mes) { $d = strtotime((string)$ts); return 
 
 $active = 'biblioteca';
 $page_title = 'Biblioteca';
-$guia = ['key'=>'biblioteca','agente'=>'sparkles','titulo'=>'La biblioteca de tu negocio',
-  'intro'=>'Guarda aquí las fotos y videos de tu negocio — el corillo los usa para crear.',
-  'pasos'=>[
-    ['image','Arrastra fotos y videos, o dale a Agregar.'],
-    ['sparkles','Ponle una nota si quieres recordar qué es.'],
-    ['check-circle','Toca cualquiera para verlo, renombrarlo o borrarlo.'],
-  ]];
+$guia = null; // La galería se usa sola: tap → fullscreen → swipe. Sin explicación.
 require __DIR__ . '/_shell.php';
 ?>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
-  /* ══ LA BIBLIOTECA ══ un lugar donde el dueño deja recuerdos útiles. Aire, calma. */
-  .content{max-width:920px}
+  /* ══ LA BIBLIOTECA ══ galería viva. Mismo director que Home/Propuestas:
+     Poppins, top ink-soft, tarjeta oscura inmersiva para el fullscreen. */
+  .content{max-width:1000px}
   .asis-fab{display:none}
-  .bib{max-width:880px;margin:0 auto;padding:5vh 6px 100px;font-family:'Poppins',var(--font-body)}
-  @media(min-width:761px){.bib{padding:7vh 6px 70px}}
-  .bib-top{margin-bottom:30px}
-  .bib-top h1{font-family:var(--font-display);font-weight:600;font-size:clamp(25px,4.6vw,37px);line-height:1.15;letter-spacing:-.02em;color:var(--ink-soft);margin:0;text-wrap:balance}
-  .bib-top h1 b{font-weight:600}
-  .bib-top p{margin:12px 0 0;font-size:14.5px;color:var(--muted);line-height:1.55;max-width:56ch}
+  .bib{max-width:940px;margin:0 auto;padding:16px 14px 100px;font-family:'Poppins',var(--font-body)}
+  @media(min-width:761px){.bib{padding:26px 6px 70px}}
 
-  .bib-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-  @media(min-width:560px){.bib-grid{grid-template-columns:repeat(3,1fr)}}
-  @media(min-width:860px){.bib-grid{grid-template-columns:repeat(4,1fr);gap:16px}}
+  .bib-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:0 2px;margin-bottom:20px}
+  .bib-neg{font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--ink-soft);letter-spacing:-.01em}
+  .bib-cred{font-size:12.5px;color:var(--muted);font-weight:400;white-space:nowrap}
+
+  /* masonry por columnas: alturas naturales, las fotos respiran */
+  .bib-grid{column-count:2;column-gap:12px}
+  @media(min-width:560px){.bib-grid{column-count:3}}
+  @media(min-width:860px){.bib-grid{column-count:4;column-gap:14px}}
   .bib-grid.drag{outline:2px dashed var(--teal);outline-offset:8px;border-radius:20px}
+  .bib-tile,.bib-add{break-inside:avoid;width:100%;margin:0 0 12px}
+  @media(min-width:860px){.bib-tile,.bib-add{margin-bottom:14px}}
 
-  .bib-add{aspect-ratio:1;border:1.5px dashed var(--line);border-radius:16px;background:var(--crema-2);
+  .bib-add{aspect-ratio:1;border:1.5px dashed var(--line);border-radius:18px;background:var(--crema-2);
     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;cursor:pointer;
     color:var(--muted);font-family:'Poppins',sans-serif;font-weight:500;font-size:13.5px;transition:.15s}
   .bib-add:hover{border-color:var(--teal);color:var(--teal-700);background:#f2fbfa}
   .bib-add .p{font-size:30px;font-weight:300;line-height:1}
 
-  .bib-tile{position:relative;aspect-ratio:1;border-radius:18px;overflow:hidden;cursor:pointer;background:var(--crema-2);
-    border:1px solid var(--line);margin:0;transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
-  .bib-tile:hover{transform:translateY(-3px);box-shadow:var(--shadow-lg)}
-  .bib-tile img,.bib-tile video{width:100%;height:100%;object-fit:cover;display:block}
-  .bib-tile .play{position:absolute;inset:0;display:grid;place-items:center;background:rgba(20,10,22,.18);color:#fff}
-  .bib-tile .play span{width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,.45);display:grid;place-items:center;backdrop-filter:blur(2px)}
-  .bib-tile .play span::after{content:"";margin-left:3px;border-style:solid;border-width:8px 0 8px 13px;border-color:transparent transparent transparent #fff}
-  .bib-tile .cap{position:absolute;left:0;right:0;bottom:0;padding:18px 10px 8px;font-size:12px;color:#fff;font-weight:500;
-    background:linear-gradient(transparent,rgba(20,10,22,.55));opacity:0;transition:opacity .18s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .bib-tile:hover .cap{opacity:1}
+  .bib-tile{position:relative;border-radius:18px;overflow:hidden;cursor:pointer;background:var(--crema-2);display:block;
+    box-shadow:0 1px 3px rgba(40,22,28,.06);transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+  .bib-tile:hover{transform:translateY(-3px);box-shadow:0 18px 40px -16px rgba(40,22,28,.3)}
+  .bib-tile img,.bib-tile video{width:100%;height:auto;display:block}
+  .bib-tile .play{position:absolute;inset:0;display:grid;place-items:center;background:rgba(20,10,22,.16);color:#fff}
+  .bib-tile .play span{width:44px;height:44px;border-radius:50%;background:rgba(0,0,0,.45);display:grid;place-items:center;backdrop-filter:blur(2px)}
+  .bib-tile .play span::after{content:"";margin-left:3px;border-style:solid;border-width:9px 0 9px 14px;border-color:transparent transparent transparent #fff}
 
-  /* Estado vacío — una invitación en calma, no un panel */
-  .bib-empty{text-align:center;padding:6vh 10px 2vh;color:var(--muted)}
-  .bib-empty p{font-size:15px;line-height:1.6;margin:0 auto;max-width:38ch}
+  .bib-empty{text-align:center;padding:8vh 10px 2vh;color:var(--muted)}
+  .bib-empty p{font-size:15px;line-height:1.6;margin:0 auto;max-width:34ch}
 
-  .bib-up{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:130;background:var(--tinta);color:#fff;
+  .bib-up{position:fixed;left:50%;bottom:82px;transform:translateX(-50%);z-index:130;background:var(--tinta);color:#fff;
     padding:12px 20px;border-radius:99px;font-size:13.5px;font-weight:600;box-shadow:0 14px 34px -10px rgba(0,0,0,.4);display:none}
   .bib-up.show{display:block}
 
-  /* Vista individual — un lightbox en calma */
-  .bib-modal{position:fixed;inset:0;z-index:140;display:none}
-  .bib-modal.show{display:block}
-  .bib-back{position:absolute;inset:0;background:rgba(20,12,22,.66);backdrop-filter:blur(3px)}
-  .bib-sheet{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,92vw);max-height:88vh;overflow:auto;
-    background:var(--card);border-radius:24px;box-shadow:var(--shadow-lg);padding:16px}
-  .bib-sheet .bib-name{font-family:var(--font-display)}
-  .bib-x{position:absolute;top:10px;right:12px;z-index:2;width:34px;height:34px;border-radius:50%;border:0;background:rgba(255,255,255,.9);
-    font-size:20px;line-height:1;color:var(--tinta);cursor:pointer;box-shadow:var(--shadow-sm)}
-  .bib-media{border-radius:14px;overflow:hidden;background:var(--crema-2);margin-bottom:14px;display:grid;place-items:center;min-height:180px}
-  .bib-media img,.bib-media video{width:100%;max-height:56vh;object-fit:contain;display:block;background:#000}
-  .bib-name{width:100%;box-sizing:border-box;font-family:'Poppins',sans-serif;font-weight:600;font-size:18px;color:var(--tinta);
-    border:0;border-bottom:1.5px solid transparent;padding:4px 2px;background:0}
-  .bib-name:hover{border-bottom-color:var(--line)}
-  .bib-name:focus{outline:0;border-bottom-color:var(--magenta)}
-  .bib-note{width:100%;box-sizing:border-box;font-family:var(--font-body);font-size:14px;line-height:1.5;color:#3a3340;
-    border:1px solid var(--line);border-radius:12px;padding:11px;resize:vertical;min-height:56px;margin-top:12px;background:#fff}
-  .bib-note:focus{outline:2px solid color-mix(in srgb,var(--magenta) 35%,transparent);outline-offset:1px;border-color:transparent}
-  .bib-metarow{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}
-  .bib-date{font-size:12.5px;color:var(--muted)}
-  .bib-del{background:0;border:0;cursor:pointer;color:var(--noo-ink);font-family:'Poppins',sans-serif;font-weight:600;font-size:13.5px}
-  .bib-del:hover{text-decoration:underline}
+  /* ── Fullscreen: la foto crece a toda la pantalla; swipe; cerrar y vuelves ── */
+  .lb{position:fixed;inset:0;z-index:200;background:#0b0810;opacity:0;pointer-events:none;
+    transition:opacity .3s var(--ease);display:flex;flex-direction:column}
+  .lb.show{opacity:1;pointer-events:auto}
+  .lb-bar{display:flex;align-items:center;gap:12px;padding:14px 16px;position:relative;z-index:3}
+  .lb-count{font-size:13px;color:rgba(255,255,255,.7);font-weight:500}
+  .lb-ico{width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.12);color:#fff;cursor:pointer;
+    display:grid;place-items:center;font-size:19px;line-height:1;transition:background var(--dur) var(--ease)}
+  .lb-ico:hover{background:rgba(255,255,255,.22)}
+  .lb-stage{flex:1;position:relative;overflow:hidden;min-height:0}
+  .lb-track{position:absolute;inset:0;display:flex;transition:transform .34s var(--ease);will-change:transform}
+  .lb-slide{flex:0 0 100%;height:100%;display:grid;place-items:center;padding:0 8px}
+  .lb-slide img,.lb-slide video{max-width:100%;max-height:100%;object-fit:contain;border-radius:12px;display:block}
+  .lb-foot{padding:14px 20px calc(22px + env(safe-area-inset-bottom));position:relative;z-index:3;max-width:640px;margin:0 auto;width:100%;box-sizing:border-box}
+  .lb-name{width:100%;box-sizing:border-box;font-family:var(--font-display);font-weight:600;font-size:18px;color:#fff;
+    border:0;border-bottom:1.5px solid transparent;padding:3px 0;background:0}
+  .lb-name:focus{outline:0;border-bottom-color:rgba(255,255,255,.5)}
+  .lb-meta{display:flex;align-items:center;gap:18px;margin-top:9px}
+  .lb-date{font-size:12.5px;color:rgba(255,255,255,.55)}
+  .lb-sp{flex:1}
+  .lb-note-btn,.lb-del{background:0;border:0;cursor:pointer;font-family:'Poppins',sans-serif;font-weight:500;font-size:13px;color:rgba(255,255,255,.82);padding:2px}
+  .lb-note-btn:hover,.lb-del:hover{color:#fff}
+  .lb-note{width:100%;box-sizing:border-box;margin-top:11px;font-family:var(--font-body);font-size:14px;line-height:1.5;color:#fff;
+    border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:10px;resize:vertical;min-height:52px;background:rgba(255,255,255,.06);display:none}
+  .lb-note.show{display:block}
+  .lb-note:focus{outline:0;border-color:rgba(255,255,255,.5)}
+  .lb-note::placeholder{color:rgba(255,255,255,.4)}
 </style>
 
 <main class="bib">
-  <header class="bib-top">
-    <h1>La biblioteca de <b><?= $h($negocio) ?></b></h1>
-    <p>Las fotos y videos de tu negocio, en un solo lugar. Guárdalos aunque no los uses todavía — el corillo los tiene a mano para crear.</p>
-  </header>
+  <div class="bib-top">
+    <span class="bib-neg">Biblioteca</span>
+    <?php if ($activos): ?><span class="bib-cred"><?= count($activos) ?> <?= count($activos) === 1 ? 'recuerdo' : 'recuerdos' ?></span><?php endif; ?>
+  </div>
 
   <input type="file" id="bibFile" accept="image/*,video/*" multiple hidden>
 
@@ -214,30 +213,35 @@ require __DIR__ . '/_shell.php';
           <video src="<?= $h($url) ?>" preload="metadata" muted playsinline></video>
           <span class="play"><span></span></span>
         <?php endif; ?>
-        <span class="cap"><?= $h($a['nombre']) ?></span>
       </figure>
     <?php endforeach; ?>
   </div>
 
   <?php if (!$activos): ?>
-    <div class="bib-empty"><p>Todavía no hay nada aquí. Arrastra las fotos y videos de tu negocio — o dale a <b>Agregar</b>. Este es el álbum del que el corillo va a tirar mañana.</p></div>
+    <div class="bib-empty"><p>Todavía no hay nada. Arrastra fotos y videos, o dale a <b>Agregar</b>. Es el álbum del que el corillo va a tirar mañana.</p></div>
   <?php endif; ?>
 
   <div class="bib-up" id="bibUp">Guardando…</div>
 </main>
 
-<!-- Vista individual -->
-<div class="bib-modal" id="bibModal" aria-hidden="true">
-  <div class="bib-back" data-close></div>
-  <div class="bib-sheet">
-    <button type="button" class="bib-x" data-close aria-label="Cerrar">&times;</button>
-    <div class="bib-media" id="bibMedia"></div>
-    <input class="bib-name" id="bibName" maxlength="180" aria-label="Nombre">
-    <textarea class="bib-note" id="bibNote" maxlength="2000" placeholder="Agrega una nota… (opcional)"></textarea>
-    <div class="bib-metarow">
-      <span class="bib-date" id="bibDate"></span>
-      <button type="button" class="bib-del" id="bibDel">Eliminar</button>
+<!-- Fullscreen: la foto crece a toda la pantalla, swipe, cerrar y vuelves -->
+<div class="lb" id="lb" aria-hidden="true">
+  <div class="lb-bar">
+    <button type="button" class="lb-ico" id="lbClose" aria-label="Cerrar">&times;</button>
+    <span class="lb-count" id="lbCount"></span>
+  </div>
+  <div class="lb-stage" id="lbStage">
+    <div class="lb-track" id="lbTrack"></div>
+  </div>
+  <div class="lb-foot">
+    <input class="lb-name" id="lbName" maxlength="180" aria-label="Nombre">
+    <div class="lb-meta">
+      <span class="lb-date" id="lbDate"></span>
+      <span class="lb-sp"></span>
+      <button type="button" class="lb-note-btn" id="lbNoteBtn">Nota</button>
+      <button type="button" class="lb-del" id="lbDel">Eliminar</button>
     </div>
+    <textarea class="lb-note" id="lbNote" maxlength="2000" placeholder="Agrega una nota…"></textarea>
   </div>
 </div>
 
@@ -271,50 +275,74 @@ require __DIR__ . '/_shell.php';
   ['dragleave', 'drop'].forEach(function (ev) { grid.addEventListener(ev, function (e) { e.preventDefault(); if (ev !== 'drop' && e.target !== grid && grid.contains(e.relatedTarget)) return; grid.classList.remove('drag'); }); });
   grid.addEventListener('drop', function (e) { e.preventDefault(); if (e.dataTransfer && e.dataTransfer.files) subir(e.dataTransfer.files); });
 
-  // ── Vista individual ──
-  var modal = document.getElementById('bibModal'), media = document.getElementById('bibMedia'),
-      nameEl = document.getElementById('bibName'), noteEl = document.getElementById('bibNote'),
-      dateEl = document.getElementById('bibDate'), delEl = document.getElementById('bibDel');
-  var cur = null;
+  // ── Galería fullscreen con swipe ──
+  var tiles = [].slice.call(grid.querySelectorAll('.bib-tile'));
+  var assets = tiles.map(function (t) {
+    return { id: t.getAttribute('data-id'), tipo: t.getAttribute('data-tipo'), url: t.getAttribute('data-url'),
+             nombre: t.getAttribute('data-nombre') || '', nota: t.getAttribute('data-nota') || '', fecha: t.getAttribute('data-fecha') || '' };
+  });
+  var lb = document.getElementById('lb'), track = document.getElementById('lbTrack'), stage = document.getElementById('lbStage'),
+      countEl = document.getElementById('lbCount'), nameEl = document.getElementById('lbName'), dateEl = document.getElementById('lbDate'),
+      noteEl = document.getElementById('lbNote'), noteBtn = document.getElementById('lbNoteBtn'), delEl = document.getElementById('lbDel');
+  var idx = 0;
 
-  function open(tile) {
-    cur = tile;
-    var tipo = tile.getAttribute('data-tipo'), url = tile.getAttribute('data-url');
-    media.innerHTML = tipo === 'imagen'
-      ? '<img src="' + url + '" alt="">'
-      : '<video src="' + url + '" controls playsinline preload="metadata"></video>';
-    nameEl.value = tile.getAttribute('data-nombre') || '';
-    noteEl.value = tile.getAttribute('data-nota') || '';
-    dateEl.textContent = tile.getAttribute('data-fecha') || '';
-    modal.classList.add('show'); modal.setAttribute('aria-hidden', 'false');
+  function build() {
+    track.innerHTML = assets.map(function (a) {
+      var m = a.tipo === 'imagen' ? '<img src="' + a.url + '" alt="">'
+                                  : '<video src="' + a.url + '" controls playsinline preload="metadata"></video>';
+      return '<div class="lb-slide">' + m + '</div>';
+    }).join('');
   }
-  function close() { modal.classList.remove('show'); modal.setAttribute('aria-hidden', 'true'); media.innerHTML = ''; cur = null; }
+  function meta() {
+    var a = assets[idx];
+    nameEl.value = a.nombre; dateEl.textContent = a.fecha; noteEl.value = a.nota;
+    noteEl.classList.toggle('show', !!a.nota);
+    countEl.textContent = (idx + 1) + ' / ' + assets.length;
+  }
+  function show(i, anim) {
+    idx = Math.max(0, Math.min(assets.length - 1, i));
+    track.style.transition = anim === false ? 'none' : '';
+    track.style.transform = 'translateX(-' + (idx * 100) + '%)';
+    meta();
+  }
+  function open(i) {
+    if (!assets.length) return;
+    build(); lb.classList.add('show'); lb.setAttribute('aria-hidden', 'false'); document.body.style.overflow = 'hidden';
+    show(i, false);
+  }
+  function close() { lb.classList.remove('show'); lb.setAttribute('aria-hidden', 'true'); document.body.style.overflow = ''; track.innerHTML = ''; }
 
-  grid.querySelectorAll('.bib-tile').forEach(function (t) { t.addEventListener('click', function () { open(t); }); });
-  modal.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', close); });
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modal.classList.contains('show')) close(); });
+  tiles.forEach(function (t, i) { t.addEventListener('click', function () { open(i); }); });
+  document.getElementById('lbClose').addEventListener('click', close);
+  document.addEventListener('keydown', function (e) {
+    if (!lb.classList.contains('show')) return;
+    if (e.key === 'Escape') close(); else if (e.key === 'ArrowRight') show(idx + 1); else if (e.key === 'ArrowLeft') show(idx - 1);
+  });
 
-  // Renombrar (al salir del campo)
+  // swipe entre activos
+  var sx = 0, drag = false;
+  stage.addEventListener('pointerdown', function (e) { if (e.target.closest('video,button,a,input,textarea')) return; drag = true; sx = e.clientX; track.style.transition = 'none'; });
+  stage.addEventListener('pointermove', function (e) { if (!drag) return; var dx = e.clientX - sx; track.style.transform = 'translateX(calc(-' + (idx * 100) + '% + ' + dx + 'px))'; });
+  function endDrag(e) { if (!drag) return; drag = false; var dx = (e.clientX || sx) - sx; if (dx < -60) show(idx + 1); else if (dx > 60) show(idx - 1); else show(idx); }
+  stage.addEventListener('pointerup', endDrag);
+  stage.addEventListener('pointercancel', endDrag);
+
+  // renombrar / nota / eliminar sobre el activo actual
   nameEl.addEventListener('blur', function () {
-    if (!cur) return; var v = nameEl.value.trim(); if (!v || v === cur.getAttribute('data-nombre')) { nameEl.value = cur.getAttribute('data-nombre'); return; }
-    post('renombrar', { id: cur.getAttribute('data-id'), nombre: v }).then(function (d) {
-      if (d && d.ok) { cur.setAttribute('data-nombre', d.nombre); var c = cur.querySelector('.cap'); if (c) c.textContent = d.nombre; }
-    });
+    var a = assets[idx]; if (!a) return; var v = nameEl.value.trim();
+    if (!v || v === a.nombre) { nameEl.value = a.nombre; return; }
+    post('renombrar', { id: a.id, nombre: v }).then(function (d) { if (d && d.ok) a.nombre = d.nombre; });
   });
-  // Nota (al salir del campo)
+  noteBtn.addEventListener('click', function () { noteEl.classList.toggle('show'); if (noteEl.classList.contains('show')) noteEl.focus(); });
   noteEl.addEventListener('blur', function () {
-    if (!cur) return; var v = noteEl.value.trim(); if (v === (cur.getAttribute('data-nota') || '')) return;
-    post('nota', { id: cur.getAttribute('data-id'), nota: v }).then(function (d) { if (d && d.ok) cur.setAttribute('data-nota', v); });
+    var a = assets[idx]; if (!a) return; var v = noteEl.value.trim(); if (v === a.nota) return;
+    post('nota', { id: a.id, nota: v }).then(function (d) { if (d && d.ok) a.nota = v; });
   });
-  // Eliminar
   delEl.addEventListener('click', function () {
-    if (!cur) return; if (!confirm('¿Eliminar esto de tu biblioteca? No se puede deshacer.')) return;
-    var id = cur.getAttribute('data-id'); delEl.disabled = true;
-    post('eliminar', { id: id }).then(function (d) {
-      delEl.disabled = false;
-      if (d && d.ok) { var t = grid.querySelector('.bib-tile[data-id="' + id + '"]'); if (t) t.remove(); close(); }
-      else alert((d && d.err) || 'No se pudo eliminar.');
-    }).catch(function () { delEl.disabled = false; alert('Se cayó la conexión.'); });
+    var a = assets[idx]; if (!a) return; if (!confirm('¿Eliminar esto de tu biblioteca? No se puede deshacer.')) return;
+    delEl.disabled = true;
+    post('eliminar', { id: a.id }).then(function (d) { delEl.disabled = false; if (d && d.ok) location.reload(); else alert((d && d.err) || 'No se pudo eliminar.'); })
+      .catch(function () { delEl.disabled = false; alert('Se cayó la conexión.'); });
   });
 })();
 </script>

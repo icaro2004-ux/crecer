@@ -327,13 +327,7 @@ $ICON = '/crecer/assets/icons';
 
 $active = 'inicio';
 $page_title = 'Inicio';
-$guia = ['key'=>'inicio','agente'=>'sparkles','titulo'=>'El relevo del corillo',
-  'intro'=>'Cada mañana, tu equipo te entrega el turno: lo que dejaron listo y tu única decisión.',
-  'pasos'=>[
-    ['check-circle','Las tres líneas son la prueba de que tu equipo ya trabajó.'],
-    ['image','Debajo ves el post que dejaron listo. Solo falta tu OK.'],
-    ['sparkles','Todo lo demás (resultados, piloto, aprendizajes) vive en "Ver todo".'],
-  ]];
+$guia = null; // El Home no se explica: se siente. (Overlay-guía eliminado a propósito.)
 require __DIR__ . '/_shell.php';
 ?>
 <?php
@@ -397,211 +391,230 @@ $hero = [
 $frase = 'Queda en tus manos.';
 $cta   = 'Vamos con este';
 $firma = 'El corillo sigue trabajando.';
+
+// ── EL TURNO · deck a pantalla completa de las decisiones que esperan tu OK ──
+$deck = [];
+foreach ($dec_pieces as $p) {
+    if (($p['estado'] ?? '') !== 'borrador') continue;
+    $deck[] = [
+        'id'   => (int)$p['id'],
+        'cap'  => trim((string)$p['caption']),
+        'plat' => (string)$p['plataforma'],
+        'img'  => (string)$p['grafica_path'],
+        'vid'  => (bool)preg_match('#\.(mp4|mov|m4v)$#i', (string)$p['grafica_path']),
+    ];
+}
+$has_deck = count($deck) > 0;
+$credito  = $has_deck
+    ? (count($deck) === 1 ? 'Tu corillo dejó esto listo' : 'Tu corillo dejó ' . count($deck) . ' listos')
+    : '';
 ?>
-<script>
-/* ── EL PRIMER MINUTO · el relevo ─────────────────────────────────────────────
-   El corillo entrega el turno UNA vez al día. Decisión SÍNCRONA antes de pintar
-   → sin flash, sin actuación repetida. Sin JS, o en visitas repetidas, o con
-   movimiento reducido, el contenido queda visible al instante (progresivo). */
-(function () {
-  try {
-    var mq = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
-    if (mq && mq.matches) return;                       // respeta reduced-motion: sin ritual
-    var hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Puerto_Rico' });
-    var k = 'relevo_' + hoy;                            // una vez por día natural (hora PR)
-    if (!localStorage.getItem(k)) {
-      document.documentElement.classList.add('rlv-play');
-      localStorage.setItem(k, '1');
-    }
-  } catch (e) {}
-})();
-</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
-  /* ══ C2 · EL RELEVO DEL CORILLO ══ calma, espacio, evidencia. Hereda tokens. */
-  .content{max-width:620px;margin-inline:auto}
-  .rlv{max-width:560px;margin:0 auto;padding:9vh 6px 70px;font-family:'Poppins',var(--font-body)}
-  @media(max-width:760px){.rlv{padding:5vh 4px 100px}}
+  /* ══ EL TURNO ══ un espacio inmersivo, no un documento. El post que el corillo
+     dejó listo ocupa la pantalla; tu veredicto vive encima; swipe para el próximo.
+     Sin caja, sin checks, sin firma, sin "ver todo". Hereda tokens. */
+  .content{max-width:none;padding:0;display:flex;flex-direction:column;flex:1}
+  .turno{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    width:100%;gap:13px;padding:16px 14px 20px;min-height:calc(100dvh - 132px)}
+  @media(max-width:760px){.turno{padding:14px 10px 8px;min-height:calc(100dvh - 116px);justify-content:flex-start}}
 
-  .rlv-top{margin-bottom:40px}
-  .rlv-hero{font-family:var(--font-display);font-weight:600;font-size:clamp(27px,5.4vw,42px);
-    line-height:1.15;letter-spacing:-.02em;color:var(--ink-soft);margin:0;text-wrap:balance}
-  .rlv-meta{margin:14px 0 0;font-size:13px;color:var(--muted);font-weight:400;letter-spacing:.01em}
+  /* whisper superior: negocio + un solo crédito */
+  .tn-top{width:100%;max-width:460px;display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:0 4px}
+  .tn-neg{font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--ink-soft);letter-spacing:-.01em}
+  .tn-cred{font-size:12.5px;color:var(--muted);font-weight:400;white-space:nowrap}
 
-  /* Evidencia: el corazón. */
-  .rlv-ev{list-style:none;margin:0 0 36px;padding:0;display:flex;flex-direction:column;gap:17px}
-  .rlv-ev li{display:flex;align-items:flex-start;gap:13px;font-size:16.5px;line-height:1.4;color:var(--tinta);font-weight:400}
-  .rlv-ck{flex:none;margin-top:1px;color:var(--palma);display:inline-flex}
-  .rlv-ck svg{width:21px;height:21px}
+  /* stage + deck a pantalla completa */
+  .tn-stage{position:relative;width:100%;max-width:440px;aspect-ratio:4/5;height:auto;max-height:min(72vh,640px);margin:4px 0}
+  @media(max-width:760px){.tn-stage{max-height:calc(100dvh - 202px)}}
+  .deck{position:absolute;inset:0}
+  .tcard{position:absolute;inset:0;border-radius:28px;overflow:hidden;background:#14121c;
+    box-shadow:0 34px 80px -26px rgba(24,12,20,.55);will-change:transform,opacity;
+    transform:translateY(30px) scale(.9);opacity:0;pointer-events:none;z-index:1;
+    transition:transform .44s var(--ease),opacity .44s var(--ease),box-shadow .44s var(--ease)}
+  .tcard.is-next{transform:translateY(16px) scale(.945);opacity:.6;z-index:2}
+  .tcard.is-active{transform:none;opacity:1;pointer-events:auto;z-index:3}
+  .tcard.is-gone{transform:translateY(-44px) scale(.94);opacity:0;z-index:0}
+  .tcard.is-hidden{opacity:0;z-index:0}
+  .tcard.fly-up{transform:translateY(-56px) scale(.92)!important;opacity:0!important}
+  .tcard.fly-down{transform:translateY(56px) scale(.92)!important;opacity:0!important}
 
-  /* El trabajo, presente sin dominar. */
-  .rlv-work{background:var(--card);border:1px solid var(--line);border-radius:22px;overflow:hidden;
-    box-shadow:0 2px 6px rgba(40,22,28,.05), 0 26px 56px -24px rgba(40,22,28,.28);
-    margin-bottom:30px;transition:box-shadow var(--dur) var(--ease),transform var(--dur) var(--ease)}
-  .rlv-work:hover{box-shadow:0 6px 16px rgba(40,22,28,.07), 0 46px 88px -28px rgba(40,22,28,.36);transform:translateY(-3px)}
-  .rlv-thumb{width:100%;aspect-ratio:4/3;overflow:hidden;background:var(--crema-2);
-    display:grid;place-items:center;color:var(--teal)}
-  .rlv-thumb img{width:100%;height:100%;object-fit:cover}
-  .rlv-thumb svg{width:30px;height:30px}
-  .rlv-thumb.txt{background:linear-gradient(135deg,#fff,var(--crema-2))}
-  .rlv-vtag{font-size:11px;font-weight:700;color:var(--teal-700);display:flex;flex-direction:column;align-items:center;gap:5px}
-  .rlv-vtag svg{width:24px;height:24px}
-  .rlv-wtext{min-width:0;padding:15px 18px 17px}
-  .rlv-wplat{font-size:12px;font-weight:600;color:var(--muted);text-transform:capitalize;margin-bottom:6px}
-  .rlv-wcap{margin:0;font-size:14.5px;line-height:1.5;color:#3a3340}
+  .tcard-media{position:absolute;inset:0}
+  .tcard-media img,.tcard-media video{width:100%;height:100%;object-fit:cover;display:block}
+  .tcard-nomedia{position:absolute;inset:0;display:grid;place-items:center;color:rgba(255,255,255,.35);
+    background:linear-gradient(150deg,#2a2733,#141019)}
+  .tcard-nomedia svg{width:44px;height:44px}
+  .tcard-scrim{position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(to top,rgba(8,5,10,.9) 2%,rgba(8,5,10,.5) 26%,rgba(8,5,10,0) 52%)}
+  .tcard-tag{position:absolute;top:15px;left:15px;font-size:11px;font-weight:700;color:#fff;text-transform:capitalize;
+    letter-spacing:.03em;background:rgba(255,255,255,.16);backdrop-filter:blur(7px);padding:6px 12px;border-radius:999px}
 
-  /* La decisión: una frase, un botón. */
-  .rlv-decide{text-align:center;margin-bottom:24px}
-  .rlv-frase{font-size:18px;color:var(--tinta);font-weight:400;margin:0 0 18px}
-  .rlv-go{display:inline-block;border:0;cursor:pointer;font-family:'Poppins',sans-serif;font-weight:600;
-    font-size:16.5px;color:#fff;text-decoration:none;padding:16px 46px;border-radius:15px;
-    background:var(--btn-grad);box-shadow:var(--btn-glow);
+  .tcard-body{position:absolute;left:0;right:0;bottom:0;padding:18px 18px 20px;color:#fff}
+  .tcard-cap{font-size:15.5px;line-height:1.45;font-weight:400;margin:0 0 15px;text-shadow:0 1px 16px rgba(0,0,0,.45);
+    display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .tn-ok{width:100%;border:0;cursor:pointer;font-family:'Poppins',sans-serif;font-weight:600;font-size:16px;color:#fff;
+    padding:16px 20px;border-radius:16px;background:var(--btn-grad);box-shadow:var(--btn-glow);
     transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
-  .rlv-go:hover{transform:translateY(-2px);box-shadow:var(--btn-glow-hover)}
-  .rlv-go:active{transform:translateY(0);box-shadow:var(--btn-glow-active)}
-  .rlv-go:disabled{opacity:.65;cursor:default;transform:none;box-shadow:var(--btn-glow)}
-  .rlv-alt{display:inline-block;margin-top:15px;color:var(--muted);font-size:14px;font-weight:500;text-decoration:none}
-  .rlv-alt:hover{color:var(--tinta)}
-  .rlv-done{font-size:18px;color:var(--palma-600);font-weight:600;text-align:center;margin:6px 0;line-height:1.4}
-  .rlv-calma{font-size:16px;color:var(--muted);line-height:1.55;margin:0 0 6px}
+  .tn-ok:active{transform:translateY(1px);box-shadow:var(--btn-glow-active)}
+  .tn-sub{display:flex;align-items:center;justify-content:center;gap:22px;margin-top:12px}
+  .tn-adj,.tn-no{background:0;border:0;cursor:pointer;font-family:'Poppins',sans-serif;font-size:13.5px;font-weight:500;
+    color:rgba(255,255,255,.82);text-decoration:none;padding:6px 4px}
+  .tn-adj:hover,.tn-no:hover{color:#fff}
 
-  .rlv-firma{font-family:var(--font-display);font-size:15.5px;color:var(--muted);font-weight:400;margin:34px 0 0;font-style:italic}
+  /* fin del turno / estados sin deck */
+  .tn-end{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;opacity:0;pointer-events:none;transition:opacity .55s var(--ease)}
+  .tn-end.show{opacity:1}
+  .tn-end-t,.tn-solo-t{font-family:var(--font-display);font-weight:600;color:var(--ink-soft);margin:0;line-height:1.15}
+  .tn-end-t{font-size:27px}
+  .tn-end-s,.tn-solo-s{font-size:14px;color:var(--muted);margin:8px 0 0}
+  .tn-solo{margin:auto;max-width:380px;text-align:center;padding:24px}
+  .tn-solo-t{font-size:clamp(25px,5.4vw,34px);margin-bottom:22px}
+  .tn-solo .tn-ok{display:inline-block;width:auto;padding:16px 42px;text-decoration:none}
 
-  .rlv-plain{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:26px;
-    box-shadow:var(--shadow-sm);text-align:center}
-  .rlv-say{font-size:16px;color:var(--tinta);line-height:1.55;margin:0 0 20px}
+  /* progreso: puntos, no números */
+  .tn-dots{display:flex;gap:6px;justify-content:center;align-items:center;height:8px}
+  .tn-dot{width:6px;height:6px;border-radius:50%;background:var(--line);transition:width .3s var(--ease),background .3s}
+  .tn-dot.on{background:var(--magenta);width:22px;border-radius:3px}
 
-  /* Ver todo — todo lo demás vive aquí, sin competir. */
-  .rlv-more{margin-top:48px;border-top:1px solid var(--line);padding-top:22px}
-  .rlv-vertodo{background:0;border:0;cursor:pointer;font-family:'Poppins',sans-serif;color:var(--muted);
-    font-size:14px;font-weight:500;display:inline-flex;align-items:center;gap:8px;padding:0}
-  .rlv-vertodo span{transition:transform .22s;display:inline-block}
-  .rlv-vertodo.on span{transform:rotate(90deg)}
-  .rlv-vertodo:hover{color:var(--tinta)}
-  .rlv-drawer{margin-top:16px;display:flex;flex-direction:column;gap:2px}
-  .rlv-drawer[hidden]{display:none}
-  .rlv-link{display:flex;flex-direction:column;gap:3px;padding:14px;border-radius:12px;text-decoration:none;transition:background .12s}
-  .rlv-link:hover{background:var(--crema-2)}
-  .rlv-link b{font-size:14.5px;color:var(--tinta);font-weight:600}
-  .rlv-link span{font-size:12.5px;color:var(--muted)}
-
-  /* ══ EL PRIMER MINUTO ══ el relevo se despliega una vez; luego, quietud absoluta.
-     Solo opacity/transform → compositado, 60fps, sin reflow, sin CLS. El contenido
-     es VISIBLE por defecto; el ritual solo corre bajo <html class="rlv-play">
-     (una vez al día, movimiento permitido). Cada elemento ya ocupa su posición
-     final; solo se revela. El silencio DESPUÉS del relevo es la función. */
-  @keyframes rlvRise{from{opacity:0;transform:translateY(var(--ry,10px))}to{opacity:1;transform:none}}
-  @keyframes rlvFade{from{opacity:0}to{opacity:1}}
-  html.rlv-play .rlv-anim{opacity:0;animation:rlvRise var(--rdur,460ms) cubic-bezier(.22,1,.36,1) both;animation-delay:var(--rd,0ms)}
-  html.rlv-play .rlv-anim.op{animation-name:rlvFade}
-  @media(prefers-reduced-motion:reduce){
-    html.rlv-play .rlv-anim{animation:none!important;opacity:1!important;transform:none!important}
-  }
+  /* entrada: el turno sube a su sitio una vez, al abrir */
+  @keyframes tnRise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+  .tn-top,.tn-dots{animation:tnRise .5s var(--ease) both}
+  .tn-dots{animation-delay:.08s}
+  @media(prefers-reduced-motion:reduce){.tn-top,.tn-dots,.tcard{animation:none!important;transition-duration:.001ms!important}}
 </style>
 
-<main class="rlv">
-  <header class="rlv-top">
-    <h1 class="rlv-hero rlv-anim" style="--rd:100ms;--rdur:500ms;--ry:12px"><?= $h($hero) ?></h1>
-    <p class="rlv-meta"><?= $h($negocio) ?><?= $relevo_label ? ' · ' . $h($relevo_label) : '' ?></p>
-  </header>
+<main class="turno" id="turno">
+  <div class="tn-top">
+    <span class="tn-neg"><?= $h($negocio) ?></span>
+    <?php if ($credito): ?><span class="tn-cred"><?= $h($credito) ?></span><?php endif; ?>
+  </div>
 
-  <?php if ($modo === 'sin_plan' || $modo === 'primerdia'): ?>
-    <section class="rlv-plain rlv-anim" style="--rd:620ms;--rdur:480ms;--ry:10px">
-      <?php if ($modo === 'primerdia'): ?>
-        <p class="rlv-say">Dale la señal y el corillo prepara tu primera semana de contenido, en tu propia voz.</p>
-        <a class="rlv-go" href="<?= $h($st['href']) ?>"><?= $h($st['cta']) ?></a>
-      <?php else: ?>
-        <p class="rlv-say">Enciende Crecer y el corillo empieza a preparar tu contenido cada semana, en tu propia voz.</p>
-        <a class="rlv-go" href="<?= $BASE ?>/precios.php?<?= $mid ?>">Activar Crecer</a>
-      <?php endif; ?>
-    </section>
-
-  <?php else: ?>
-    <?php if ($evidencia): ?>
-    <ul class="rlv-ev">
-      <?php foreach ($evidencia as $i => $e): ?>
-        <li class="rlv-anim" style="--rd:<?= 620 + $i * 140 ?>ms;--rdur:420ms;--ry:8px"><span class="rlv-ck"><?= ico('check-circle') ?></span><?= $h($e) ?></li>
+  <?php if ($has_deck): ?>
+  <div class="tn-stage">
+    <div class="deck" id="deck">
+      <?php foreach ($deck as $card): ?>
+      <article class="tcard" data-id="<?= $card['id'] ?>">
+        <div class="tcard-media">
+          <?php if ($card['img'] && $card['vid']): ?>
+            <video src="<?= $h($card['img']) ?>" muted loop autoplay playsinline></video>
+          <?php elseif ($card['img']): ?>
+            <img src="<?= $h($card['img']) ?>" alt="">
+          <?php else: ?>
+            <div class="tcard-nomedia"><?= ico('image') ?></div>
+          <?php endif; ?>
+        </div>
+        <div class="tcard-scrim"></div>
+        <?php if ($card['plat']): ?><span class="tcard-tag"><?= $h($card['plat']) ?></span><?php endif; ?>
+        <div class="tcard-body">
+          <p class="tcard-cap"><?= $h($card['cap'] !== '' ? $card['cap'] : 'Sin texto todavía') ?></p>
+          <button type="button" class="tn-ok" data-act="aprobar">Vamos con este</button>
+          <div class="tn-sub">
+            <a class="tn-adj" href="<?= $BASE ?>/aprobar2.php?edit=<?= $card['id'] ?>&<?= $mid ?>#cap-<?= $card['id'] ?>">Ajustar</a>
+            <button type="button" class="tn-no" data-act="rechazar">No es esto</button>
+          </div>
+        </div>
+      </article>
       <?php endforeach; ?>
-    </ul>
-    <?php endif; ?>
-
-    <?php if ($modo === 'decision' && $featured): ?>
-      <div class="rlv-work rlv-anim" id="rlvWork" style="--rd:1080ms;--rdur:460ms;--ry:10px">
-        <div class="rlv-thumb<?= ($fe_arte || $fe_video) ? '' : ' txt' ?>">
-          <?php if ($fe_arte): ?><img src="<?= $h($featured['grafica_path']) ?>" alt="">
-          <?php elseif ($fe_video): ?><span class="rlv-vtag"><?= ico('image') ?>Video</span>
-          <?php else: ?><?= ico('image') ?><?php endif; ?>
-        </div>
-        <div class="rlv-wtext">
-          <div class="rlv-wplat"><?= $h(ucfirst((string)($featured['plataforma'] ?? ''))) ?><?= !empty($featured['fecha_programada']) ? ' · ' . $h(_fecha_humana($featured['fecha_programada'])) : '' ?></div>
-          <p class="rlv-wcap"><?= $h(mb_strimwidth($fe_cap !== '' ? $fe_cap : '(sin texto)', 0, 190, '…')) ?></p>
-        </div>
-      </div>
-
-      <div class="rlv-decide" id="rlvDecide">
-        <p class="rlv-frase rlv-anim op" style="--rd:1240ms;--rdur:340ms"><?= $h($frase) ?></p>
-        <button type="button" class="rlv-go rlv-anim" id="rlvOk" data-id="<?= (int)$featured['id'] ?>" style="--rd:1380ms;--rdur:400ms;--ry:6px"><?= $h($cta) ?></button>
-        <br><a class="rlv-alt" href="<?= $BASE ?>/aprobar2.php?edit=<?= (int)$featured['id'] ?>&<?= $mid ?>#cap-<?= (int)$featured['id'] ?>">Cámbiale algo</a>
-      </div>
-
-    <?php else: ?>
-      <p class="rlv-calma rlv-anim op" style="--rd:1080ms;--rdur:420ms">Hoy no necesitas hacer nada. Nosotros seguimos.</p>
-    <?php endif; ?>
-
-    <p class="rlv-firma rlv-anim op" style="--rd:1560ms;--rdur:560ms"><?= $h($firma) ?></p>
-  <?php endif; ?>
-
-  <div class="rlv-more">
-    <button type="button" class="rlv-vertodo" id="rlvVerTodo">Ver todo <span>→</span></button>
-    <div class="rlv-drawer" id="rlvDrawer" hidden>
-      <a class="rlv-link" href="<?= $BASE ?>/resultados.php?marca=<?= $marca_id ?>">
-        <b>Resultados</b><span><?= (int)($prod['publicados_mes'] ?? 0) ?> publicados este mes<?= (int)($tot_ins['n'] ?? 0) > 0 ? ' · ' . number_format((int)$tot_ins['alcance']) . ' alcanzadas' : '' ?></span>
-      </a>
-      <a class="rlv-link" href="<?= $BASE ?>/configuracion.php?<?= $mid ?>">
-        <b>Piloto automático</b><span><?= $autopilot_on ? 'Encendido · ~' . (int)$autopilot_n . ' posts por semana' : 'Apagado' ?></span>
-      </a>
-      <a class="rlv-link" href="<?= $BASE ?>/marca.php?marca=<?= $marca_id ?>#aprendido">
-        <b>Lo aprendido</b><span><?= !empty($memorias) ? count($memorias) . (count($memorias) === 1 ? ' cosa' : ' cosas') . ' de tu negocio' : 'Aprendiendo tu voz' ?></span>
-      </a>
-      <a class="rlv-link" href="<?= $BASE ?>/actividad.php?marca=<?= $marca_id ?>">
-        <b>Actividad del corillo</b><span>Todo lo que hemos hecho por ti</span>
-      </a>
+    </div>
+    <div class="tn-end" id="tnEnd">
+      <p class="tn-end-t">Al día.</p>
+      <p class="tn-end-s">El corillo sigue trabajando.</p>
     </div>
   </div>
+  <?php if (count($deck) > 1): ?>
+  <div class="tn-dots" id="tnDots">
+    <?php foreach ($deck as $i => $_c): ?><span class="tn-dot<?= $i === 0 ? ' on' : '' ?>"></span><?php endforeach; ?>
+  </div>
+  <?php endif; ?>
+
+  <?php elseif ($modo === 'primerdia'): ?>
+  <div class="tn-solo">
+    <p class="tn-solo-t">Tu corillo está listo para empezar.</p>
+    <a class="tn-ok" href="<?= $h($st['href']) ?>"><?= $h($st['cta']) ?></a>
+  </div>
+
+  <?php elseif (!$plan): ?>
+  <div class="tn-solo">
+    <p class="tn-solo-t">Enciende Crecer.</p>
+    <a class="tn-ok" href="<?= $BASE ?>/precios.php?<?= $mid ?>">Activar Crecer</a>
+  </div>
+
+  <?php else: ?>
+  <div class="tn-solo">
+    <p class="tn-solo-t">Al día.</p>
+    <p class="tn-solo-s">El corillo sigue trabajando. No necesitas hacer nada.</p>
+  </div>
+  <?php endif; ?>
 </main>
 
 <script>
 (function () {
   var CSRF = <?= json_encode(csrf_token()) ?>, MARCA = <?= (int)$marca_id ?>, BASE = <?= json_encode($BASE) ?>;
-  var ok = document.getElementById('rlvOk');
-  if (ok) ok.addEventListener('click', function () {
-    var id = ok.getAttribute('data-id'); ok.disabled = true; var old = ok.textContent; ok.textContent = 'Un momento…';
-    var fd = new FormData(); fd.append('csrf', CSRF); fd.append('accion', 'aprobar'); fd.append('id', id); fd.append('ajax', '1');
+  var deck = document.getElementById('deck'); if (!deck) return;
+  var cards = [].slice.call(deck.querySelectorAll('.tcard'));
+  var dots  = [].slice.call(document.querySelectorAll('#tnDots .tn-dot'));
+  var end   = document.getElementById('tnEnd');
+  var idx = 0, busy = false;
+
+  function paint() {
+    cards.forEach(function (c, i) {
+      c.className = 'tcard ' + (i < idx ? 'is-gone' : i === idx ? 'is-active' : i === idx + 1 ? 'is-next' : 'is-hidden');
+      c.style.transform = ''; c.style.opacity = '';
+    });
+    dots.forEach(function (d, i) { d.classList.toggle('on', i === idx); });
+    if (idx >= cards.length && end) end.classList.add('show');
+  }
+  function advance() { idx++; paint(); }
+
+  function act(card, accion) {
+    if (busy) return; busy = true;
+    var id = card.getAttribute('data-id');
+    card.classList.add(accion === 'aprobar' ? 'fly-up' : 'fly-down');
+    var fd = new FormData(); fd.append('csrf', CSRF); fd.append('accion', accion); fd.append('id', id); fd.append('ajax', '1');
     fetch(BASE + '/aprobar2.php?marca=' + MARCA, { method: 'POST', body: fd })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (d && d.ok) {
-          // El equipo retoma, callado: el trabajo se desvanece, la confirmación llega.
-          var w = document.getElementById('rlvWork'), dc = document.getElementById('rlvDecide');
-          if (w) { w.style.transition = 'opacity .36s ease, transform .36s ease'; w.style.opacity = '0'; w.style.transform = 'translateY(-4px)'; }
-          if (dc) { dc.style.transition = 'opacity .28s ease'; dc.style.opacity = '0'; }
-          setTimeout(function () {
-            if (w) w.style.display = 'none';
-            if (dc) {
-              dc.innerHTML = '<p class="rlv-done">✓ Va pa’ arriba. El corillo se encarga del resto.</p>';
-              dc.style.opacity = '0';
-              requestAnimationFrame(function () { dc.style.transition = 'opacity .34s ease'; dc.style.opacity = '1'; });
-            }
-            setTimeout(function () { location.reload(); }, 1500);
-          }, 360);
-        } else { ok.disabled = false; ok.textContent = old; alert((d && d.err) || 'No se pudo. Intenta otra vez.'); }
+        if (d && d.ok) { setTimeout(function () { busy = false; advance(); }, 300); }
+        else { busy = false; card.classList.remove('fly-up', 'fly-down'); alert((d && d.err) || 'No se pudo. Intenta otra vez.'); }
       })
-      .catch(function () { ok.disabled = false; ok.textContent = old; alert('Se cayó la conexión. Intenta otra vez.'); });
+      .catch(function () { busy = false; card.classList.remove('fly-up', 'fly-down'); alert('Se cayó la conexión. Intenta otra vez.'); });
+  }
+
+  deck.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-act]'); if (!b) return;
+    var card = b.closest('.tcard'); if (!card || !card.classList.contains('is-active')) return;
+    act(card, b.getAttribute('data-act'));
   });
-  var vt = document.getElementById('rlvVerTodo'), dr = document.getElementById('rlvDrawer');
-  if (vt && dr) vt.addEventListener('click', function () { var open = dr.hidden; dr.hidden = !open; vt.classList.toggle('on', open); });
+
+  // swipe horizontal → siguiente / anterior (mirar sin decidir)
+  var sx = 0, dragging = false, active = null;
+  deck.addEventListener('pointerdown', function (e) {
+    if (e.target.closest('[data-act],a')) return;
+    active = cards[idx]; if (!active) return;
+    dragging = true; sx = e.clientX; active.style.transition = 'none';
+    try { active.setPointerCapture(e.pointerId); } catch (x) {}
+  });
+  deck.addEventListener('pointermove', function (e) {
+    if (!dragging || !active) return;
+    var dx = e.clientX - sx;
+    active.style.transform = 'translateX(' + dx + 'px) rotate(' + (dx * 0.025) + 'deg)';
+    active.style.opacity = String(Math.max(.35, 1 - Math.abs(dx) / 520));
+  });
+  function endDrag(e) {
+    if (!dragging || !active) return; dragging = false;
+    var dx = ((e.clientX || sx) - sx); active.style.transition = '';
+    if (dx < -70 && idx < cards.length - 1) { active.style.transform = 'translateX(-125%) rotate(-7deg)'; active.style.opacity = '0'; setTimeout(advance, 170); }
+    else if (dx > 70 && idx > 0) { idx--; paint(); }
+    else { active.style.transform = ''; active.style.opacity = ''; }
+    active = null;
+  }
+  deck.addEventListener('pointerup', endDrag);
+  deck.addEventListener('pointercancel', endDrag);
+
+  requestAnimationFrame(paint);
 })();
 </script>
 

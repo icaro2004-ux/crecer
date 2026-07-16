@@ -290,6 +290,12 @@ body{
   .content{padding:20px 18px 80px}
   .grid.g2,.grid.g3{grid-template-columns:1fr}
   .backdrop.show{display:block}
+  /* Navegación consolidada: en móvil la barra de abajo ES la navegación primaria.
+     El panel del avatar NO repite esos 4 destinos — solo Biblioteca + perfil. */
+  .side nav:not(.nav-perfil) a:not([href*="biblioteca"]){display:none}
+  /* El avatar es el acceso al menú: fuera el hamburger que duplicaba la barra. */
+  .ptop-menu .bars{display:none}
+  .ptop-menu{padding:4px}
 }
 
 /* ── Lightbox (agrandar imágenes al tocar) ── */

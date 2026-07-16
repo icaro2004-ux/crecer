@@ -7,7 +7,7 @@
 // ============================================================
 ?>
 <style>
-  .sec-h{font-family:var(--font-impact);text-transform:uppercase;letter-spacing:.02em;font-size:21px;margin:6px 0 4px}
+  .sec-h{font-family:var(--font-display);font-weight:600;color:var(--ink-soft);letter-spacing:-.01em;font-size:19px;margin:6px 0 4px;display:flex;align-items:center;gap:9px}
   .tono{max-width:680px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:20px 22px;box-shadow:var(--shadow-sm);margin-top:14px}
   .tono .presets{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-bottom:18px}
   .tono .preset{border:1.5px solid var(--line);background:#fff;border-radius:13px;padding:11px 13px;cursor:pointer;text-align:left;font-family:inherit;display:flex;gap:9px;align-items:center;transition:border-color .15s,transform .12s,box-shadow .15s}
@@ -20,7 +20,7 @@
   .tono .preset.on small{opacity:.92}
   .tono .slab{display:flex;justify-content:space-between;align-items:baseline;margin:16px 0 6px}
   .tono .slab .nm{font-weight:700;font-size:13.5px}
-  .tono .slab .vl{font-family:var(--font-impact);font-size:12px;color:var(--magenta);text-transform:uppercase;letter-spacing:.03em}
+  .tono .slab .vl{font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;color:var(--magenta);text-transform:uppercase;letter-spacing:.03em}
   .tono input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:8px;border-radius:99px;outline:none;cursor:pointer;
     background:linear-gradient(90deg,var(--coral),var(--magenta)) no-repeat,#f0e9e2;background-size:var(--p,50%) 100%,100% 100%}
   .tono input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:50%;background:#fff;border:3px solid var(--magenta);box-shadow:0 4px 10px -2px rgba(255,43,133,.5);transition:transform .1s}
@@ -36,7 +36,7 @@
   .tono .save:hover{border-color:var(--terracota);color:var(--terracota-700)}
   .tono .res{margin-top:16px}
   .tono .vcard{border:1px solid var(--line);border-radius:13px;padding:13px 15px;background:#fff;margin-bottom:10px;font-size:13.5px;line-height:1.55;white-space:pre-wrap;animation:trise .35s ease both}
-  .tono .vcard .vn{font-family:var(--font-impact);font-size:11px;text-transform:uppercase;color:var(--magenta);letter-spacing:.04em;margin-bottom:5px;display:block}
+  .tono .vcard .vn{font-family:'Poppins',sans-serif;font-weight:600;font-size:11px;text-transform:uppercase;color:var(--magenta);letter-spacing:.04em;margin-bottom:5px;display:block}
   @keyframes trise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
   @media(max-width:560px){.tono .presets{grid-template-columns:1fr}}
 </style>

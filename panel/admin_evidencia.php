@@ -56,7 +56,7 @@ $por_agente = $pdo->query("SELECT agente, COUNT(*) n, COALESCE(SUM(costo_usd),0)
 <!DOCTYPE html><html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Evidencia XPRIZE — Operaciones</title>
-<link href="/crecer/assets/encuentralo-ui.css?v=16" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=17" rel="stylesheet">
 <style>
   *{box-sizing:border-box} body{background:var(--crema,#fbf6ee);color:var(--tinta,#1b1622);font-family:'Plus Jakarta Sans',system-ui,sans-serif;margin:0}
   .top{display:flex;align-items:center;gap:14px;padding:14px 20px;background:#140a16;color:#fff}

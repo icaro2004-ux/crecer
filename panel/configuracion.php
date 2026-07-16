@@ -142,35 +142,48 @@ $tabs = [
 $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
 ?>
 <style>
-  .cfg-wrap{max-width:680px}
-  .cfg-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px;border-bottom:1px solid var(--line);padding-bottom:2px}
-  .cfg-tabs a{display:inline-flex;align-items:center;gap:7px;text-decoration:none;font-weight:700;font-size:14px;
-    color:var(--muted);padding:9px 14px;border-radius:10px 10px 0 0}
-  .cfg-tabs a.on{color:var(--tinta);background:var(--card);border:1px solid var(--line);border-bottom-color:var(--card);margin-bottom:-1px}
-  .cfg-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg,16px);padding:20px;margin-bottom:16px;box-shadow:var(--shadow-sm)}
-  .cfg-card h2{font-size:16px;font-weight:800;color:var(--tinta);margin:0 0 4px}
-  .cfg-card .sub{font-size:13.5px;color:var(--muted);margin:0 0 16px}
-  .cfg-card label{display:block;font-weight:700;font-size:13.5px;color:var(--tinta);margin:14px 0 6px}
+  /* ══ CONFIGURACIÓN ══ ajustes, en el mismo lenguaje: Poppins, ink-soft, pill signature. */
+  .content{max-width:720px;font-family:'Poppins',var(--font-body)}
+  .asis-fab{display:none}
+  .cfg-wrap{max-width:680px;margin:0 auto}
+  .cfg-top{padding:0 2px;margin-bottom:14px}
+  .cfg-neg{font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--ink-soft);letter-spacing:-.01em}
+
+  .cfg-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+  .cfg-tabs a{display:inline-flex;align-items:center;gap:7px;text-decoration:none;font-family:'Poppins',sans-serif;font-weight:600;font-size:13.5px;
+    color:var(--muted);padding:9px 15px;border-radius:12px;border:1.5px solid var(--line);background:#fff;transition:.15s}
+  .cfg-tabs a svg{width:16px;height:16px}
+  .cfg-tabs a.on{border-color:transparent;background:linear-gradient(135deg,var(--teal),var(--teal-700));color:#fff;box-shadow:0 8px 20px -10px rgba(0,164,159,.45)}
+  .cfg-tabs a.on svg{color:#fff}
+
+  .cfg-card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:22px;margin-bottom:16px;box-shadow:var(--shadow-sm)}
+  .cfg-card h2{font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--ink-soft);letter-spacing:-.01em;margin:0 0 4px;display:flex;align-items:center;gap:9px}
+  .cfg-card h2 svg{width:19px;height:19px;color:var(--muted)}
+  .cfg-card .sub{font-size:13.5px;color:var(--muted);margin:0 0 16px;line-height:1.5}
+  .cfg-card label{display:block;font-weight:600;font-size:13.5px;color:var(--ink-soft);margin:15px 0 6px}
   .cfg-card label:first-of-type{margin-top:0}
   .cfg-card input[type=text],.cfg-card input[type=email],.cfg-card input[type=password],
-  .cfg-card textarea,.cfg-card select{width:100%;font-family:inherit;font-size:14.5px;border:1.5px solid var(--line);
-    border-radius:11px;padding:10px 12px;background:#fff;box-sizing:border-box}
+  .cfg-card input[type=tel],.cfg-card textarea,.cfg-card select{width:100%;font-family:var(--font-body);font-size:14.5px;border:1.5px solid var(--line);
+    border-radius:12px;padding:11px 13px;background:#fff;box-sizing:border-box;transition:border-color .15s}
+  .cfg-card input:focus,.cfg-card textarea:focus,.cfg-card select:focus{outline:0;border-color:color-mix(in srgb,var(--magenta) 45%,var(--line))}
   .cfg-card textarea{resize:vertical;min-height:64px}
   .cfg-row{display:flex;gap:12px;flex-wrap:wrap}
   .cfg-row>div{flex:1;min-width:180px}
-  .cfg-save{margin-top:18px;border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:15px;color:#fff;
-    background:var(--palma,#16b86a);padding:12px 22px;border-radius:12px}
-  .cfg-msg{padding:11px 14px;border-radius:12px;font-weight:700;font-size:14px;margin-bottom:16px}
-  .cfg-msg.ok{background:#e6f6ee;color:#0d7a44}
-  .cfg-msg.err{background:#fde8e8;color:#9b1c1c}
-  .cfg-hint{font-size:12.5px;color:var(--muted);margin-top:5px}
-  .cfg-link{display:inline-flex;align-items:center;gap:8px;text-decoration:none;font-weight:800;font-size:15px;
-    color:#fff;padding:12px 20px;border-radius:12px}
-  .cfg-pill{display:inline-block;font-weight:800;font-size:13px;padding:5px 12px;border-radius:99px;background:var(--crema);color:var(--tinta);border:1px solid var(--line)}
+  .cfg-save{margin-top:20px;border:0;cursor:pointer;font-family:'Poppins',sans-serif;font-weight:600;font-size:15px;color:#fff;
+    background:var(--btn-grad);padding:14px 26px;border-radius:15px;box-shadow:var(--btn-glow);transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+  .cfg-save:active{transform:translateY(1px);box-shadow:var(--btn-glow-active)}
+  .cfg-msg{padding:11px 15px;border-radius:12px;font-weight:600;font-size:14px;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+  .cfg-msg svg{width:17px;height:17px}
+  .cfg-msg.ok{background:color-mix(in srgb,var(--teal) 10%,#fff);color:var(--ink-soft);border:1px solid color-mix(in srgb,var(--teal) 25%,#fff)}
+  .cfg-msg.err{background:#fdeaea;color:#9b1c1c;border:1px solid #f5c2c0}
+  .cfg-hint{font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.5}
+  .cfg-link{display:inline-flex;align-items:center;gap:8px;text-decoration:none;font-family:'Poppins',sans-serif;font-weight:600;font-size:15px;
+    color:#fff;padding:13px 22px;border-radius:14px}
+  .cfg-pill{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:13px;padding:6px 13px;border-radius:99px;background:var(--crema-2);color:var(--ink-soft);border:1px solid var(--line)}
 </style>
 
 <div class="cfg-wrap">
-  <h1 class="page-h" style="margin-bottom:14px">Configuración</h1>
+  <div class="cfg-top"><span class="cfg-neg">Configuración</span></div>
 
   <div class="cfg-tabs">
     <?php foreach ($tabs as $k=>$t): ?>
