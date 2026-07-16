@@ -233,7 +233,7 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
 <title>Centro de Operaciones · Crecer</title>
 <link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/encuentralo-pin.svg">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Poppins:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=13" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=16" rel="stylesheet">
 <style>
   :root{--grad:linear-gradient(120deg,var(--coral,#ff5c39),var(--magenta,#c0395f))}
   *{box-sizing:border-box}

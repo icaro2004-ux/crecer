@@ -36,7 +36,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=13" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=16" rel="stylesheet">
 <style>
   body{background:var(--crema)}
   .wrap{max-width:560px;margin:0 auto;padding:30px 20px 70px;text-align:center}

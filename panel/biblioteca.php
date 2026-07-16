@@ -134,7 +134,7 @@ require __DIR__ . '/_shell.php';
   .bib{max-width:880px;margin:0 auto;padding:5vh 6px 100px;font-family:'Poppins',var(--font-body)}
   @media(min-width:761px){.bib{padding:7vh 6px 70px}}
   .bib-top{margin-bottom:30px}
-  .bib-top h1{font-family:'Poppins',sans-serif;font-weight:500;font-size:clamp(25px,4.6vw,36px);line-height:1.15;letter-spacing:-.02em;color:var(--tinta);margin:0;text-wrap:balance}
+  .bib-top h1{font-family:var(--font-display);font-weight:600;font-size:clamp(25px,4.6vw,37px);line-height:1.15;letter-spacing:-.02em;color:var(--ink-soft);margin:0;text-wrap:balance}
   .bib-top h1 b{font-weight:600}
   .bib-top p{margin:12px 0 0;font-size:14.5px;color:var(--muted);line-height:1.55;max-width:56ch}
 
@@ -149,9 +149,9 @@ require __DIR__ . '/_shell.php';
   .bib-add:hover{border-color:var(--teal);color:var(--teal-700);background:#f2fbfa}
   .bib-add .p{font-size:30px;font-weight:300;line-height:1}
 
-  .bib-tile{position:relative;aspect-ratio:1;border-radius:16px;overflow:hidden;cursor:pointer;background:var(--crema-2);
-    border:1px solid var(--line);margin:0;transition:transform .18s,box-shadow .18s}
-  .bib-tile:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+  .bib-tile{position:relative;aspect-ratio:1;border-radius:18px;overflow:hidden;cursor:pointer;background:var(--crema-2);
+    border:1px solid var(--line);margin:0;transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+  .bib-tile:hover{transform:translateY(-3px);box-shadow:var(--shadow-lg)}
   .bib-tile img,.bib-tile video{width:100%;height:100%;object-fit:cover;display:block}
   .bib-tile .play{position:absolute;inset:0;display:grid;place-items:center;background:rgba(20,10,22,.18);color:#fff}
   .bib-tile .play span{width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,.45);display:grid;place-items:center;backdrop-filter:blur(2px)}
@@ -173,7 +173,8 @@ require __DIR__ . '/_shell.php';
   .bib-modal.show{display:block}
   .bib-back{position:absolute;inset:0;background:rgba(20,12,22,.66);backdrop-filter:blur(3px)}
   .bib-sheet{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,92vw);max-height:88vh;overflow:auto;
-    background:var(--card);border-radius:22px;box-shadow:0 40px 90px -20px rgba(0,0,0,.5);padding:16px}
+    background:var(--card);border-radius:24px;box-shadow:var(--shadow-lg);padding:16px}
+  .bib-sheet .bib-name{font-family:var(--font-display)}
   .bib-x{position:absolute;top:10px;right:12px;z-index:2;width:34px;height:34px;border-radius:50%;border:0;background:rgba(255,255,255,.9);
     font-size:20px;line-height:1;color:var(--tinta);cursor:pointer;box-shadow:var(--shadow-sm)}
   .bib-media{border-radius:14px;overflow:hidden;background:var(--crema-2);margin-bottom:14px;display:grid;place-items:center;min-height:180px}

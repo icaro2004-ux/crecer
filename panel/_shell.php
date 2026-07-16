@@ -42,8 +42,8 @@ $nav_perfil = [
 <link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/crecer-mark.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Poppins:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=13" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Poppins:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=16" rel="stylesheet">
 </head>
 <body>
 <div class="layout">
@@ -88,7 +88,7 @@ $nav_perfil = [
       <?php endforeach; ?>
     </nav>
     <?php if ($es_admin): ?>
-      <a href="<?= $BASE ?>/admin.php" style="display:flex;align-items:center;gap:10px;padding:10px 12px;margin-top:6px;border-radius:12px;text-decoration:none;color:#fff;background:var(--tinta);font-weight:800;font-size:13.5px"><?= ico('settings') ?> Centro de Operaciones</a>
+      <a href="<?= $BASE ?>/admin.php" style="display:flex;align-items:center;gap:10px;padding:10px 12px;margin-top:6px;border-radius:12px;text-decoration:none;color:var(--tinta);background:var(--crema-2);border:1px solid var(--line);font-weight:700;font-size:13.5px"><?= ico('settings') ?> Centro de Operaciones</a>
     <?php endif; ?>
     <a href="/crecer/logout.php" style="display:flex;align-items:center;gap:10px;padding:9px 12px;margin-top:6px;border-radius:12px;text-decoration:none;color:var(--muted);font-weight:600;font-size:13.5px">Salir</a>
   </aside>

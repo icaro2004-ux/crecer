@@ -421,13 +421,13 @@ $firma = 'El corillo sigue trabajando.';
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
   /* ══ C2 · EL RELEVO DEL CORILLO ══ calma, espacio, evidencia. Hereda tokens. */
-  .content{max-width:600px}
+  .content{max-width:620px;margin-inline:auto}
   .rlv{max-width:560px;margin:0 auto;padding:9vh 6px 70px;font-family:'Poppins',var(--font-body)}
   @media(max-width:760px){.rlv{padding:5vh 4px 100px}}
 
   .rlv-top{margin-bottom:40px}
-  .rlv-hero{font-family:'Poppins',sans-serif;font-weight:500;font-size:clamp(27px,5.4vw,42px);
-    line-height:1.16;letter-spacing:-.02em;color:var(--tinta);margin:0;text-wrap:balance}
+  .rlv-hero{font-family:var(--font-display);font-weight:600;font-size:clamp(27px,5.4vw,42px);
+    line-height:1.15;letter-spacing:-.02em;color:var(--ink-soft);margin:0;text-wrap:balance}
   .rlv-meta{margin:14px 0 0;font-size:13px;color:var(--muted);font-weight:400;letter-spacing:.01em}
 
   /* Evidencia: el corazón. */
@@ -437,16 +437,18 @@ $firma = 'El corillo sigue trabajando.';
   .rlv-ck svg{width:21px;height:21px}
 
   /* El trabajo, presente sin dominar. */
-  .rlv-work{display:flex;gap:16px;align-items:center;background:var(--card);border:1px solid var(--line);
-    border-radius:18px;padding:16px;box-shadow:var(--shadow-sm);margin-bottom:32px}
-  .rlv-thumb{width:90px;height:90px;border-radius:13px;flex:none;overflow:hidden;background:var(--crema-2);
+  .rlv-work{background:var(--card);border:1px solid var(--line);border-radius:22px;overflow:hidden;
+    box-shadow:0 2px 6px rgba(40,22,28,.05), 0 26px 56px -24px rgba(40,22,28,.28);
+    margin-bottom:30px;transition:box-shadow var(--dur) var(--ease),transform var(--dur) var(--ease)}
+  .rlv-work:hover{box-shadow:0 6px 16px rgba(40,22,28,.07), 0 46px 88px -28px rgba(40,22,28,.36);transform:translateY(-3px)}
+  .rlv-thumb{width:100%;aspect-ratio:4/3;overflow:hidden;background:var(--crema-2);
     display:grid;place-items:center;color:var(--teal)}
   .rlv-thumb img{width:100%;height:100%;object-fit:cover}
   .rlv-thumb svg{width:30px;height:30px}
   .rlv-thumb.txt{background:linear-gradient(135deg,#fff,var(--crema-2))}
   .rlv-vtag{font-size:11px;font-weight:700;color:var(--teal-700);display:flex;flex-direction:column;align-items:center;gap:5px}
   .rlv-vtag svg{width:24px;height:24px}
-  .rlv-wtext{min-width:0}
+  .rlv-wtext{min-width:0;padding:15px 18px 17px}
   .rlv-wplat{font-size:12px;font-weight:600;color:var(--muted);text-transform:capitalize;margin-bottom:6px}
   .rlv-wcap{margin:0;font-size:14.5px;line-height:1.5;color:#3a3340}
 
@@ -454,17 +456,18 @@ $firma = 'El corillo sigue trabajando.';
   .rlv-decide{text-align:center;margin-bottom:24px}
   .rlv-frase{font-size:18px;color:var(--tinta);font-weight:400;margin:0 0 18px}
   .rlv-go{display:inline-block;border:0;cursor:pointer;font-family:'Poppins',sans-serif;font-weight:600;
-    font-size:16.5px;color:#fff;text-decoration:none;padding:15px 42px;border-radius:14px;
-    background:linear-gradient(135deg,var(--coral),var(--magenta));
-    box-shadow:0 16px 34px -14px rgba(255,43,133,.55);transition:transform .16s,box-shadow .16s}
-  .rlv-go:hover{transform:translateY(-2px);box-shadow:0 22px 42px -14px rgba(255,43,133,.6)}
-  .rlv-go:disabled{opacity:.7;cursor:default;transform:none}
+    font-size:16.5px;color:#fff;text-decoration:none;padding:16px 46px;border-radius:15px;
+    background:var(--btn-grad);box-shadow:var(--btn-glow);
+    transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+  .rlv-go:hover{transform:translateY(-2px);box-shadow:var(--btn-glow-hover)}
+  .rlv-go:active{transform:translateY(0);box-shadow:var(--btn-glow-active)}
+  .rlv-go:disabled{opacity:.65;cursor:default;transform:none;box-shadow:var(--btn-glow)}
   .rlv-alt{display:inline-block;margin-top:15px;color:var(--muted);font-size:14px;font-weight:500;text-decoration:none}
   .rlv-alt:hover{color:var(--tinta)}
   .rlv-done{font-size:18px;color:var(--palma-600);font-weight:600;text-align:center;margin:6px 0;line-height:1.4}
   .rlv-calma{font-size:16px;color:var(--muted);line-height:1.55;margin:0 0 6px}
 
-  .rlv-firma{font-size:13px;color:var(--muted);font-weight:400;margin:34px 0 0;font-style:italic}
+  .rlv-firma{font-family:var(--font-display);font-size:15.5px;color:var(--muted);font-weight:400;margin:34px 0 0;font-style:italic}
 
   .rlv-plain{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:26px;
     box-shadow:var(--shadow-sm);text-align:center}

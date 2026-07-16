@@ -115,9 +115,10 @@ require __DIR__ . '/_shell.php';
   .est-prop{opacity:0}
   .est-prop.show{opacity:1}
   .est-ctx{font-size:12.5px;font-weight:600;color:var(--muted);text-transform:capitalize;margin:0 0 14px}
-  .est-art{border-radius:18px;overflow:hidden;background:var(--crema-2);border:1px solid var(--line);
-    display:grid;place-items:center;margin:0 0 18px;box-shadow:var(--shadow-sm)}
-  .est-art img{width:100%;display:block}
+  .est-art{border-radius:22px;overflow:hidden;background:var(--crema-2);border:1px solid var(--line);
+    display:grid;place-items:center;margin:0 0 20px;
+    box-shadow:0 2px 6px rgba(40,22,28,.05), 0 30px 62px -26px rgba(40,22,28,.3)}
+  .est-art img{width:100%;max-height:72vh;object-fit:cover;display:block}
   .est-art.txt{aspect-ratio:16/10;color:var(--teal)}
   .est-art.txt svg{width:38px;height:38px;opacity:.6}
   .est-vtag{display:flex;flex-direction:column;align-items:center;gap:7px;color:var(--teal-700);font-size:12px;font-weight:700;padding:38px 0}
@@ -143,10 +144,11 @@ require __DIR__ . '/_shell.php';
   /* El veredicto */
   .est-verdict{display:flex;flex-direction:column;align-items:center;gap:14px}
   .est-go{border:0;cursor:pointer;font-family:'Poppins',sans-serif;font-weight:600;font-size:17px;color:#fff;
-    padding:16px 46px;border-radius:15px;background:linear-gradient(135deg,var(--coral),var(--magenta));
-    box-shadow:0 16px 36px -14px rgba(255,43,133,.55);transition:transform .16s,box-shadow .16s,opacity .2s;width:100%;max-width:340px}
-  .est-go:hover{transform:translateY(-2px);box-shadow:0 22px 44px -14px rgba(255,43,133,.6)}
-  .est-go:disabled{opacity:.65;cursor:default;transform:none}
+    padding:17px 46px;border-radius:16px;background:var(--btn-grad);box-shadow:var(--btn-glow);
+    transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease),opacity .2s;width:100%;max-width:340px}
+  .est-go:hover{transform:translateY(-2px);box-shadow:var(--btn-glow-hover)}
+  .est-go:active{transform:translateY(0);box-shadow:var(--btn-glow-active)}
+  .est-go:disabled{opacity:.65;cursor:default;transform:none;box-shadow:var(--btn-glow)}
   .est-minor{display:flex;gap:26px;align-items:center}
   .est-minor button{background:0;border:0;cursor:pointer;font-family:'Poppins',sans-serif;font-size:14px;font-weight:500;color:var(--muted)}
   .est-minor button:hover{color:var(--tinta)}
@@ -174,7 +176,7 @@ require __DIR__ . '/_shell.php';
   .est-done .mk{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;margin:0 auto 20px;
     background:color-mix(in srgb,var(--palma) 12%,#fff);color:var(--palma-600)}
   .est-done .mk svg{width:28px;height:28px}
-  .est-done h2{font-family:'Poppins',sans-serif;font-weight:500;font-size:clamp(22px,4.6vw,30px);line-height:1.2;color:var(--tinta);margin:0 0 10px;text-wrap:balance}
+  .est-done h2{font-family:'Poppins',sans-serif;font-weight:600;font-size:clamp(22px,4.6vw,30px);line-height:1.2;color:var(--ink-soft);margin:0 0 10px;text-wrap:balance}
   .est-done p{font-size:15px;color:var(--muted);margin:0 0 26px;line-height:1.5}
   .est-done .acts{display:flex;gap:22px;justify-content:center;flex-wrap:wrap}
   .est-done .acts a{color:var(--teal-700);font-weight:600;font-size:14.5px;text-decoration:none}
