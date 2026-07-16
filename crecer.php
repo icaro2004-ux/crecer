@@ -214,10 +214,10 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
   <!-- 5 · CTA -->
   <section class="cta wrap">
-    <h2>Bienvenido al Corillo.</h2>
-    <p>Tu equipo está listo para trabajar por <b class="jsname"><?= $h($biz) ?></b>.</p>
-    <a class="enter" id="enterCta" href="/crecer/registro.php?negocio=<?= urlencode($negocio) ?>">Entrar al Corillo</a>
-    <div class="free">Gratis para empezar · sin tarjeta</div>
+    <h2>Ya vimos por dónde podemos empezar.</h2>
+    <p>Crea tu cuenta gratis y el Corillo prepara tu primer post real — con lo que aprenda de <b class="jsname"><?= $h($biz) ?></b>.</p>
+    <a class="enter" id="enterCta" href="/crecer/registro.php?negocio=<?= urlencode($negocio) ?>">Crear mi primer post gratis</a>
+    <div class="free">Sin tarjeta. El Corillo aprende primero sobre tu negocio.</div>
   </section>
 
   <footer class="foot">

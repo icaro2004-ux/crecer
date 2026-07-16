@@ -89,29 +89,29 @@ $plan_lbl = ['crecer'=>'Crecer','despegar'=>'Despegar'][$plan_intent] ?? '';
 <link rel="icon" type="image/png" href="/crecer/assets/brand/encuentralo-crecer-pin-drop.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Caveat:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link href="/crecer/assets/crecer-brand.css?v=1" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="/crecer/assets/crecer-brand.css?v=2" rel="stylesheet">
 <style>
-  body{padding-top:70px}
-  .auth{width:min(1000px,calc(100% - 44px));margin:0 auto;padding:40px 0 60px;display:grid;grid-template-columns:1.04fr .96fr;gap:44px;align-items:center;min-height:calc(100vh - 70px)}
-  .welcome .eyebrow{font-family:var(--hand);font-weight:700;font-size:clamp(26px,3.6vw,34px);color:var(--teal);transform:rotate(-1deg);margin:0 0 4px}
-  .welcome h1{font-family:var(--display);font-weight:400;text-transform:uppercase;letter-spacing:.012em;font-size:clamp(38px,5.2vw,60px);line-height:.9;margin:0;color:var(--ink)}
-  .welcome p{margin:20px 0 0;font-size:16.5px;line-height:1.55;color:var(--ink-soft);max-width:42ch}
+  body{padding-top:66px}
+  .auth{width:min(1000px,calc(100% - 44px));margin:0 auto;padding:40px 0 60px;display:grid;grid-template-columns:1.04fr .96fr;gap:44px;align-items:center;min-height:calc(100vh - 66px)}
+  .welcome .eyebrow{font-family:var(--display);font-weight:600;font-size:15px;color:var(--muted);margin:0 0 14px}
+  .welcome h1{font-family:var(--display);font-weight:600;letter-spacing:-.025em;font-size:clamp(32px,5vw,48px);line-height:1.06;margin:0;color:var(--ink-soft)}
+  .welcome p{margin:18px 0 0;font-size:16.5px;line-height:1.55;color:var(--muted);max-width:42ch}
   .bnf{display:flex;flex-direction:column;gap:12px;margin:22px 0 0}
-  .bnf .it{display:flex;align-items:center;gap:11px;font-size:15px;font-weight:700;color:var(--ink)}
+  .bnf .it{display:flex;align-items:center;gap:11px;font-size:15px;font-weight:500;color:var(--ink)}
   .bnf .it svg{width:20px;height:20px;color:var(--teal);flex:none}
   .welcome .chip-live{margin-top:24px}
-  .formwrap h1{font-family:var(--display);font-weight:400;text-transform:uppercase;letter-spacing:.012em;font-size:clamp(26px,3.4vw,36px);line-height:.95;margin:0;color:var(--ink)}
-  .formwrap .sub{color:var(--muted);font-size:15px;font-weight:600;margin:8px 0 0;line-height:1.5}
+  .formwrap h1{font-family:var(--display);font-weight:600;letter-spacing:-.02em;font-size:clamp(24px,3.2vw,32px);line-height:1.1;margin:0;color:var(--ink-soft)}
+  .formwrap .sub{color:var(--muted);font-size:15px;font-weight:400;margin:8px 0 0;line-height:1.5}
   .formwrap form{margin-top:18px}
   .r2{display:flex;gap:12px}.r2>div{flex:1}
   .go-full{margin-top:20px;width:100%}
-  .trust{text-align:center;font-size:13px;color:var(--muted);font-weight:600;margin-top:14px}
-  .alt{text-align:center;margin-top:14px;font-size:14px;color:var(--muted);font-weight:600}
-  .alt a{color:var(--teal-dark);font-weight:800;text-decoration:none}
+  .trust{text-align:center;font-size:13px;color:var(--muted);font-weight:400;margin-top:14px}
+  .alt{text-align:center;margin-top:14px;font-size:14px;color:var(--muted);font-weight:400}
+  .alt a{color:var(--teal-dark);font-weight:600;text-decoration:none}
   .legal{text-align:center;font-size:12px;color:var(--muted);margin-top:16px}
   .legal a{color:var(--muted);text-decoration:none}
-  .legal a:hover{color:var(--pink)}
+  .legal a:hover{color:var(--magenta)}
   .big-ic svg{width:46px;height:46px;color:var(--teal)}
   @media(max-width:820px){
     .auth{grid-template-columns:1fr;gap:26px;padding-top:24px;min-height:0}

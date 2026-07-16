@@ -71,17 +71,17 @@ $nf = fn($n) => number_format($n);
 <link rel="icon" type="image/png" href="/crecer/assets/brand/encuentralo-crecer-pin-drop.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Caveat:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link href="/crecer/assets/crecer-brand.css?v=1" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="/crecer/assets/crecer-brand.css?v=2" rel="stylesheet">
 <style>
-  body{padding-top:70px}
-  .auth{width:min(1000px,calc(100% - 44px));margin:0 auto;padding:40px 0 60px;display:grid;grid-template-columns:1.04fr .96fr;gap:44px;align-items:center;min-height:calc(100vh - 70px)}
-  .welcome .eyebrow{font-family:var(--hand);font-weight:700;font-size:clamp(28px,4vw,36px);color:var(--teal);transform:rotate(-1deg);margin:0 0 4px}
-  .welcome h1{font-family:var(--display);font-weight:400;text-transform:uppercase;letter-spacing:.012em;font-size:clamp(42px,6vw,68px);line-height:.9;margin:0;color:var(--ink)}
-  .welcome p{margin:22px 0 0;font-size:17px;line-height:1.55;color:var(--ink-soft);max-width:40ch}
+  body{padding-top:66px}
+  .auth{width:min(1000px,calc(100% - 44px));margin:0 auto;padding:40px 0 60px;display:grid;grid-template-columns:1.04fr .96fr;gap:44px;align-items:center;min-height:calc(100vh - 66px)}
+  .welcome .eyebrow{font-family:var(--display);font-weight:600;font-size:15px;color:var(--muted);margin:0 0 14px}
+  .welcome h1{font-family:var(--display);font-weight:600;letter-spacing:-.025em;font-size:clamp(34px,5.4vw,54px);line-height:1.06;margin:0;color:var(--ink-soft)}
+  .welcome p{margin:20px 0 0;font-size:17px;line-height:1.55;color:var(--muted);max-width:40ch}
   .welcome .chip-live{margin-top:26px}
-  .formwrap h2{font-family:var(--display);font-weight:400;text-transform:uppercase;letter-spacing:.012em;font-size:clamp(26px,3.4vw,34px);line-height:.95;margin:0;color:var(--ink)}
-  .formwrap .sub{color:var(--muted);font-size:15px;font-weight:600;margin:7px 0 0}
+  .formwrap h2{font-family:var(--display);font-weight:600;letter-spacing:-.02em;font-size:clamp(24px,3.2vw,30px);line-height:1.1;margin:0;color:var(--ink-soft)}
+  .formwrap .sub{color:var(--muted);font-size:15px;font-weight:400;margin:7px 0 0}
   .formwrap form{margin-top:18px}
   .pw{position:relative}
   .pw .f-input{padding-right:46px}
@@ -90,13 +90,13 @@ $nf = fn($n) => number_format($n);
   .eye.on{color:var(--teal)}
   .go-full{margin-top:22px;width:100%}
   .forgot{text-align:center;margin-top:16px;font-size:14px}
-  .forgot a{color:var(--muted);font-weight:700;text-decoration:none}
+  .forgot a{color:var(--muted);font-weight:500;text-decoration:none}
   .forgot a:hover{color:var(--ink)}
-  .alt{text-align:center;margin-top:12px;font-size:14px;color:var(--muted);font-weight:600}
-  .alt a{color:var(--teal-dark);font-weight:800;text-decoration:none}
+  .alt{text-align:center;margin-top:12px;font-size:14px;color:var(--muted);font-weight:400}
+  .alt a{color:var(--teal-dark);font-weight:600;text-decoration:none}
   .legal{text-align:center;font-size:12px;color:var(--muted);margin-top:18px}
   .legal a{color:var(--muted);text-decoration:none}
-  .legal a:hover{color:var(--pink)}
+  .legal a:hover{color:var(--magenta)}
   @media(max-width:820px){
     .auth{grid-template-columns:1fr;gap:26px;padding-top:24px;min-height:0}
     .welcome{text-align:center}.welcome p{margin-inline:auto}
