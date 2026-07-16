@@ -32,87 +32,93 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>¡Tu primer post está listo! · Encuéntralo</title>
-<link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/encuentralo-pin.svg">
+<link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/crecer-mark.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link href="/crecer/assets/encuentralo-ui.css?v=18" rel="stylesheet">
 <style>
-  body{background:var(--crema)}
-  .wrap{max-width:560px;margin:0 auto;padding:30px 20px 70px;text-align:center}
-  .top{display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:20px}
-  .top img{height:30px}.top b{font-weight:800;font-size:19px}
-  .tag{display:inline-flex;align-items:center;gap:8px;font-family:'Poppins';text-transform:uppercase;letter-spacing:.05em;
-    font-size:12.5px;background:var(--okk-bg);color:var(--okk-ink);padding:8px 15px;border-radius:999px;margin-bottom:14px}
-  .tag img{width:18px;height:18px}
-  h1{font-family:'Poppins';text-transform:uppercase;letter-spacing:.5px;line-height:.98;font-size:clamp(30px,7vw,44px);color:var(--tinta);margin:0 0 8px}
-  h1 span{color:var(--terracota)}
-  .lede{color:var(--muted);font-size:15.5px;margin:0 0 24px}
-  /* tarjeta del post (mock IG) */
-  .post{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow);overflow:hidden;text-align:left;max-width:420px;margin:0 auto}
-  .post .ph{display:flex;align-items:center;gap:9px;padding:12px 14px;border-bottom:1px solid var(--line)}
-  .post .av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;display:grid;place-items:center;font-weight:800}
-  .post .hn{font-weight:800;font-size:14px}.post .hn small{display:block;color:var(--muted);font-weight:500;font-size:11.5px}
+  body{background:var(--crema);font-family:var(--font-body)}
+  .bv{max-width:480px;margin:0 auto;padding:30px 20px 80px;text-align:center}
+  .brand{display:inline-flex;align-items:center;gap:8px;margin-bottom:26px;font-family:var(--font-display);font-weight:600;font-size:15px;color:var(--ink-soft);text-decoration:none}
+  .brand img{height:26px}.brand i{color:var(--teal);font-style:normal}
+  .chip{display:inline-flex;align-items:center;gap:7px;font-family:var(--font-display);font-weight:600;font-size:12px;letter-spacing:.03em;text-transform:uppercase;
+    color:var(--teal-dark,#00827e);background:color-mix(in srgb,var(--teal) 12%,#fff);padding:7px 14px;border-radius:999px;margin-bottom:16px}
+  .chip svg{width:15px;height:15px}
+  h1{font-family:var(--font-display);font-weight:600;font-size:clamp(28px,6.4vw,40px);line-height:1.1;letter-spacing:-.025em;color:var(--ink-soft);margin:0 0 10px;text-wrap:balance}
+  h1 span{color:var(--magenta)}
+  .lede{color:var(--muted);font-size:15.5px;line-height:1.5;margin:0 auto 26px;max-width:34ch}
+  /* el post — tarjeta estilo IG, coordinada, protagonista */
+  .post{background:var(--card);border:1px solid var(--line);border-radius:22px;overflow:hidden;text-align:left;max-width:400px;margin:0 auto;
+    box-shadow:0 2px 6px rgba(40,22,28,.05),0 30px 64px -30px rgba(40,22,28,.3)}
+  .post .ph{display:flex;align-items:center;gap:10px;padding:14px 15px}
+  .post .av{width:36px;height:36px;border-radius:50%;background:var(--btn-grad);color:#fff;display:grid;place-items:center;font-family:var(--font-display);font-weight:600;font-size:15px}
+  .post .hn{font-family:var(--font-display);font-weight:600;font-size:14.5px;color:var(--ink-soft)}
+  .post .hn small{display:block;color:var(--muted);font-weight:400;font-size:11.5px;font-family:var(--font-body)}
   .post .img{width:100%;display:block;background:var(--crema-2)}
-  .post .cap{padding:14px;font-size:14.5px;line-height:1.5;color:#3a2f26;white-space:pre-wrap}
-  .cta{display:block;width:100%;border:0;cursor:pointer;font-family:'Poppins';text-transform:uppercase;letter-spacing:.03em;
-    font-size:18px;color:#fff;background:linear-gradient(135deg,var(--coral),var(--terracota-700));padding:16px;border-radius:14px;
-    box-shadow:0 14px 30px -12px rgba(239,67,117,.6);margin-top:24px;text-decoration:none}
-  .cta .small{display:block;font-family:'Plus Jakarta Sans';text-transform:none;letter-spacing:0;font-size:12.5px;font-weight:600;opacity:.9;margin-top:2px}
-  .later{display:inline-block;margin-top:16px;color:var(--muted);font-weight:700;font-size:14px;text-decoration:none}
-  .feat{display:flex;flex-direction:column;gap:7px;max-width:380px;margin:18px auto 0;text-align:left}
-  .feat div{display:flex;align-items:center;gap:9px;font-size:13.5px;color:#473b46}
-  .feat .ic{width:16px;height:16px;color:var(--palma);flex:none}
-  .lock{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);margin-top:16px}
-  .lock img{width:15px;height:15px}
+  .post .cap{padding:15px;font-size:14.5px;line-height:1.55;color:var(--tinta);white-space:pre-wrap}
+  /* CTA signature */
+  .cta{display:block;width:100%;max-width:400px;margin:24px auto 0;border:0;cursor:pointer;text-decoration:none;font-family:var(--font-display);font-weight:600;font-size:17px;color:#fff;
+    background:var(--btn-grad);box-shadow:var(--btn-glow);padding:17px;border-radius:16px;transition:transform .2s var(--ease),box-shadow .2s var(--ease)}
+  .cta:active{transform:translateY(1px);box-shadow:var(--btn-glow-active)}
+  .cta .small{display:block;font-family:var(--font-body);font-weight:500;font-size:12.5px;opacity:.92;margin-top:3px}
+  .feat{display:flex;flex-direction:column;gap:9px;max-width:340px;margin:22px auto 0;text-align:left}
+  .feat div{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--tinta)}
+  .feat svg{width:17px;height:17px;color:var(--palma);flex:none}
+  .later{display:inline-block;margin-top:20px;color:var(--muted);font-family:var(--font-display);font-weight:500;font-size:14px;text-decoration:none}
+  .later:hover{color:var(--ink-soft)}
+  /* entrada delicada — el contenido ya estaba ahí */
+  @keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+  .an{opacity:0;animation:rise .5s var(--ease) both}
+  .a1{animation-delay:.06s}.a2{animation-delay:.15s}.a3{animation-delay:.28s}.a4{animation-delay:.46s}.a5{animation-delay:.56s}
+  @media(prefers-reduced-motion:reduce){.an{animation:none;opacity:1}}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="top"><img src="/crecer/assets/brand/encuentralo-pin.svg" alt=""><b>encuéntralo</b></div>
+<?php $chk='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'; ?>
+<div class="bv">
+  <a class="brand an" href="/crecer/panel/index.php?marca=<?= $marca_id ?>"><img src="/crecer/assets/brand/crecer-mark.svg" alt=""><span>encuéntralo <i>crecer</i></span></a>
 
-  <div class="tag"><img src="/crecer/assets/icons/aprobar.svg" alt=""> El corillo ya metió mano</div>
-  <h1>¡Tu primer post<br><span>está listo!</span></h1>
-  <p class="lede">Le hablaste 40 segundos y el corillo te armó esto — en tu voz, con tu foto. Esto es solo una probadita.</p>
+  <div><span class="chip an a1"><?= $chk ?> El corillo ya lo hizo</span></div>
+  <h1 class="an a2">Tu primer post está <span>listo</span>.</h1>
+  <p class="lede an a2">Le hablaste 40 segundos y el corillo lo armó — en tu voz, con tu foto. Esto es solo un adelanto.</p>
 
-  <!-- El post de muestra -->
-  <div class="post">
+  <!-- El post de muestra (protagonista) -->
+  <div class="post an a3">
     <div class="ph">
       <div class="av"><?= $h(mb_strtoupper(mb_substr($marca['nombre_negocio'],0,1))) ?></div>
       <div class="hn"><?= $h($marca['nombre_negocio']) ?><small>tu post de muestra · gratis</small></div>
     </div>
     <?php if (!empty($post['grafica_path'])): ?>
-      <img class="img" src="<?= $h($post['grafica_path']) ?>" alt="post">
+      <img class="img" src="<?= $h($post['grafica_path']) ?>" alt="">
     <?php endif; ?>
     <div class="cap"><?= $h($post['caption'] ?? 'El corillo está redactando tu caption…') ?></div>
   </div>
 
   <?php if ($planRow): ?>
-    <!-- Eligió un plan en el landing → directo al checkout -->
-    <form method="post" action="/crecer/panel/crear_checkout.php">
+    <form method="post" action="/crecer/panel/crear_checkout.php" class="an a4">
       <?= csrf_field() ?>
       <input type="hidden" name="marca" value="<?= $marca_id ?>">
       <input type="hidden" name="plan" value="<?= $h($planRow['slug']) ?>">
-      <button type="submit" class="cta">
+      <button type="submit" class="cta" style="margin-top:0">
         Activar Crecer · $<?= number_format((float)$planRow['precio_mensual'],0) ?>/mes
         <span class="small">Contenido nuevo cada semana, en tu voz</span>
       </button>
     </form>
   <?php else: ?>
-    <!-- Vino gratis → invitar a activar -->
-    <a class="cta" href="/crecer/panel/precios.php?marca=<?= $marca_id ?>">
+    <a class="cta an a4" href="/crecer/panel/precios.php?marca=<?= $marca_id ?>">
       Activar Crecer
       <span class="small">Contenido nuevo cada semana, en tu voz</span>
     </a>
   <?php endif; ?>
 
-  <div class="feat">
-    <div><?= ico('check','ic') ?> Tu logo profesional con IA</div>
-    <div><?= ico('check','ic') ?> Contenido nuevo cada semana, en tu voz</div>
-    <div><?= ico('check','ic') ?> Gráficas con tus fotos + calendario</div>
+  <div class="feat an a5">
+    <div><?= $chk ?> Tu logo profesional con IA</div>
+    <div><?= $chk ?> Contenido nuevo cada semana, en tu voz</div>
+    <div><?= $chk ?> Gráficas con tus fotos + calendario</div>
   </div>
 
-  <div><a class="later" href="/crecer/panel/index.php?marca=<?= $marca_id ?>">Explorar mi panel primero →</a></div>
+  <div><a class="later an a5" href="/crecer/panel/index.php?marca=<?= $marca_id ?>">Explorar mi panel primero →</a></div>
 </div>
 </body>
 </html>

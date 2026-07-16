@@ -108,6 +108,13 @@ cliente, HQ, biblioteca, resultados, configuración, soporte, y cualquier pantal
 nueva). Ejemplo canónico: `registro.php` (desktop 2-columnas vs móvil form-first
 + "¿Qué pasa después?" en 3 pasos).
 
+**Criterio de deleite (REGLA PERMANENTE, desde 2026-07-16):** además de limpio y
+claro, cada pantalla debe **dar ganas de tocarla**. No basta con "correcto".
+Superficies que invitan a deslizar, botones que invitan a presionar, cards que
+invitan a abrir, transiciones que invitan a seguir. Antes de dar una pantalla por
+buena, preguntar: *"¿Da ganas de tocar esto?"* Si es solo correcta, no está lista.
+Interfaces **disfrutables**, no solo correctas. Simplificar primero; luego deleitar.
+
 ## Marca
 
 - "Crecer" es nombre de trabajo, **por confirmar**. La marca va **ligada a

@@ -44,45 +44,54 @@ $page_title = 'Soporte';
 require __DIR__ . '/_shell.php';
 ?>
 <style>
-  .sp-wrap{max-width:620px}
-  .sp-card{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow-sm);overflow:hidden;display:flex;flex-direction:column;height:min(64vh,560px)}
-  .sp-head{display:flex;align-items:center;gap:11px;padding:14px 16px;background:var(--tinta,#1b1622);color:#fff}
-  .sp-head .o{width:36px;height:36px;border-radius:50%;background:var(--grad,linear-gradient(120deg,#ff5c39,#c0395f));display:grid;place-items:center;font-size:17px;flex:none}
-  .sp-head b{font-size:15px}.sp-head .s{font-size:12px;color:#cfc7d6}
-  .sp-msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;background:var(--crema,#fbf6ee)}
-  .sp-m{max-width:82%;padding:10px 13px;border-radius:14px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word}
-  .sp-m .t{display:block;font-size:10.5px;color:var(--muted);margin-top:4px}
-  .sp-m.cliente{align-self:flex-end;background:var(--terracota,#e3683f);color:#fff;border-bottom-right-radius:5px}
-  .sp-m.cliente .t{color:rgba(255,255,255,.8)}
+  .content{max-width:640px}
+  .asis-fab{display:none}
+  .sp-top{margin-bottom:16px}
+  .sp-top h1{font-family:var(--font-display);font-weight:600;font-size:clamp(24px,4.4vw,28px);letter-spacing:-.02em;color:var(--ink-soft);margin:0}
+  .sp-top p{color:var(--muted);font-size:14.5px;margin:6px 0 0;line-height:1.5;max-width:46ch}
+  .sp-card{background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column;height:min(64vh,560px)}
+  @media(max-width:760px){.content{max-width:none}.sp-card{height:calc(100dvh - 208px);border-radius:18px}}
+  .sp-head{display:flex;align-items:center;gap:11px;padding:14px 16px;background:var(--tinta);color:#fff}
+  .sp-head .o{width:38px;height:38px;border-radius:50%;background:var(--btn-grad);display:grid;place-items:center;flex:none;color:#fff}
+  .sp-head .o svg{width:20px;height:20px}
+  .sp-head b{font-family:var(--font-display);font-weight:600;font-size:15px}.sp-head .s{font-size:12px;color:#cfc7d6}
+  .sp-msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;background:var(--crema)}
+  .sp-m{max-width:82%;padding:11px 14px;border-radius:16px;font-size:14.5px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word;font-family:var(--font-body)}
+  .sp-m .t{display:block;font-size:10.5px;margin-top:4px;opacity:.72}
+  .sp-m.cliente{align-self:flex-end;background:var(--btn-grad);color:#fff;border-bottom-right-radius:5px}
   .sp-m.operador{align-self:flex-start;background:#fff;border:1px solid var(--line);color:var(--tinta);border-bottom-left-radius:5px}
-  .sp-empty{text-align:center;color:var(--muted);font-size:14px;margin:auto;max-width:34ch}
-  .sp-form{display:flex;gap:8px;padding:11px;border-top:1px solid var(--line);background:#fff}
-  .sp-form input{flex:1;font-family:inherit;font-size:14.5px;border:1.5px solid var(--line);border-radius:11px;padding:11px 13px}
-  .sp-form button{border:0;cursor:pointer;background:var(--palma,#16b86a);color:#fff;font-weight:800;font-size:15px;padding:0 18px;border-radius:11px}
+  .sp-m.operador .t{color:var(--muted)}
+  .sp-empty{text-align:center;color:var(--muted);font-size:14px;margin:auto;max-width:32ch;line-height:1.5}
+  .sp-form{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line);background:#fff}
+  .sp-form input{flex:1;font-family:var(--font-body);font-size:14.5px;border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;transition:border-color .15s}
+  .sp-form input:focus{outline:none;border-color:color-mix(in srgb,var(--magenta) 45%,var(--line))}
+  .sp-form button{border:0;cursor:pointer;background:var(--btn-grad);box-shadow:var(--btn-glow);color:#fff;width:46px;border-radius:12px;display:grid;place-items:center;flex:none;transition:transform .15s var(--ease)}
+  .sp-form button:active{transform:translateY(1px)}
+  .sp-form button svg{width:19px;height:19px}
   .sp-form button:disabled{opacity:.5}
 </style>
 
-<div class="sp-wrap">
-  <h1 class="page-h" style="margin-bottom:6px">Soporte</h1>
-  <p style="color:var(--muted);font-size:14px;margin:0 0 16px">¿Una duda, una queja, una idea? Escríbele directo al equipo de Crecer. Te contestamos por aquí.</p>
+<div class="sp-top">
+  <h1>Soporte</h1>
+  <p>¿Una duda, una idea, algo trabado? Escríbele directo al equipo. Te contestamos por aquí.</p>
+</div>
 
-  <div class="sp-card">
-    <div class="sp-head">
-      <span class="o">🤝</span>
-      <div><b>Equipo Crecer</b><div class="s">Aquí pa' lo que necesites</div></div>
-    </div>
-    <div class="sp-msgs" id="spMsgs">
-      <?php if (!$mensajes): ?>
-        <div class="sp-empty" id="spEmpty">👋 ¡Salúdanos! Escríbenos lo que sea — dudas, problemas, sugerencias. El equipo te responde por aquí.</div>
-      <?php else: foreach ($mensajes as $m): ?>
-        <div class="sp-m <?= $h($m['de']) ?>"><?= $h($m['mensaje']) ?><span class="t"><?= $h(date('d/m H:i', strtotime($m['created_at']))) ?></span></div>
-      <?php endforeach; endif; ?>
-    </div>
-    <form class="sp-form" id="spForm">
-      <input type="text" id="spInput" placeholder="Escribe tu mensaje…" autocomplete="off" maxlength="2000">
-      <button type="submit" id="spSend">➤</button>
-    </form>
+<div class="sp-card">
+  <div class="sp-head">
+    <span class="o"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg></span>
+    <div><b>Equipo Crecer</b><div class="s">Aquí pa' lo que necesites</div></div>
   </div>
+  <div class="sp-msgs" id="spMsgs">
+    <?php if (!$mensajes): ?>
+      <div class="sp-empty" id="spEmpty">Escríbenos lo que sea — dudas, problemas, ideas. El equipo te responde por aquí.</div>
+    <?php else: foreach ($mensajes as $m): ?>
+      <div class="sp-m <?= $h($m['de']) ?>"><?= $h($m['mensaje']) ?><span class="t"><?= $h(date('d/m H:i', strtotime($m['created_at']))) ?></span></div>
+    <?php endforeach; endif; ?>
+  </div>
+  <form class="sp-form" id="spForm">
+    <input type="text" id="spInput" placeholder="Escribe tu mensaje…" autocomplete="off" maxlength="2000">
+    <button type="submit" id="spSend" aria-label="Enviar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg></button>
+  </form>
 </div>
 
 <script>
