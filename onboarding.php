@@ -179,7 +179,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   <div class="step on" data-step="1">
     <div class="n">PASO 1</div>
     <label>¿Cómo se llama tu negocio?</label>
-    <input type="text" id="nombre" placeholder="Ej. El Palo Dulce" maxlength="120">
+    <input type="text" id="nombre" placeholder="Ej. El Palo Dulce" maxlength="120" value="<?= htmlspecialchars((string)($_SESSION['negocio_intent'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
     <label style="margin-top:14px">¿De qué pueblo es tu negocio? <span style="color:var(--muted);font-weight:500">(opcional)</span></label>
     <select id="municipio_id">
       <option value="">— Escoge tu pueblo —</option>

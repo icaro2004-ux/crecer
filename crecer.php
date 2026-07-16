@@ -1,369 +1,282 @@
 <?php
 // ============================================================
-//  ENCUENTRALO · CRECER — Landing minimalista inspirada en flyer
+//  ENCUÉNTRALO · CRECER — LANDING V4 "El Corillo ya está trabajando"
 //  crecer.php · /crecer
+//
+//  5 bloques: (1) pregunta → (2) reveal del Home personalizado →
+//  (3) voz → (4) resultados DEMOSTRATIVOS honestos → (5) CTA de pertenencia.
+//
+//  Personalización REAL = solo el nombre del negocio (input del visitante).
+//  Todo lo demás (créditos, propuesta, caption, números) está marcado como
+//  DEMOSTRACIÓN. Cero Gemini, cero generación de imágenes, cero llamadas
+//  externas. Solo plantillas estáticas + variables sanitizadas.
 // ============================================================
-require __DIR__ . '/includes/iconos.php';
 
-$acciones = 113;
-$negocios = 7;
-$precio_crecer = 39;   // respaldo si la BD no responde; la fuente real es crecer_planes.precio_mensual
-try {
-    if (is_file(__DIR__ . '/includes/config.local.php')) require_once __DIR__ . '/includes/config.local.php';
-    if (defined('DB_NAME') && DB_NAME !== '') {
-        $pdo = new PDO(
-            "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
-            DB_USER,
-            DB_PASS,
-            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
-        );
-        $r = $pdo->query("SELECT COUNT(*) a, COUNT(DISTINCT marca_id) n FROM crecer_ia_log WHERE estado='ok'")->fetch(PDO::FETCH_ASSOC);
-        if ($r) {
-            $acciones = max($acciones, (int)$r['a']);
-            $negocios = max($negocios, (int)$r['n']);
-        }
-        $pp = $pdo->query("SELECT precio_mensual FROM crecer_planes WHERE slug='crecer' AND activo=1")->fetchColumn();
-        if ($pp !== false && $pp !== null) $precio_crecer = (int)$pp;
-    }
-} catch (Throwable $e) {}
+// Sanitiza el nombre del negocio (mostrado y reenviado por query string).
+function crecer_clean_negocio(string $s): string {
+    $s = strip_tags($s);
+    $s = preg_replace('/\s+/u', ' ', trim($s)) ?? '';
+    return mb_substr($s, 0, 60);
+}
 
-$nf = fn($n) => number_format((int)$n);
+$negocio  = crecer_clean_negocio($_GET['negocio'] ?? '');
+$has_name = $negocio !== '';
+$biz      = $has_name ? $negocio : 'tu negocio';   // token visible por defecto
+$h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 ?>
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Crecer · Hacerse conocer no tiene por qué serlo</title>
-<meta name="description" content="Encuéntralo Crecer es tu asistente de inteligencia artificial para atraer clientes, ahorrar tiempo y hacer crecer tu negocio.">
+<title>Crecer · El Corillo que trabaja por tu negocio</title>
+<meta name="description" content="Escribe el nombre de tu negocio y conoce al Corillo: un equipo de marketing que trabaja por ti.">
 <link rel="icon" type="image/png" href="/crecer/assets/brand/encuentralo-crecer-pin-drop.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Caveat:wght@600;700&family=Poppins:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=17" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+  /* Hereda el lenguaje visual del producto (encuentralo-ui.css), aquí autónomo. */
   :root{
-    --paper:#fff;
-    --ink:#06274a;
-    --pink:#ef4375;
-    --teal:#00a49f;
-    --teal-dark:#00827e;
-    --soft:#eefafa;
-    --line:#ebe7df;
-    --muted:#566276;
-    --cream:#fff6dc;
-    --display:'Anton', Impact, sans-serif;
-    --hand:'Caveat', cursive;
-    --body:'Plus Jakarta Sans', system-ui, sans-serif;
+    --crema:#F7F5F1; --card:#fff; --tinta:#231F20; --ink:#4A434F; --muted:#6E6A67; --line:#E9E7E4;
+    --magenta:#EF4375; --coral:#FF6B3D; --teal:#00A49F; --palma:#16b86a;
+    --disp:'Poppins',sans-serif; --body:'Plus Jakarta Sans',system-ui,sans-serif;
+    --grad:linear-gradient(135deg,var(--coral),var(--magenta));
+    --glow:0 1px 0 rgba(255,255,255,.28) inset,0 10px 22px -8px rgba(239,67,117,.5),0 22px 50px -18px rgba(239,67,117,.42);
+    --glow-active:0 1px 0 rgba(255,255,255,.2) inset,0 5px 13px -6px rgba(239,67,117,.5);
+    --ease:cubic-bezier(.22,1,.36,1);
   }
-  *{box-sizing:border-box}
+  *{box-sizing:border-box;margin:0;padding:0}
   html{scroll-behavior:smooth}
-  body{margin:0;background:#fff;color:var(--ink);font-family:var(--body);overflow-x:hidden;padding-top:75px}
-  .wrap{width:min(1160px,calc(100% - 48px));margin:0 auto}
-  .nav{position:fixed;top:0;left:0;right:0;z-index:50;background:rgba(255,255,255,.92);backdrop-filter:blur(14px);border-bottom:1px solid rgba(235,231,223,.75)}
-  .nav .in{height:74px;display:flex;align-items:center;gap:18px}
-  .brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}
-  .brand img{width:54px;height:58px;object-fit:contain;display:block}
-  .navlinks{margin-left:auto;display:flex;align-items:center;gap:20px}
-  .navlinks a{color:var(--ink);text-decoration:none;font-size:14px;font-weight:800}
-  .navlinks a.cta{color:#fff}
-  .navlinks .login{color:var(--muted)}
-  .cta{display:inline-flex;align-items:center;justify-content:center;gap:9px;border:0;border-radius:999px;background:var(--pink);color:#fff;text-decoration:none;font-weight:900;padding:13px 22px;box-shadow:0 16px 32px -18px var(--pink);transition:transform .16s ease,filter .16s ease}
-  .cta:hover{transform:translateY(-2px);filter:brightness(1.04)}
-  .hero{padding:58px 0 42px}
-  .hero-grid{display:grid;grid-template-columns:minmax(0,1.03fr) minmax(340px,.97fr);gap:44px;align-items:center}
-  .hand{font-family:var(--hand);font-weight:700;letter-spacing:.01em}
-  .pre{font-size:clamp(28px,3.6vw,42px);line-height:1;color:var(--ink);margin:0 0 10px;transform:rotate(-1deg)}
-  h1{font-family:var(--display);font-weight:400;text-transform:uppercase;letter-spacing:.012em;font-size:clamp(62px,8.7vw,116px);line-height:.88;margin:0;max-width:760px}
-  .pink{color:var(--pink)} .teal{color:var(--teal)}
-  .underline{position:relative;display:inline-block}
-  .underline::after{content:"";position:absolute;left:-3%;right:-3%;bottom:-.16em;height:.18em;background:var(--teal);border-radius:999px;transform:rotate(-2deg)}
-  .lede{max-width:570px;margin:30px 0 0;font-size:clamp(18px,2vw,24px);line-height:1.47;color:var(--ink)}
-  .lede b{color:var(--pink)}
-  .lede strong{color:var(--teal)}
-  .hero-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:30px}
-  .secondary{font-weight:900;color:var(--ink);text-decoration:none;border-bottom:3px solid var(--teal);padding-bottom:2px}
-  .pain-note{margin-top:34px;width:min(520px,100%);background:linear-gradient(100deg,rgba(0,164,159,.12),rgba(0,164,159,.045));border:1px solid rgba(0,164,159,.14);padding:26px 30px;position:relative;clip-path:polygon(1% 3%,98% 0,100% 96%,2% 100%)}
-  .pain-note h2{font-family:var(--hand);font-size:36px;line-height:.95;color:var(--teal);margin:0 0 16px;text-transform:uppercase}
-  .pain-note h2 span{border-bottom:4px solid var(--pink)}
-  .pain-note ul{list-style:none;margin:0;padding:0;display:grid;gap:10px}
-  .pain-note li{display:flex;align-items:center;gap:10px;color:var(--ink);font-size:16px;font-weight:700}
-  .xmark{width:23px;height:23px;display:grid;place-items:center;border-radius:50%;background:var(--pink);color:#fff;flex:none}
-  .xmark svg{width:14px;height:14px}
-  .alone{font-family:var(--hand);font-size:34px;line-height:1;color:var(--teal);margin:20px 0 0;text-transform:uppercase}
-  .alone small{display:block;color:var(--ink);font-size:27px}
-  .visual{position:relative;min-height:620px;display:grid;place-items:center;overflow:visible}
-  .hero-photo{position:absolute;inset:-18px -96px -42px -48px;z-index:1}
-  .hero-photo img{width:100%;height:100%;object-fit:cover;object-position:center right;display:block;
-    -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 16%,#000 100%),
-      linear-gradient(180deg,#000 0,#000 90%,transparent 100%);
-    -webkit-mask-composite:source-in;
-    mask-image:linear-gradient(90deg,transparent 0,#000 16%,#000 100%),
-      linear-gradient(180deg,#000 0,#000 90%,transparent 100%);
-    mask-composite:intersect}
-  .hero-photo::after{content:"";position:absolute;inset:auto 0 0;height:34%;background:linear-gradient(180deg,transparent,var(--paper));pointer-events:none}
-  .photo-bubble{position:absolute;right:18px;top:52px;border:3px solid var(--teal);border-radius:50%;padding:18px 26px;background:rgba(255,253,249,.78);font-family:var(--hand);font-size:27px;line-height:1.05;text-align:center;transform:rotate(5deg);z-index:3}
-  .photo-bubble::after{content:"";position:absolute;left:26px;bottom:-20px;width:34px;height:24px;border-left:3px solid var(--teal);border-bottom:3px solid var(--teal);border-radius:0 0 0 30px;transform:rotate(-20deg)}
-  .features{padding:46px 0 30px;border-top:1px solid var(--line)}
-  .features h2{text-align:center;font-family:var(--hand);font-size:34px;line-height:1;color:var(--ink);margin:0 0 28px;text-transform:uppercase}
-  .features h2 span{color:var(--teal)}
-  .feature-row{display:grid;grid-template-columns:repeat(5,1fr);gap:0}
-  .feature{padding:8px 22px 0;text-align:center;border-right:1px solid var(--line)}
-  .feature:last-child{border-right:0}
-  .feature .icon{height:58px;display:grid;place-items:center;color:var(--teal);margin-bottom:10px}
-  .feature .icon svg{width:44px;height:44px;stroke-width:1.8}
-  .feature p{margin:0 auto;font-size:15px;line-height:1.35;color:var(--ink);font-weight:800;max-width:180px}
-  .offer{padding:52px 0}
-  .offer-grid{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:28px;align-items:center}
-  .banner{position:relative;overflow:hidden;background:linear-gradient(135deg,#008f8b 0%,#00a49f 52%,#0dbbb5 100%);color:#fff;padding:42px 46px;display:grid;grid-template-columns:minmax(0,1fr) minmax(250px,.78fr);align-items:center;gap:28px;clip-path:polygon(1% 6%,99% 0,98% 96%,0 100%)}
-  .banner::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 78% 30%,rgba(255,255,255,.24),transparent 30%),linear-gradient(90deg,rgba(0,0,0,.16),transparent 45%);pointer-events:none}
-  .banner-copy{position:relative;z-index:2}
-  .banner h2{font-family:var(--display);font-size:clamp(32px,4vw,50px);font-weight:400;letter-spacing:.01em;line-height:1.02;margin:0;text-transform:uppercase;color:#fff}
-  .banner h2 span{display:block;color:#ffe45c}
-  .banner h2 b{color:var(--pink);font-weight:400}
-  .banner .accent-line{width:76px;height:4px;background:var(--pink);border-radius:999px;margin:20px 0 18px;display:block}
-  .banner p{margin:0;font-size:16px;font-weight:800;color:#e9ffff}
-  .growth-art{position:relative;z-index:1;min-height:250px;align-self:stretch;display:grid;place-items:center;overflow:visible}
-  .growth-art img{width:145%;height:100%;max-height:330px;object-fit:contain;object-position:center;border-radius:8px;opacity:.98;mix-blend-mode:screen;
-    -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 10%,#000 100%),linear-gradient(180deg,transparent 0,#000 10%,#000 90%,transparent 100%);
-    -webkit-mask-composite:source-in;
-    mask-image:linear-gradient(90deg,transparent 0,#000 10%,#000 100%),linear-gradient(180deg,transparent 0,#000 10%,#000 90%,transparent 100%);
-    mask-composite:intersect}
-  .price-card{background:linear-gradient(140deg,#fffaf0,#fff2d3);border:1px solid #f2dfba;border-radius:24px;padding:28px 24px;text-align:center;box-shadow:0 22px 50px -38px rgba(0,0,0,.38)}
-  .price-card .hand{font-size:31px;line-height:1;color:var(--teal);text-transform:uppercase}
-  .price-card .line{width:120px;height:4px;background:var(--pink);border-radius:999px;margin:6px auto 18px;transform:rotate(-2deg)}
-  .price-card .desde{font-size:16px;font-weight:900;color:var(--ink)}
-  .price-card .price{font-family:var(--display);font-size:70px;line-height:.85;margin:8px 0;color:var(--ink)}
-  .price-card .price small{font-family:var(--body);font-size:24px;color:var(--teal);font-weight:900}
-  .price-card p{margin:12px 0 0;color:var(--ink);font-weight:800}
-  .price-cta{display:inline-flex;align-items:center;justify-content:center;margin-top:18px;border-radius:999px;background:var(--pink);color:#fff;text-decoration:none;font-size:14px;font-weight:900;padding:11px 18px;box-shadow:0 14px 30px -20px var(--pink)}
-  .price-note{display:block;margin-top:10px;color:var(--muted);font-size:12px;font-weight:800}
-  .final{padding:30px 0 58px;text-align:center}
-  .final h2{font-family:var(--display);font-size:clamp(40px,5vw,70px);line-height:.94;margin:0 auto 22px;max-width:760px;text-transform:uppercase}
-  .final h2 span{color:var(--pink)}
-  .micro{color:var(--muted);font-size:14px;font-weight:800;margin-top:12px}
-  .foot{border-top:1px solid var(--line);padding:22px 0;color:var(--muted)}
-  .foot .in{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
-  .foot img{width:160px;height:auto}
-  .foot a{color:var(--muted);text-decoration:none;font-size:13px;font-weight:800}
-  .foot a:hover{color:var(--pink)}
-  @media(max-width:960px){
-    .hero-grid,.offer-grid{grid-template-columns:1fr}
-    .visual{min-height:520px}
-    .hero-photo{inset:0 -46px -28px -34px}
-    .photo-bubble{right:4px;top:112px}
-    .feature-row{grid-template-columns:repeat(2,1fr);gap:24px}.feature{border-right:0}
+  body{font-family:var(--body);color:var(--tinta);background:var(--crema);line-height:1.5;
+    background-image:radial-gradient(110% 40% at 100% 0%,rgba(239,67,117,.045),transparent 60%),radial-gradient(80% 38% at 0% 2%,rgba(0,164,159,.035),transparent 58%);
+    -webkit-font-smoothing:antialiased;overflow-x:hidden}
+  .wrap{width:min(600px,calc(100% - 40px));margin-inline:auto}
+  a{color:inherit}
+  :where(a,button,input):focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--magenta) 32%,transparent)}
+  ::selection{background:color-mix(in srgb,var(--magenta) 20%,#fff)}
+
+  /* nav — Crecer discreto */
+  .nav{display:flex;align-items:center;justify-content:space-between;padding:20px 22px;position:relative;z-index:5}
+  .brand{font-family:var(--disp);font-weight:600;font-size:16px;letter-spacing:-.02em;color:var(--tinta);text-decoration:none}
+  .brand i{color:var(--teal);font-style:normal}
+  .nav .entrar{font-family:var(--disp);font-weight:500;font-size:14px;color:var(--muted);text-decoration:none}
+  .nav .entrar:hover{color:var(--tinta)}
+
+  /* chip de honestidad */
+  .demo{display:inline-block;font-family:var(--disp);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;
+    color:var(--muted);background:color-mix(in srgb,var(--muted) 8%,#fff);border:1px solid var(--line);padding:4px 10px;border-radius:999px}
+
+  /* ── 1 · HERO: solo la pregunta ── */
+  #ask{min-height:calc(100dvh - 64px);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 22px 12vh}
+  .ask-q{font-family:var(--disp);font-weight:600;font-size:clamp(30px,6.6vw,48px);line-height:1.12;letter-spacing:-.025em;color:var(--ink);text-wrap:balance;max-width:14ch}
+  .namebox{display:flex;align-items:center;gap:10px;margin-top:34px;width:min(440px,100%);
+    background:var(--card);border:1px solid var(--line);border-radius:18px;padding:8px 8px 8px 20px;
+    box-shadow:0 2px 6px rgba(40,22,28,.05),0 24px 50px -26px rgba(40,22,28,.22);transition:box-shadow .2s var(--ease)}
+  .namebox:focus-within{box-shadow:0 2px 6px rgba(40,22,28,.05),0 26px 56px -24px rgba(239,67,117,.3)}
+  .namebox.shake{animation:shake .4s}
+  @keyframes shake{10%,90%{transform:translateX(-2px)}30%,70%{transform:translateX(5px)}50%{transform:translateX(-7px)}}
+  .namebox input{flex:1;border:0;outline:0;background:0;font-family:var(--body);font-size:17px;color:var(--tinta);min-width:0}
+  .namebox input::placeholder{color:#b8b2ad}
+  .namebox button{flex:none;width:52px;height:52px;border:0;border-radius:14px;background:var(--grad);color:#fff;
+    box-shadow:var(--glow);font-size:22px;cursor:pointer;display:grid;place-items:center;line-height:1;transition:transform .2s var(--ease),box-shadow .2s var(--ease)}
+  .namebox button:active{transform:translateY(1px);box-shadow:var(--glow-active)}
+  .whisper{margin-top:22px;font-size:14px;color:var(--muted)}
+
+  /* Estados: por defecto se ve el hero; al fichar (o con ?negocio) se ve #exp */
+  #exp{display:none}
+  body.revealed #ask{display:none}
+  body.revealed #exp{display:block}
+
+  /* ── 2 · EL CORILLO TRABAJANDO (Home real, personalizado) ── */
+  .stage{padding:56px 0 60px}
+  .stage .demo{margin-bottom:16px}
+  .biz{font-family:var(--disp);font-weight:600;font-size:15px;letter-spacing:-.01em;color:var(--ink);margin-bottom:6px}
+  .relevo{font-family:var(--disp);font-weight:600;font-size:clamp(24px,5.2vw,34px);line-height:1.15;letter-spacing:-.02em;color:var(--ink);text-wrap:balance;max-width:20ch}
+  .credits{list-style:none;margin:26px 0 30px;display:flex;flex-direction:column;gap:16px}
+  .credits li{display:flex;align-items:flex-start;gap:12px;font-size:16.5px;line-height:1.35;color:var(--tinta)}
+  .ck{flex:none;width:21px;height:21px;margin-top:1px;color:var(--palma)}
+  .prop{border-radius:26px;overflow:hidden;background:#14121c;box-shadow:0 34px 80px -26px rgba(24,12,20,.55)}
+  .prop-top{padding:20px 20px 0}
+  .chip{display:inline-block;font-size:11px;font-weight:700;color:#fff;text-transform:capitalize;letter-spacing:.03em;
+    background:rgba(255,255,255,.14);backdrop-filter:blur(7px);padding:6px 12px;border-radius:999px}
+  .cap{padding:22px 22px 4px;color:#fff;font-size:19.5px;line-height:1.5;font-weight:400}
+  .cap b{font-weight:600}
+  .prop-foot{padding:20px 20px 22px}
+  .go{width:100%;border:0;cursor:pointer;font-family:var(--disp);font-weight:600;font-size:16px;color:#fff;
+    padding:16px;border-radius:16px;background:var(--grad);box-shadow:var(--glow);transition:transform .2s var(--ease),box-shadow .2s var(--ease)}
+  .go:active{transform:translateY(1px);box-shadow:var(--glow-active)}
+  .subacc{display:flex;justify-content:center;gap:22px;margin-top:12px}
+  .subacc span{color:rgba(255,255,255,.8);font-family:var(--disp);font-weight:500;font-size:13.5px}
+  .firma{margin-top:26px;font-family:var(--disp);font-style:italic;font-weight:400;font-size:15px;color:var(--muted)}
+
+  /* ── 3 · LA VOZ DEL NEGOCIO ── */
+  .voz{padding:66px 0;border-top:1px solid var(--line)}
+  .voz .demo{margin-bottom:20px}
+  .voz .lbl{font-family:var(--disp);font-weight:600;font-size:15px;color:var(--muted);margin:16px 0 18px}
+  .voz q{quotes:none;font-family:var(--disp);font-weight:500;font-size:clamp(22px,5vw,30px);line-height:1.4;letter-spacing:-.015em;color:var(--ink);display:block}
+
+  /* ── 4 · RESULTADOS DEMOSTRATIVOS (honestos) ── */
+  .res{padding:66px 0;border-top:1px solid var(--line)}
+  .res .demo{margin-bottom:16px}
+  .res .pre{font-size:16px;color:var(--tinta);margin-bottom:16px;max-width:26ch;line-height:1.45;font-weight:500}
+  .num{font-family:var(--disp);font-weight:600;font-size:clamp(54px,15vw,84px);line-height:.9;letter-spacing:-.035em;color:var(--magenta)}
+  .res .after{margin-top:12px;font-size:15px;color:var(--muted)}
+  .spark{display:flex;align-items:flex-end;gap:6px;height:44px;margin-top:24px;max-width:260px}
+  .spark i{flex:1;border-radius:4px 4px 0 0;background:linear-gradient(180deg,var(--teal),#00827e)}
+
+  /* ── 5 · CTA — pertenencia ── */
+  .cta{padding:80px 0 92px;border-top:1px solid var(--line);text-align:center}
+  .cta h2{font-family:var(--disp);font-weight:600;font-size:clamp(32px,7.4vw,50px);line-height:1.05;letter-spacing:-.03em;color:var(--ink)}
+  .cta p{margin:18px auto 30px;font-size:16.5px;color:var(--muted);line-height:1.5;max-width:30ch}
+  .cta p b{color:var(--ink);font-weight:600}
+  .enter{display:inline-block;border:0;cursor:pointer;text-decoration:none;font-family:var(--disp);font-weight:600;font-size:17px;color:#fff;
+    padding:17px 42px;border-radius:16px;background:var(--grad);box-shadow:var(--glow);transition:transform .2s var(--ease),box-shadow .2s var(--ease)}
+  .enter:active{transform:translateY(1px);box-shadow:var(--glow-active)}
+  .free{margin-top:16px;font-size:13.5px;color:var(--muted)}
+  .foot{padding:26px 0;border-top:1px solid var(--line);text-align:center;color:var(--muted);font-size:13px}
+  .foot a{text-decoration:none}.foot a:hover{color:var(--tinta)}
+
+  /* Fichaje: el Home entra desde abajo (una vez, al revelar) */
+  body.revealed.animate #exp{animation:riseIn .5s var(--ease) both}
+  @keyframes riseIn{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}
+  body.revealed.animate .credits li{opacity:0;animation:riseIn .42s var(--ease) both}
+  body.revealed.animate .credits li:nth-child(1){animation-delay:.12s}
+  body.revealed.animate .credits li:nth-child(2){animation-delay:.20s}
+  body.revealed.animate .credits li:nth-child(3){animation-delay:.28s}
+  body.revealed.animate .prop{opacity:0;animation:riseIn .46s var(--ease) .34s both}
+
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    *,*::before,*::after{animation-duration:.001ms!important;transition-duration:.001ms!important}
   }
   @media(max-width:620px){
-    .wrap{width:min(100% - 30px,1160px)}
-    .nav .in{height:66px}.brand img{width:48px;height:52px}.navlinks a:not(.cta){display:none}
-    .hero{padding-top:30px}h1{font-size:58px}.pre{font-size:31px}.lede{font-size:18px}
-    .visual{min-height:390px;margin-top:22px}
-    .hero-photo{inset:0 -105px -18px -34px}
-    .hero-photo img{object-position:62% center}
-    .photo-bubble{display:none}
-    .pain-note{padding:22px 20px}.feature-row{grid-template-columns:1fr}
-    .banner{padding:42px 24px 30px;grid-template-columns:1fr;gap:10px}.banner h2{font-size:31px}.banner p{font-size:16px}.growth-art{min-height:236px;margin-top:-8px}.growth-art img{width:93%;max-height:255px;object-position:center}
-    .price-card{padding-bottom:34px}.price-card .price{font-size:58px}
-  }
-  /* ═══════════════ HERO SOLO MÓVIL (≤768px) ═══════════════
-     Capa aparte. NO altera el desktop: solo se muestra bajo 768px. */
-  .hero-mobile{display:none}
-  @media (max-width:768px){
-    .hero-desktop{display:none !important}
-    .hero-mobile{display:block}
-    .hero{padding:0}
-  }
-  .hero-mobile{width:100%;overflow:hidden;background:#fff;padding:32px 0 56px}
-  .hero-mobile__content{width:min(100% - 40px,480px);margin-inline:auto}
-  .hero-mobile__eyebrow{margin:0 0 12px;color:#062A4E;font-family:var(--hand);font-size:clamp(28px,8vw,38px);line-height:1;font-weight:700;transform:rotate(-1deg)}
-  .hero-mobile__title{margin:0;color:#061F3B;font-family:var(--display);font-weight:400;text-transform:uppercase;font-size:clamp(34px,10vw,48px);line-height:.96;letter-spacing:.01em}
-  .text-magenta{color:var(--pink)} .text-teal{color:var(--teal)}
-  .text-underlined{position:relative;display:inline-block}
-  .text-underlined::after{content:"";position:absolute;left:0;right:0;bottom:-5px;height:5px;border-radius:999px;background:var(--teal)}
-  .hero-mobile__description{margin:20px 0 0;max-width:36ch;color:#36506B;font-size:17px;line-height:1.55}
-  .hero-mobile__description strong{font-weight:800}
-  .hero-mobile__actions{display:flex;flex-direction:column;align-items:flex-start;gap:16px;margin-top:26px}
-  .hero-mobile .button--primary{display:inline-flex;align-items:center;justify-content:center;min-height:56px;padding:14px 24px;border-radius:999px;background:var(--pink);color:#fff;font-size:17px;font-weight:800;text-decoration:none;box-shadow:0 14px 30px rgba(239,67,117,.22)}
-  .hero-mobile__plans-link{color:#061F3B;font-size:16px;font-weight:800;text-decoration:none;border-bottom:3px solid var(--teal);padding-bottom:3px}
-  /* teléfono */
-  .hero-mobile__visual{position:relative;width:min(102%,532px);margin:42px auto 0;min-height:auto}
-  .hero-mobile__phone{position:relative;z-index:1;display:block;width:100%;height:auto;margin-inline:auto;object-fit:contain;object-position:top center}
-  /* card flotante */
-  .growth-card{position:absolute;z-index:3;top:17%;right:2%;width:min(46vw,190px);padding:16px;border:1px solid rgba(6,31,59,.06);border-radius:20px;background:#fff;box-shadow:0 20px 50px rgba(6,31,59,.18),0 4px 12px rgba(6,31,59,.08);transform:rotate(2deg)}
-  .growth-card__icon{display:grid;place-items:center;width:36px;height:36px;margin-bottom:10px;border-radius:50%;background:var(--teal);color:#fff}
-  .growth-card__icon svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
-  .growth-card__title{margin:0;color:#061F3B;font-size:15px;line-height:1.2;font-weight:800}
-  .growth-card__metric{margin:8px 0 0;color:var(--teal);font-size:14px;line-height:1.25;font-weight:800}
-  /* partículas */
-  .hero-particle{position:absolute;z-index:2;width:10px;height:10px;border-radius:3px;pointer-events:none}
-  .hero-particle--one{left:5%;top:36%;background:var(--pink)}
-  .hero-particle--two{right:6%;top:43%;background:var(--teal)}
-  .hero-particle--three{left:10%;top:65%;background:var(--teal)}
-  /* card ¿Te suena? */
-  .pain-card{position:relative;z-index:4;width:min(100% - 32px,520px);margin:-150px auto 0;padding:28px 24px;border:1px solid rgba(0,164,159,.20);border-radius:28px;background:#F1FBFA;box-shadow:0 20px 50px rgba(6,31,59,.08)}
-  .pain-card__title{display:inline-block;margin:0 0 20px;color:var(--teal);font-family:var(--hand);font-size:34px;line-height:1;border-bottom:4px solid var(--pink);text-transform:uppercase}
-  .pain-card__list{display:grid;gap:14px;margin:0;padding:0;list-style:none}
-  .pain-card__list li{position:relative;padding-left:36px;color:#061F3B;font-size:16px;line-height:1.35;font-weight:700}
-  .pain-card__list li::before{content:"×";position:absolute;left:0;top:-1px;display:grid;place-items:center;width:23px;height:23px;border-radius:50%;background:var(--pink);color:#fff;font-size:17px;line-height:1;font-weight:800}
-  .pain-card__footer{display:flex;flex-direction:column;margin-top:26px;padding-top:22px;border-top:1px solid rgba(0,164,159,.18)}
-  .pain-card__footer strong{color:var(--teal);font-family:var(--hand);font-size:27px;line-height:1;font-weight:700;text-transform:uppercase}
-  .pain-card__footer span{margin-top:6px;color:#062A4E;font-family:var(--hand);font-size:22px;line-height:1.05;text-transform:uppercase}
-  /* accesibilidad */
-  .hero-mobile a:focus-visible{outline:3px solid var(--teal);outline-offset:3px;border-radius:6px}
-  @media (max-width:390px){
-    .hero-mobile__content{width:min(100% - 32px,480px)}
-    .hero-mobile__title{font-size:clamp(31px,9.5vw,39px)}
-    .hero-mobile__description{font-size:16px}
-    .hero-mobile__visual{width:104%;margin-inline:auto;min-height:auto}
-    .growth-card{right:8%;width:165px;padding:14px}
-    .pain-card{width:calc(100% - 24px);padding:25px 20px}
-  }
-  @media (prefers-reduced-motion:no-preference){
-    .growth-card{animation:growth-card-in 700ms ease-out 250ms both}
-    @keyframes growth-card-in{from{opacity:0;transform:translateY(18px) rotate(2deg)}to{opacity:1;transform:translateY(0) rotate(2deg)}}
+    .cap{font-size:18px}
+    .res .num{font-size:clamp(50px,17vw,74px)}
   }
 </style>
 </head>
-<body>
+<body class="<?= $has_name ? 'revealed' : '' ?>">
+
 <nav class="nav">
-  <div class="in wrap">
-    <a class="brand" href="/crecer/crecer.php"><img src="/crecer/assets/brand/encuentralo-crecer-pin-drop.png" alt="Encuéntralo Crecer"></a>
-    <div class="navlinks">
-      <a class="login" href="/crecer/login.php">Entrar</a>
-      <a class="cta" href="/crecer/registro.php">Probar gratis</a>
-    </div>
-  </div>
+  <a class="brand" href="/crecer/crecer.php">encuéntralo <i>crecer</i></a>
+  <a class="entrar" href="/crecer/login.php">Entrar</a>
 </nav>
 
-<main>
-  <header class="hero">
-    <div class="hero-grid wrap hero-desktop">
-      <section>
-        <p class="pre hand">Emprender es difícil.</p>
-        <h1>Hacerse <span class="pink">conocer</span><br>no tiene por qué<br><span class="teal underline">serlo.</span></h1>
-        <p class="lede"><b>Encuéntralo Crecer</b> es tu asistente de inteligencia artificial que te ayuda a atraer clientes, ahorrar tiempo y <strong>hacer crecer tu negocio.</strong></p>
-        <div class="hero-actions">
-          <a class="cta" href="/crecer/registro.php">Crear mi primer post</a>
-          <a class="secondary" href="#planes">Ver el plan · $<?= (int)$precio_crecer ?>/mes</a>
-        </div>
+<!-- ── 1 · HERO — solo la pregunta ── -->
+<header id="ask">
+  <h1 class="ask-q">¿Cómo se llama tu negocio?</h1>
+  <form class="namebox" id="fiche" method="get" action="/crecer/crecer.php" autocomplete="off">
+    <input id="negInput" name="negocio" maxlength="60" required
+           value="<?= $has_name ? $h($negocio) : '' ?>"
+           placeholder="Escríbelo aquí…" aria-label="Nombre de tu negocio"
+           enterkeyhint="go" autocapitalize="words" spellcheck="false">
+    <button type="submit" aria-label="Entrar">→</button>
+  </form>
+  <p class="whisper">Tu corillo te está esperando.</p>
+</header>
 
-        <div class="pain-note">
-          <h2><span>¿Te suena?</span></h2>
-          <ul>
-            <li><span class="xmark"><?= ico('x') ?></span>No sabes qué publicar.</li>
-            <li><span class="xmark"><?= ico('x') ?></span>No tienes tiempo.</li>
-            <li><span class="xmark"><?= ico('x') ?></span>Tus redes están abandonadas.</li>
-            <li><span class="xmark"><?= ico('x') ?></span>No sabes de marketing.</li>
-            <li><span class="xmark"><?= ico('x') ?></span>Sientes que tu negocio merece más.</li>
-          </ul>
-          <p class="alone">No estás solo.<small>Estamos aquí para ayudarte.</small></p>
-        </div>
-      </section>
+<!-- ── 2–5 · LA EXPERIENCIA (se revela al fichar) ── -->
+<main id="exp">
 
-      <section class="visual" aria-label="Vista previa de Crecer">
-        <div class="hero-photo">
-          <img src="/crecer/assets/crecer-contenido/hero-foto-crecer.png?v=2" alt="Teléfono con la app Encuéntralo Crecer junto a una taza y una planta">
-        </div>
-        <div class="photo-bubble">Tu negocio<br>en buenas manos.</div>
-      </section>
-    </div>
-
-    <!-- ── HERO SOLO MÓVIL (≤768px). Desktop intacto arriba. ── -->
-    <div class="hero-mobile">
-      <div class="hero-mobile__content">
-        <p class="hero-mobile__eyebrow">Emprender es difícil.</p>
-        <h1 class="hero-mobile__title">Hacerse <span class="text-magenta">conocer</span><br>no tiene por qué<br><span class="text-teal text-underlined">serlo.</span></h1>
-        <p class="hero-mobile__description"><strong class="text-magenta">Encuéntralo Crecer</strong> es tu asistente de inteligencia artificial que te ayuda a atraer clientes, ahorrar tiempo y <strong class="text-teal">hacer crecer tu negocio.</strong></p>
-        <div class="hero-mobile__actions">
-          <a class="button button--primary" href="/crecer/registro.php">Crear mi primer post</a>
-          <a class="hero-mobile__plans-link" href="#planes">Ver el plan · $<?= (int)$precio_crecer ?>/mes</a>
-        </div>
+  <!-- 2 · EL CORILLO TRABAJANDO -->
+  <section class="stage wrap">
+    <span class="demo">Demostración</span>
+    <div class="biz jsname"><?= $h($biz) ?></div>
+    <h2 class="relevo">Tu Corillo ya tendría esto listo.</h2>
+    <ul class="credits">
+      <li><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.4 2.4 4.6-4.8"/></svg>La Creativa prepara tu propuesta del día.</li>
+      <li><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.4 2.4 4.6-4.8"/></svg>El Diseñador monta tu arte.</li>
+      <li><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.4 2.4 4.6-4.8"/></svg>La Estratega cuadra tu semana.</li>
+    </ul>
+    <article class="prop">
+      <div class="prop-top"><span class="chip">Instagram</span></div>
+      <p class="cap">¡Wepa! En <b class="jsname"><?= $h($biz) ?></b> tenemos algo bueno para ti hoy 🔥 Escríbenos por WhatsApp y te lo apartamos, mi gente 💛</p>
+      <div class="prop-foot">
+        <button class="go" type="button">Vamos con este</button>
+        <div class="subacc"><span>Ajústalo</span><span>No es esto</span></div>
       </div>
-
-      <div class="hero-mobile__visual">
-        <img class="hero-mobile__phone" src="/crecer/assets/images/crecer-phone-mobile.png"
-             alt="Aplicación Encuéntralo Crecer mostrada en un teléfono" loading="eager" decoding="async">
-
-        <div class="growth-card" aria-label="Ejemplo de resultado generado por Crecer">
-          <div class="growth-card__icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M4 17l5-5 4 4 7-8"></path><path d="M15 8h5v5"></path></svg>
-          </div>
-          <p class="growth-card__title">Tu negocio está creciendo</p>
-          <p class="growth-card__metric">+14 clientes esta semana</p>
-        </div>
-
-        <span class="hero-particle hero-particle--one" aria-hidden="true"></span>
-        <span class="hero-particle hero-particle--two" aria-hidden="true"></span>
-        <span class="hero-particle hero-particle--three" aria-hidden="true"></span>
-      </div>
-
-      <article class="pain-card">
-        <h2 class="pain-card__title">¿Te suena?</h2>
-        <ul class="pain-card__list">
-          <li>No sabes qué publicar.</li>
-          <li>No tienes tiempo.</li>
-          <li>Tus redes están abandonadas.</li>
-          <li>No sabes de marketing.</li>
-          <li>Sientes que tu negocio merece más.</li>
-        </ul>
-        <div class="pain-card__footer">
-          <strong>No estás solo.</strong>
-          <span>Estamos aquí para ayudarte.</span>
-        </div>
-      </article>
-    </div>
-  </header>
-
-  <section class="features wrap" aria-label="Beneficios">
-    <h2>Con <span>Encuéntralo Crecer</span> puedes:</h2>
-    <div class="feature-row">
-      <article class="feature"><div class="icon"><?= ico('lightbulb') ?></div><p>Tener ideas de contenido sin romperte la cabeza.</p></article>
-      <article class="feature"><div class="icon"><?= ico('pen') ?></div><p>Publicar contenido que atrae y conecta con tu gente.</p></article>
-      <article class="feature"><div class="icon"><?= ico('calendar') ?></div><p>Organizar tus publicaciones y olvidarte del estrés.</p></article>
-      <article class="feature"><div class="icon"><?= ico('chat') ?></div><p>El Estratega: tu asesor de negocio por IA, siempre disponible.</p></article>
-      <article class="feature"><div class="icon"><?= ico('chart') ?></div><p>Hacer crecer tu negocio con recomendaciones inteligentes.</p></article>
-    </div>
+    </article>
+    <p class="firma">El corillo sigue trabajando.</p>
   </section>
 
-  <section class="offer wrap" id="planes">
-    <div class="offer-grid">
-      <div class="banner">
-        <div class="banner-copy">
-          <h2>Tu negocio tiene potencial.<span>Nosotros te ayudamos a hacerlo <b>crecer.</b></span></h2>
-          <span class="accent-line" aria-hidden="true"></span>
-          <p><?= $nf($acciones) ?> acciones de IA registradas para <?= $nf($negocios) ?> negocios y contando.</p>
-        </div>
-        <picture class="growth-art" aria-hidden="true">
-          <source media="(max-width: 620px)" srcset="/crecer/assets/crecer-contenido/grafica-crecimiento-mobile-square.png">
-          <img src="/crecer/assets/crecer-contenido/grafica-crecimiento-tight.png" alt="">
-        </picture>
-      </div>
-      <aside class="price-card">
-        <div class="hand">Bueno, bonito<br>y asequible</div>
-        <div class="line"></div>
-        <div class="desde">Un solo plan</div>
-        <div class="price">$<?= (int)$precio_crecer ?><small>/mes</small></div>
-        <p>Hecho para emprendedores como tú.</p>
-        <a class="price-cta" href="/crecer/registro.php">Empezar gratis</a>
-        <span class="price-note">Tu primer post, gratis · sin tarjeta</span>
-      </aside>
-    </div>
+  <!-- 3 · LA VOZ DEL NEGOCIO -->
+  <section class="voz wrap">
+    <span class="demo">Demostración</span>
+    <div class="lbl">Habla como tú. Nunca traducido.</div>
+    <q>"Date el gusto: lo bueno de <b class="jsname"><?= $h($biz) ?></b>, como te lo mereces. Escríbenos hoy y te atendemos con cariño. 😋"</q>
   </section>
 
-  <section class="final wrap">
-    <h2>Haz que tu negocio se vea <span>presente, activo y listo para crecer.</span></h2>
-    <a class="cta" href="/crecer/registro.php">Crea tu primer post gratis</a>
-    <div class="micro">Sin tarjeta · empiezas con tu post de muestra.</div>
+  <!-- 4 · RESULTADOS DEMOSTRATIVOS (honestos) -->
+  <section class="res wrap">
+    <span class="demo">Demostración</span>
+    <p class="pre">Así se ven los números de un negocio con el Corillo.</p>
+    <div class="num">2,082</div>
+    <p class="after">personas alcanzadas en un mes · ejemplo de demostración, no tus resultados.</p>
+    <div class="spark"><i style="height:22%"></i><i style="height:38%"></i><i style="height:31%"></i><i style="height:55%"></i><i style="height:70%"></i><i style="height:64%"></i><i style="height:88%"></i><i style="height:100%"></i></div>
   </section>
+
+  <!-- 5 · CTA -->
+  <section class="cta wrap">
+    <h2>Bienvenido al Corillo.</h2>
+    <p>Tu equipo está listo para trabajar por <b class="jsname"><?= $h($biz) ?></b>.</p>
+    <a class="enter" id="enterCta" href="/crecer/registro.php?negocio=<?= urlencode($negocio) ?>">Entrar al Corillo</a>
+    <div class="free">Gratis para empezar · sin tarjeta</div>
+  </section>
+
+  <footer class="foot">
+    <a class="brand" href="/crecer/crecer.php" style="font-size:14px">encuéntralo <i style="color:var(--teal);font-style:normal">crecer</i></a>
+    · <a href="/crecer/terminos.php">Términos</a> · <a href="/crecer/privacidad.php">Privacidad</a>
+  </footer>
 </main>
 
-<footer class="foot">
-  <div class="in wrap">
-    <img src="/crecer/assets/brand/encuentralo-crecer-completo.png" alt="Encuéntralo Crecer">
-    <span>Conecta. Impulsa. <b style="color:var(--pink)">Crece.</b></span>
-    <span><a href="/crecer/terminos.php">Términos</a> · <a href="/crecer/privacidad.php">Privacidad</a> · <a href="/crecer/eliminar-datos.php">Eliminar datos</a></span>
-  </div>
-</footer>
+<script>
+(function () {
+  var form  = document.getElementById('fiche'),
+      input = document.getElementById('negInput'),
+      box   = form,
+      cta   = document.getElementById('enterCta');
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function limpiar(v){ return (v || '').replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim().slice(0,60); }
+
+  function aplicarNombre(n){
+    var seguro = n || 'tu negocio';
+    // textContent = XSS-safe; nunca innerHTML con input del usuario.
+    document.querySelectorAll('.jsname').forEach(function(el){ el.textContent = seguro; });
+    if (cta) cta.setAttribute('href', '/crecer/registro.php?negocio=' + encodeURIComponent(n));
+  }
+
+  function revelar(){
+    if (reduce) {
+      document.body.classList.add('revealed');
+      window.scrollTo(0, 0);
+      return;
+    }
+    var ask = document.getElementById('ask');
+    ask.style.transition = 'transform .42s var(--ease), opacity .38s ease';
+    ask.style.transform = 'translateY(-24px)';
+    ask.style.opacity = '0';
+    setTimeout(function(){
+      document.body.classList.add('revealed', 'animate');   // oculta #ask, muestra #exp con rise-in
+      window.scrollTo(0, 0);
+    }, 360);
+  }
+
+  if (form) form.addEventListener('submit', function(e){
+    var nombre = limpiar(input.value);
+    if (!nombre) {                       // campo vacío → no revela; avisa
+      e.preventDefault();
+      box.classList.remove('shake'); void box.offsetWidth; box.classList.add('shake');
+      input.focus();
+      return;
+    }
+    e.preventDefault();                  // fichaje sin recarga (fallback: GET si no hay JS)
+    input.value = nombre;
+    aplicarNombre(nombre);
+    revelar();
+  });
+})();
+</script>
 </body>
 </html>

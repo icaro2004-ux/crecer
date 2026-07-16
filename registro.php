@@ -10,6 +10,14 @@ require_once __DIR__ . '/includes/iconos.php';
 if (!empty($_GET['plan']) && in_array($_GET['plan'], ['crecer','despegar'], true)) {
     $_SESSION['plan_intent'] = $_GET['plan'];
 }
+// Nombre del negocio que viene del landing (LANDING V4). Se sanitiza, se guarda
+// en sesión y se prellena en el onboarding (donde vive el campo real del negocio).
+if (isset($_GET['negocio'])) {
+    $neg = preg_replace('/\s+/u', ' ', trim(strip_tags((string)$_GET['negocio']))) ?? '';
+    $neg = mb_substr($neg, 0, 60);
+    if ($neg !== '') $_SESSION['negocio_intent'] = $neg;
+}
+$negocio_intent = $_SESSION['negocio_intent'] ?? '';
 
 if (esta_logueado()) { header('Location: /crecer/panel/index.php'); exit; }
 
@@ -126,7 +134,7 @@ $plan_lbl = ['crecer'=>'Crecer','despegar'=>'Despegar'][$plan_intent] ?? '';
 <div class="auth">
   <!-- Únete al corillo -->
   <section class="welcome">
-    <p class="eyebrow"><?= $plan_lbl ? 'Vas pa\' '.$h($plan_lbl).'.' : 'Tu corillo te espera.' ?></p>
+    <p class="eyebrow"><?= $negocio_intent ? 'El corillo de '.$h($negocio_intent).' te espera.' : ($plan_lbl ? 'Vas pa\' '.$h($plan_lbl).'.' : 'Tu corillo te espera.') ?></p>
     <h1>Monta tu <span class="teal u-teal">corillo</span> en un minuto.</h1>
     <p>Creas tu cuenta, le hablas 40 segundos de tu negocio, y el corillo arranca a trabajarte el marketing. Tú solo apruebas.</p>
     <div class="bnf">
