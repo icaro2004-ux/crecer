@@ -797,28 +797,46 @@ function tono_instruccion(array $m): string {
  * dueño no puso. Sin preferencia elegida => DM (siempre existe en la red).
  */
 function contacto_instruccion(array $m): string {
-    $wa   = trim((string)($m['whatsapp'] ?? ''));
-    $tiene_wa = $wa !== '';
+    // PRINCIPIO DE GROUNDING: el Creador solo puede ofrecer canales CONFIRMADOS en el
+    // Business Genome. Nunca inferir DM/Instagram/WhatsApp/Facebook/teléfono/email si no
+    // existen en los datos reales. (Antes se ofrecía "DM" sin Instagram → el Director lo
+    // rechazaba como afirmación no respaldada. Ese era un bug de contrato Creador↔Director.)
+    $wa = trim((string)($m['whatsapp']  ?? ''));
+    $ig = trim((string)($m['instagram'] ?? ''));
+    $fb = trim((string)($m['facebook']  ?? ''));
+    $canales = [];
+    if ($wa !== '') $canales['whatsapp'] = "WhatsApp al {$wa}";
+    if ($ig !== '') $canales['dm']       = "mensaje directo en Instagram " . (str_starts_with($ig, '@') ? $ig : '@' . $ig);
+    if ($fb !== '') $canales['facebook'] = "Facebook";
+    // La preferencia solo puede elegir ENTRE los canales que existen.
     $pref = (string)($m['contacto_preferencia'] ?? '');
-    // Normaliza: si la preferencia pide WhatsApp pero no hay número, cae a DM.
-    if (in_array($pref, ['whatsapp','ambas','todas'], true) && !$tiene_wa) {
-        $pref = 'dm';
+    if ($pref === 'whatsapp' && isset($canales['whatsapp']))    $canales = ['whatsapp' => $canales['whatsapp']];
+    elseif ($pref === 'dm' && isset($canales['dm']))            $canales = ['dm' => $canales['dm']];
+    if (!$canales) {
+        return "- CIERRA invitando a la persona a escribirte, SIN nombrar ningún canal específico: este negocio no tiene "
+             . "WhatsApp, Instagram, Facebook, teléfono ni email confirmados. PROHIBIDO inventar o inferir cualquier canal.\n";
     }
-    switch ($pref) {
-        case 'whatsapp':
-            return "- CIERRA con un llamado a la acción para que le escriban por WhatsApp al {$wa}. NO uses otro canal.\n";
-        case 'ambas':
-            return "- CIERRA invitando a escribir por mensaje directo (DM) aquí en la red O por WhatsApp al {$wa}.\n";
-        case 'todas':
-            return "- CIERRA invitando a contactar por la vía que le quede fácil: DM aquí en la red o WhatsApp al {$wa}.\n";
-        case 'dm':
-            return "- CIERRA invitando a escribir por mensaje directo (DM) aquí en la red. NO menciones WhatsApp ni inventes un número de teléfono.\n";
-        default: // el dueño no ha elegido preferencia
-            if ($tiene_wa) {
-                return "- CIERRA invitando a escribir por mensaje directo (DM) aquí en la red o por WhatsApp al {$wa}.\n";
-            }
-            return "- CIERRA invitando a escribir por mensaje directo (DM) aquí en la red. NO menciones WhatsApp ni inventes un número de teléfono.\n";
+    return "- CIERRA con UN llamado a la acción usando SOLO estos canales CONFIRMADOS: " . implode(' o ', $canales)
+         . ". PROHIBIDO mencionar cualquier otro canal (DM, Instagram, WhatsApp, Facebook, teléfono o email) que no esté en esa lista.\n";
+}
+
+// PRINCIPIO DE GROUNDING (producto): el Creador solo habla de lo que existe en el perfil.
+function grounding_producto_instruccion(array $m): string {
+    $raw = $m['productos'] ?? [];
+    if (is_string($raw)) $raw = json_decode($raw, true) ?: [];
+    $prods = [];
+    foreach ((array)$raw as $p) {
+        $nom = is_array($p) ? trim((string)($p['nombre'] ?? '')) : trim((string)$p);
+        if ($nom !== '') $prods[] = rtrim($nom, ' :.-');
     }
+    $lista  = $prods ? implode('; ', array_slice($prods, 0, 12)) : '';
+    $oferta = trim((string)($m['ofertas'] ?? ''));
+    $out  = "- Habla SOLO de lo que existe en el perfil. ";
+    $out .= $lista  !== '' ? "Productos/servicios reales: {$lista}. " : "No hay productos declarados: no inventes ninguno. ";
+    $out .= $oferta !== '' ? "Oferta real: {$oferta}. "               : "No hay oferta: no inventes promociones ni precios. ";
+    $out .= "PROHIBIDO ampliar la lista o insinuar más: nada de \"y mucho más\", \"entre otros\", \"todo tipo de\", \"y más\". "
+          . "No inventes atributos, ingredientes, años de experiencia ni datos que no estén en el perfil.\n";
+    return $out;
 }
 
 /**
