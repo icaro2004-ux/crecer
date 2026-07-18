@@ -484,6 +484,24 @@ $credito  = $has_deck
   .tn-top,.tn-dots{animation:tnRise .5s var(--ease) both}
   .tn-dots{animation-delay:.08s}
   @media(prefers-reduced-motion:reduce){.tn-top,.tn-dots,.tcard{animation:none!important;transition-duration:.001ms!important}}
+
+  /* Superficie de activación — solo cuentas sin plan. No tapa el contenido, no es modal. */
+  .tn-activar{width:100%;max-width:460px;background:var(--card);border:1px solid var(--line);border-radius:20px;
+    padding:17px 18px 16px;position:relative;overflow:hidden;
+    box-shadow:0 2px 6px rgba(40,22,28,.05),0 22px 50px -34px rgba(40,22,28,.3);animation:tnRise .5s var(--ease) both}
+  .tn-activar::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--btn-grad)}
+  .ta-badge{display:inline-flex;align-items:center;gap:7px;font-family:var(--font-display);font-weight:600;font-size:11px;
+    letter-spacing:.04em;text-transform:uppercase;color:var(--teal-dark,#00827e);
+    background:color-mix(in srgb,var(--teal) 12%,#fff);padding:6px 12px;border-radius:999px}
+  .ta-badge svg{width:14px;height:14px}
+  .ta-t{font-family:var(--font-display);font-weight:600;font-size:16.5px;line-height:1.3;color:var(--ink-soft);margin:11px 0 12px;letter-spacing:-.01em}
+  .ta-list{list-style:none;margin:0 0 15px;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}
+  .ta-list li{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--tinta)}
+  .ta-list li svg{width:15px;height:15px;color:var(--palma);flex:none}
+  .ta-cta{display:block;text-align:center;text-decoration:none;font-family:var(--font-display);font-weight:600;font-size:16px;color:#fff;
+    background:var(--btn-grad);box-shadow:var(--btn-glow);padding:15px;border-radius:14px;transition:transform .18s var(--ease),box-shadow .18s var(--ease)}
+  .ta-cta:active{transform:translateY(1px);box-shadow:var(--btn-glow-active)}
+  @media(max-width:420px){.ta-list{grid-template-columns:1fr}}
 </style>
 
 <main class="turno" id="turno">
@@ -491,6 +509,20 @@ $credito  = $has_deck
     <span class="tn-neg"><?= $h($negocio) ?></span>
     <?php if ($credito): ?><span class="tn-cred"><?= $h($credito) ?></span><?php endif; ?>
   </div>
+
+  <?php if (!$plan && $has_deck): ?>
+  <div class="tn-activar">
+    <span class="ta-badge"><?= ico('sparkles') ?> Tu primera propuesta está lista</span>
+    <p class="ta-t">Activa Crecer para que el Corillo siga trabajando contigo.</p>
+    <ul class="ta-list">
+      <li><?= ico('sparkles') ?> Propuestas nuevas cada semana</li>
+      <li><?= ico('calendar') ?> Tu calendario de contenido</li>
+      <li><?= ico('image') ?> Publicación en tus redes</li>
+      <li><?= ico('check-circle') ?> Seguimiento de resultados</li>
+    </ul>
+    <a class="ta-cta" href="<?= $BASE ?>/precios.php?<?= $mid ?>">Activar mi Corillo</a>
+  </div>
+  <?php endif; ?>
 
   <?php if ($has_deck): ?>
   <div class="tn-stage">
@@ -538,8 +570,9 @@ $credito  = $has_deck
 
   <?php elseif (!$plan): ?>
   <div class="tn-solo">
-    <p class="tn-solo-t">Enciende Crecer.</p>
-    <a class="tn-ok" href="<?= $BASE ?>/precios.php?<?= $mid ?>">Activar Crecer</a>
+    <p class="tn-solo-t">Tu primera propuesta está lista.</p>
+    <p class="tn-solo-s">Activa Crecer para que el Corillo siga trabajando contigo.</p>
+    <a class="tn-ok" href="<?= $BASE ?>/precios.php?<?= $mid ?>" style="margin-top:22px">Activar mi Corillo</a>
   </div>
 
   <?php else: ?>

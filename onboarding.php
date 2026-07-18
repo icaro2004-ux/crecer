@@ -380,7 +380,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       .then(function(r){return r.json();})
       .then(function(d){
         clearInterval(dotTimer);
-        if(d.ok){ location.href='/crecer/panel/bienvenida.php?marca='+d.marca_id; }
+        if(d.ok){ location.href='/crecer/primer_minuto.php?marca='+d.marca_id; }
         else { load.classList.remove('show'); showErr(d.err||'Algo falló. Intenta de nuevo.'); }
       })
       .catch(function(){ clearInterval(dotTimer); load.classList.remove('show'); showErr('Error de conexión. Intenta de nuevo.'); });
