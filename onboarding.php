@@ -12,6 +12,7 @@ require __DIR__ . '/includes/db.php';
 require __DIR__ . '/includes/auth.php';
 require __DIR__ . '/includes/agentes.php';
 require __DIR__ . '/includes/suscripcion.php';
+require __DIR__ . '/includes/voice_dna.php';   // Business Voice DNA + Director Editorial
 requiere_login();
 $usuario = usuario_actual($pdo);
 $USUARIO_ID = (int)$usuario['id'];
@@ -27,10 +28,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = trim($_POST['nombre'] ?? '');
     if ($nombre === '') { echo json_encode(['ok'=>false,'err'=>'Ponle nombre a tu negocio.']); exit; }
 
+    // Idempotencia PERSISTENTE (BD): un pipeline por usuario aunque haya doble clic /
+    // refresh / dos pestañas / otra sesión / otro dispositivo / requests concurrentes.
+    // El acquire es atómico (PRIMARY KEY usuario_id): dos requests simultáneos ⇒ uno solo entra.
+    if (!empty($_GET['otra'])) onboarding_lock_reset($pdo, $USUARIO_ID);   // crear OTRO negocio: lock nuevo
+    $lock = onboarding_lock_acquire($pdo, $USUARIO_ID);
+    if (!$lock['acquired']) {
+        if (($lock['estado'] ?? '') === 'completed' && !empty($lock['marca_id'])) {
+            echo json_encode(['ok'=>true, 'marca_id'=>(int)$lock['marca_id']]); exit;   // ya se creó: reutiliza el resultado
+        }
+        // En curso ⇒ estado RECUPERABLE (no un error confuso): el front reintenta / hace poll.
+        http_response_code(202);
+        echo json_encode(['ok'=>false, 'estado'=>'procesando', 'reintentar'=>true,
+            'err'=>'Ya estamos montando tu corillo — dale un segundito y se abre solo.']); exit;
+    }
+    $LOCK_TOKEN = $lock['token'];
+
     $municipio   = ($_POST['municipio_id'] ?? '') !== '' ? (int)$_POST['municipio_id'] : null;
     $texto_in    = trim($_POST['texto'] ?? '');
     $tiene_audio = !empty($_FILES['audio']['tmp_name']) && $_FILES['audio']['error'] === UPLOAD_ERR_OK;
     if (!$tiene_audio && $texto_in === '') {
+        onboarding_lock_fail($pdo, $USUARIO_ID, $LOCK_TOKEN);
         echo json_encode(['ok'=>false,'err'=>'Grábate o escribe de tu negocio.']); exit;
     }
 
@@ -44,6 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $perfil = perfil_desde_texto($pdo, null, $texto_in, $nombre);
         }
     } catch (Throwable $e) {
+        onboarding_lock_fail($pdo, $USUARIO_ID, $LOCK_TOKEN);
         echo json_encode(['ok'=>false,'err'=>'No pude procesar: '.substr($e->getMessage(),0,120)]); exit;
     }
 
@@ -87,7 +106,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ->execute([$calid, $marca_id, 'Post de bienvenida: preséntale el negocio a la gente, cálido y boricua', date('Y-m-d 10:00:00')]);
     $cid = (int)$pdo->lastInsertId();
     $caption = '';
-    try { $rp = redactar_pieza($pdo, $cid); $caption = $rp['caption'] ?? ''; } catch (Throwable $e) {}
+    // FEATURE FLAG: el recorrido nuevo (Voice DNA + Director Editorial) NO se activa en
+    // producción hasta validar. Con el flag apagado, el onboarding usa el creador clásico.
+    if (VOICE_DNA_ONBOARDING_ENABLED) {
+        // Business Voice DNA (idempotente por hash) desde lo que extrajo el intake.
+        $fuente_dna = trim(($perfil['voz'] ?? '') . "\n" . ($perfil['descripcion'] ?? '') . "\nProductos: "
+            . implode(', ', array_map(fn($x) => is_array($x) ? ($x['nombre'] ?? '') : $x, (array)($perfil['productos'] ?? [])))
+            . "\n" . $texto_in);
+        try {
+            $dnaR = voice_dna_extraer($pdo, $marca_id, $fuente_dna, ['fuente' => $tiene_audio ? 'audio' : 'texto']);
+            $dna  = $dnaR['dna'];
+            $mm   = leer_marca($pdo, $marca_id);
+            $pueblo = $municipio ? (string)$pdo->query("SELECT nombre FROM municipios WHERE id=" . (int)$municipio)->fetchColumn() : '';
+            $ctxED = [
+                'nombre_negocio' => $mm['nombre_negocio'] ?? $nombre,
+                'productos'      => implode(', ', array_map(fn($x) => is_array($x) ? ($x['nombre'] ?? '') : $x, (array)($mm['productos'] ?? []))),
+                'ofertas'        => $mm['ofertas'] ?? '',
+                'pueblo'         => $pueblo,
+                'whatsapp'       => $mm['whatsapp'] ?? '',
+                'instagram'      => $mm['instagram'] ?? '',
+            ];
+            // Director Editorial: genera → revisa → corrige (máx 2) → fallback. Nunca un borrador malo.
+            $ed = generar_con_director($pdo, $marca_id, fn($instr) => generar_caption_dna($pdo, $marca_id, $mm, $dna, $instr), $dna, $ctxED, ['max_regeneraciones' => 2]);
+            $caption = $ed['contenido'];
+        } catch (Throwable $e) {
+            try { $rp = redactar_pieza($pdo, $cid); $caption = $rp['caption'] ?? ''; } catch (Throwable $e2) {}  // respaldo clásico
+        }
+    } else {
+        try { $rp = redactar_pieza($pdo, $cid); $caption = $rp['caption'] ?? ''; } catch (Throwable $e) {}  // recorrido clásico (flag off)
+    }
+    if ($caption !== '') { $pdo->prepare("UPDATE crecer_contenido SET caption=? WHERE id=?")->execute([$caption, $cid]); }
     // SIEMPRE genera la imagen de muestra (cumple la promesa "imagen + caption").
     // Con foto real la realza; sin foto, la IA genera una acorde al tema/negocio.
     try {
@@ -96,6 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ->execute([$g['archivo'], $cid]);
     } catch (Throwable $e) { /* si falla la imagen, el caption igual quedó */ }
 
+    onboarding_lock_done($pdo, $USUARIO_ID, $marca_id, $LOCK_TOKEN);   // marca lock 'listo' + marca_id (idempotente)
     echo json_encode(['ok'=>true, 'marca_id'=>$marca_id]);
     exit;
 }
