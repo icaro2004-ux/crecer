@@ -834,11 +834,11 @@ function grounding_producto_instruccion(array $m): string {
     }
     $lista  = $prods ? implode('; ', array_slice($prods, 0, 12)) : '';
     $oferta = trim((string)($m['ofertas'] ?? ''));
-    $out  = "- Habla SOLO de lo que existe en el perfil. ";
-    $out .= $lista  !== '' ? "Productos/servicios reales: {$lista}. " : "No hay productos declarados: no inventes ninguno. ";
-    $out .= $oferta !== '' ? "Oferta real: {$oferta}. "               : "No hay oferta: no inventes promociones ni precios. ";
-    $out .= "PROHIBIDO ampliar la lista o insinuar más: nada de \"y mucho más\", \"entre otros\", \"todo tipo de\", \"y más\". "
-          . "No inventes atributos, ingredientes, años de experiencia ni datos que no estén en el perfil.\n";
+    // Frontera de HECHOS (no muro de estilo): declara qué es cierto; CÓMO se cuenta es libre.
+    $out  = "- Hechos reales del negocio (no inventes otros; el estilo es tuyo). ";
+    $out .= $lista  !== '' ? "Productos/servicios: {$lista}. " : "Sin productos declarados: no inventes ninguno. ";
+    $out .= $oferta !== '' ? "Oferta: {$oferta}. "            : "Sin oferta declarada: no inventes promociones ni precios. ";
+    $out .= "No inventes atributos, ingredientes ni años de experiencia que no estén en el perfil.\n";
     return $out;
 }
 

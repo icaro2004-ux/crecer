@@ -430,10 +430,11 @@ function tesis_orquestar(PDO $pdo, array $genoma, array $direccion, string $run,
 function _creador_directiva(array $direccion, ?array $tesis): string {
     $enfoque = "Enfoque de este primer post: «{$direccion['titulo']}» — {$direccion['recomendacion']}";
     if ($tesis !== null && ($tesis['status'] ?? '') === 'accepted' && trim((string)($tesis['idea_central'] ?? '')) !== '') {
-        $enfoque .= "\nIDEA A DEFENDER (la decidió Creative Thesis — NO la cambies, NO elijas otra, NO añadas ideas nuevas): «"
+        $enfoque .= "\nÁNGULO ESTRATÉGICO (tu BRÚJULA, la decidió Creative Thesis): «"
                   . trim((string)$tesis['idea_central']) . "»"
                   . (!empty($tesis['contraste']) ? " · " . trim((string)$tesis['contraste']) : '')
-                  . ". El caption debe sostener SOLO esa idea (ángulo: " . (string)($tesis['angulo'] ?? 'otro') . ").";
+                  . ". Es una DIRECCIÓN, no un libreto: cuéntala con libertad total (metáfora, historia, humor, ritmo) y sorprende. "
+                  . "No la contradigas; dentro de ella, todo lo demás es tuyo (ángulo: " . (string)($tesis['angulo'] ?? 'otro') . ").";
     }
     return $enfoque;
 }
@@ -447,18 +448,32 @@ function genoma_caption(PDO $pdo, int $marca_id, array $marca, array $dna, array
     $identidad = $habla_como === 'organizacion'
         ? "- El negocio habla como ORGANIZACIÓN (nosotros / en «{$marca['nombre_negocio']}»). PROHIBIDO primera persona individual: nada de 'soy el fundador', 'soy la cara', 'mi nombre es', ni un nombre propio inventado.\n"
         : "- El negocio puede hablar cálido (yo/nosotros), pero NO inventes nombre propio, cargo ni título ('Dr.', 'fundador', 'el creador') que no esté en el perfil.\n";
-    $sistema = "Eres el CREADOR del Corillo (NUNCA te presentes como 'el creador'). Caption corto (máx 45 palabras), "
-             . "español puertorriqueño AUTÉNTICO, nunca 'AI slop'. PRINCIPIO DE GROUNDING: escribe SOLO lo respaldado por el perfil; "
-             . "no generes nada que el Director tenga que borrar por falta de evidencia.\n"
+    // VOZ restaurada del Creator viejo: tono del dueño + glosario + memoria (el Cerebro).
+    $glosario = trim((string)($marca['glosario'] ?? '')) !== ''
+        ? "\nVOCABULARIO DEL NEGOCIO (el dueño lo corrigió — RESPÉTALO SIEMPRE):\n" . $marca['glosario'] . "\n" : '';
+    if (is_file(__DIR__ . '/memoria.php')) require_once __DIR__ . '/memoria.php';
+    $memoria = function_exists('memoria_para_prompt') ? memoria_para_prompt($pdo, $marca_id) : '';
+    $sistema = "Eres el CREADOR de contenido del Corillo (NUNCA te presentes como 'el creador'). Escribes captions para redes "
+             . "de microempresas boricuas, con PERSONALIDAD, ritmo y picardía — nunca traducido, nunca 'AI slop', nunca planos. Reglas:\n"
+             . "- Español puertorriqueño AUTÉNTICO. Vocabulario local (bizcocho, no 'tarta'; chavos; nene/nena; etc.).\n"
+             . "- Tono según la voz del negocio. 1-2 emojis máximo.\n"
+             . "- Cierra con un llamado a la acción (según la vía de contacto de abajo) y 3-4 hashtags locales.\n"
+             . "- Máximo 60 palabras. Devuelve SOLO el caption, sin comillas ni explicación.\n"
+             . "FRONTERA DE HECHOS (lo único inviolable): los hechos son ciertos; no inventes productos, ofertas, atributos ni datos "
+             . "que no estén en el perfil. CÓMO los cuentas es 100% tuyo.\n"
              . grounding_producto_instruccion($marca)
              . contacto_instruccion($marca)
              . $identidad
-             . $enfoque . "\n" . voice_dna_instruccion($dna);
+             . $enfoque . "\n"
+             . tono_instruccion($marca)
+             . $glosario
+             . $memoria
+             . voice_dna_instruccion($dna);
     $prompt = "Perfil del negocio:\n{$ctx}\n\nEscribe UN caption para arrancar con ese enfoque, en SU voz."
             . ($revision !== '' ? "\n\nEL DIRECTOR EDITORIAL rechazó el intento anterior. CORRIGE exactamente: {$revision}" : '')
             . "\n\nDevuelve SOLO el caption.";
     $r = ia_ejecutar($pdo, 'creador', 'Primer post (genoma)', $prompt, [
-        'marca_id'=>$marca_id, 'sistema'=>$sistema, 'temperatura'=>0.9, 'max_tokens'=>220, 'thinking_budget'=>0,
+        'marca_id'=>$marca_id, 'sistema'=>$sistema, 'temperatura'=>0.95, 'max_tokens'=>400, 'thinking_budget'=>0,
         'mock_texto'=>'En ' . ($marca['nombre_negocio'] ?? 'la casa') . ' arrancamos con algo bueno para ti.',
     ]);
     return trim((string)$r['texto']);

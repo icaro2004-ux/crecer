@@ -184,7 +184,7 @@ if (!$FLAG_ON) {
     // ── 8. N regeneraciones del Director: una decisión, MISMA idea en cada intento ──
     $baseC = $cAcc;
     $dir0 = _creador_directiva($direccion, $dec['envelope']);
-    ok('regen · directiva ordena DEFENDER, no elegir', strpos($dir0,'NO la cambies')!==false && strpos($dir0,'DEFENDER')!==false);
+    ok('regen · directiva = BRÚJULA (dirección, no libreto)', (strpos($dir0,'BRÚJULA')!==false || strpos($dir0,'DIRECCIÓN')!==false) && strpos($dir0,'No la contradigas')!==false);
     ok('regen · directiva lleva la idea_central', strpos($dir0, $dec['envelope']['idea_central'])!==false);
     ok('regen · idea idéntica entre intentos (revisión es aparte)', _creador_directiva($direccion,$dec['envelope']) === $dir0);
     ok('regen · Creative Thesis NO se re-invoca', $cAcc === $baseC);
