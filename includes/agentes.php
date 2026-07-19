@@ -784,7 +784,7 @@ function tono_instruccion(array $m): string {
     $B = [
         'Español neutral, sin regionalismos marcados.',
         'Español con sabor boricua moderado.',
-        'Bien boricua: usa expresiones de la isla (wepa, mi gente, brutal, chévere, "pa\'", nene/nena) con naturalidad.',
+        'Bien boricua: usa expresiones de la isla (mi gente, brutal, chévere, "pa\'", nene/nena) con naturalidad — pero NO arranques todos los posts igual: EVITA empezar siempre con "wepa mi gente"; varía el saludo y el gancho.',
     ][$b];
     $F = [
         'Bien casual y relajado, como un mensaje de WhatsApp a un pana.',
@@ -805,6 +805,27 @@ function tono_instruccion(array $m): string {
     $E = $emoji < 28 ? 'Casi sin emojis.' : ($emoji > 66 ? 'Emojis con libertad (2-4).' : '1-2 emojis.');
     return "\n\nTONO DE VOZ (el dueño lo definió con los controles — RESPÉTALO por encima de la regla genérica de tono):\n"
          . "- Sabor: {$B}\n- Formalidad: {$F}\n- Venta: {$V}\n- Humor: {$G}\n- Emojis: {$E}";
+}
+
+/**
+ * Preset de VOZ que el dueño elige en el onboarding → los 4 ejes de tono (0-100).
+ * El dueño ya no depende de que la IA adivine el tono: escoge cómo suena su marca.
+ * Devuelve null si el preset no existe (entonces se usa el tono que sugirió la IA).
+ */
+function preset_voz_a_tono(string $preset): ?array {
+    $mapa = [
+        // Formal y serio — abogados, ingenieros, médicos, contables, consultores. CERO jerga.
+        'profesional' => ['tono_boricua'=>10, 'tono_formal'=>92, 'tono_venta'=>40, 'tono_ingenio'=>8],
+        // Bien de la isla, con sabor y calle.
+        'boricua'     => ['tono_boricua'=>85, 'tono_formal'=>25, 'tono_venta'=>55, 'tono_ingenio'=>65],
+        // Con chispa, humor y giros inesperados.
+        'creativo'    => ['tono_boricua'=>50, 'tono_formal'=>35, 'tono_venta'=>50, 'tono_ingenio'=>90],
+        // Cercano y de confianza, como un amigo — sin jerga fuerte.
+        'calido'      => ['tono_boricua'=>50, 'tono_formal'=>45, 'tono_venta'=>45, 'tono_ingenio'=>45],
+        // Directo a la acción, con gancho de venta.
+        'vendedor'    => ['tono_boricua'=>45, 'tono_formal'=>45, 'tono_venta'=>92, 'tono_ingenio'=>40],
+    ];
+    return $mapa[strtolower(trim($preset))] ?? null;
 }
 
 /**

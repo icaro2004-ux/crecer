@@ -483,6 +483,7 @@ function _creador_sistema(PDO $pdo, int $marca_id, array $marca, array $dna, arr
          . "- Español puertorriqueño AUTÉNTICO y con alma, pero con ORTOGRAFÍA Y GRAMÁTICA IMPECABLES (cero errores, acentos correctos). "
          . "El sabor boricua vive en las PALABRAS y el RITMO, JAMÁS en escribir mal: escribe 'para', 'nada', 'todo' completos; no butchees palabras ni pongas apóstrofes por todos lados.\n"
          . "- Vocabulario local natural (bizcocho, no 'tarta'; chavos; nene/nena) — solo si le queda al negocio; NO fuerces jerga callejera.\n"
+         . "- VARÍA el arranque: NO empieces todos los posts con el mismo saludo ni gancho — NUNCA abras por defecto con 'Wepa mi gente'. Sorprende con entradas distintas (una pregunta, una imagen, un dato, una escena).\n"
          . "- 1-2 emojis máximo. Cierra con un llamado a la acción (según el contacto de abajo) y 3-4 hashtags locales.\n"
          . "- Máximo 60 palabras. Devuelve SOLO el caption, sin comillas ni explicación.\n"
          . $hechos

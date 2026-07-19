@@ -47,6 +47,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $LOCK_TOKEN = $lock['token'];
 
     $municipio   = ($_POST['municipio_id'] ?? '') !== '' ? (int)$_POST['municipio_id'] : null;
+    // VOZ elegida por el dueño (paso 4 del wizard) → los 4 ejes de tono. Si no eligió, $tono=null
+    // y se usa el tono que la IA sugiere por tipo de negocio. La elección del dueño MANDA.
+    $tono        = preset_voz_a_tono(trim($_POST['voz_preset'] ?? ''));
     $texto_in    = trim($_POST['texto'] ?? '');
     $tiene_audio = !empty($_FILES['audio']['tmp_name']) && $_FILES['audio']['error'] === UPLOAD_ERR_OK;
     if (!$tiene_audio && $texto_in === '') {
@@ -84,11 +87,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'ofertas'          => $perfil['ofertas'] ?? '',
         'instagram'        => $perfil['instagram'] ?? '',
         'whatsapp'         => $perfil['whatsapp'] ?? '',
-        // Tono inicial elegido por la IA según el tipo de negocio (si lo devolvió).
-        'tono_boricua'     => $perfil['tono_boricua'] ?? null,
-        'tono_formal'      => $perfil['tono_formal']  ?? null,
-        'tono_venta'       => $perfil['tono_venta']   ?? null,
-        'tono_ingenio'     => $perfil['tono_ingenio'] ?? null,
+        // Tono: MANDA lo que eligió el dueño en el paso de voz; si no eligió, lo que sugiere la IA.
+        'tono_boricua'     => $tono['tono_boricua'] ?? ($perfil['tono_boricua'] ?? null),
+        'tono_formal'      => $tono['tono_formal']  ?? ($perfil['tono_formal']  ?? null),
+        'tono_venta'       => $tono['tono_venta']   ?? ($perfil['tono_venta']   ?? null),
+        'tono_ingenio'     => $tono['tono_ingenio'] ?? ($perfil['tono_ingenio'] ?? null),
     ]);
 
     // 3) Guardar la foto (será la imagen del post de muestra)
@@ -176,6 +179,16 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .prog{display:flex;gap:6px;margin:2px 0 20px}
   .prog i{height:6px;flex:1;background:var(--crema-2);border-radius:99px;transition:background .3s}
   .prog i.on{background:linear-gradient(90deg,var(--coral),var(--magenta))}
+  /* Paso 4 · selector de voz */
+  .voces{display:flex;flex-direction:column;gap:10px}
+  .voz{text-align:left;width:100%;font-family:inherit;cursor:pointer;display:block;
+    border:1.5px solid var(--line);background:#fff;border-radius:14px;padding:13px 15px;transition:border-color .16s,box-shadow .16s,transform .12s}
+  .voz b{display:block;font-family:var(--font-display);font-weight:600;font-size:15.5px;color:var(--tinta);letter-spacing:-.01em}
+  .voz span{display:block;color:var(--muted);font-size:13px;margin-top:3px;line-height:1.4}
+  .voz:hover{border-color:var(--magenta)}
+  .voz:active{transform:scale(.99)}
+  .voz.sel{border-color:var(--magenta);box-shadow:0 0 0 3px color-mix(in srgb,var(--magenta) 16%,transparent)}
+  .voz.sel b{color:var(--magenta)}
   .step{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:20px;box-shadow:var(--shadow-sm);display:none;animation:fadein .3s ease}
   .step.on{display:block}
   @keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
@@ -226,7 +239,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   <h1>Háblame de <span>tu negocio</span></h1>
   <p class="lede">No llenes formularios largos. Grábate 40 segundos contándome de tu negocio y el corillo arma tu primer post — en tu propia voz boricua.</p>
 
-  <div class="prog"><i class="on"></i><i></i><i></i></div>
+  <div class="prog"><i class="on"></i><i></i><i></i><i></i></div>
   <div class="err" id="err"></div>
 
   <div class="step on" data-step="1">
@@ -267,6 +280,19 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <input type="file" id="foto" accept="image/png,image/jpeg,image/webp">
     <img class="photo-prev" id="prev" alt="">
     <div class="hint">Si tienes una foto real de lo que vendes, la IA la convierte en tu post de muestra. <b>Si no tienes ahora, no hay lío</b> — el corillo te arma el caption igual y la foto la subes después desde tu panel.</div>
+  </div>
+
+  <div class="step" data-step="4">
+    <div class="n">PASO 4</div>
+    <label>¿Cómo quieres que suene tu marca?</label>
+    <div class="hint" style="margin:2px 0 13px">Elige la voz de tus posts. La puedes cambiar cuando quieras en Mi marca.</div>
+    <div class="voces">
+      <button type="button" class="voz" data-voz="profesional"><b>Profesional</b><span>Formal y serio. Para abogados, ingenieros, médicos, contables.</span></button>
+      <button type="button" class="voz sel" data-voz="boricua"><b>Boricua</b><span>Bien de la isla, con sabor y de la calle.</span></button>
+      <button type="button" class="voz" data-voz="creativo"><b>Creativo</b><span>Con chispa, humor y giros inesperados.</span></button>
+      <button type="button" class="voz" data-voz="calido"><b>Cálido</b><span>Cercano y de confianza, como un buen amigo.</span></button>
+      <button type="button" class="voz" data-voz="vendedor"><b>Vendedor</b><span>Directo a la acción, con gancho de venta.</span></button>
+    </div>
   </div>
 
   <div class="wiznav">
@@ -335,6 +361,14 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     });
   }
 
+  // Paso 4: selección de voz (una sola)
+  [].forEach.call(document.querySelectorAll('.voz'), function(b){
+    b.addEventListener('click', function(){
+      [].forEach.call(document.querySelectorAll('.voz'), function(x){ x.classList.remove('sel'); });
+      b.classList.add('sel');
+    });
+  });
+
   function usarTexto(msg){
     var t=document.getElementById('texto'); if(t) t.style.display='block';
     var bv=document.getElementById('bloque-voz'); if(bv) bv.style.display='none'; // oculta el micrófono
@@ -389,6 +423,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     if(blob) fd.append('audio', blob, 'voz.webm');
     else fd.append('texto', texto);
     if(foto.files[0]) fd.append('foto', foto.files[0]);   // foto opcional
+    var vsel=document.querySelector('.voz.sel'); fd.append('voz_preset', vsel ? vsel.getAttribute('data-voz') : '');  // voz elegida (paso 4)
     // Sondas de estado LIGERAS (no re-suben audio/foto): mientras el lock está 'procesando' el
     // backend responde 202 antes de tocar el audio, y {ok:true} cuando termina. El tope < 180s
     // evita que una sonda ligera re-adquiera el lock (que exigiría voz/texto).
