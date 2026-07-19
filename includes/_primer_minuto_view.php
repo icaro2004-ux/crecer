@@ -117,6 +117,18 @@ $plus  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-widt
   .fs-label{font-family:var(--font-display);font-weight:600;font-size:14.5px;color:var(--ink-soft)}
   .fs-err{color:var(--magenta);font-size:13px;margin:12px 0 0;text-align:center;min-height:1px}
   .fs-cancel{display:block;margin:16px auto 0;background:0;border:0;cursor:pointer;font-family:var(--font-display);font-weight:500;font-size:14px;color:var(--muted)}
+  /* Working Moment — conversación silenciosa (no loader). El texto es el protagonista. */
+  .wm{display:none;width:100%;max-width:460px;text-align:center;opacity:1;max-height:640px;overflow:hidden;
+    transition:opacity .25s var(--ease),max-height .3s var(--ease)}
+  .wm.on{display:block}
+  .wm.leaving{opacity:0;max-height:0}
+  .wm-neg{font-family:var(--font-display);font-weight:600;font-size:15px;color:var(--muted);letter-spacing:.01em;margin:0 0 30px}
+  .wm-obs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:18px}
+  .wm-obs li{font-family:var(--font-display);font-weight:500;font-size:18.5px;line-height:1.42;color:var(--ink-soft);text-wrap:balance;
+    opacity:0;transform:translateY(9px);animation:wmrise .6s var(--ease) forwards}
+  .wm-obs li.wm-neutral{color:var(--muted);font-weight:500}
+  @keyframes wmrise{to{opacity:1;transform:none}}
+  @media(prefers-reduced-motion:reduce){.wm,.wm-obs li{transition:none;animation:none;opacity:1;transform:none}}
 </style>
 
 <div class="wrap">
@@ -160,6 +172,12 @@ $plus  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-widt
         <li><b><?= $chk ?></b>Dándole el tono correcto…</li>
         <li><b><?= $chk ?></b>Dándole el último toque…</li>
       </ul>
+    </div>
+    <!-- Working Moment (flag ON): conversación silenciosa. Silencio → observaciones que se apilan
+         al ocurrir cada evento REAL → reveal al mismo espacio. NO es un loader. -->
+    <div class="wm" id="wm">
+      <p class="wm-neg" id="wmNeg"><?= $hh($V['negocio']) ?></p>
+      <ul class="wm-obs" id="wmObs"></ul>
     </div>
     <div class="reveal" id="reveal">
       <p class="rk">Así empezaríamos nosotros.</p>
@@ -230,14 +248,68 @@ $plus  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-widt
     });
     timers.push(setTimeout(show, t+380));
   }
-  function show(){ work.style.display='none'; reveal.classList.add('on'); }
-  function close(){ clear(); scene.classList.remove('on'); }
+  function show(){ work.style.display='none'; if(wmEl) wmEl.classList.remove('on'); reveal.classList.add('on'); }
+  function close(){ clear(); wmStop(); if(wmEl){ wmEl.classList.remove('on','leaving'); wmEl.style.maxHeight=''; } scene.classList.remove('on'); wmBusy=false; }
+
+  // ── Working Moment (flag ON): la UI OBSERVA el pipeline; jamás lo apura ni finge progreso ──
+  var WM=<?= json_encode($V['wm'] ?: null, JSON_UNESCAPED_UNICODE) ?>;
+  var wmEl=document.getElementById('wm'), wmObs=document.getElementById('wmObs'),
+      wmBusy=false, wmPoll=null, wmShown=0, wmRun=null;
+  function wmStop(){ if(wmPoll){ clearInterval(wmPoll); wmPoll=null; } }
+  function wmRevealUpTo(n){
+    var max=Math.min(n, (WM&&WM.observaciones?WM.observaciones.length:0), 3);
+    while(wmShown<max){ var li=document.createElement('li'); li.textContent=WM.observaciones[wmShown]; wmObs.appendChild(li); wmShown++; }
+  }
+  function wmFinish(caption){          // el pipeline REAL terminó → reveal; no esperamos observaciones pendientes
+    wmStop();
+    try{ if(WM&&WM.on&&wmRun) fetch(WM.base_url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'accion=wm_shown&run='+encodeURIComponent(wmRun)+'&n='+wmShown+'&csrf='+encodeURIComponent(CSRF)}); }catch(e){}
+    revcap.textContent = caption || '';
+    if(love){ love.disabled=false; love.textContent='Me encanta'; }
+    if(wmEl) wmEl.classList.add('leaving');          // fade muy corto; el post ocupa el mismo espacio
+    reveal.classList.add('on');
+    wmBusy=false;
+  }
+  function wmError(){ wmStop(); close(); }
+  function startWM(clave){
+    if(wmBusy) return; wmBusy=true; wmShown=0; chosen=clave;
+    scene.classList.add('on'); work.style.display='none'; reveal.classList.remove('on');
+    if(love){ love.disabled=false; love.textContent='Me encanta'; }
+    wmObs.innerHTML=''; wmEl.classList.remove('leaving'); wmEl.style.maxHeight=''; wmEl.classList.add('on');
+    var noObs = !(WM.observaciones && WM.observaciones.length);
+    var form=function(o){ return Object.keys(o).map(function(k){return k+'='+encodeURIComponent(o[k]);}).join('&'); };
+    var H={'Content-Type':'application/x-www-form-urlencoded'};
+    fetch(WM.base_url,{method:'POST',headers:H,body:form({accion:'wm_start',angulo:clave,csrf:CSRF})})
+     .then(function(r){return r.json();}).then(function(d){
+       if(!d||!d.run_uid){ wmError(); return; }
+       if(d.estado==='listo' && d.caption){ wmFinish(d.caption); return; }   // recuperado (refresh/doble-clic): no regenera
+       var run=d.run_uid, done=false; wmRun=run;
+       if(noObs){ var li=document.createElement('li'); li.className='wm-neutral'; li.textContent=WM.neutro; wmObs.appendChild(li); }
+       // Genera el post REAL (su resolución = fin real). El fallback curado ocurre dentro del motor.
+       fetch(WM.base_url,{method:'POST',headers:H,body:form({accion:'wm_generar',run:run,csrf:CSRF})})
+        .then(function(r){return r.json();}).then(function(g){ done=true; if(g&&g.ok){ wmFinish(g.caption||''); } else { wmError(); } })
+        .catch(function(){ done=true; wmError(); });
+       // Observa eventos REALES (ia_log por run_uid). Cada evento revela la siguiente observación.
+       wmPoll=setInterval(function(){
+         fetch(WM.base_url+'&wm=estado&run='+encodeURIComponent(run)).then(function(r){return r.json();}).then(function(e){
+           if(!e) return;
+           if(!noObs) wmRevealUpTo(e.eventos||0);
+           if(e.estado==='listo' && !done){ done=true; wmFinish(e.caption||''); }
+           if(e.estado==='error'){ wmStop(); }
+         }).catch(function(){});
+       },500);
+     }).catch(function(){ wmError(); });
+  }
+
   document.querySelectorAll('.pick').forEach(function(btn){
-    btn.addEventListener('click', function(){ clear(); play(btn.getAttribute('data-clave'), btn.getAttribute('data-cap')); });
+    btn.addEventListener('click', function(){
+      clear();
+      if(WM && WM.on){ startWM(btn.getAttribute('data-clave')); }
+      else { play(btn.getAttribute('data-clave'), btn.getAttribute('data-cap')); }
+    });
   });
   document.getElementById('other').addEventListener('click', close);
-  scene.addEventListener('click', function(e){ if(e.target===scene) close(); });
-  document.addEventListener('keydown', function(e){ if(e.key==='Escape' && scene.classList.contains('on')) close(); });
+  scene.addEventListener('click', function(e){ if(e.target===scene && !wmBusy) close(); });   // no interrumpir mientras trabaja
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape' && scene.classList.contains('on') && !wmBusy) close(); });
   // "Me encanta": en real guarda la decisión y va al Home; en demo solo cierra.
   if(love) love.addEventListener('click', function(){
     if(MODE!=='real'){ close(); return; }

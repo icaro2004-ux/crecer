@@ -23,6 +23,7 @@ require_once __DIR__ . '/primer_minuto.php';
 // Presupuestos de seguridad (medir antes de tocar). Estabilidad > sofisticación.
 if (!defined('GENOMA_MAX_REGEN'))       define('GENOMA_MAX_REGEN', 2);
 if (!defined('GENOMA_TIMEOUT_POST_MS')) define('GENOMA_TIMEOUT_POST_MS', 20000); // techo blando por post
+if (!defined('UMBRAL_POTENCIAL'))       define('UMBRAL_POTENCIAL', 85);          // Potencial: solo con evidencia FUERTE
 
 // ── Telemetría: captura tokens/costo por rango de ia_log (pipeline por-usuario es secuencial) ──
 function _genoma_snap(PDO $pdo): int { return (int)$pdo->query("SELECT COALESCE(MAX(id),0) FROM crecer_ia_log")->fetchColumn(); }
@@ -140,6 +141,88 @@ function genoma_recomendaciones(PDO $pdo, array $genoma, array $seleccion, strin
     }
 }
 
+// ── The Working Moment · El Corillo devuelve INTERPRETACIONES (no datos) ──
+// 1–3 observaciones que hagan pensar "sí, así mismo es". Respaldadas por el Genome,
+// en tono tentativo (conclusiones de una conversación, no un reporte). Gated por
+// confianza: habla cuando tiene algo que decir; si solo hay una fuerte, muestra una.
+// Interpretación, NO dato: "Parece que hay un producto del que te sientes orgulloso",
+// no "vendes bizcocho". Si nada supera el umbral, devuelve [] (la UI cae a algo neutro).
+function genoma_observaciones(PDO $pdo, array $genoma, string $run, int $max = 3): array {
+    $marca_id = (int)$genoma['marca']['id'];
+    $t0 = microtime(true); $snap = _genoma_snap($pdo);
+    $m = $genoma['m'];
+    $dicho = trim((string)($genoma['marca']['voz'] ?? '') ?: (string)($genoma['marca']['descripcion'] ?? ''));
+    $ctx = "Negocio: {$m['nombre_negocio']} · {$m['pueblo']}\n"
+         . "Lo que dijo el dueño (en sus palabras): " . mb_substr($dicho, 0, 700) . "\n"
+         . "Productos/servicios: " . ($m['producto'] !== '' ? $m['producto'] : '(no especificó)');
+    // Gate de material: el Corillo habla solo cuando tiene de dónde. Poco texto ⇒ pocas o ninguna.
+    $riqueza = count(array_filter(preg_split('/\s+/u', trim($dicho))));
+    if ($riqueza < 5) {
+        _genoma_registrar($pdo, $run, $marca_id, 'observaciones', true, (microtime(true)-$t0)*1000, ['llamadas'=>0,'tokens_in'=>0,'tokens_out'=>0,'costo'=>0], '0_obs', 'sin_material');
+        return [];
+    }
+    $umbral = $riqueza < 10 ? 88 : 70;                 // poco material ⇒ solo lo muy seguro
+    $cap    = $riqueza < 10 ? 1 : $max;                // poco material ⇒ a lo sumo una
+    $sistema = "Eres el Corillo: un equipo de marketing que acaba de conocer este negocio. NO listas datos ni repites lo que el "
+        . "dueño dijo. Devuelves INTERPRETACIONES, como las conclusiones de una conversación. Cada frase debe hacer pensar al dueño "
+        . "\"sí, así mismo es\" o \"no lo había visto de esa manera\" — NUNCA \"¿de dónde sacó eso?\".\n"
+        . "El Corillo NUNCA critica, NUNCA corrige, NUNCA supone. Solo comparte aquello de lo que tiene evidencia suficiente.\n"
+        . "Cada observación es de UNO de tres TIPOS:\n"
+        . "  • comprension  — demuestra que entendiste el negocio. Ej: 'Creo que tu mayor fortaleza está en la confianza que generas.'\n"
+        . "  • confirmacion — refuerza algo que el negocio YA hace muy bien. Ej: 'Lo artesanal parece parte de tu identidad, no solo de tu proceso.'\n"
+        . "  • potencial    — señala algo VALIOSO que el negocio TIENE pero que NO parece estar mostrando o aprovechando lo suficiente "
+        .                    "(un producto que se vende solo pero casi no promociona; una historia que no cuenta; un diferenciador que no destaca). "
+        .                    "Solo con evidencia CLARA de que existe Y está subaprovechado. NO propongas soluciones, solo señala la oportunidad. "
+        .                    "Ej: 'Creo que hay un producto que merece mucho más protagonismo del que le das.' Si no hay evidencia clara, NO la incluyas.\n"
+        . "REGLAS DURAS:\n"
+        . "- Interpretación, NO dato. PROHIBIDO 'vendes X', 'estás en Y', 'hablas Z', 'ofreces...'.\n"
+        . "- Tono humano y tentativo: 'Parece que…', 'Da la impresión de que…', 'Creo que…', 'Se nota que…'.\n"
+        . "- Específica de ESTE negocio; jamás una frase que sirva para cualquiera.\n"
+        . "- Cada observación: UNA idea, máximo 20 palabras. Corta y con alma.\n"
+        . "- Incluye una observación SOLO si estás genuinamente seguro. Mejor decir menos y acertar. Si el dueño dio muy poca información, devuelve pocas o NINGUNA. Nunca inventes.\n"
+        . "Devuelve SOLO JSON." . voice_dna_instruccion($genoma['dna']);
+    $prompt = $ctx . "\n\nDevuelve hasta 5 CANDIDATAS (yo elijo la mejor combinación): "
+        . "{\"observaciones\":[{\"texto\":\"\",\"tipo\":\"comprension|confirmacion|potencial\",\"confianza\":0-100,\"evidencia\":\"qué del perfil la respalda\"}]}. Ordena de mayor a menor confianza.";
+    try {
+        $r = ia_ejecutar($pdo, 'genoma_observaciones', 'Interpretaciones del negocio', $prompt, [
+            'marca_id'=>$marca_id, 'sistema'=>$sistema, 'json'=>true, 'temperatura'=>0.7, 'max_tokens'=>650, 'thinking_budget'=>0,
+            'mock_texto'=>'{"observaciones":[]}',
+        ]);
+        $j = json_decode(trim((string)$r['texto']), true);
+        $cands = [];
+        foreach (($j['observaciones'] ?? []) as $o) {
+            $texto = trim((string)($o['texto'] ?? ''));
+            $conf  = is_numeric($o['confianza'] ?? null) ? (int)$o['confianza'] : 0;
+            if ($texto === '' || $conf < $umbral) continue;                              // habla solo si está seguro
+            if (preg_match('/^\s*(vendes|ofreces|tienes|haces|eres|est[áa]s|hablas)\b/iu', $texto)) continue; // es un DATO, no interpretación
+            $tipo = mb_strtolower(trim((string)($o['tipo'] ?? 'comprension')));
+            if (!in_array($tipo, ['comprension','confirmacion','potencial'], true)) $tipo = 'comprension';
+            $cands[] = ['texto'=>mb_substr($texto,0,200), 'tipo'=>$tipo, 'confianza'=>$conf, 'evidencia'=>trim(mb_substr((string)($o['evidencia']??''),0,160))];
+        }
+        // Selección de la combinación más útil: backbone (comprensión/confirmación) + a lo sumo UNA
+        // Potencial, y solo con evidencia FUERTE (≥UMBRAL_POTENCIAL) y material rico. La Potencial va al final.
+        $pot  = array_values(array_filter($cands, fn($o)=>$o['tipo']==='potencial'));
+        $rest = array_values(array_filter($cands, fn($o)=>$o['tipo']!=='potencial'));
+        usort($pot,  fn($a,$b)=>$b['confianza']<=>$a['confianza']);
+        usort($rest, fn($a,$b)=>$b['confianza']<=>$a['confianza']);
+        $sel = [];
+        foreach ($rest as $o) { if (count($sel) >= $cap) break; $sel[] = $o; }
+        if ($cap >= 2 && $riqueza >= 10 && !empty($pot) && $pot[0]['confianza'] >= UMBRAL_POTENCIAL) {
+            if (count($sel) >= $cap) array_pop($sel);    // libera un espacio (baja la más débil del backbone)
+            $sel[] = $pot[0];                            // la Potencial es la elevación → va al final
+        }
+        $sel = array_slice($sel, 0, $cap);
+        _genoma_registrar($pdo, $run, $marca_id, 'observaciones', count($sel)>0, (microtime(true)-$t0)*1000, _genoma_delta($pdo,$snap), count($sel).'_obs', implode('+', array_column($sel,'tipo')));
+        return $sel;
+    } catch (Throwable $e) {
+        _genoma_registrar($pdo, $run, $marca_id, 'observaciones', false, (microtime(true)-$t0)*1000, _genoma_delta($pdo,$snap), 'fallback', $e->getMessage());
+        return []; // sin observaciones → el Working Moment usa una línea neutra y honesta
+    }
+}
+// Nota de visión (futuro, Learning Engine): hoy las observaciones demuestran COMPRENSIÓN.
+// Cuando el Corillo aprenda del negocio con el tiempo, la Potencial podrá demostrar CRITERIO
+// ("tus clientes mencionan la rapidez; vale la pena destacarla"). Ese día no es hoy.
+
 // Creador C2: caption del primer post según la DIRECCIÓN elegida + Voice DNA. Reusa reglas de C1.
 function genoma_caption(PDO $pdo, int $marca_id, array $marca, array $dna, array $direccion, string $habla_como = 'persona', string $revision = ''): string {
     $ctx = marca_contexto($marca);
@@ -205,7 +288,8 @@ function pipeline_preparar(PDO $pdo, array $marca, ?string $run = null): array {
     $genoma = genoma_construir($pdo, $marca, $run);
     $seleccion = genoma_seleccionar($pdo, $genoma, $run, 3);
     $direcciones = genoma_recomendaciones($pdo, $genoma, $seleccion, $run);
-    return ['run'=>$run, 'genoma'=>$genoma, 'direcciones'=>$direcciones];
+    $observaciones = genoma_observaciones($pdo, $genoma, $run, 3);  // The Working Moment (interpretaciones)
+    return ['run'=>$run, 'genoma'=>$genoma, 'direcciones'=>$direcciones, 'observaciones'=>$observaciones];
 }
 // Generar el post de la dirección elegida (etapas 4-6): corre DETRÁS de la escena, al elegir.
 function pipeline_post(PDO $pdo, array $genoma, array $direccion, string $run): array {

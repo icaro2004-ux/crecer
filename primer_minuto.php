@@ -14,6 +14,7 @@
 require __DIR__ . '/includes/db.php';
 require __DIR__ . '/includes/auth.php';
 require __DIR__ . '/includes/primer_minuto.php';
+require __DIR__ . '/includes/working_moment.php';   // Working Moment (solo actúa con el flag ON)
 requiere_login();
 $usuario = usuario_actual($pdo);
 $UID = (int)$usuario['id'];
@@ -21,6 +22,7 @@ $marca = marca_del_usuario($pdo, $UID, isset($_GET['marca']) ? (int)$_GET['marca
 if (!$marca) { header('Location: /crecer/onboarding.php'); exit; }
 $marca_id = (int)$marca['id'];
 $HOME = '/crecer/panel/index.php?marca=' . $marca_id;
+$WM_ON = defined('VOICE_DNA_ONBOARDING_ENABLED') && VOICE_DNA_ONBOARDING_ENABLED;   // motor real detrás del flag
 
 // ¿Ya decidió su arranque? (una decisión por negocio)
 $q = $pdo->prepare("SELECT id FROM crecer_estrategia_arranque WHERE marca_id=?");
@@ -48,42 +50,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'foto'
     echo json_encode(['ok' => true, 'url' => $url]); exit;
 }
 
+// ── Working Moment (solo flag ON): endpoints que OBSERVAN la telemetría existente ──
+// estado = solo lectura (cuenta eventos reales de ia_log por run_uid). start/generar = idempotentes por run_uid.
+if ($WM_ON && ($_GET['wm'] ?? '') === 'estado') {
+    session_write_close();  // libera el lock de sesión: no bloquea al pipeline
+    header('Content-Type: application/json');
+    echo json_encode(wm_estado($pdo, $marca_id, (string)($_GET['run'] ?? ''))); exit;
+}
+if ($WM_ON && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'wm_start') {
+    header('Content-Type: application/json');
+    if (!csrf_ok()) { echo json_encode(['ok' => false, 'err' => 'csrf']); exit; }
+    session_write_close();
+    echo json_encode(['ok' => true] + wm_start($pdo, $marca, $UID, trim($_POST['angulo'] ?? ''))); exit;
+}
+if ($WM_ON && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'wm_generar') {
+    header('Content-Type: application/json');
+    if (!csrf_ok()) { echo json_encode(['ok' => false, 'err' => 'csrf']); exit; }
+    session_write_close();
+    echo json_encode(wm_generar($pdo, $marca, trim($_POST['run'] ?? ''))); exit;
+}
+// Telemetría UI: cuántas observaciones alcanzó a ver el usuario (no toca el motor).
+if ($WM_ON && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'wm_shown') {
+    session_write_close();
+    header('Content-Type: application/json');
+    $pdo->prepare("UPDATE crecer_wm_run SET obs_mostradas=? WHERE run_uid=? AND marca_id=?")
+        ->execute([max(0, (int)($_POST['n'] ?? 0)), trim($_POST['run'] ?? ''), $marca_id]);
+    echo json_encode(['ok' => true]); exit;
+}
+
 // ── POST: confirmar la estrategia (idempotente) ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
     if (!csrf_ok()) { echo json_encode(['ok' => false, 'err' => 'csrf']); exit; }
     $clave = trim($_POST['angulo'] ?? '');
-    $ang = pm_angulo($clave);
-    if (!$ang) { echo json_encode(['ok' => false, 'err' => 'ángulo inválido']); exit; }
-    // Si ya había decisión, no dupliques nada: éxito idempotente.
     if ($decidido) { echo json_encode(['ok' => true, 'ya' => true]); exit; }
 
-    $m       = pm_marca_a_m($pdo, $marca);
-    $caption = pm_fill($ang['caption'], $m);
-    $nombre  = pm_fill($ang['titulo'], $m);
-    $motivo  = pm_motivo($clave, $m);
-
-    // Asigna el borrador al contenido de muestra EXISTENTE (no crea filas nuevas → no duplica).
+    // Dirección REAL (motor, flag ON) vs curada (C1). En WM el caption ya lo generó el Working Moment.
+    $dirReal = null;
+    if ($WM_ON) {
+        $prep = json_decode((string)($marca['pm_preparado'] ?? ''), true) ?: [];
+        foreach (($prep['direcciones'] ?? []) as $d) if (($d['id'] ?? '') === $clave) { $dirReal = $d; break; }
+    }
+    $ang = pm_angulo($clave);
+    if (!$dirReal && !$ang) { echo json_encode(['ok' => false, 'err' => 'ángulo inválido']); exit; }
+    $m = pm_marca_a_m($pdo, $marca);
     $cid = (int)$pdo->query("SELECT id FROM crecer_contenido WHERE marca_id={$marca_id} ORDER BY id DESC LIMIT 1")->fetchColumn();
-    if ($cid) {
-        $pdo->prepare("UPDATE crecer_contenido SET caption=?, updated_at=NOW() WHERE id=?")->execute([$caption, $cid]);
+
+    if ($dirReal) {
+        // WM: NO sobrescribir el caption (ya lo puso wm_generar). Solo registra la decisión.
+        $nombre = (string)($dirReal['titulo'] ?? $clave); $motivo = 'Generado por el motor (Business Genome)'; $fuente = 'genome';
     } else {
-        // Defensivo: si por algún motivo no existe el post de muestra, créalo una vez.
-        $ca = (int)date('Y'); $cm = (int)date('n');
-        $pdo->prepare("INSERT INTO crecer_calendario (marca_id,anio,mes,estado,generado_por_ia) VALUES (?,?,?, 'borrador',0) ON DUPLICATE KEY UPDATE updated_at=NOW()")->execute([$marca_id, $ca, $cm]);
-        $calid = (int)$pdo->query("SELECT id FROM crecer_calendario WHERE marca_id={$marca_id} AND anio={$ca} AND mes={$cm}")->fetchColumn();
-        $pdo->prepare("INSERT INTO crecer_contenido (calendario_id,marca_id,plataforma,tipo,caption,fecha_programada,estado) VALUES (?,?, 'instagram','post',?,?, 'borrador')")
-            ->execute([$calid, $marca_id, $caption, date('Y-m-d 10:00:00')]);
-        $cid = (int)$pdo->lastInsertId();
+        // C1 curado: asigna el borrador al contenido de muestra existente.
+        $caption = pm_fill($ang['caption'], $m); $nombre = pm_fill($ang['titulo'], $m); $motivo = pm_motivo($clave, $m); $fuente = 'curated_c1';
+        if ($cid) {
+            $pdo->prepare("UPDATE crecer_contenido SET caption=?, updated_at=NOW() WHERE id=?")->execute([$caption, $cid]);
+        } else {
+            $ca = (int)date('Y'); $cm = (int)date('n');
+            $pdo->prepare("INSERT INTO crecer_calendario (marca_id,anio,mes,estado,generado_por_ia) VALUES (?,?,?, 'borrador',0) ON DUPLICATE KEY UPDATE updated_at=NOW()")->execute([$marca_id, $ca, $cm]);
+            $calid = (int)$pdo->query("SELECT id FROM crecer_calendario WHERE marca_id={$marca_id} AND anio={$ca} AND mes={$cm}")->fetchColumn();
+            $pdo->prepare("INSERT INTO crecer_contenido (calendario_id,marca_id,plataforma,tipo,caption,fecha_programada,estado) VALUES (?,?, 'instagram','post',?,?, 'borrador')")
+                ->execute([$calid, $marca_id, $caption, date('Y-m-d 10:00:00')]);
+            $cid = (int)$pdo->lastInsertId();
+        }
     }
 
     // Guarda la DECISIÓN estratégica (idempotente por UNIQUE(marca_id)).
     $pdo->prepare(
         "INSERT INTO crecer_estrategia_arranque (marca_id,angulo_clave,angulo_nombre,motivo,catalogo_version,fuente,contenido_id,created_at)
-         VALUES (?,?,?,?,?, 'curated_c1', ?, NOW())
+         VALUES (?,?,?,?,?,?, ?, NOW())
          ON DUPLICATE KEY UPDATE angulo_clave=VALUES(angulo_clave), angulo_nombre=VALUES(angulo_nombre),
-                                 motivo=VALUES(motivo), catalogo_version=VALUES(catalogo_version), contenido_id=VALUES(contenido_id)")
-        ->execute([$marca_id, $clave, $nombre, $motivo, PM_CATALOGO_VERSION, $cid ?: null]);
+                                 motivo=VALUES(motivo), catalogo_version=VALUES(catalogo_version), fuente=VALUES(fuente), contenido_id=VALUES(contenido_id)")
+        ->execute([$marca_id, $clave, $nombre, $motivo, PM_CATALOGO_VERSION, $fuente, $cid ?: null]);
 
     echo json_encode(['ok' => true]); exit;
 }
@@ -91,9 +128,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ── GET: si ya decidió, el momento NO se repite → al Home ──
 if ($decidido) { header('Location: ' . $HOME); exit; }
 
-// Datos reales → señales → tres estrategias
+// Datos reales → estrategias. C1 curado por defecto; con el flag ON, lo que el motor YA preparó.
 $m = pm_marca_a_m($pdo, $marca);
 $props = pm_proponer($m, 3);
+$WM = null;
+if ($WM_ON) {
+    $prep = json_decode((string)($marca['pm_preparado'] ?? ''), true) ?: [];
+    if (!empty($prep['direcciones'])) {
+        $props = array_map(fn($d) => [
+            'id' => (string)($d['id'] ?? ''), 'titulo' => (string)($d['titulo'] ?? ''),
+            'recomendacion' => (string)($d['recomendacion'] ?? ''), 'caption' => '', 'cta' => 'Empecemos por aquí',
+        ], $prep['direcciones']);
+        $WM = [
+            'on'            => true,
+            'observaciones' => array_values(array_filter(array_map(fn($o) => is_array($o) ? (string)($o['texto'] ?? '') : (string)$o, $prep['observaciones'] ?? []))),
+            'neutro'        => 'Ya entendimos lo esencial de tu negocio.',
+            'base_url'      => '/crecer/primer_minuto.php?marca=' . $marca_id,
+        ];
+    }
+}
 $V = [
     'mode'         => 'real',
     'negocio'      => $m['nombre_negocio'],
@@ -106,6 +159,7 @@ $V = [
     'home_url'     => $HOME,
     'csrf'         => csrf_token(),
     'devswitch'    => false,
+    'wm'           => $WM,
 ];
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 ?>

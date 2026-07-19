@@ -13,6 +13,7 @@ require __DIR__ . '/includes/auth.php';
 require __DIR__ . '/includes/agentes.php';
 require __DIR__ . '/includes/suscripcion.php';
 require __DIR__ . '/includes/voice_dna.php';   // Business Voice DNA + Director Editorial
+require __DIR__ . '/includes/genoma.php';       // C2 · Business Genome Engine (solo actúa con el flag ON)
 requiere_login();
 $usuario = usuario_actual($pdo);
 $USUARIO_ID = (int)$usuario['id'];
@@ -109,26 +110,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // FEATURE FLAG: el recorrido nuevo (Voice DNA + Director Editorial) NO se activa en
     // producción hasta validar. Con el flag apagado, el onboarding usa el creador clásico.
     if (VOICE_DNA_ONBOARDING_ENABLED) {
-        // Business Voice DNA (idempotente por hash) desde lo que extrajo el intake.
-        $fuente_dna = trim(($perfil['voz'] ?? '') . "\n" . ($perfil['descripcion'] ?? '') . "\nProductos: "
-            . implode(', ', array_map(fn($x) => is_array($x) ? ($x['nombre'] ?? '') : $x, (array)($perfil['productos'] ?? [])))
-            . "\n" . $texto_in);
+        // C2 · el motor PREPARA aquí (genome + 3 direcciones + observaciones) durante este
+        // procesamiento del onboarding. El primer POST se genera on-pick (Working Moment),
+        // no aquí. Se guarda lo preparado en pm_preparado para que la reunión lo LEA.
         try {
-            $dnaR = voice_dna_extraer($pdo, $marca_id, $fuente_dna, ['fuente' => $tiene_audio ? 'audio' : 'texto']);
-            $dna  = $dnaR['dna'];
-            $mm   = leer_marca($pdo, $marca_id);
-            $pueblo = $municipio ? (string)$pdo->query("SELECT nombre FROM municipios WHERE id=" . (int)$municipio)->fetchColumn() : '';
-            $ctxED = [
-                'nombre_negocio' => $mm['nombre_negocio'] ?? $nombre,
-                'productos'      => implode(', ', array_map(fn($x) => is_array($x) ? ($x['nombre'] ?? '') : $x, (array)($mm['productos'] ?? []))),
-                'ofertas'        => $mm['ofertas'] ?? '',
-                'pueblo'         => $pueblo,
-                'whatsapp'       => $mm['whatsapp'] ?? '',
-                'instagram'      => $mm['instagram'] ?? '',
-            ];
-            // Director Editorial: genera → revisa → corrige (máx 2) → fallback. Nunca un borrador malo.
-            $ed = generar_con_director($pdo, $marca_id, fn($instr) => generar_caption_dna($pdo, $marca_id, $mm, $dna, $instr), $dna, $ctxED, ['max_regeneraciones' => 2]);
-            $caption = $ed['contenido'];
+            $marcaRow = $pdo->query("SELECT * FROM crecer_marca WHERE id={$marca_id}")->fetch(PDO::FETCH_ASSOC);
+            $prep = pipeline_preparar($pdo, $marcaRow);
+            $pdo->prepare("UPDATE crecer_marca SET pm_preparado=? WHERE id=?")
+                ->execute([json_encode(['run'=>$prep['run'], 'direcciones'=>$prep['direcciones'], 'observaciones'=>$prep['observaciones']], JSON_UNESCAPED_UNICODE), $marca_id]);
+            $caption = ''; // el post lo genera el Working Moment al elegir dirección
         } catch (Throwable $e) {
             try { $rp = redactar_pieza($pdo, $cid); $caption = $rp['caption'] ?? ''; } catch (Throwable $e2) {}  // respaldo clásico
         }
