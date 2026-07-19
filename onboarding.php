@@ -67,6 +67,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo json_encode(['ok'=>false,'err'=>'No pude procesar: '.substr($e->getMessage(),0,120)]); exit;
     }
 
+    // A partir de aquí, CUALQUIER Throwable debe soltar el lock (no dejarlo 'procesando'):
+    // cubre crear_marca(), los INSERT de calendario/contenido y todo lo demás hasta el done.
+    try {
+
     // 2) Crear la marca con lo que extrajo
     $marca_id = crear_marca($pdo, [
         'usuario_id'       => $USUARIO_ID,
@@ -137,6 +141,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     onboarding_lock_done($pdo, $USUARIO_ID, $marca_id, $LOCK_TOKEN);   // marca lock 'listo' + marca_id (idempotente)
     echo json_encode(['ok'=>true, 'marca_id'=>$marca_id]);
     exit;
+
+    } catch (Throwable $e) {
+        // Fallo manejable tras adquirir el lock: márcalo 'failed' (re-adquirible al instante),
+        // NUNCA lo dejes atascado en 'procesando'. El pipeline_preparar y generar_grafica ya
+        // tienen su propio try/catch (degradan sin abortar); esto cubre lo que quedaba sin proteger.
+        onboarding_lock_fail($pdo, $USUARIO_ID, $LOCK_TOKEN);
+        error_log('onboarding: fallo tras acquire (lock→failed): ' . $e->getMessage());
+        echo json_encode(['ok'=>false, 'err'=>'No pude completar el arranque: ' . substr($e->getMessage(), 0, 120)]);
+        exit;
+    }
 }
 
 $municipios = $pdo->query("SELECT id, nombre FROM municipios ORDER BY nombre")->fetchAll();
@@ -351,29 +365,66 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   function showErr(m){ var e=document.getElementById('err'); e.textContent='⚠️ '+m; e.style.display='block'; window.scrollTo(0,0); }
 
   var dots=['Escuchando tu voz…','Aprendiendo tu negocio…','Escribiendo tu caption…','Montando tu arte…'];
+  var enviando=false;                       // guard: un solo envío en curso (anti doble-clic / concurrencia)
+  var POLL_MS=3000, POLL_MAX_MS=150000;     // reintento controlado; tope < 180s del lock (no re-adquiere)
+
+  // POST que devuelve {status, data}; data=null si la respuesta no es JSON (p. ej. un 504 del proxy).
+  function postOnboarding(fd){
+    return fetch('/crecer/onboarding.php', {method:'POST', body:fd}).then(function(r){
+      return r.text().then(function(t){ var d=null; try{ d=JSON.parse(t); }catch(_){ } return {status:r.status, data:d}; });
+    });
+  }
+
   document.getElementById('go').addEventListener('click', function(){
+    if(enviando) return;                    // ya hay un envío en curso → ignora clics extra
     var nombre=document.getElementById('nombre').value.trim();
     if(!nombre){ showErr('Ponle nombre a tu negocio (paso 1).'); return; }
     var texto=document.getElementById('texto').value.trim();
     if(!blob && !texto){ showErr('Grábate o escribe de tu negocio (paso 2).'); return; }
     document.getElementById('err').style.display='none';
+    var goBtn=document.getElementById('go');
+    var muni=document.getElementById('municipio_id').value;
+
+    // Envío COMPLETO (una sola vez): voz/texto + foto.
     var fd=new FormData();
     fd.append('nombre', nombre);
-    fd.append('municipio_id', document.getElementById('municipio_id').value);
+    fd.append('municipio_id', muni);
     if(blob) fd.append('audio', blob, 'voz.webm');
     else fd.append('texto', texto);
     if(foto.files[0]) fd.append('foto', foto.files[0]);   // foto opcional
+    // Sondas de estado LIGERAS (no re-suben audio/foto): mientras el lock está 'procesando' el
+    // backend responde 202 antes de tocar el audio, y {ok:true} cuando termina. El tope < 180s
+    // evita que una sonda ligera re-adquiera el lock (que exigiría voz/texto).
+    function ligera(){ var p=new FormData(); p.append('nombre', nombre); p.append('municipio_id', muni); p.append('reintento','1'); return p; }
+
+    enviando=true; goBtn.disabled=true;
     var load=document.getElementById('load'); load.classList.add('show');
     var di=0, dEl=document.getElementById('dot');
     var dotTimer=setInterval(function(){ di=(di+1)%dots.length; dEl.textContent=dots[di]; }, 4000);
-    fetch('/crecer/onboarding.php', {method:'POST', body:fd})
-      .then(function(r){return r.json();})
-      .then(function(d){
-        clearInterval(dotTimer);
-        if(d.ok){ location.href='/crecer/primer_minuto.php?marca='+d.marca_id; }
-        else { load.classList.remove('show'); showErr(d.err||'Algo falló. Intenta de nuevo.'); }
-      })
-      .catch(function(){ clearInterval(dotTimer); load.classList.remove('show'); showErr('Error de conexión. Intenta de nuevo.'); });
+    var t0=Date.now();
+
+    function terminar(){ clearInterval(dotTimer); }
+    function fallar(msg){ terminar(); load.classList.remove('show'); showErr(msg); enviando=false; goBtn.disabled=false; }
+    var TARDE='Esto está tardando más de lo normal. Recarga la página en un momento — tu negocio debería estar listo.';
+
+    function manejar(res){
+      var d=res.data;
+      if(d && d.ok && d.marca_id){ terminar(); location.href='/crecer/primer_minuto.php?marca='+d.marca_id; return; }
+      var procesando = (res.status===202) || (d && d.estado==='procesando' && d.reintentar);
+      if(procesando){ sondear(); return; }              // sigue montándose → reintenta controladamente
+      fallar((d && d.err) ? d.err : 'Algo falló. Intenta de nuevo.');
+    }
+    function sondear(){
+      if(Date.now()-t0 > POLL_MAX_MS){ fallar(TARDE); return; }
+      setTimeout(function(){
+        postOnboarding(ligera()).then(manejar).catch(function(){
+          if(Date.now()-t0 > POLL_MAX_MS) fallar(TARDE);   // transitorio → reintenta hasta el tope
+          else sondear();
+        });
+      }, POLL_MS);
+    }
+
+    postOnboarding(fd).then(manejar).catch(function(){ fallar('Error de conexión. Intenta de nuevo.'); });
   });
 
   // ── Wizard: una pantalla a la vez ──
