@@ -19,7 +19,13 @@ if (isset($_GET['negocio'])) {
 }
 $negocio_intent = $_SESSION['negocio_intent'] ?? '';
 
-if (esta_logueado()) { header('Location: /crecer/panel/index.php'); exit; }
+// Sesión VÁLIDA (el usuario existe) → ya está dentro, al panel.
+// Sesión FANTASMA (variable de sesión vieja pero el usuario no existe) → límpiala y
+// deja que se registre, en vez de mandarlo a un loop que termina en login. (fix 2026-07-19)
+if (esta_logueado()) {
+    if (usuario_actual($pdo)) { header('Location: /crecer/panel/index.php'); exit; }
+    logout_usuario();   // fantasma: borra la sesión muerta y sigue al formulario de registro
+}
 
 $err = ''; $val = ['nombre'=>'','email'=>''];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
