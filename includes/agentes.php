@@ -748,6 +748,7 @@ function marca_contexto(array $m): string {
     $prod = $m['productos'] ? implode(', ', array_map(
         fn($p) => is_array($p) ? ($p['nombre'] ?? json_encode($p)) : $p, $m['productos'])) : 'n/d';
     return "Negocio: {$m['nombre_negocio']}\n"
+         . (trim((string)($m['pueblo'] ?? '')) !== '' ? "Pueblo/mercado: {$m['pueblo']}\n" : '')
          . "Descripción: " . ($m['descripcion'] ?: 'n/d') . "\n"
          . "Productos: {$prod}\n"
          . "Público: " . ($m['publico_objetivo'] ?: 'n/d') . "\n"
@@ -839,6 +840,11 @@ function grounding_producto_instruccion(array $m): string {
     $out .= $lista  !== '' ? "Productos/servicios: {$lista}. " : "Sin productos declarados: no inventes ninguno. ";
     $out .= $oferta !== '' ? "Oferta: {$oferta}. "            : "Sin oferta declarada: no inventes promociones ni precios. ";
     $out .= "No inventes atributos, ingredientes ni años de experiencia que no estén en el perfil.\n";
+    $out .= "- NO inventes afirmaciones factuales no provistas: demanda ('nos lo piden mucho'), escasez o disponibilidad "
+          . "limitada ('se llenan rápido', 'quedan pocos'), popularidad, testimonios o reseñas, tradición o historia "
+          . "familiar, premios, resultados, promociones, horarios, precios ni teléfonos que no estén en el perfil.\n";
+    $out .= "- SÍ eres libre de crear: imágenes verbales, ritmo, humor, emoción, contraste, curiosidad, personalidad y una "
+          . "invitación atractiva — siempre sobre los HECHOS REALES.\n";
     return $out;
 }
 

@@ -441,8 +441,9 @@ function _creador_directiva(array $direccion, ?array $tesis): string {
 
 // Creador C2: caption del primer post según la DIRECCIÓN elegida + Voice DNA. Reusa reglas de C1.
 // Con $tesis accepted, el Creador pasa de "elige y escribe" a "defiende una tesis recibida".
-function genoma_caption(PDO $pdo, int $marca_id, array $marca, array $dna, array $direccion, string $habla_como = 'persona', string $revision = '', ?array $tesis = null): string {
-    $ctx = marca_contexto($marca);
+// Ensambla el SYSTEM del Creador con TODO el contexto editorial (inspeccionable en pruebas):
+// grounding (frontera de hechos) + contacto + identidad + brújula de tesis + tono + glosario + memoria + Voice DNA.
+function _creador_sistema(PDO $pdo, int $marca_id, array $marca, array $dna, array $direccion, string $habla_como, ?array $tesis): string {
     $enfoque = _creador_directiva($direccion, $tesis);
     // La identidad (persona vs organización) la decide el GENOMA, no el prompt.
     $identidad = $habla_como === 'organizacion'
@@ -453,24 +454,30 @@ function genoma_caption(PDO $pdo, int $marca_id, array $marca, array $dna, array
         ? "\nVOCABULARIO DEL NEGOCIO (el dueño lo corrigió — RESPÉTALO SIEMPRE):\n" . $marca['glosario'] . "\n" : '';
     if (is_file(__DIR__ . '/memoria.php')) require_once __DIR__ . '/memoria.php';
     $memoria = function_exists('memoria_para_prompt') ? memoria_para_prompt($pdo, $marca_id) : '';
-    $sistema = "Eres el CREADOR de contenido del Corillo (NUNCA te presentes como 'el creador'). Escribes captions para redes "
-             . "de microempresas boricuas, con PERSONALIDAD, ritmo y picardía — nunca traducido, nunca 'AI slop', nunca planos. Reglas:\n"
-             . "- Español puertorriqueño AUTÉNTICO. Vocabulario local (bizcocho, no 'tarta'; chavos; nene/nena; etc.).\n"
-             . "- Tono según la voz del negocio. 1-2 emojis máximo.\n"
-             . "- Cierra con un llamado a la acción (según la vía de contacto de abajo) y 3-4 hashtags locales.\n"
-             . "- Máximo 60 palabras. Devuelve SOLO el caption, sin comillas ni explicación.\n"
-             . "FRONTERA DE HECHOS (lo único inviolable): los hechos son ciertos; no inventes productos, ofertas, atributos ni datos "
-             . "que no estén en el perfil. CÓMO los cuentas es 100% tuyo.\n"
-             . grounding_producto_instruccion($marca)
-             . contacto_instruccion($marca)
-             . $identidad
-             . $enfoque . "\n"
-             . tono_instruccion($marca)
-             . $glosario
-             . $memoria
-             . voice_dna_instruccion($dna);
+    return "Eres el CREADOR de contenido del Corillo (NUNCA te presentes como 'el creador'). Escribes captions para redes "
+         . "de microempresas boricuas, con PERSONALIDAD, ritmo y picardía — nunca traducido, nunca 'AI slop', nunca planos. Reglas:\n"
+         . "- Español puertorriqueño AUTÉNTICO. Vocabulario local (bizcocho, no 'tarta'; chavos; nene/nena; etc.).\n"
+         . "- Tono según la voz del negocio. 1-2 emojis máximo.\n"
+         . "- Cierra con un llamado a la acción (según la vía de contacto de abajo) y 3-4 hashtags locales.\n"
+         . "- Máximo 60 palabras. Devuelve SOLO el caption, sin comillas ni explicación.\n"
+         . "FRONTERA DE HECHOS (lo único inviolable): los hechos son ciertos; no inventes productos, ofertas, atributos ni datos "
+         . "que no estén en el perfil. CÓMO los cuentas es 100% tuyo.\n"
+         . grounding_producto_instruccion($marca)
+         . contacto_instruccion($marca)
+         . $identidad
+         . $enfoque . "\n"
+         . tono_instruccion($marca)
+         . $glosario
+         . $memoria
+         . voice_dna_instruccion($dna);
+}
+
+function genoma_caption(PDO $pdo, int $marca_id, array $marca, array $dna, array $direccion, string $habla_como = 'persona', string $revision = '', ?array $tesis = null): string {
+    $ctx = marca_contexto($marca);
+    $sistema = _creador_sistema($pdo, $marca_id, $marca, $dna, $direccion, $habla_como, $tesis);
+    // Regeneración del Director: corrige el HECHO señalado SIN aplanar la personalidad.
     $prompt = "Perfil del negocio:\n{$ctx}\n\nEscribe UN caption para arrancar con ese enfoque, en SU voz."
-            . ($revision !== '' ? "\n\nEL DIRECTOR EDITORIAL rechazó el intento anterior. CORRIGE exactamente: {$revision}" : '')
+            . ($revision !== '' ? "\n\nUn editor marcó UN ajuste (normalmente un hecho no respaldado o un CTA). Corrígelo SIN perder la chispa: reescribe con la MISMA personalidad, ritmo y voz boricua; solo respeta lo señalado. Ajuste: {$revision}" : '')
             . "\n\nDevuelve SOLO el caption.";
     $r = ia_ejecutar($pdo, 'creador', 'Primer post (genoma)', $prompt, [
         'marca_id'=>$marca_id, 'sistema'=>$sistema, 'temperatura'=>0.95, 'max_tokens'=>400, 'thinking_budget'=>0,
@@ -487,6 +494,7 @@ function genoma_post(PDO $pdo, array $genoma, array $direccion, string $run, ?ar
     $marca_id = (int)$genoma['marca']['id'];
     $marca = leer_marca($pdo, $marca_id) ?: $genoma['marca'];  // productos parseado (como en C1)
     $m = $genoma['m'];
+    $marca['pueblo'] = $m['pueblo'] ?? ($marca['pueblo'] ?? '');  // la CIUDAD/mercado llega al Creator vía marca_contexto
     $ctxED = [
         'nombre_negocio'=>$m['nombre_negocio'], 'productos'=>$m['producto'],
         'ofertas'=>trim((string)($marca['ofertas'] ?? '')), 'pueblo'=>$m['pueblo'],
