@@ -495,6 +495,21 @@ function _creador_sistema(PDO $pdo, int $marca_id, array $marca, array $dna, arr
          . $memoria;
 }
 
+// KILL determinista del CTA roto: "escríbenos al ." / "por WhatsApp al ." (número en blanco).
+// Pasa aunque el modelo se equivoque: elimina el "al" colgante sin número detrás, y limpia
+// dobles espacios/puntuación. "al momento", "al horno" (seguidos de palabra) NO se tocan.
+function _limpiar_cta_rota(string $t): string {
+    // "... al ." / "... al," / "... al!" / "... al" al final → quita el "al" colgante (sin dígito detrás)
+    $t = preg_replace('/\s+al\b\s*(?=[.,;:!?)]|$)/iu', '', $t);
+    // "WhatsApp al ." o "número al " que quedó sin dígitos → deja la frase limpia
+    $t = preg_replace('/\s+al\s+(?=[.,;:!?)]|$)/iu', '', $t);
+    // Limpia " ." colgante, comas dobles y espacios múltiples
+    $t = preg_replace('/\s+([.,;:!?])/u', '$1', $t);
+    $t = preg_replace('/([.,])\1+/u', '$1', $t);
+    $t = preg_replace('/[ \t]{2,}/u', ' ', $t);
+    return trim($t);
+}
+
 function genoma_caption(PDO $pdo, int $marca_id, array $marca, array $dna, array $direccion, string $habla_como = 'persona', string $revision = '', ?array $tesis = null): string {
     $ctx = marca_contexto($marca);
     $sistema = _creador_sistema($pdo, $marca_id, $marca, $dna, $direccion, $habla_como, $tesis);
@@ -506,7 +521,7 @@ function genoma_caption(PDO $pdo, int $marca_id, array $marca, array $dna, array
         'marca_id'=>$marca_id, 'sistema'=>$sistema, 'temperatura'=>0.95, 'max_tokens'=>400, 'thinking_budget'=>0,
         'mock_texto'=>'En ' . ($marca['nombre_negocio'] ?? 'la casa') . ' arrancamos con algo bueno para ti.',
     ]);
-    return trim((string)$r['texto']);
+    return _limpiar_cta_rota(trim((string)$r['texto']));
 }
 
 // ── ETAPA 4-5-6 · Primer post → Director → Resultado (con fallback curado) ──
