@@ -566,6 +566,28 @@ function genoma_post(PDO $pdo, array $genoma, array $direccion, string $run, ?ar
     }
 }
 
+// CAPTIONS DEL PREVIEW: los 3 posts que se muestran en "Así empezaríamos nosotros" los escribe
+// la IA (escritor ya arreglado), UNO por dirección — NO la plantilla curada de pm_catalogo, que
+// salía idéntica entre negocios, sin chispa y con CTA roto. La plantilla queda SOLO como fallback
+// (con el CTA limpio) si la IA falla. Sin tesis/director aquí (rapidez); el post elegido recibe el
+// tratamiento completo al dar "Me encanta" (wm_generar). (fix 2026-07-19)
+function genoma_captions_preview(PDO $pdo, array $genoma, array $direcciones, string $run): array {
+    $marca_id = (int)$genoma['marca']['id'];
+    try { $marca = leer_marca($pdo, $marca_id); } catch (Throwable $e) { $marca = $genoma['marca']; }
+    $marca['pueblo'] = $genoma['m']['pueblo'] ?? ($marca['pueblo'] ?? '');
+    $habla = $genoma['habla_como'] ?? 'persona';
+    foreach ($direcciones as &$d) {
+        try {
+            $cap = genoma_caption($pdo, $marca_id, $marca, $genoma['dna'], $d, $habla, '', null);
+            $d['caption'] = (trim($cap) !== '') ? $cap : _limpiar_cta_rota((string)($d['caption'] ?? ''));
+        } catch (Throwable $e) {
+            $d['caption'] = _limpiar_cta_rota((string)($d['caption'] ?? ''));   // fallback curado, CTA sin romper
+        }
+    }
+    unset($d);
+    return $direcciones;
+}
+
 // ── Orquestación de alto nivel ───────────────────────────────
 // Preparar la reunión (etapas 1-3): lo que corre DURANTE el procesamiento del onboarding.
 function pipeline_preparar(PDO $pdo, array $marca, ?string $run = null): array {
@@ -574,6 +596,7 @@ function pipeline_preparar(PDO $pdo, array $marca, ?string $run = null): array {
     $seleccion = genoma_seleccionar($pdo, $genoma, $run, 3);
     $direcciones = genoma_recomendaciones($pdo, $genoma, $seleccion, $run);
     $observaciones = genoma_observaciones($pdo, $genoma, $run, 3);  // The Working Moment (interpretaciones)
+    $direcciones = genoma_captions_preview($pdo, $genoma, $direcciones, $run);  // captions reales (IA), no plantilla
     return ['run'=>$run, 'genoma'=>$genoma, 'direcciones'=>$direcciones, 'observaciones'=>$observaciones];
 }
 // Generar el post de la dirección elegida (etapas 4-6): corre DETRÁS de la escena, al elegir.
