@@ -19,7 +19,8 @@
 | **Primer Minuto** | ✅ Construido | La primera reunión con el depto de marketing; estrategia curada; el momento vive, el motor no | [ADR-0001](adr/ADR-0001-primer-minuto-business-genome-foundation.md) |
 | **Editorial Director** | ✅ Operativo (dentro del pipeline) | Compuerta factual; valida y protege, **no repara** (Principio de Grounding) | [ADR-0002](adr/ADR-0002-business-genome-engine.md) |
 | **Business Genome** — *comprender el negocio de forma consistente, medible y verificable* | ✅ **Capacidad cerrada** (inerte, flag OFF) | *Implementación actual:* **Business Genome Engine** — pipeline observable + telemetría + fix del contrato Creador↔Director. 80% aprobación directa · 20% regen · 0% fallback · 0 regresiones | [ADR-0002](adr/ADR-0002-business-genome-engine.md) — *Accepted* |
-| **Creative Studio** | ⏳ Futuro | Sala de edición / generación de piezas más allá del primer post | — |
+| **Creative Thesis** — *transformar comprensión en una idea creativa única antes de generar contenido* | 🟡 **ADR Accepted · sin implementar** | La capa intermedia **Comprensión → Idea → Contenido**. Activo semántico reutilizable (posts, anuncios, emails, páginas, campañas). Optimiza por **resonancia**, no originalidad | [ADR-0003](adr/ADR-0003-creative-thesis.md) — *Accepted* |
+| **Creative Studio** | ⏳ Futuro | Sala de edición / generación de piezas más allá del primer post; consumirá la Creative Thesis | — |
 | **Biblioteca Inteligente** | ⏳ Futuro | Memoria visual del Genome; la subida de foto real del reveal es el primer hilo | — |
 | **Learning Engine** | ⏳ Futuro | El Corillo aprende de resultados y ajusta | — |
 | **Growth Loop** | ⏳ Futuro | Adquisición → confianza → Encuéntralo (fase 2) | — |
