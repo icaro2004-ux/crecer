@@ -672,11 +672,14 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
     }
 
     $tiene_foto = (bool)($foto_abs && is_file($foto_abs));
-    $prompt = "Crea el ARTE (imagen cuadrada 1:1) para un post de \"{$m['nombre_negocio']}\", negocio boricua.\n";
+    $prompt = "Crea el ARTE (imagen cuadrada 1:1) para el post de un negocio boricua"
+            . ($m['nombre_negocio'] !== '' ? " llamado \"{$m['nombre_negocio']}\"" : '') . ".\n"
+            . "- EL NOMBRE ES SOLO UNA ETIQUETA DE MARCA, no el tema de la imagen. La ESCENA sale del MENSAJE del texto del post (abajo), NUNCA del nombre. No ilustres el nombre ni interpretes sus palabras de forma literal ni por parecido; trátalas como un rótulo, no como objetos.\n";
     if ($copy !== '') {
         // El TEMA DEL POST manda sobre el tipo de negocio: evita imágenes fuera de tema.
-        $prompt .= "- ⭐ LO MÁS IMPORTANTE: la imagen tiene que ILUSTRAR EL TEMA DE ESTE POST en concreto, NO algo genérico del negocio. Lee bien el texto y muestra visualmente de qué habla:\n"
+        $prompt .= "- ⭐ LO MÁS IMPORTANTE: la imagen ILUSTRA EL MENSAJE DE ESTE POST (lo que el texto realmente dice), no el nombre ni algo genérico. Lee el texto y muestra de qué habla de verdad:\n"
                  . "  \"{$copy}\"\n"
+                 . "  PRIORIDAD ABSOLUTA DEL TEXTO: si el nombre sugiere una cosa y el texto otra, manda el texto. Si una palabra del nombre es ambigua, ignórala y decide la escena solo con el texto.\n"
                  . "  Si el post NO es sobre comida, NO pongas comida. Piensa qué escena/objeto/concepto representa mejor ESE mensaje.\n";
     }
     if ($tiene_foto) {
