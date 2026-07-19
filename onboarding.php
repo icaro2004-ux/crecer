@@ -148,7 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // tienen su propio try/catch (degradan sin abortar); esto cubre lo que quedaba sin proteger.
         onboarding_lock_fail($pdo, $USUARIO_ID, $LOCK_TOKEN);
         error_log('onboarding: fallo tras acquire (lock→failed): ' . $e->getMessage());
-        echo json_encode(['ok'=>false, 'err'=>'No pude completar el arranque: ' . substr($e->getMessage(), 0, 120)]);
+        echo json_encode(['ok'=>false, 'err'=>'No pude completar el arranque: ' . substr($e->getMessage(), 0, 300)]);
         exit;
     }
 }

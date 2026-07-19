@@ -125,6 +125,21 @@ function crear_marca(PDO $pdo, array $d): int {
     $existe->execute([$d['usuario_id'], $d['nombre_negocio']]);
     if ($id = $existe->fetchColumn()) return (int)$id;
 
+    // FK-safe: si el municipio/categoría enviado NO existe en la BD, se guarda NULL
+    // (ambas columnas son nullable, FK ON DELETE SET NULL) en vez de reventar con el
+    // error 1452 "foreign key constraint fails" y tumbar todo el onboarding. (fix 2026-07-19)
+    foreach (['municipio_id'=>'municipios', 'categoria_id'=>'categorias'] as $campo => $tabla) {
+        $val = isset($d[$campo]) && $d[$campo] !== null && $d[$campo] !== '' ? (int)$d[$campo] : null;
+        if ($val !== null) {
+            try {
+                $chk = $pdo->prepare("SELECT 1 FROM {$tabla} WHERE id = ?");
+                $chk->execute([$val]);
+                if (!$chk->fetchColumn()) $val = null;   // id inexistente → NULL (evita el 1452)
+            } catch (Throwable $e) { $val = null; }       // tabla ausente/rara → NULL, no rompas
+        }
+        $d[$campo] = $val;
+    }
+
     $stmt = $pdo->prepare(
         "INSERT INTO crecer_marca
            (usuario_id, municipio_id, categoria_id, nombre_negocio, descripcion,
