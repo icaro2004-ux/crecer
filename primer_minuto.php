@@ -85,23 +85,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $clave = trim($_POST['angulo'] ?? '');
     if ($decidido) { echo json_encode(['ok' => true, 'ya' => true]); exit; }
 
-    // Dirección REAL (motor, flag ON) vs curada (C1). En WM el caption ya lo generó el Working Moment.
-    $dirReal = null;
-    if ($WM_ON) {
-        $prep = json_decode((string)($marca['pm_preparado'] ?? ''), true) ?: [];
-        foreach (($prep['direcciones'] ?? []) as $d) if (($d['id'] ?? '') === $clave) { $dirReal = $d; break; }
-    }
+    // La dirección elegida: PRIMERO la que escribió la IA (pm_preparado); el catálogo curado
+    // solo si por alguna razón no hay preparación de IA. En ambos casos guardamos el caption.
+    $prep = json_decode((string)($marca['pm_preparado'] ?? ''), true) ?: [];
+    $dirIA = null;
+    foreach (($prep['direcciones'] ?? []) as $d) if (($d['id'] ?? '') === $clave) { $dirIA = $d; break; }
     $ang = pm_angulo($clave);
-    if (!$dirReal && !$ang) { echo json_encode(['ok' => false, 'err' => 'ángulo inválido']); exit; }
+    if (!$dirIA && !$ang) { echo json_encode(['ok' => false, 'err' => 'ángulo inválido']); exit; }
     $m = pm_marca_a_m($pdo, $marca);
     $cid = (int)$pdo->query("SELECT id FROM crecer_contenido WHERE marca_id={$marca_id} ORDER BY id DESC LIMIT 1")->fetchColumn();
 
-    if ($dirReal) {
-        // WM: NO sobrescribir el caption (ya lo puso wm_generar). Solo registra la decisión.
-        $nombre = (string)($dirReal['titulo'] ?? $clave); $motivo = 'Generado por el motor (Business Genome)'; $fuente = 'genome';
-    } else {
-        // C1 curado: asigna el borrador al contenido de muestra existente.
-        $caption = pm_fill($ang['caption'], $m); $nombre = pm_fill($ang['titulo'], $m); $motivo = pm_motivo($clave, $m); $fuente = 'curated_c1';
+    $caption = $dirIA ? trim((string)($dirIA['caption'] ?? '')) : pm_fill($ang['caption'], $m);
+    $nombre  = $dirIA ? (string)($dirIA['titulo'] ?? $clave)     : pm_fill($ang['titulo'], $m);
+    $fuente  = $dirIA ? 'genome' : 'curated_c1';
+    $motivo  = $dirIA ? 'Generado por el motor (Business Genome)' : pm_motivo($clave, $m);
+    if ($caption !== '') {
         if ($cid) {
             $pdo->prepare("UPDATE crecer_contenido SET caption=?, updated_at=NOW() WHERE id=?")->execute([$caption, $cid]);
         } else {
@@ -128,25 +126,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ── GET: si ya decidió, el momento NO se repite → al Home ──
 if ($decidido) { header('Location: ' . $HOME); exit; }
 
-// Datos reales → estrategias. C1 curado por defecto; con el flag ON, lo que el motor YA preparó.
+// EL PREVIEW LO ESCRIBE LA IA, SIEMPRE (sin flag). Lee lo preparado en el onboarding;
+// si falta o no trae captions de IA (los 3 llenos), lo genera AHORA y lo guarda. La plantilla
+// curada NUNCA es el preview: solo aparece como red de emergencia si Gemini se cae del todo.
 $m = pm_marca_a_m($pdo, $marca);
-$props = pm_proponer($m, 3);
-$WM = null;
-if ($WM_ON) {
-    $prep = json_decode((string)($marca['pm_preparado'] ?? ''), true) ?: [];
-    if (!empty($prep['direcciones'])) {
-        $props = array_map(fn($d) => [
-            'id' => (string)($d['id'] ?? ''), 'titulo' => (string)($d['titulo'] ?? ''),
-            'recomendacion' => (string)($d['recomendacion'] ?? ''), 'caption' => '', 'cta' => 'Empecemos por aquí',
-        ], $prep['direcciones']);
-        $WM = [
-            'on'            => true,
-            'observaciones' => array_values(array_filter(array_map(fn($o) => is_array($o) ? (string)($o['texto'] ?? '') : (string)$o, $prep['observaciones'] ?? []))),
-            'neutro'        => 'Ya entendimos lo esencial de tu negocio.',
-            'base_url'      => '/crecer/primer_minuto.php?marca=' . $marca_id,
-        ];
-    }
+$prep = json_decode((string)($marca['pm_preparado'] ?? ''), true) ?: [];
+$dirs = $prep['direcciones'] ?? [];
+$tieneIA = !empty($dirs) && count(array_filter($dirs, fn($d) => trim((string)($d['caption'] ?? '')) !== '')) === count($dirs);
+if (!$tieneIA) {
+    try {
+        $prep = pipeline_preparar($pdo, $marca);              // genera genome + 3 direcciones + 3 captions IA
+        $dirs = $prep['direcciones'] ?? [];
+        $pdo->prepare("UPDATE crecer_marca SET pm_preparado=? WHERE id=?")
+            ->execute([json_encode(['run'=>$prep['run'], 'direcciones'=>$dirs, 'observaciones'=>$prep['observaciones'] ?? []], JSON_UNESCAPED_UNICODE), $marca_id]);
+    } catch (Throwable $e) { error_log('primer_minuto pipeline_preparar: ' . $e->getMessage()); $dirs = []; }
 }
+if (!empty($dirs)) {
+    $props = array_map(fn($d) => [
+        'id' => (string)($d['id'] ?? ''), 'titulo' => (string)($d['titulo'] ?? ''),
+        'recomendacion' => (string)($d['recomendacion'] ?? ''),
+        'caption' => (string)($d['caption'] ?? ''),     // ← LA IA (antes se botaba con '')
+        'cta' => 'Empecemos por aquí',
+    ], $dirs);
+} else {
+    $props = pm_proponer($m, 3);   // red de emergencia (Gemini caído): curado, es lo último
+}
+$WM = null;   // flujo directo: la card muestra el caption de la IA tal cual (WYSIWYG, sin regenerar)
 $V = [
     'mode'         => 'real',
     'negocio'      => $m['nombre_negocio'],

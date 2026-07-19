@@ -112,23 +112,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ->execute([$calid, $marca_id, 'Post de bienvenida: preséntale el negocio a la gente, cálido y boricua', date('Y-m-d 10:00:00')]);
     $cid = (int)$pdo->lastInsertId();
     $caption = '';
-    // FEATURE FLAG: el recorrido nuevo (Voice DNA + Director Editorial) NO se activa en
-    // producción hasta validar. Con el flag apagado, el onboarding usa el creador clásico.
-    if (VOICE_DNA_ONBOARDING_ENABLED) {
-        // C2 · el motor PREPARA aquí (genome + 3 direcciones + observaciones) durante este
-        // procesamiento del onboarding. El primer POST se genera on-pick (Working Moment),
-        // no aquí. Se guarda lo preparado en pm_preparado para que la reunión lo LEA.
-        try {
-            $marcaRow = $pdo->query("SELECT * FROM crecer_marca WHERE id={$marca_id}")->fetch(PDO::FETCH_ASSOC);
-            $prep = pipeline_preparar($pdo, $marcaRow);
-            $pdo->prepare("UPDATE crecer_marca SET pm_preparado=? WHERE id=?")
-                ->execute([json_encode(['run'=>$prep['run'], 'direcciones'=>$prep['direcciones'], 'observaciones'=>$prep['observaciones']], JSON_UNESCAPED_UNICODE), $marca_id]);
-            $caption = ''; // el post lo genera el Working Moment al elegir dirección
-        } catch (Throwable $e) {
-            try { $rp = redactar_pieza($pdo, $cid); $caption = $rp['caption'] ?? ''; } catch (Throwable $e2) {}  // respaldo clásico
-        }
-    } else {
-        try { $rp = redactar_pieza($pdo, $cid); $caption = $rp['caption'] ?? ''; } catch (Throwable $e) {}  // recorrido clásico (flag off)
+    // EL PREVIEW ES EL PRODUCTO — se prepara SIEMPRE con IA (ya no detrás de un flag).
+    // El motor arma genome + 3 direcciones + 3 captions REALES (genoma_captions_preview) +
+    // observaciones, y lo guarda en pm_preparado para que el Primer Minuto lo LEA directo.
+    // Solo si el motor falla del todo, cae al creador clásico como red de emergencia.
+    try {
+        $marcaRow = $pdo->query("SELECT * FROM crecer_marca WHERE id={$marca_id}")->fetch(PDO::FETCH_ASSOC);
+        $prep = pipeline_preparar($pdo, $marcaRow);
+        $pdo->prepare("UPDATE crecer_marca SET pm_preparado=? WHERE id=?")
+            ->execute([json_encode(['run'=>$prep['run'], 'direcciones'=>$prep['direcciones'], 'observaciones'=>$prep['observaciones']], JSON_UNESCAPED_UNICODE), $marca_id]);
+        $caption = '';
+    } catch (Throwable $e) {
+        error_log('onboarding pipeline_preparar falló: ' . $e->getMessage());
+        try { $rp = redactar_pieza($pdo, $cid); $caption = $rp['caption'] ?? ''; } catch (Throwable $e2) {}  // respaldo clásico
     }
     if ($caption !== '') { $pdo->prepare("UPDATE crecer_contenido SET caption=? WHERE id=?")->execute([$caption, $cid]); }
     // SIEMPRE genera la imagen de muestra (cumple la promesa "imagen + caption").
