@@ -292,28 +292,35 @@ function director_editorial(PDO $pdo, int $marca_id, string $contenido, array $d
     $pueblo    = trim((string)($ctx['pueblo'] ?? ''));
     $whatsapp  = trim((string)($ctx['whatsapp'] ?? ''));
     $instagram = trim((string)($ctx['instagram'] ?? ''));
+    // LA HISTORIA DEL DUEÑO es HECHO, no invento. Sin esto, el Director rechazaba
+    // como "inventado" todo lo que el dueño mismo contó (su receta, su gente, su
+    // proceso, sus motivos) → el caption bueno caía al fallback genérico. (fix 2026-07-19)
+    $voz = trim((string)($ctx['voz'] ?? ''));
 
-    $hechos = "HECHOS REALES (lo ÚNICO cierto — todo lo demás es inventado):\n"
+    $hechos = "HECHOS REALES DEL NEGOCIO (esto es cierto; el escritor puede contarlo con libertad):\n"
         . "- Negocio: " . ($negocio ?: '(sin nombre)') . "\n"
         . "- Productos/servicios: " . ($productos ?: '(ninguno declarado)') . "\n"
         . "- Ofertas: " . ($ofertas ?: '(ninguna)') . "\n"
         . "- Pueblo/ubicación: " . ($pueblo ?: '(no declarado)') . "\n"
         . "- WhatsApp: " . ($whatsapp ?: '(no tiene)') . "\n"
-        . "- Instagram: " . ($instagram ?: '(no declarado)') . "\n";
+        . "- Instagram: " . ($instagram ?: '(no declarado)') . "\n"
+        . ($voz !== '' ? "- LA HISTORIA/VOZ QUE EL DUEÑO CONTÓ (TODO esto es CIERTO y se puede contar libremente: su historia, su proceso, su gente, sus motivos, su forma de hablar): \"" . mb_substr($voz, 0, 800) . "\"\n" : "")
+        . "Lo INVENTADO (que sí debes marcar) es un dato CONCRETO nuevo que NO sale de arriba: un producto/sabor/precio/teléfono/premio/oferta que nadie mencionó. La emoción, la historia del dueño y el estilo NO son inventos.\n";
 
-    $sistema = "Eres el DIRECTOR EDITORIAL de Crecer. Eres EXIGENTE y FACTUAL. Rechazas cualquier caption con datos "
-             . "que NO estén respaldados por los hechos reales (productos, servicios, ofertas, ubicación, teléfono, atributos "
-             . "inventados). Prefieres rechazar a dejar pasar. Devuelve SOLO JSON.";
-    $prompt = "Evalúa el caption. Devuelve JSON EXACTO:\n"
+    $sistema = "Eres el DIRECTOR EDITORIAL de Crecer. Tu ÚNICO trabajo es la INTEGRIDAD FACTUAL — NO el estilo. "
+             . "La creatividad, la voz atrevida, el humor, la metáfora y los ángulos inesperados son BUENOS: NUNCA los rechazas por eso. "
+             . "Un caption con personalidad fuerte que respeta los hechos SIEMPRE se aprueba. Solo marcas UNA cosa: datos INVENTADOS "
+             . "(productos/servicios/ofertas/ubicación/teléfono/atributos que NO están en los hechos reales). Devuelve SOLO JSON.";
+    $prompt = "Evalúa el caption SOLO por sus hechos. Devuelve JSON EXACTO:\n"
         . '{"aprobado":true|false,"puntuacion":0-100,"razones":[],"problemas":[],'
         . '"afirmaciones_verificadas":["afirmación respaldada por los hechos"],'
         . '"afirmaciones_no_respaldadas":["afirmación que NO está en los hechos (inventada)"],'
-        . '"instrucciones_de_revision":"qué cambiar, concreto"}' . "\n\n"
-        . "Criterios: (1) NO genérico (serviría para cualquier negocio ⇒ rechazo). (2) Específico de ESTE negocio. "
-        . "(3) Auténtico, no IA. (4) Coincide con el Voice DNA. (5) FACTUAL: cada producto/servicio/oferta/ubicación/teléfono "
-        . "DEBE estar en los hechos; si no, va a afirmaciones_no_respaldadas. (6) CTA coherente con los datos. (7) Publicable mañana.\n"
-        . "Regla dura: si afirmaciones_no_respaldadas tiene algo ⇒ aprobado=false. aprobado=true solo si puntuacion>=75 y sin no_respaldadas.\n\n"
-        . $hechos . voice_dna_instruccion($dna) . "\n\nCAPTION:\n{$contenido}";
+        . '"instrucciones_de_revision":"qué hecho quitar/corregir, concreto"}' . "\n\n"
+        . "Cómo evaluar: revisa cada producto/servicio/oferta/ubicación/teléfono del caption; si NO está en los hechos, va a "
+        . "afirmaciones_no_respaldadas. ESO es lo único que importa.\n"
+        . "NO rechaces por: ser creativo, atrevido, gracioso, poético, corto, informal, o por 'sonar genérico' — eso NO es tu trabajo.\n"
+        . "Regla dura: aprobado=false SOLO si afirmaciones_no_respaldadas tiene algo. Si respeta los hechos, aprobado=true (aunque sea audaz).\n\n"
+        . $hechos . "\n\nCAPTION:\n{$contenido}";
 
     $res = ['aprobado' => false, 'puntuacion' => 0, 'razones' => [], 'problemas' => [],
             'afirmaciones_verificadas' => [], 'afirmaciones_no_respaldadas' => [], 'instrucciones_de_revision' => '', 'llamadas' => 0];
@@ -327,8 +334,11 @@ function director_editorial(PDO $pdo, int $marca_id, string $contenido, array $d
         $j = json_decode(trim((string)$r['texto']), true);
         if (is_array($j)) {
             $strl = fn($v, $n = 6) => array_slice(array_values(array_filter(array_map('strval', (array)$v), 'strlen')), 0, $n);
-            $res['aprobado']   = !empty($j['aprobado']);
-            $res['puntuacion'] = is_numeric($j['puntuacion'] ?? null) ? max(0, min(100, (int)$j['puntuacion'])) : 0;
+            // RIENDA SUELTA A LOS CREATIVOS: el estilo NO rechaza. El caption arranca APROBADO;
+            // solo lo tumban los hechos inventados (afirmaciones_no_respaldadas, más abajo) y los
+            // guards deterministas (slop/teléfono/especificidad). Ya no gatea la puntuación subjetiva.
+            $res['aprobado']   = empty($res['afirmaciones_no_respaldadas']) && empty($j['afirmaciones_no_respaldadas']);
+            $res['puntuacion'] = is_numeric($j['puntuacion'] ?? null) ? max(0, min(100, (int)$j['puntuacion'])) : 80;
             $res['razones']    = $strl($j['razones'] ?? []);
             $res['problemas']  = $strl($j['problemas'] ?? []);
             $res['afirmaciones_verificadas']   = $strl($j['afirmaciones_verificadas'] ?? [], 10);

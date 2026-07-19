@@ -41,7 +41,15 @@ $sis = _creador_sistema($pdo, 990200, $marca, $dna, $direccion, 'persona', $tesi
 
 // ── 1. El Creator recibe el CONTEXTO editorial completo ──
 ok('glosario del negocio presente', has($sis,'VOCABULARIO DEL NEGOCIO') && has($sis,'piragua, no raspao'));
-ok('Voice DNA presente', has($sis,'VOICE DNA'));
+// RECUPERACIÓN 2026-07-19: el escritor va MAGRO. Ya NO lleva el volcado de ejes ("VOICE DNA")
+// que lo estrangulaba y forzaba jerga/ortografía butcheada. En su lugar: ortografía impecable
+// exigida + la voz real del dueño al frente. El grounding lo hace cumplir el Director.
+ok('ortografía impecable exigida (fix horrores)', has($sis,'ORTOGRAFÍA'));
+ok('escritor SIN bozal de ejes DNA (rienda suelta)', !has($sis,'VOICE DNA'));
+// La ESENCIA: con un negocio que SÍ dio su voz, esa voz va al frente del prompt del escritor.
+$marcaVoz = $marca; $marcaVoz['voz'] = 'Hablo cortito y dulce, siempre digo "mi gente" y todo bien fresquecito.';
+$sisVoz = _creador_sistema($pdo, 990200, $marcaVoz, $dna, $direccion, 'persona', $tesis);
+ok('voz real del dueño al frente (esencia)', has($sisVoz,'LA VOZ DEL DUEÑO') && has($sisVoz,'fresquecito'));
 ok('memoria wired (Cerebro cargado)', function_exists('memoria_para_prompt'));
 // tono y glosario se INCORPORAN (el sistema es más largo con ellos que sin ellos)
 $sinTono = $marca; unset($sinTono['tono_boricua'],$sinTono['tono_formal'],$sinTono['tono_venta'],$sinTono['tono_ingenio']);

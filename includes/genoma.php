@@ -439,37 +439,60 @@ function _creador_directiva(array $direccion, ?array $tesis): string {
     return $enfoque;
 }
 
-// Creador C2: caption del primer post según la DIRECCIÓN elegida + Voice DNA. Reusa reglas de C1.
+// Creador C2: caption del primer post según la DIRECCIÓN elegida.
 // Con $tesis accepted, el Creador pasa de "elige y escribe" a "defiende una tesis recibida".
-// Ensambla el SYSTEM del Creador con TODO el contexto editorial (inspeccionable en pruebas):
-// grounding (frontera de hechos) + contacto + identidad + brújula de tesis + tono + glosario + memoria + Voice DNA.
+//
+// RECUPERACIÓN DE CALIDAD (2026-07-19): el escritor estaba enterrado bajo un muro de
+// prohibiciones (grounding_producto_instruccion) + un volcado de ejes numéricos
+// (voice_dna_instruccion) que forzaba jerga y producía ortografía butcheada y copy plano.
+// Ahora el escritor va MAGRO: la VOZ REAL del dueño al frente (la esencia), ortografía
+// impecable exigida, y solo una LÍNEA de hechos. El grounding NO se pierde: lo hace cumplir
+// el Director (director_editorial), que sigue intacto. El escritor escribe libre; el Director valida.
 function _creador_sistema(PDO $pdo, int $marca_id, array $marca, array $dna, array $direccion, string $habla_como, ?array $tesis): string {
     $enfoque = _creador_directiva($direccion, $tesis);
     // La identidad (persona vs organización) la decide el GENOMA, no el prompt.
     $identidad = $habla_como === 'organizacion'
         ? "- El negocio habla como ORGANIZACIÓN (nosotros / en «{$marca['nombre_negocio']}»). PROHIBIDO primera persona individual: nada de 'soy el fundador', 'soy la cara', 'mi nombre es', ni un nombre propio inventado.\n"
         : "- El negocio puede hablar cálido (yo/nosotros), pero NO inventes nombre propio, cargo ni título ('Dr.', 'fundador', 'el creador') que no esté en el perfil.\n";
-    // VOZ restaurada del Creator viejo: tono del dueño + glosario + memoria (el Cerebro).
     $glosario = trim((string)($marca['glosario'] ?? '')) !== ''
         ? "\nVOCABULARIO DEL NEGOCIO (el dueño lo corrigió — RESPÉTALO SIEMPRE):\n" . $marca['glosario'] . "\n" : '';
     if (is_file(__DIR__ . '/memoria.php')) require_once __DIR__ . '/memoria.php';
     $memoria = function_exists('memoria_para_prompt') ? memoria_para_prompt($pdo, $marca_id) : '';
-    return "Eres el CREADOR de contenido del Corillo (NUNCA te presentes como 'el creador'). Escribes captions para redes "
-         . "de microempresas boricuas, con PERSONALIDAD, ritmo y picardía — nunca traducido, nunca 'AI slop', nunca planos. Reglas:\n"
-         . "- Español puertorriqueño AUTÉNTICO. Vocabulario local (bizcocho, no 'tarta'; chavos; nene/nena; etc.).\n"
-         . "- Tono según la voz del negocio. 1-2 emojis máximo.\n"
-         . "- Cierra con un llamado a la acción (según la vía de contacto de abajo) y 3-4 hashtags locales.\n"
+
+    // LA ESENCIA: las palabras REALES del dueño, al frente. Es lo que el escritor debe capturar.
+    $vozReal = trim((string)($marca['voz'] ?? '') ?: (string)($marca['descripcion'] ?? ''));
+    $vozBloque = $vozReal !== ''
+        ? "\nLA VOZ DEL DUEÑO (esta es la ESENCIA del negocio — captúrala en el caption, no la calques literal):\n\"" . mb_substr($vozReal, 0, 600) . "\"\n"
+        : '';
+
+    // HECHOS en UNA línea positiva (antes era un muro de 'NO inventes...'). El grounding duro lo hace el Director.
+    $rawp = $marca['productos'] ?? [];
+    if (is_string($rawp)) $rawp = json_decode($rawp, true) ?: [];
+    $prods = [];
+    foreach ((array)$rawp as $p) { $nom = is_array($p) ? trim((string)($p['nombre'] ?? '')) : trim((string)$p); if ($nom !== '') $prods[] = rtrim($nom, ' :.-'); }
+    $lista  = $prods ? implode(', ', array_slice($prods, 0, 12)) : '';
+    $oferta = trim((string)($marca['ofertas'] ?? ''));
+    $nombre = trim((string)($marca['nombre_negocio'] ?? ''));
+    $hechos = "- HECHOS reales (no inventes otros — el ESTILO es 100% tuyo): "
+        . ($lista !== '' ? "ofrece {$lista}. " : "sin productos declarados: no inventes ninguno. ")
+        . ($oferta !== '' ? "Oferta: {$oferta}. " : "")
+        . "Nombre exacto: «{$nombre}». No inventes sabores, precios ni reseñas que no estén.\n";
+
+    return "Eres el CREADOR de contenido del Corillo (NUNCA te presentes como 'el creador'). Escribes UN caption para redes "
+         . "de una microempresa boricua, con PERSONALIDAD, ritmo y picardía — nunca traducido, nunca 'AI slop', nunca plano. Reglas:\n"
+         . "- Español puertorriqueño AUTÉNTICO y con alma, pero con ORTOGRAFÍA Y GRAMÁTICA IMPECABLES (cero errores, acentos correctos). "
+         . "El sabor boricua vive en las PALABRAS y el RITMO, JAMÁS en escribir mal: escribe 'para', 'nada', 'todo' completos; no butchees palabras ni pongas apóstrofes por todos lados.\n"
+         . "- Vocabulario local natural (bizcocho, no 'tarta'; chavos; nene/nena) — solo si le queda al negocio; NO fuerces jerga callejera.\n"
+         . "- 1-2 emojis máximo. Cierra con un llamado a la acción (según el contacto de abajo) y 3-4 hashtags locales.\n"
          . "- Máximo 60 palabras. Devuelve SOLO el caption, sin comillas ni explicación.\n"
-         . "FRONTERA DE HECHOS (lo único inviolable): los hechos son ciertos; no inventes productos, ofertas, atributos ni datos "
-         . "que no estén en el perfil. CÓMO los cuentas es 100% tuyo.\n"
-         . grounding_producto_instruccion($marca)
+         . $hechos
+         . $vozBloque
          . contacto_instruccion($marca)
          . $identidad
          . $enfoque . "\n"
          . tono_instruccion($marca)
          . $glosario
-         . $memoria
-         . voice_dna_instruccion($dna);
+         . $memoria;
 }
 
 function genoma_caption(PDO $pdo, int $marca_id, array $marca, array $dna, array $direccion, string $habla_como = 'persona', string $revision = '', ?array $tesis = null): string {
@@ -499,6 +522,9 @@ function genoma_post(PDO $pdo, array $genoma, array $direccion, string $run, ?ar
         'nombre_negocio'=>$m['nombre_negocio'], 'productos'=>$m['producto'],
         'ofertas'=>trim((string)($marca['ofertas'] ?? '')), 'pueblo'=>$m['pueblo'],
         'whatsapp'=>$m['whatsapp'], 'instagram'=>trim((string)($marca['instagram'] ?? '')),
+        // La HISTORIA/VOZ del dueño va al Director como HECHO (no invento): sin esto rechazaba
+        // el storytelling grounded y caía al fallback genérico. (fix 2026-07-19)
+        'voz'=>trim((string)($marca['voz'] ?? '') ?: (string)($marca['descripcion'] ?? '')),
     ];
     $t0 = microtime(true); $snap = _genoma_snap($pdo);
     try {
