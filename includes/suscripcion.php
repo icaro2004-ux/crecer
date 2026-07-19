@@ -78,13 +78,23 @@ function marca_es_pagada(PDO $pdo, int $marca_id): bool {
 function puede_generar(?array $su): bool { return suscripcion_activa($su); }
 
 /**
- * ¿Esta cuenta activa en MODO PRUEBA (sin Stripe)? Dos formas:
- *  - CRECER_DEV_ACTIVAR=true en el config  → todas (solo para LOCAL/pruebas).
- *  - CRECER_TEST_EMAILS='a@x.com,b@y.com'   → solo esos emails (seguro en PROD:
- *    los usuarios reales siguen pasando por Stripe).
+ * ¿El entorno es LOCAL/dev? FAIL-SECURE: solo es local si APP_ENV lo dice
+ * EXPLÍCITAMENTE. Si APP_ENV falta, está mal escrito o dice 'prod' → se trata
+ * como PRODUCCIÓN. Así un flag de dev colado en prod NUNCA baja las defensas.
+ */
+function crecer_entorno_local(): bool {
+    return defined('APP_ENV') && in_array(strtolower((string)APP_ENV), ['local','dev','development','testing'], true);
+}
+
+/**
+ * ¿Esta cuenta activa en MODO PRUEBA (sin correo de confirmación y sin Stripe)? Dos formas:
+ *  - CRECER_DEV_ACTIVAR=true  → todas, PERO SOLO en entorno local (crecer_entorno_local()).
+ *    En producción este flag se IGNORA: los usuarios reales SIEMPRE confirman correo y pagan.
+ *  - CRECER_TEST_EMAILS='a@x.com,b@y.com' → solo esos emails, en cualquier entorno (seguro en PROD).
+ *    Este es el mecanismo correcto para cuentas de prueba en producción.
  */
 function activacion_de_prueba(?string $email = null): bool {
-    if (defined('CRECER_DEV_ACTIVAR') && CRECER_DEV_ACTIVAR) return true;
+    if (defined('CRECER_DEV_ACTIVAR') && CRECER_DEV_ACTIVAR && crecer_entorno_local()) return true;
     if ($email !== null && $email !== '' && defined('CRECER_TEST_EMAILS') && CRECER_TEST_EMAILS !== '') {
         $lista = array_map('trim', explode(',', strtolower((string)CRECER_TEST_EMAILS)));
         if (in_array(strtolower($email), $lista, true)) return true;
