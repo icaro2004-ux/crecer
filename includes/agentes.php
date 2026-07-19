@@ -843,6 +843,10 @@ function grounding_producto_instruccion(array $m): string {
     $out .= "- NO inventes afirmaciones factuales no provistas: demanda ('nos lo piden mucho'), escasez o disponibilidad "
           . "limitada ('se llenan rápido', 'quedan pocos'), popularidad, testimonios o reseñas, tradición o historia "
           . "familiar, premios, resultados, promociones, horarios, precios ni teléfonos que no estén en el perfil.\n";
+    $out .= "- El NOMBRE del negocio es EXACTAMENTE «" . trim((string)($m['nombre_negocio'] ?? '')) . "»: úsalo tal cual. NO inventes "
+          . "nombres alternativos, apodos ni lemas ('el verdadero…', 'los reyes de…'), ni hashtags con marcas inventadas; NO menciones "
+          . "otro negocio, letrero, logo ni marca ajena — aunque aparezca en una foto. Los datos del perfil MANDAN sobre cualquier imagen.\n";
+    $out .= "- Los productos/servicios son EXACTAMENTE los listados: NO inventes sabores, variantes, versiones ni presentaciones que no estén ahí.\n";
     $out .= "- SÍ eres libre de crear: imágenes verbales, ritmo, humor, emoción, contraste, curiosidad, personalidad y una "
           . "invitación atractiva — siempre sobre los HECHOS REALES.\n";
     return $out;

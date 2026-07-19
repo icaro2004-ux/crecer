@@ -78,6 +78,20 @@ ok('CONCEDE libertad creativa explícita', has($g,'SÍ eres libre de crear') && 
 $sinProd=$marca; $sinProd['productos']=[];
 ok('sin productos → instruye no inventar', has(grounding_producto_instruccion($sinProd),'no inventes ninguno'));
 
+// ── 7. IDENTIDAD: los datos estructurados MANDAN; la imagen nunca sobrescribe ──
+// (El Creator NO recibe imagen/OCR — prueba estructural — así que el único vector
+//  posible era la alucinación; se cierra por grounding de nombre/sabores.)
+$rf = new ReflectionFunction('genoma_caption');
+$params = array_map(fn($p)=>$p->getName(), $rf->getParameters());
+ok('genoma_caption NO recibe imagen/foto/ocr (imposible sobrescribir por imagen)',
+   !array_intersect($params, ['imagen','foto','ocr','imagenes','vision','imagen_base64']));
+$g2 = grounding_producto_instruccion($marca);
+ok('impone el NOMBRE exacto de la BD', has($g2,'NOMBRE del negocio es EXACTAMENTE') && has($g2,'La Piragua Dulce'));
+ok('prohíbe nombres/apodos/lemas alternativos', has($g2,'nombres alternativos') && has($g2,'apodos'));
+ok('prohíbe marcas/letreros ajenos aunque estén en foto', has($g2,'marca ajena') && has($g2,'foto') && has($g2,'MANDAN sobre cualquier imagen'));
+ok('prohíbe inventar sabores/variantes', has($g2,'sabores') && has($g2,'variantes'));
+ok('el nombre de BD está en el sistema del Creator', has($sis,'La Piragua Dulce'));
+
 echo "\n";
 if ($F===0) echo "✅ TODAS OK — {$P} aserciones, 0 fallos.\n";
 else { echo "❌ {$F} fallo(s) de {$P} (fallidas: ".implode(' · ',$fails).")\n"; exit(1); }
