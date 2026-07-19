@@ -14,8 +14,9 @@ require __DIR__ . '/includes/agentes.php';
 require __DIR__ . '/includes/suscripcion.php';
 require __DIR__ . '/includes/voice_dna.php';   // Business Voice DNA + Director Editorial
 require __DIR__ . '/includes/genoma.php';       // C2 · Business Genome Engine (solo actúa con el flag ON)
-requiere_login();
+requiere_login($pdo);                 // bounce si la sesión apunta a un usuario fantasma
 $usuario = usuario_actual($pdo);
+if (!$usuario) { logout_usuario(); header('Location: /crecer/login.php?expirado=1'); exit; }  // cinturón + tirantes
 $USUARIO_ID = (int)$usuario['id'];
 
 // Si ya tiene una marca, el onboarding ya pasó → al panel (salvo ?otra=1).

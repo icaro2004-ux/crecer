@@ -574,15 +574,20 @@ function genoma_post(PDO $pdo, array $genoma, array $direccion, string $run, ?ar
 function genoma_captions_preview(PDO $pdo, array $genoma, array $direcciones, string $run): array {
     $marca_id = (int)$genoma['marca']['id'];
     try { $marca = leer_marca($pdo, $marca_id); } catch (Throwable $e) { $marca = $genoma['marca']; }
-    $marca['pueblo'] = $genoma['m']['pueblo'] ?? ($marca['pueblo'] ?? '');
+    $m = $genoma['m'];
+    $marca['pueblo'] = $m['pueblo'] ?? ($marca['pueblo'] ?? '');
     $habla = $genoma['habla_como'] ?? 'persona';
+    // Fallback GROUNDED (datos reales, CTA limpio) — JAMÁS la plantilla curada de pm_catalogo.
+    $ctxFB = ['nombre_negocio'=>$m['nombre_negocio'] ?? '', 'productos'=>$m['producto'] ?? '',
+              'pueblo'=>$m['pueblo'] ?? '', 'whatsapp'=>$m['whatsapp'] ?? ''];
     foreach ($direcciones as &$d) {
-        try {
-            $cap = genoma_caption($pdo, $marca_id, $marca, $genoma['dna'], $d, $habla, '', null);
-            $d['caption'] = (trim($cap) !== '') ? $cap : _limpiar_cta_rota((string)($d['caption'] ?? ''));
-        } catch (Throwable $e) {
-            $d['caption'] = _limpiar_cta_rota((string)($d['caption'] ?? ''));   // fallback curado, CTA sin romper
+        $cap = '';
+        for ($try = 1; $try <= 2 && $cap === ''; $try++) {            // reintenta la IA antes de rendirse
+            try { $cap = trim(genoma_caption($pdo, $marca_id, $marca, $genoma['dna'], $d, $habla, '', null)); }
+            catch (Throwable $e) { $cap = ''; }
         }
+        // El molde curado NO se usa nunca como preview. IA, o fallback grounded — punto.
+        $d['caption'] = _limpiar_cta_rota($cap !== '' ? $cap : contenido_fallback_seguro($ctxFB, $genoma['dna']));
     }
     unset($d);
     return $direcciones;

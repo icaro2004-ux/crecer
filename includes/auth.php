@@ -24,10 +24,20 @@ function usuario_actual(PDO $pdo) {
 function esta_logueado(): bool { return !empty($_SESSION['usuario_id']); }
 
 /** Exige sesión; si no, manda al login (guardando a dónde quería ir). */
-function requiere_login(): void {
+function requiere_login(?PDO $pdo = null): void {
     if (empty($_SESSION['usuario_id'])) {
         $_SESSION['after_login'] = $_SERVER['REQUEST_URI'] ?? '/crecer/panel/index.php';
         header('Location: /crecer/login.php');
+        exit;
+    }
+    // Sesión FANTASMA: la variable de sesión existe pero el usuario fue borrado o
+    // desactivado en la BD. Sin este chequeo, el código sigue con un usuario nulo
+    // → usuario_id=0 → revienta más adelante (ej. FK 1452 al crear la marca en el
+    // onboarding). Cerramos la sesión muerta y mandamos a login limpio. (fix 2026-07-19)
+    if ($pdo === null && isset($GLOBALS['pdo']) && $GLOBALS['pdo'] instanceof PDO) $pdo = $GLOBALS['pdo'];
+    if ($pdo instanceof PDO && usuario_actual($pdo) === null) {
+        logout_usuario();
+        header('Location: /crecer/login.php?expirado=1');
         exit;
     }
 }
