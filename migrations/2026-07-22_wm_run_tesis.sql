@@ -1,0 +1,27 @@
+-- ============================================================
+--  Creative Thesis (ADR-0003) — Paso 3: BINDING ejecución ↔ tesis
+--
+--  Añade crecer_wm_run.tesis_id: el vínculo EXPLÍCITO entre una ejecución
+--  lógica (run) y el activo Creative Thesis que se decidió para ella.
+--
+--  POR QUÉ AQUÍ (justificación del cambio de esquema):
+--   - crecer_wm_run ya ES la capa de orquestación/ejecución: identidad
+--     inequívoca (run_uid), idempotencia entre requests (acquire atómico
+--     procesando→generando) y recuperación (doble-clic/refresh reusan el run).
+--   - La reutilización e idempotencia de la tesis pertenecen a la ORQUESTACIÓN
+--     (ADR-0003). El lugar natural del binding es la fila de ejecución, no la
+--     capacidad (crecer_tesis es un activo puro que NO conoce ejecuciones) ni
+--     el Creator. Guardar tesis_id aquí hace el binding visible y auditable, y
+--     evita depender de memoria en un closure para idempotencia entre requests.
+--
+--  Nullable: una ejecución con Feature Flag OFF, o cuya tesis se abstuvo pero
+--  no se entregó al Creator, puede no tener tesis accepted; el binding apunta a
+--  la fila de crecer_tesis realmente producida (accepted o abstained) o queda
+--  NULL si Creative Thesis no corrió (flag OFF).
+--
+--  Inerte con flag OFF: la columna no altera ningún flujo previo.
+--  Reversible:  ALTER TABLE crecer_wm_run DROP COLUMN tesis_id;
+--  Idempotente (ADD COLUMN IF NOT EXISTS — MariaDB). Correr en phpMyAdmin y local.
+-- ============================================================
+ALTER TABLE crecer_wm_run
+  ADD COLUMN IF NOT EXISTS tesis_id BIGINT UNSIGNED NULL AFTER angulo_clave;

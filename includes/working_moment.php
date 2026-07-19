@@ -91,7 +91,21 @@ function wm_generar(PDO $pdo, array $marca, string $run_uid): array {
         foreach (($prep['direcciones'] ?? []) as $d) if (($d['id'] ?? '') === $run['angulo_clave']) { $direccion = $d; break; }
         if (!$direccion) throw new RuntimeException('sin direccion en pm_preparado');
         $genoma  = genoma_construir($pdo, $marca, $run_uid);           // reusa DNA (0 llamadas)
-        $ed      = pipeline_post($pdo, $genoma, $direccion, $run_uid); // creador + director + fallback curado
+        // ── Creative Thesis (ADR-0003, Paso 3): decide/recupera la tesis ANTES del Creator ──
+        // El BINDING ejecución↔tesis (crecer_wm_run.tesis_id) se publica ATÓMICAMENTE dentro de
+        // tesis_publicar (INSERT crecer_tesis + UPDATE del binding en una sola transacción). Aquí
+        // solo hay un fast-path de recuperación (si el run ya trae el binding, no re-decide).
+        $tesis = null;
+        if (tesis_activa()) {
+            if (!empty($run['tesis_id'])) {
+                $tesis = tesis_cargar($pdo, (int)$run['tesis_id']);      // recuperación: cero inferencia
+            } else {
+                $dec   = tesis_orquestar($pdo, $genoma, $direccion, $run_uid, $prep);  // decide (fuera de tx) + publica (tx corta)
+                $tesis = $dec['envelope'];                               // null si el proveedor falló (error → re-intentable)
+            }
+        }
+        $entregable = ($tesis && ($tesis['status'] ?? '') === 'accepted') ? $tesis : null;  // solo accepted llega al Creator
+        $ed      = pipeline_post($pdo, $genoma, $direccion, $run_uid, $entregable); // creador (defiende) + director + fallback
         $caption = (string)($ed['contenido'] ?? '');
         $cid = (int)$pdo->query("SELECT id FROM crecer_contenido WHERE marca_id=" . $marca_id . " ORDER BY id DESC LIMIT 1")->fetchColumn();
         if ($cid && $caption !== '') $pdo->prepare("UPDATE crecer_contenido SET caption=?, updated_at=NOW() WHERE id=?")->execute([$caption, $cid]);

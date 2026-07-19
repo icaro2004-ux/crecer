@@ -19,6 +19,7 @@ require_once __DIR__ . '/ia.php';
 require_once __DIR__ . '/agentes.php';
 require_once __DIR__ . '/voice_dna.php';
 require_once __DIR__ . '/primer_minuto.php';
+require_once __DIR__ . '/creative_thesis.php';
 
 // Presupuestos de seguridad (medir antes de tocar). Estabilidad > sofisticación.
 if (!defined('GENOMA_MAX_REGEN'))       define('GENOMA_MAX_REGEN', 2);
@@ -223,10 +224,225 @@ function genoma_observaciones(PDO $pdo, array $genoma, string $run, int $max = 3
 // Cuando el Corillo aprenda del negocio con el tiempo, la Potencial podrá demostrar CRITERIO
 // ("tus clientes mencionan la rapidez; vale la pena destacarla"). Ese día no es hoy.
 
-// Creador C2: caption del primer post según la DIRECCIÓN elegida + Voice DNA. Reusa reglas de C1.
-function genoma_caption(PDO $pdo, int $marca_id, array $marca, array $dna, array $direccion, string $habla_como = 'persona', string $revision = ''): string {
-    $ctx = marca_contexto($marca);
+// ── ORQUESTACIÓN de Creative Thesis (ADR-0003, Paso 3) ───────────────────────
+//  Creative Thesis (includes/creative_thesis.php) es una capacidad AISLADA: no
+//  conoce BD, run_uid, tesis_id, persistencia, reintentos, telemetría, Creator ni
+//  Director. TODO eso vive AQUÍ, en la orquestación del pipeline. La orquestación:
+//   (a) arma la vista del Genome y el brief CERRADO desde datos que YA existen;
+//   (b) inyecta el PROVEEDOR DE INFERENCIA (mecanismo: un callable sobre ia_ejecutar);
+//   (c) invoca la capacidad UNA vez por ejecución lógica;
+//   (d) persiste el activo (crecer_tesis) EXACTAMENTE como salió (sin copy/prompts);
+//   (e) el binding ejecución↔tesis_id vive en crecer_wm_run (working_moment.php),
+//       no aquí dentro y NUNCA dentro de la capacidad ni del Creator.
+
+// ¿Debe correr Creative Thesis? Solo con el Feature Flag ON. Con OFF: no corre,
+// no se crea tesis, no se toca el prompt del Creator, no se añade latencia.
+function tesis_activa(): bool { return defined('VOICE_DNA_ONBOARDING_ENABLED') && VOICE_DNA_ONBOARDING_ENABLED; }
+
+// Vista del Genome que consume la capacidad (SOLO comprensión; nada de ejecución).
+function _tesis_genome_view(array $genoma, array $prep): array {
+    $m = $genoma['m']; $marca = $genoma['marca'];
+    $prods = array_map(fn($x) => is_array($x) ? trim((string)($x['nombre'] ?? '')) : trim((string)$x),
+             (array)(json_decode((string)($marca['productos'] ?? ''), true) ?: []));
+    $prods = array_values(array_filter($prods));
+    $obs = [];
+    foreach (($prep['observaciones'] ?? []) as $o) {
+        $t = is_array($o) ? (string)($o['texto'] ?? '') : (string)$o;
+        if ($t !== '') $obs[] = ['texto' => $t, 'tipo' => (string)($o['tipo'] ?? 'comprension')];
+    }
+    return [
+        'nombre'        => (string)($m['nombre_negocio'] ?? ''),
+        'pueblo'        => (string)($m['pueblo'] ?? ''),
+        'productos'     => $prods,
+        'voz'           => trim((string)($marca['voz'] ?? '') ?: (string)($marca['descripcion'] ?? '')),
+        'descripcion'   => (string)($marca['descripcion'] ?? ''),
+        'dna'           => ['ejes' => (array)($genoma['dna']['ejes'] ?? [])],
+        'observaciones' => $obs,
+    ];
+}
+
+// El ENCARGO (brief CERRADO) desde datos ya presentes en el pipeline. No inventa nada.
+function _tesis_brief(PDO $pdo, int $marca_id, array $direccion): array {
+    $recientes = [];
+    try {
+        $st = $pdo->prepare("SELECT angulo FROM crecer_tesis WHERE marca_id=? AND status='accepted' AND angulo IS NOT NULL ORDER BY created_at DESC, tesis_id DESC LIMIT 5");
+        $st->execute([$marca_id]);
+        $recientes = array_values(array_filter($st->fetchAll(PDO::FETCH_COLUMN)));
+    } catch (Throwable $e) { /* sin historial → sin restricción de variedad */ }
+    return ct_brief([
+        'objetivo'          => (string)($direccion['id'] ?? ''),   // objetivo estratégico de la pieza (arquetipo elegido, upstream)
+        'medio'             => 'post',                              // Working Moment = post (solo contexto de encuadre)
+        'angulos_recientes' => $recientes,                         // variedad: no repetir ángulos recientes de la marca
+        'hechos_prohibidos' => [],                                 // ninguno disponible hoy en el pipeline (no inventar)
+    ]);
+}
+
+// Persiste el activo EXACTAMENTE como salió (envelope validado). NO guarda copy,
+// prompts, respuestas crudas, revisiones ni estado de Director/Working Moment.
+function tesis_persistir(PDO $pdo, int $marca_id, array $env): int {
+    $acc = ($env['status'] ?? '') === 'accepted';
+    $pdo->prepare("INSERT INTO crecer_tesis
+        (marca_id,status,contrato_version,angulo,idea_central,audiencia,resonancia,contraste,confianza,evidencia,restricciones_usadas,motivo,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NOW())")
+      ->execute([
+        $marca_id,
+        (string)($env['status'] ?? 'abstained'),
+        (string)($env['contrato_version'] ?? CT_CONTRATO_VERSION),
+        $acc ? ($env['angulo']       ?? null) : null,
+        $acc ? ($env['idea_central'] ?? null) : null,
+        $acc ? ($env['audiencia']    ?? null) : null,
+        $acc ? ($env['resonancia']   ?? null) : null,
+        $acc ? ($env['contraste']    ?? null) : null,
+        $acc ? ($env['confianza']    ?? null) : null,
+        $acc ? json_encode($env['evidencia'] ?? [], JSON_UNESCAPED_UNICODE) : null,
+        json_encode($env['restricciones_usadas'] ?? [], JSON_UNESCAPED_UNICODE),
+        $acc ? null : (string)($env['motivo'] ?? ''),
+      ]);
+    return (int)$pdo->lastInsertId();
+}
+
+// Recupera un activo persistido a la forma del envelope (para reuso idempotente).
+function tesis_cargar(PDO $pdo, int $tesis_id): ?array {
+    $st = $pdo->prepare("SELECT * FROM crecer_tesis WHERE tesis_id=?");
+    $st->execute([$tesis_id]);
+    $r = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$r) return null;
+    if ($r['status'] === 'accepted') {
+        return [
+            'status' => 'accepted', 'contrato_version' => (string)$r['contrato_version'],
+            'idea_central' => $r['idea_central'], 'angulo' => $r['angulo'],
+            'audiencia' => $r['audiencia'], 'resonancia' => $r['resonancia'], 'contraste' => $r['contraste'],
+            'confianza' => $r['confianza'],
+            'evidencia' => json_decode((string)$r['evidencia'], true) ?: [],
+            'restricciones_usadas' => json_decode((string)$r['restricciones_usadas'], true) ?: [],
+        ];
+    }
+    return [
+        'status' => 'abstained', 'contrato_version' => (string)$r['contrato_version'],
+        'motivo' => $r['motivo'], 'restricciones_usadas' => json_decode((string)$r['restricciones_usadas'], true) ?: [],
+    ];
+}
+
+// Proveedor de inferencia REAL (mecanismo actual: ia_ejecutar). La capacidad no lo conoce;
+// la orquestación lo inyecta. crecer_ia_log registra costo/contabilidad, NO gobierna estado.
+function _tesis_inferidor_real(PDO $pdo, int $marca_id): callable {
+    return function (array $req) use ($pdo, $marca_id): string {
+        $r = ia_ejecutar($pdo, 'creative_thesis', 'Decidir la tesis', $req['prompt'],
+            array_merge($req['opts'], ['marca_id' => $marca_id,
+                'mock_texto' => '{"status":"abstained","motivo":"sin proveedor de inferencia real (mock)"}']));
+        return (string)$r['texto'];
+    };
+}
+
+// ── DECIDIR (inferencia, FUERA de toda transacción) ──────────────────────────
+// Arma vista+brief, inyecta el proveedor, invoca la capacidad y CLASIFICA desde el
+// contrato observable por la orquestación (NO desde crecer_ia_log):
+//   · el proveedor lanza / falla el transporte → 'error' (fallo de infraestructura);
+//   · envelope accepted  → 'accepted';
+//   · envelope abstained → 'abstained' (incluye no-parseable / confianza baja / evidencia
+//     inválida: son ABSTENCIONES correctas de la capacidad, no errores).
+// Devuelve ['envelope'=>envelope, 'clasificacion'=>'accepted|abstained|error']. NO persiste.
+function tesis_decidir(PDO $pdo, array $genoma, array $direccion, array $prep, ?callable $inferir = null): array {
+    $marca_id = (int)$genoma['marca']['id'];
+    $G       = _tesis_genome_view($genoma, $prep);
+    $brief   = _tesis_brief($pdo, $marca_id, $direccion);
+    $inferir = $inferir ?? _tesis_inferidor_real($pdo, $marca_id);
+    // La orquestación observa el fallo del proveedor en SU propia frontera (no vía ia_log).
+    $proveedor_fallo = false;
+    $observado = function (array $req) use ($inferir, &$proveedor_fallo): string {
+        try { return $inferir($req); }
+        catch (Throwable $e) { $proveedor_fallo = true; throw $e; }   // la capacidad igual lo convierte en abstención
+    };
+    $env    = creative_thesis($G, $brief, $observado);
+    $clasif = $proveedor_fallo ? 'error' : (string)$env['status'];
+    return ['envelope' => $env, 'clasificacion' => $clasif];
+}
+
+// ── PUBLICAR (transacción CORTA, atómica; sin inferencia dentro) ─────────────
+// Publica el activo + el binding como una sola operación, o reutiliza el ya vinculado.
+//   1) bloquea/relee la fila de crecer_wm_run (FOR UPDATE);
+//   2) re-comprueba tesis_id;
+//   3) si existe → carga y reutiliza, SIN insertar el candidato;
+//   4) si no → INSERT crecer_tesis + UPDATE crecer_wm_run.tesis_id en la MISMA tx;
+//   5) commit de ambas juntas;  6) rollback de ambas ante cualquier fallo.
+// Garantía: nunca hay commit con tesis insertada pero run sin binding; una carrera tardía
+// puede desperdiciar la inferencia en memoria, pero no publica un segundo activo.
+function tesis_publicar(PDO $pdo, int $marca_id, string $run_uid, array $envelope): array {
+    $pdo->beginTransaction();
+    try {
+        $st = $pdo->prepare("SELECT tesis_id FROM crecer_wm_run WHERE run_uid=? FOR UPDATE");
+        $st->execute([$run_uid]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$row) throw new RuntimeException("run inexistente para binding: {$run_uid}");
+        if (!empty($row['tesis_id'])) {                        // ya vinculado ⇒ reutiliza, no inserta
+            $existente = tesis_cargar($pdo, (int)$row['tesis_id']);
+            $pdo->commit();
+            return ['tesis_id' => (int)$row['tesis_id'], 'envelope' => $existente, 'reused' => true];
+        }
+        $tid = tesis_persistir($pdo, $marca_id, $envelope);     // INSERT + UPDATE en la misma tx
+        $pdo->prepare("UPDATE crecer_wm_run SET tesis_id=?, updated_at=NOW() WHERE run_uid=?")->execute([$tid, $run_uid]);
+        $pdo->commit();
+        return ['tesis_id' => $tid, 'envelope' => $envelope, 'reused' => false];
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();            // rollback de ambas (tesis + binding)
+        throw $e;
+    }
+}
+
+// ── ORQUESTAR: decide (fuera de tx) → publica (tx corta) → telemetría honesta ──
+// Devuelve ['envelope'=>?array, 'tesis_id'=>?int, 'clasificacion'=>str, 'reused'=>bool].
+// 'error' del proveedor NO se publica (no es una decisión); el run queda re-intentable.
+// $inferir inyectable para pruebas (sin depender de crecer_ia_log).
+function tesis_orquestar(PDO $pdo, array $genoma, array $direccion, string $run, array $prep, ?callable $inferir = null): array {
+    $marca_id = (int)$genoma['marca']['id'];
+    $t0 = microtime(true); $snap = _genoma_snap($pdo);
+    $d   = tesis_decidir($pdo, $genoma, $direccion, $prep, $inferir);   // inferencia FUERA de transacción
+    $env = $d['envelope']; $clasif = $d['clasificacion'];
+    $tel = _genoma_delta($pdo, $snap);                                  // costo/contabilidad (NO gobierna estado)
+
+    // EXCEPCIÓN: fallo real del proveedor ANTES de producir envelope → 'error'. No se publica,
+    // no se crea ni vincula activo, el run queda re-intentable. (No hay candidato que descartar.)
+    if ($clasif === 'error') {
+        _genoma_registrar($pdo, $run, $marca_id, 'tesis', false, (microtime(true)-$t0)*1000, $tel, 'error', 'fallo del proveedor de inferencia');
+        return ['envelope' => null, 'tesis_id' => null, 'clasificacion' => 'error', 'reused' => false];
+    }
+
+    // $clasif / $env = resultado CANDIDATO (inferencia local; aún NO es la verdad publicada).
+    $pub = tesis_publicar($pdo, $marca_id, $run, $env);                 // publica candidato, o reutiliza el ya vinculado
+
+    // ── RESULTADO EFECTIVO: única fuente de verdad para el resto del pipeline ──
+    // Es la tesis realmente vinculada al run: la insertada por este proceso (reused=false) o la
+    // existente recuperada en el re-check transaccional (reused=true). En una carrera tardía el
+    // candidato puede diferir del efectivo; SIEMPRE manda el efectivo. El candidato perdedor NO se
+    // persiste ni se expone: solo queda como nota en telemetría.
+    $efectivo = $pub['envelope'];
+    $clasif_ef = (string)$efectivo['status'];                          // accepted | abstained (del activo vinculado)
+    $nota = ($clasif_ef === 'accepted') ? ('angulo=' . (string)($efectivo['angulo'] ?? '')) : ('motivo=' . mb_substr((string)($efectivo['motivo'] ?? ''), 0, 120));
+    $trazaCand = $pub['reused'] ? " candidato_descartado={$clasif}" : '';   // honesto: qué decidió este proceso vs. qué quedó
+    _genoma_registrar($pdo, $run, $marca_id, 'tesis', $clasif_ef === 'accepted', (microtime(true)-$t0)*1000, $tel, $clasif_ef,
+        "tesis_id={$pub['tesis_id']} reused=" . ($pub['reused'] ? 1 : 0) . "{$trazaCand} {$nota}");
+    // Devuelve SOLO el efectivo (nunca el candidato descartado).
+    return ['envelope' => $efectivo, 'tesis_id' => $pub['tesis_id'], 'clasificacion' => $clasif_ef, 'reused' => $pub['reused']];
+}
+
+// Directiva de enfoque del Creador. Con tesis accepted → DEFIENDE esa idea (no elige).
+// Sin tesis (null) → enfoque legado, PROMPT byte-idéntico al de antes (compat/flag OFF).
+function _creador_directiva(array $direccion, ?array $tesis): string {
     $enfoque = "Enfoque de este primer post: «{$direccion['titulo']}» — {$direccion['recomendacion']}";
+    if ($tesis !== null && ($tesis['status'] ?? '') === 'accepted' && trim((string)($tesis['idea_central'] ?? '')) !== '') {
+        $enfoque .= "\nIDEA A DEFENDER (la decidió Creative Thesis — NO la cambies, NO elijas otra, NO añadas ideas nuevas): «"
+                  . trim((string)$tesis['idea_central']) . "»"
+                  . (!empty($tesis['contraste']) ? " · " . trim((string)$tesis['contraste']) : '')
+                  . ". El caption debe sostener SOLO esa idea (ángulo: " . (string)($tesis['angulo'] ?? 'otro') . ").";
+    }
+    return $enfoque;
+}
+
+// Creador C2: caption del primer post según la DIRECCIÓN elegida + Voice DNA. Reusa reglas de C1.
+// Con $tesis accepted, el Creador pasa de "elige y escribe" a "defiende una tesis recibida".
+function genoma_caption(PDO $pdo, int $marca_id, array $marca, array $dna, array $direccion, string $habla_como = 'persona', string $revision = '', ?array $tesis = null): string {
+    $ctx = marca_contexto($marca);
+    $enfoque = _creador_directiva($direccion, $tesis);
     // La identidad (persona vs organización) la decide el GENOMA, no el prompt.
     $identidad = $habla_como === 'organizacion'
         ? "- El negocio habla como ORGANIZACIÓN (nosotros / en «{$marca['nombre_negocio']}»). PROHIBIDO primera persona individual: nada de 'soy el fundador', 'soy la cara', 'mi nombre es', ni un nombre propio inventado.\n"
@@ -249,7 +465,10 @@ function genoma_caption(PDO $pdo, int $marca_id, array $marca, array $dna, array
 }
 
 // ── ETAPA 4-5-6 · Primer post → Director → Resultado (con fallback curado) ──
-function genoma_post(PDO $pdo, array $genoma, array $direccion, string $run): array {
+// $tesis (opcional): activo Creative Thesis accepted que el Creador DEFIENDE. Se decide
+// UNA vez arriba (orquestación) y se captura en el closure → la MISMA idea llega a todos
+// los reintentos del Director (solo cambia la revisión editorial). null → ruta de compat.
+function genoma_post(PDO $pdo, array $genoma, array $direccion, string $run, ?array $tesis = null): array {
     $marca_id = (int)$genoma['marca']['id'];
     $marca = leer_marca($pdo, $marca_id) ?: $genoma['marca'];  // productos parseado (como en C1)
     $m = $genoma['m'];
@@ -261,8 +480,10 @@ function genoma_post(PDO $pdo, array $genoma, array $direccion, string $run): ar
     $t0 = microtime(true); $snap = _genoma_snap($pdo);
     try {
         $habla = $genoma['habla_como'] ?? 'persona';
+        // El closure captura $tesis: el Director puede regenerar N veces, pero la idea
+        // NO cambia — Creative Thesis NO se vuelve a invocar; solo cambia $instr (revisión).
         $ed = generar_con_director($pdo, $marca_id,
-            fn($instr) => genoma_caption($pdo, $marca_id, $marca, $genoma['dna'], $direccion, $habla, $instr),
+            fn($instr) => genoma_caption($pdo, $marca_id, $marca, $genoma['dna'], $direccion, $habla, $instr, $tesis),
             $genoma['dna'], $ctxED, ['max_regeneraciones'=>GENOMA_MAX_REGEN]);
         $tel = _genoma_delta($pdo, $snap);
         // Desenlace observable del Director.
@@ -292,6 +513,8 @@ function pipeline_preparar(PDO $pdo, array $marca, ?string $run = null): array {
     return ['run'=>$run, 'genoma'=>$genoma, 'direcciones'=>$direcciones, 'observaciones'=>$observaciones];
 }
 // Generar el post de la dirección elegida (etapas 4-6): corre DETRÁS de la escena, al elegir.
-function pipeline_post(PDO $pdo, array $genoma, array $direccion, string $run): array {
-    return genoma_post($pdo, $genoma, $direccion, $run);
+// $tesis (opcional): la orquestación (working_moment.php) entrega aquí la tesis accepted que
+// el Creador debe defender; null cuando el flag está OFF o la tesis se abstuvo (ruta de compat).
+function pipeline_post(PDO $pdo, array $genoma, array $direccion, string $run, ?array $tesis = null): array {
+    return genoma_post($pdo, $genoma, $direccion, $run, $tesis);
 }
