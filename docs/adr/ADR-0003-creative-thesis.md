@@ -1,7 +1,13 @@
 # ADR-0003 — Creative Thesis
 
 ## Estado
-Accepted
+Accepted · **Implementado** (ver Addendum de implementación).
+
+## Addendum de implementación (post-Accepted)
+> Esta sección describe la **realidad del sistema** y supera las notas de "Próximos pasos" que quedaron obsoletas.
+- **Estado:** implementado y en el repo — capacidad aislada `includes/creative_thesis.php`; orquestación en `includes/genoma.php` (`tesis_decidir` → `tesis_publicar` → `tesis_orquestar`); persistencia `crecer_tesis` (migración 2026-07-21) + binding `crecer_wm_run.tesis_id` (2026-07-22). Commits `8358e3b` (modelo), `6c7ccb7` (módulo), `454e474` (integración al pipeline). Inerte tras `VOICE_DNA_ONBOARDING_ENABLED` (OFF en prod).
+- **Arquitectura real = DOS llamadas independientes** (Creative Thesis decide la idea · Creator desarrolla el contenido), decidida por el fundador **desde el día 1** por respeto a la separación de responsabilidades. Esto **supera** la nota de "Próximos pasos" que sugería empezar por single-call: el single-call quedó descartado.
+- **Fidelidad: medición DIFERIDA** — no se construye evaluador de fidelidad todavía; se pospone hasta disponer de datos reales de usuarios reales, y el método se decidirá entonces con evidencia (ver Métricas).
 
 ## Contexto
 Ya tenemos dos capacidades cerradas: **Business Genome** (comprender el negocio de forma
@@ -120,7 +126,7 @@ Su **única** responsabilidad: **decidir cuál es la idea que merece ser desarro
 - **Diversidad de ángulos**: ángulos distintos por negocio sobre N piezas (conteo/entropía).
 - **Grounding**: % de tesis con evidencia del Genome; tasa de rechazo del Director (no debe subir).
 - **Aprobación directa del Creator**: ≥ 80% (idealmente sube, porque el copy va enfocado).
-- **Fidelidad**: % de piezas cuyo copy realmente defiende su tesis (chequeo).
+- **Fidelidad**: % de piezas cuyo copy realmente defiende su tesis (chequeo). **[DIFERIDO]** — no existe evaluador de fidelidad y es intencional: la medición se pospone hasta disponer de datos reales de usuarios reales; el método se decidirá entonces con evidencia, no con suposiciones.
 - **Costo/latencia por tesis** (meta: mínima; idealmente absorbida en el presupuesto de generación).
 - (Futuro, señal real de negocio: guardado/scroll-stop/respuesta cuando se publique.)
 
@@ -150,8 +156,7 @@ Su **única** responsabilidad: **decidir cuál es la idea que merece ser desarro
 - Implementar Creative Thesis como **módulo propio** (medium-agnóstico), no dentro de `genoma_caption`,
   para que lo consuman el Creator de posts y, después, generadores de anuncios/emails/páginas.
 - Primera integración: el Creator de posts (Working Moment) consume la tesis y la defiende.
-- Empezar por **single-call** (decidir→escribir en una llamada, impacto y costo mínimos); escalar a
-  **dos llamadas** (tesis aparte) solo si la medición de fidelidad lo exige.
+- ~~Empezar por single-call (decidir→escribir en una llamada); escalar a dos llamadas solo si la medición lo exige.~~ **[SUPERADO — ver Addendum]:** se implementó con **dos llamadas independientes desde el día 1** (decisión del fundador); el single-call quedó descartado por violar la separación de responsabilidades.
 - Persistir `tesis`/`angulo`/`evidencia` (evidencia + variedad), sin tocar Genome/Director/pipeline.
 
 ## Filosofía del producto
