@@ -1552,6 +1552,7 @@ $cf = [
     if(!ajuste) ta.value=''; ta.placeholder='💭 El Diseñador está pensando la idea…';
     if(b){ b.disabled=true; }
     var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','sugerir_arte'); fd.append('id',wizId);
+    fd.append('estilo_arte', (document.querySelector('#wiz-estilo input:checked')||{}).value||'realista');
     if(ajuste) fd.append('ajuste',ajuste); else if(prev) fd.append('evitar',prev);   // "otra idea" → distinta a la anterior
     fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
       if(b){ b.disabled=false; }
@@ -1610,11 +1611,14 @@ $cf = [
       }).catch(function(){ b.disabled=false; b.textContent='Guardar'; toast('Error de conexión.'); });
     });
     document.getElementById('wiz-arte-sug').addEventListener('click', function(){ wizSugerirArte(); });
+    // Cambiar el estilo → re-sugiere la idea acorde al estilo elegido (barato, es texto).
+    document.querySelectorAll('#wiz-estilo input').forEach(function(r){ r.addEventListener('change', function(){ wizSugerirArte(); }); });
     g.addEventListener('click', function(){
       if(!wizId) return;
       loaderShow('Generando tu imagen…', ['Imaginando la escena…','Ajustando la luz y el encuadre…','Aplicando tu logo de marca…','Puliendo texturas y detalles…','Casi lista…']);
       var idea=document.getElementById('wiz-arteidea').value.trim();
       var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','arte'); fd.append('id',wizId); fd.append('con_logo','1');
+      fd.append('estilo_arte', (document.querySelector('#wiz-estilo input:checked')||{}).value||'realista');
       if(idea) fd.append('instrucciones', idea);   // genera con la idea que ves/ajustaste
       fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
         loaderHide(); if(!d.ok){ wizArteErr(d); return; } wizPintaArte(d.img);
@@ -2132,6 +2136,13 @@ $cf = [
           <button type="button" class="fbnew" id="wiz-capcancel">Cancelar</button>
         </div>
         <div class="art-note">Si cambias una palabra o el tono, la IA aprende tu preferencia para los próximos posts.</div>
+      </div>
+      <label class="fl" style="margin-top:4px"><?= ico('palette') ?> Estilo del arte <span style="color:var(--muted);font-weight:500">(cambia cómo se ve — la idea se ajusta sola)</span></label>
+      <div class="chips" id="wiz-estilo" style="margin-bottom:8px">
+        <label class="chip-opt"><input type="radio" name="wiz_estilo_arte" value="realista" checked><span>📷 Realista</span></label>
+        <label class="chip-opt"><input type="radio" name="wiz_estilo_arte" value="creativo"><span>🎨 Creativo</span></label>
+        <label class="chip-opt"><input type="radio" name="wiz_estilo_arte" value="fantasia"><span>✨ Fantasía</span></label>
+        <label class="chip-opt"><input type="radio" name="wiz_estilo_arte" value="ilustracion"><span>🖌️ Ilustración</span></label>
       </div>
       <label class="fl" style="margin-top:4px"><?= ico('lightbulb') ?> Idea para la imagen <span style="color:var(--muted);font-weight:500">(el Diseñador la propone — ajústala a tu gusto)</span></label>
       <textarea id="wiz-arteidea" rows="3" placeholder="El Diseñador está pensando la idea…"></textarea>
