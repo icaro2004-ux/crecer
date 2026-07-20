@@ -150,11 +150,18 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
   .cfg-neg{font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--ink-soft);letter-spacing:-.01em}
 
   .cfg-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
-  .cfg-tabs a{display:inline-flex;align-items:center;gap:7px;text-decoration:none;font-family:'Poppins',sans-serif;font-weight:600;font-size:13.5px;
-    color:var(--muted);padding:9px 15px;border-radius:12px;border:1.5px solid var(--line);background:#fff;transition:.15s}
-  .cfg-tabs a svg{width:16px;height:16px}
-  .cfg-tabs a.on{border-color:transparent;background:linear-gradient(135deg,var(--teal),var(--teal-700));color:#fff;box-shadow:0 8px 20px -10px rgba(0,164,159,.45)}
-  .cfg-tabs a.on svg{color:#fff}
+  .cfg-tab{display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-family:'Poppins',sans-serif;font-weight:600;font-size:13.5px;
+    color:var(--muted);padding:9px 15px;border-radius:12px;border:1.5px solid var(--line);background:#fff;transition:.18s var(--ease)}
+  .cfg-tab svg{width:16px;height:16px}
+  .cfg-tab:hover{border-color:color-mix(in srgb,var(--teal) 40%,var(--line))}
+  .cfg-tab.on{border-color:transparent;background:linear-gradient(135deg,var(--teal),var(--teal-700));color:#fff;box-shadow:0 8px 20px -10px rgba(0,164,159,.45)}
+  .cfg-tab.on svg{color:#fff}
+
+  /* ── MOLDE: ventana limpia + slide lateral ── una sección por pantalla, se desliza al lado (sin recargar, con swipe). */
+  .cfg-view{overflow:hidden;transition:height .38s var(--ease)}
+  .cfg-track{display:flex;align-items:flex-start;transition:transform .38s var(--ease);will-change:transform}
+  .cfg-sec{flex:0 0 100%;min-width:0;padding:2px}     /* cada sección ocupa el ancho completo del viewport */
+  @media (prefers-reduced-motion: reduce){.cfg-view,.cfg-track{transition:none}}
 
   .cfg-card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:22px;margin-bottom:16px;box-shadow:var(--shadow-sm)}
   .cfg-card h2{font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--ink-soft);letter-spacing:-.01em;margin:0 0 4px;display:flex;align-items:center;gap:9px}
@@ -185,9 +192,9 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
 <div class="cfg-wrap">
   <div class="cfg-top"><span class="cfg-neg">Configuración</span></div>
 
-  <div class="cfg-tabs">
+  <div class="cfg-tabs" role="tablist">
     <?php foreach ($tabs as $k=>$t): ?>
-      <a href="<?= $turl($k) ?>" class="<?= $tab===$k?'on':'' ?>"><?= $t[0] ?> <?= $h($t[1]) ?></a>
+      <button type="button" class="cfg-tab <?= $tab===$k?'on':'' ?>" data-sec="<?= $k ?>" role="tab"><?= $t[0] ?> <span><?= $h($t[1]) ?></span></button>
     <?php endforeach; ?>
   </div>
 
@@ -195,7 +202,8 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
   <?php if ($okpass): ?><div class="cfg-msg ok"><?= ico('check-circle') ?>Contraseña actualizada.</div><?php endif; ?>
   <?php if ($error): ?><div class="cfg-msg err">⚠️ <?= $h($error) ?></div><?php endif; ?>
 
-  <?php if ($tab === 'negocio'): ?>
+  <div class="cfg-view" id="cfgView"><div class="cfg-track" id="cfgTrack">
+  <section class="cfg-sec" data-sec="negocio">
     <form method="post" action="<?= $turl('negocio') ?>">
       <?= csrf_field() ?><input type="hidden" name="accion" value="negocio">
       <div class="cfg-card">
@@ -315,7 +323,8 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
       </div>
     </form>
 
-  <?php elseif ($tab === 'redes'): ?>
+  </section>
+  <section class="cfg-sec" data-sec="redes">
     <div class="cfg-card">
       <h2>Tus redes <?= ico('pin') ?></h2>
       <p class="sub">Conecta Instagram y Facebook para que el corillo publique solo los posts que tú aprobaste.</p>
@@ -331,7 +340,8 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
       <?php endif; ?>
     </div>
 
-  <?php elseif ($tab === 'plan'): ?>
+  </section>
+  <section class="cfg-sec" data-sec="plan">
     <div class="cfg-card">
       <h2>Tu plan <?= ico('wallet') ?></h2>
       <p class="sub">Tu suscripción y facturación.</p>
@@ -344,7 +354,8 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
       <?php endif; ?>
     </div>
 
-  <?php else: /* cuenta */ ?>
+  </section>
+  <section class="cfg-sec" data-sec="cuenta">
     <form method="post" action="<?= $turl('cuenta') ?>">
       <?= csrf_field() ?><input type="hidden" name="accion" value="cuenta_datos">
       <div class="cfg-card">
@@ -372,7 +383,52 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
         <button class="cfg-save" type="submit">Cambiar contraseña</button>
       </div>
     </form>
-  <?php endif; ?>
+  </section>
+  </div></div><!-- /cfg-track /cfg-view -->
 </div>
+
+<script>
+(function(){
+  var order=['negocio','redes','plan','cuenta'];
+  var tabs=[].slice.call(document.querySelectorAll('.cfg-tab'));
+  var view=document.getElementById('cfgView'), track=document.getElementById('cfgTrack');
+  var secs=[].slice.call(document.querySelectorAll('.cfg-sec'));
+  if(!view||!track||!secs.length) return;
+  var cur=Math.max(0, order.indexOf(<?= json_encode($tab) ?>));
+
+  function fitHeight(){ view.style.height = secs[cur].offsetHeight + 'px'; }
+  function go(i, push){
+    i=Math.max(0,Math.min(order.length-1,i)); cur=i;
+    track.style.transform='translateX(-'+(i*100)+'%)';
+    tabs.forEach(function(t){ t.classList.toggle('on', t.getAttribute('data-sec')===order[i]); });
+    fitHeight();
+    var url=location.pathname+'?marca=<?= $marca_id ?>&tab='+order[i];
+    if(push!==false) history.replaceState(null,'',url);
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+  tabs.forEach(function(t){ t.addEventListener('click', function(){ go(order.indexOf(t.getAttribute('data-sec'))); }); });
+
+  // Posición inicial sin animación
+  track.style.transition='none'; go(cur,false); requestAnimationFrame(function(){ track.style.transition=''; });
+  // Recalcular alto cuando cambie el contenido/tamaño
+  window.addEventListener('resize', fitHeight);
+  window.addEventListener('load', fitHeight);
+  if(window.ResizeObserver){ new ResizeObserver(fitHeight).observe(secs[0].parentNode); }
+
+  // Swipe lateral (móvil)
+  var x0=null, y0=null, lock=null;
+  view.addEventListener('touchstart', function(e){ var t=e.touches[0]; x0=t.clientX; y0=t.clientY; lock=null; }, {passive:true});
+  view.addEventListener('touchmove', function(e){
+    if(x0===null) return; var t=e.touches[0], dx=t.clientX-x0, dy=t.clientY-y0;
+    if(lock===null && (Math.abs(dx)>8||Math.abs(dy)>8)) lock = Math.abs(dx)>Math.abs(dy) ? 'x':'y';
+  }, {passive:true});
+  view.addEventListener('touchend', function(e){
+    if(x0===null||lock!=='x'){ x0=null; return; }
+    var dx=e.changedTouches[0].clientX-x0;
+    if(dx<-45) go(cur+1); else if(dx>45) go(cur-1);
+    x0=null;
+  }, {passive:true});
+})();
+</script>
 
 <?php require __DIR__ . '/_shell_foot.php'; ?>
