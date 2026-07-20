@@ -609,7 +609,15 @@ require __DIR__ . '/_shell.php';
   .art-box h3{font-family:var(--font-display);font-weight:800;font-size:20px;margin-bottom:2px}
   .art-box .sub{font-size:13px;color:var(--muted);margin-bottom:6px}
   .art-box .x{position:absolute;top:12px;right:14px;border:0;background:none;font-size:20px;cursor:pointer;color:var(--muted)}
-  .art-box .fl{display:block;font-weight:700;font-size:13px;margin:14px 0 7px}
+  .art-box .fl{display:block;font-weight:700;font-size:14.5px;margin:14px 0 7px}
+  /* MÓVIL: campos del arte y del caption grandes y legibles — 16px evita el zoom de iOS y se lee sin espejuelos. */
+  @media(max-width:560px){
+    .art-box textarea,.art-box input[type=text],.art-box input[type=file],
+    #wiz-arteidea,#wiz-arte-chat,#art-instr,textarea[name="caption"]{font-size:16px !important;padding:14px !important;line-height:1.5 !important}
+    .art-box .fl,.fl{font-size:15px !important}
+    .art-box h3{font-size:20px}
+    .chip-opt span,.st{font-size:14px}
+  }
   .art-box .reuse-strip{display:flex;gap:8px;overflow-x:auto;padding:4px 0 8px}
   .art-box .reuse-thumb{width:72px;height:72px;border-radius:12px;object-fit:cover;border:2.5px solid var(--line);cursor:pointer;flex:0 0 auto;transition:border-color .12s,transform .12s}
   .art-box .reuse-thumb:hover{border-color:var(--terracota);transform:scale(1.04)}
@@ -622,7 +630,7 @@ require __DIR__ . '/_shell.php';
   .art-box .chip-opt{cursor:pointer}.art-box .chip-opt input{position:absolute;opacity:0}
   .art-box .chip-opt span{display:inline-block;padding:6px 12px;border-radius:99px;border:1.5px solid var(--line);background:#fff;font-weight:700;font-size:12.5px}
   .art-box .chip-opt input:checked + span{border-color:transparent;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta))}
-  .art-box textarea,.art-box input[type=file]{width:100%;font-family:inherit;font-size:13.5px;border:1.5px solid var(--line);border-radius:12px;padding:9px 11px}
+  .art-box textarea,.art-box input[type=file],.art-box input[type=text]{width:100%;font-family:inherit;font-size:15px;border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;line-height:1.45}
   .art-box .ck{display:flex;align-items:center;gap:7px;font-weight:700;font-size:13.5px}
   .art-go{width:100%;border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:15px;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));padding:13px;border-radius:99px;margin-top:18px}
   .art-go:disabled{opacity:.6;cursor:default}
