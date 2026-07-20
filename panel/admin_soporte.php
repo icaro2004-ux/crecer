@@ -63,7 +63,7 @@ $total_sin_leer = 0; foreach ($convs as $c) $total_sin_leer += (int)$c['sin_leer
 <title>Soporte · Operaciones · Crecer</title>
 <link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/encuentralo-pin.svg">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=18" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=19" rel="stylesheet">
 <style>
   :root{--grad:linear-gradient(120deg,var(--coral,#ff5c39),var(--magenta,#c0395f))}
   *{box-sizing:border-box} body{background:var(--crema,#fbf6ee);color:var(--tinta,#1b1622);font-family:'Plus Jakarta Sans',sans-serif;margin:0}

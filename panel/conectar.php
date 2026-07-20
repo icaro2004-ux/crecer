@@ -103,7 +103,7 @@ $paginas = $_SESSION['meta_paginas'][$marca_id] ?? [];
 <link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/crecer-mark.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=18" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=19" rel="stylesheet">
 <style>
   body{background:var(--crema);font-family:var(--font-body)}
   .cx{max-width:520px;margin:0 auto;padding:26px 20px 90px}
