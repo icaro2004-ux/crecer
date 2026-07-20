@@ -47,6 +47,24 @@ try {
     } else {
         echo "(código viejo, no se puede evaluar)\n";
     }
+    // 3) Prueba EN VIVO contra OpenAI (opcional): añade  &test=img  a la URL.
+    //    Hace 1 llamada real y muestra el resultado o el ERROR EXACTO (ej. "org
+    //    no verificada"). Cuesta ~$0.17 la prueba.
+    if (($_GET['test'] ?? '') === 'img') {
+        echo "\n--- Prueba EN VIVO a OpenAI (gpt-image-1) ---\n";
+        try {
+            $r = openai_imagen('Un café boricua humeante sobre madera, luz cálida, foto premium', ['aspect' => '1:1']);
+            echo "RESULTADO: ✅ OpenAI generó la imagen (" . strlen($r['data']) . " bytes, modelo " . $r['modelo'] . ").\n";
+            echo "→ gpt-image-1 FUNCIONA. Genera un post y saldrá con este motor.\n";
+        } catch (Throwable $e) {
+            echo "RESULTADO: ❌ OpenAI falló.\n";
+            echo "ERROR EXACTO: " . $e->getMessage() . "\n";
+            echo "→ Si menciona 'organization/verified', verifica tu org en OpenAI,\n";
+            echo "  o cambia OPENAI_IMG_MODEL a 'dall-e-3' en el config (no exige verificación).\n";
+        }
+    } else {
+        echo "\n(Para probar OpenAI de verdad, abre esta URL con  &test=img  al final.)\n";
+    }
 } catch (Throwable $e) {
     echo "No pude cargar el diagnóstico: " . $e->getMessage() . "\n";
 }
