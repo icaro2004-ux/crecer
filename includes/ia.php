@@ -384,34 +384,96 @@ function gemini_imagen(string $prompt, array $opts = []): array {
 //  cero. Si no hay OPENAI_API_KEY, TODO cae a Gemini (degrada con gracia).
 if (!defined('OPENAI_API_KEY'))   define('OPENAI_API_KEY', '');
 if (!defined('OPENAI_IMG_MODEL')) define('OPENAI_IMG_MODEL', 'gpt-image-1');
+// Calidad de gpt-image-1: low|medium|high|auto. 'high' = la buena ("otro nivel"),
+// ~$0.17 por imagen 1:1. Reversible a 'medium' (~$0.04) si hay que bajar costo.
+if (!defined('OPENAI_IMG_QUALITY')) define('OPENAI_IMG_QUALITY', 'high');
 
 function openai_configurado(): bool { return OPENAI_API_KEY !== ''; }
 
-/** Genera una imagen con OpenAI (gpt-image-1). Devuelve ['data','mime','modelo']. */
-function openai_imagen(string $prompt, array $opts = []): array {
-    if (!openai_configurado()) throw new IaSinCredenciales('Falta OPENAI_API_KEY.');
-    $modelo = $opts['modelo_openai'] ?? OPENAI_IMG_MODEL;
-    $aspect = $opts['aspect'] ?? '1:1';
-    // gpt-image-1 y dall-e-3 usan tamaños y params distintos. Soportamos ambos:
-    // gpt-image-1 = más nuevo (requiere verificación de organización);
-    // dall-e-3 = sin verificación (fallback fácil).
-    $es_dalle = (stripos($modelo, 'dall-e') !== false);
-    if ($es_dalle) {
-        $size = ['1:1'=>'1024x1024','4:5'=>'1024x1792','9:16'=>'1024x1792','3:4'=>'1024x1792','16:9'=>'1792x1024','4:3'=>'1792x1024'][$aspect] ?? '1024x1024';
-        $body = ['model'=>$modelo, 'prompt'=>$prompt, 'n'=>1, 'size'=>$size, 'response_format'=>'b64_json'];
-    } else {
-        $size = ['1:1'=>'1024x1024','4:5'=>'1024x1536','9:16'=>'1024x1536','3:4'=>'1024x1536','16:9'=>'1536x1024','4:3'=>'1536x1024'][$aspect] ?? '1024x1024';
-        $body = ['model'=>$modelo, 'prompt'=>$prompt, 'n'=>1, 'size'=>$size];
-    }
-    $resp = ia_http_post_retry(
-        'https://api.openai.com/v1/images/generations',
-        ['Content-Type: application/json', 'Authorization: Bearer ' . OPENAI_API_KEY],
-        json_encode($body, JSON_UNESCAPED_UNICODE), $opts['max_reintentos'] ?? 2);
+/** Extrae la imagen (b64) de una respuesta JSON de OpenAI. */
+function openai_extraer_img(string $resp, string $modelo): array {
     $d = json_decode($resp, true);
     if (isset($d['error'])) throw new IaError('OpenAI imagen: ' . ($d['error']['message'] ?? 'error'));
     $b64 = $d['data'][0]['b64_json'] ?? '';
     if ($b64 === '') throw new IaError('OpenAI no devolvió imagen.');
     return ['data'=>base64_decode($b64), 'mime'=>'image/png', 'modelo'=>$modelo];
+}
+
+/**
+ * Genera una imagen con OpenAI. gpt-image-1 a calidad ALTA ("otro nivel").
+ * Si llega una imagen de entrada (típicamente el LOGO), usa /images/edits para
+ * incorporarla al arte (la recorta/adapta); si no, /images/generations desde cero.
+ * dall-e-3 = respaldo sin verificación de organización.
+ * Devuelve ['data','mime','modelo'].
+ */
+function openai_imagen(string $prompt, array $opts = []): array {
+    if (!openai_configurado()) throw new IaSinCredenciales('Falta OPENAI_API_KEY.');
+    $modelo   = $opts['modelo_openai'] ?? OPENAI_IMG_MODEL;
+    $aspect   = $opts['aspect'] ?? '1:1';
+    $es_dalle = (stripos($modelo, 'dall-e') !== false);
+
+    if ($es_dalle) {   // dall-e-3: no soporta edits ni verificación; solo generación
+        $size = ['1:1'=>'1024x1024','4:5'=>'1024x1792','9:16'=>'1024x1792','3:4'=>'1024x1792','16:9'=>'1792x1024','4:3'=>'1792x1024'][$aspect] ?? '1024x1024';
+        $body = ['model'=>$modelo, 'prompt'=>$prompt, 'n'=>1, 'size'=>$size, 'response_format'=>'b64_json', 'quality'=>'hd', 'style'=>'vivid'];
+        $resp = ia_http_post_retry('https://api.openai.com/v1/images/generations',
+            ['Content-Type: application/json', 'Authorization: Bearer ' . OPENAI_API_KEY],
+            json_encode($body, JSON_UNESCAPED_UNICODE), $opts['max_reintentos'] ?? 2);
+        return openai_extraer_img($resp, $modelo);
+    }
+
+    // gpt-image-1
+    $size    = ['1:1'=>'1024x1024','4:5'=>'1024x1536','9:16'=>'1024x1536','3:4'=>'1024x1536','16:9'=>'1536x1024','4:3'=>'1536x1024'][$aspect] ?? '1024x1024';
+    $quality = $opts['calidad_openai'] ?? OPENAI_IMG_QUALITY;
+
+    // ¿Hay una imagen de entrada (el logo)? → edits (la incorpora al arte).
+    $entrada = null;
+    foreach (($opts['imagenes'] ?? []) as $img) {
+        $bin = base64_decode($img['data'] ?? '', true);
+        if ($bin !== false && $bin !== '') { $entrada = ['bin'=>$bin, 'mime'=>$img['mime'] ?? 'image/png']; break; }
+    }
+    if ($entrada !== null) {
+        return openai_imagen_edit($prompt, $entrada, $modelo, $size, $quality, $opts);
+    }
+
+    $body = ['model'=>$modelo, 'prompt'=>$prompt, 'n'=>1, 'size'=>$size, 'quality'=>$quality];
+    $resp = ia_http_post_retry('https://api.openai.com/v1/images/generations',
+        ['Content-Type: application/json', 'Authorization: Bearer ' . OPENAI_API_KEY],
+        json_encode($body, JSON_UNESCAPED_UNICODE), $opts['max_reintentos'] ?? 2);
+    return openai_extraer_img($resp, $modelo);
+}
+
+/** gpt-image-1 /images/edits — incorpora UNA imagen (el logo) al arte, a calidad ALTA. */
+function openai_imagen_edit(string $prompt, array $entrada, string $modelo, string $size, string $quality, array $opts): array {
+    $mime = $entrada['mime'] ?: 'image/png';
+    $ext  = (stripos($mime,'png')!==false) ? 'png' : ((stripos($mime,'jpeg')!==false||stripos($mime,'jpg')!==false) ? 'jpg' : 'png');
+    $tmp  = tempnam(sys_get_temp_dir(), 'oai_');
+    if ($tmp === false) throw new IaError('No se pudo crear archivo temporal para OpenAI edits.');
+    file_put_contents($tmp, $entrada['bin']);
+    $post = [
+        'model'   => $modelo,
+        'prompt'  => $prompt,
+        'n'       => '1',
+        'size'    => $size,
+        'quality' => $quality,
+        'image'   => new CURLFile($tmp, $mime, 'entrada.' . $ext),
+    ];
+    $ch = curl_init('https://api.openai.com/v1/images/edits');
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $post,   // array → multipart/form-data (curl arma el boundary)
+        CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . OPENAI_API_KEY],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 120,
+        CURLOPT_CONNECTTIMEOUT => 10,
+    ]);
+    $resp = curl_exec($ch);
+    $cerr = curl_error($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    @unlink($tmp);
+    if ($resp === false) throw new IaError('OpenAI edits cURL: ' . $cerr);
+    if ($code < 200 || $code >= 300) throw new IaError("OpenAI edits HTTP $code: " . substr((string)$resp, 0, 400));
+    return openai_extraer_img((string)$resp, $modelo);
 }
 
 /**
@@ -425,12 +487,15 @@ function motor_imagen_elegir(array $opts): array {
     if (isset($opts['motor']) && in_array($opts['motor'], ['gemini','openai'], true)) {
         return ['motor'=>$opts['motor'], 'razon'=>'Motor forzado por la petición.'];
     }
-    $tiene_foto = !empty($opts['imagen_base64']) || !empty($opts['imagenes']);
-    if ($tiene_foto) {
-        return ['motor'=>'gemini', 'razon'=>'Edición sobre la foto real del negocio → Gemini (Nano Banana).'];
+    // Regla de IP: la FOTO REAL del producto se REALZA sin inventarla → Gemini (Nano
+    // Banana), fiel al original. El ARTE desde cero (con o sin logo) → gpt-image-1
+    // (calidad tope). OJO: el logo NO cuenta como "foto real" → ese arte va a OpenAI.
+    $foto_real = !empty($opts['foto_real']) || !empty($opts['imagen_base64']);
+    if ($foto_real) {
+        return ['motor'=>'gemini', 'razon'=>'Realce fiel de la foto real → Gemini (Nano Banana).'];
     }
     if (openai_configurado()) {
-        return ['motor'=>'openai', 'razon'=>'Arte conceptual desde cero → motor generativo dedicado.'];
+        return ['motor'=>'openai', 'razon'=>'Arte desde cero → gpt-image-1 (calidad tope).'];
     }
     return ['motor'=>'gemini', 'razon'=>'Arte desde cero → Gemini (OpenAI no configurado).'];
 }
@@ -471,7 +536,7 @@ function ia_imagen(PDO $pdo, string $agente, string $accion, string $prompt, str
       catch (IaError $e)        { $estado='error'; $err=$e->getMessage(); }
       catch (Throwable $e)      { $estado='error'; $err=substr($e->getMessage(),0,200); }
     $lat = (int)round((microtime(true) - $t0) * 1000);
-    $costo = $estado === 'ok' ? (['gemini-3-pro-image'=>0.134, 'gemini-2.5-flash-image'=>0.039, 'gpt-image-1'=>0.04][$modelo] ?? CRECER_IMG_PRECIO) : 0;
+    $costo = $estado === 'ok' ? (['gemini-3-pro-image'=>0.134, 'gemini-2.5-flash-image'=>0.039, 'gpt-image-1'=>0.17, 'dall-e-3'=>0.08][$modelo] ?? CRECER_IMG_PRECIO) : 0;
     // La decisión del Director de Arte queda en la acción (evidencia del ruteo).
     // OJO: crecer_ia_log.accion es VARCHAR(80) → truncar para no romper el INSERT.
     $accion_log = mb_substr($razon ? ($accion . ' · ' . $razon) : $accion, 0, 80);

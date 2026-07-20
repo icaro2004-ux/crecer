@@ -778,10 +778,11 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
     $modelo = 'gemini-3-pro-image';
     $fname = "marca_{$marca_id}/graficas/post_" . uniqid() . ".png";
     $r = ia_imagen($pdo, 'creador', 'Crear arte de post', $prompt, $fname, [
-        'marca_id' => $marca_id,
-        'modelo'   => $modelo,
-        'imagenes' => $imagenes,
-        'aspect'   => $opts['aspect'] ?? '1:1',   // cuadrado (feed IG/FB); encuadre limpio
+        'marca_id'  => $marca_id,
+        'modelo'    => $modelo,
+        'imagenes'  => $imagenes,
+        'foto_real' => $tiene_foto,               // foto real → Gemini (fiel); arte desde cero → gpt-image-1
+        'aspect'    => $opts['aspect'] ?? '1:1',   // cuadrado (feed IG/FB); encuadre limpio
     ]);
     $pdo->prepare("INSERT INTO crecer_graficas (marca_id, archivo, copy_text) VALUES (?,?,?)")
         ->execute([$marca_id, $r['archivo'], $copy]);
