@@ -23,6 +23,9 @@ $acceso_full = $pagado
     || (function_exists('activacion_de_prueba') && activacion_de_prueba($usuario['email'] ?? null));
 $posts_total = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$marca_id}")->fetchColumn();
 $puede_crear = $acceso_full || $posts_total < 1;   // tope de 1 post en free/prueba
+// GATE DEL POST GRATIS: para publicar/descargar, el free debe verificar su celular
+// (1 gratis por número). Los pagados/prueba/verificados ya no lo necesitan.
+$necesita_telefono = !$acceso_full && trim((string)($marca['telefono_verificado'] ?? '')) === '';
 // Cupo semanal de publicaciones (cada publicar/re-publicar consume 1). Admin exento.
 $cupo_exento = (($usuario['rol'] ?? '') === 'admin');
 $cupo = cupo_estado($pdo, $marca_id, $cupo_exento);
@@ -53,6 +56,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Content-Type: application/json');
         // CSRF: publicar postea a redes reales del cliente → exige token válido.
         if (!csrf_ok()) { echo json_encode(['ok'=>false,'err'=>'Sesión expiró. Recarga la página e intenta de nuevo.']); exit; }
+        // GATE del post gratis: publicar a redes reales exige celular verificado (1 gratis por número).
+        if ($necesita_telefono) { echo json_encode(['ok'=>false,'needs_phone'=>true]); exit; }
         require_once __DIR__ . '/../includes/meta.php';
         require_once __DIR__ . '/../includes/publicador.php';
         if (!$id) { echo json_encode(['ok'=>false,'err'=>'Falta el post.']); exit; }
@@ -1976,6 +1981,7 @@ $cf = [
   // en celular abrimos el compartir nativo (escoges WhatsApp → Estado); en PC
   // descargamos + copiamos el copy (el Estado solo existe en el teléfono).
   function compartirWhatsAppEstado(){
+    if(NECESITA_TEL){ conTelefono(function(){ compartirWhatsAppEstado(); }); return; }   // gate del post gratis
     var url=(document.getElementById('pa-dl')||{}).href||'';
     var cap=(document.getElementById('copybuffer')||{}).value||'';
     if(!url){ toast('Este post no tiene imagen o video para el Estado.'); return; }
@@ -2026,6 +2032,18 @@ $cf = [
   var REDES_OK = <?= $redes_ok ? 'true' : 'false' ?>;
   var REDES_CONECTADAS = <?= json_encode($redes_conectadas) ?>;   // ['instagram','facebook'] realmente conectadas
   var CSRF = <?= json_encode(csrf_token()) ?>;   // token para las acciones que postean a redes
+
+  // ── Gate del POST GRATIS ────────────────────────────────────────────────
+  // El free debe verificar su celular por SMS antes de publicar o descargar
+  // (1 gratis por número). conTelefono(fn): corre fn() ya si no hace falta; si
+  // hace falta, abre el modal y corre fn() SOLO al verificar (y libera el resto
+  // de la sesión). El backend de publicar_api también lo exige (defensa doble).
+  var NECESITA_TEL = <?= $necesita_telefono ? 'true' : 'false' ?>;
+  function conTelefono(fn){
+    if(!NECESITA_TEL){ fn(); return; }
+    if(window.crecerSmsGate){ crecerSmsGate.open(function(){ NECESITA_TEL=false; fn(); }); }
+    else { fn(); }
+  }
 
   // ── Popup de resultado de publicación (loading → éxito/error con botón Cerrar) ──
   function _pubCard(){ return document.getElementById('pubresCard'); }
@@ -2085,6 +2103,7 @@ $cf = [
       .then(function(d){
         if(btn) btn.disabled = false;
         if(d.ok){ pubOk('Tu post ya salió a Instagram/Facebook.', _permalink(d.resultados)); actualizarCupo(1); }
+        else if(d.needs_phone){ loaderHide(); conTelefono(function(){ publicarPorAPI(card, btn); }); }   // falta verificar celular
         else if(d.err === 'no_conectado'){ pubCerrar(false); abrirPublicar(card); }   // sin conexión → flujo manual
         else if(d.err === 'cupo_semana'){ pubErr('Llegaste a tus '+(d.limite||<?= (int)$cupo['limite'] ?>)+' posts de la semana.'+(d.reset?' Se libera espacio el '+d.reset+'.':''), card); }
         else { pubErr(d.err || 'No se pudo publicar', card); }                          // falló → ofrece publicar a mano
@@ -2102,8 +2121,20 @@ $cf = [
   if(feed) feed.addEventListener('click', function(e){
     var b=e.target.closest('.publicarbtn'); if(!b) return; e.preventDefault();
     var card=b.closest('.post');
-    if(REDES_OK){ publicarPorAPI(card, b); }   // un botón → va a la Página conectada
-    else { abrirPublicar(card); }              // sin redes → compartir a mano
+    conTelefono(function(){                     // gate del post gratis (SMS)
+      if(REDES_OK){ publicarPorAPI(card, b); }  // un botón → va a la Página conectada
+      else { abrirPublicar(card); }             // sin redes → compartir a mano
+    });
+  });
+  // Descargar el arte también pasa por el gate del post gratis. Tras verificar,
+  // NECESITA_TEL=false y el segundo .click() baja el archivo de verdad.
+  ['pa-dl','pub-dl'].forEach(function(id){
+    var a=document.getElementById(id); if(!a) return;
+    a.addEventListener('click', function(ev){
+      if(!NECESITA_TEL) return;                 // libre → deja bajar
+      ev.preventDefault();
+      conTelefono(function(){ a.click(); });    // verifica → re-dispara la descarga real
+    });
   });
 </script>
 
@@ -2255,4 +2286,5 @@ $cf = [
   .wiz-card-go:active{transform:scale(.98)}
 </style>
 
+<?php if ($necesita_telefono) require __DIR__ . '/../includes/_sms_gate.php'; ?>
 <?php require __DIR__ . '/_shell_foot.php'; ?>
