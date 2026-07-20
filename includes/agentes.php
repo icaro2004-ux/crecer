@@ -356,7 +356,7 @@ function estilo_arte_direccion(string $estilo): array {
  * texto dice (mismo mensaje, no dos cosas sueltas). El dueño la lee y aprueba.
  * $estilo_arte: realista|creativo|fantasia|ilustracion. Es una llamada de TEXTO (barata).
  */
-function sugerir_arte(PDO $pdo, int $marca_id, string $caption, string $ajuste = '', string $evitar = '', string $estilo_arte = 'realista'): string {
+function sugerir_arte(PDO $pdo, int $marca_id, string $caption, string $ajuste = '', string $evitar = '', string $estilo_arte = 'realista', string $idea_actual = ''): string {
     $m = leer_marca($pdo, $marca_id);
     $ctx = marca_contexto($m);
     $est = estilo_arte_direccion($estilo_arte);
@@ -372,16 +372,25 @@ function sugerir_arte(PDO $pdo, int $marca_id, string $caption, string $ajuste =
         . "ambiente, (5) la paleta. Específico, no genérico. Deja aire arriba por si va texto encima.\n"
         . "Varía las escenas post a post, PERO siempre PEGADO a lo que dice el copy. Evita el cliché de pantallas "
         . "de celular/laptop con apps o notificaciones flotantes.\n"
-        . $est['sugerir'];
-    if (function_exists('tono_instruccion')) $sistema .= tono_instruccion($m);
+        . $est['sugerir']
+        . "\nEmpieza DIRECTO con la descripción de la escena — SIN saludos, sin \"mi gente\", sin preámbulos ni emojis. Es una DESCRIPCIÓN VISUAL para el diseñador, no un caption.";
     $prompt = "Perfil del negocio:\n{$ctx}\n\nTexto del post (la imagen TIENE que pegar con esto):\n\"{$caption}\"\n";
-    if (trim($ajuste) !== '') $prompt .= "\nLO QUE PIDE EL DUEÑO (es lo más importante — EXPÁNDELO con detalle visual, no lo ignores): {$ajuste}\n";
-    if (trim($evitar) !== '') {
-        $prompt .= "\nEL DUEÑO YA VIO esta idea y pidió OTRA — dale algo CATEGÓRICAMENTE DISTINTO: "
-                 . "cambia el TIPO de escena, el ángulo, el lugar y los props por completo. NO la reconfigures "
-                 . "ni la parafrasees; invéntate algo fresco y diferente de esto:\n\"" . mb_substr(trim($evitar), 0, 400) . "\"\n";
+    $idea_actual = trim($idea_actual);
+    if ($idea_actual !== '' && trim($ajuste) !== '') {
+        // MODO CHAT: el dueño conversa para AFINAR la idea actual. Se aplica su cambio, se
+        // mantiene lo que ya funciona (no se empieza de cero) y se devuelve la idea revisada.
+        $prompt .= "\nIDEA ACTUAL del arte (la que el dueño está afinando):\n\"" . mb_substr($idea_actual, 0, 500) . "\"\n"
+                 . "EL DUEÑO PIDE ESTE CAMBIO — APLÍCALO y mantén lo demás que ya funciona, NO empieces de cero: \"{$ajuste}\"\n"
+                 . "Devuelve la idea REVISADA completa (2-3 frases, con detalle concreto), ya con el cambio aplicado.";
+    } else {
+        if (trim($ajuste) !== '') $prompt .= "\nLO QUE PIDE EL DUEÑO (es lo más importante — EXPÁNDELO con detalle visual, no lo ignores): {$ajuste}\n";
+        if (trim($evitar) !== '') {
+            $prompt .= "\nEL DUEÑO YA VIO esta idea y pidió OTRA — dale algo CATEGÓRICAMENTE DISTINTO: "
+                     . "cambia el TIPO de escena, el ángulo, el lugar y los props por completo. NO la reconfigures "
+                     . "ni la parafrasees; invéntate algo fresco y diferente de esto:\n\"" . mb_substr(trim($evitar), 0, 400) . "\"\n";
+        }
+        $prompt .= "\nDescribe en 2-3 frases, con detalle concreto, qué va a mostrar la imagen.";
     }
-    $prompt .= "\nDescribe en 2-3 frases, con detalle concreto, qué va a mostrar la imagen.";
     $r = ia_ejecutar($pdo, 'diseñador', 'Sugerir idea de arte', $prompt, [
         'marca_id' => $marca_id, 'sistema' => $sistema,
         'temperatura' => (trim($evitar) !== '' ? 1.15 : 0.9), 'max_tokens' => 300, 'thinking_budget' => 0,

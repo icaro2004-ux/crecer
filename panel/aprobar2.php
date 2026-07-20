@@ -102,8 +102,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ajuste = trim((string)($_POST['ajuste'] ?? ''));
         $evitar = trim((string)($_POST['evitar'] ?? ''));   // idea anterior → dame otra distinta
         $estilo_arte = trim((string)($_POST['estilo_arte'] ?? 'realista'));
+        $idea_actual = trim((string)($_POST['idea_actual'] ?? ''));   // modo chat: afinar la idea que ya está
         try {
-            $idea = sugerir_arte($pdo, $marca_id, (string)$cap, $ajuste, $evitar, $estilo_arte);
+            $idea = sugerir_arte($pdo, $marca_id, (string)$cap, $ajuste, $evitar, $estilo_arte, $idea_actual);
             echo json_encode(['ok'=>true, 'idea'=>$idea], JSON_UNESCAPED_UNICODE);
         } catch (Throwable $e) {
             echo json_encode(['ok'=>false, 'err'=>substr($e->getMessage(),0,160)], JSON_UNESCAPED_UNICODE);
@@ -1613,6 +1614,22 @@ $cf = [
     document.getElementById('wiz-arte-sug').addEventListener('click', function(){ wizSugerirArte(); });
     // Cambiar el estilo → re-sugiere la idea acorde al estilo elegido (barato, es texto).
     document.querySelectorAll('#wiz-estilo input').forEach(function(r){ r.addEventListener('change', function(){ wizSugerirArte(); }); });
+    // CHAT del arte: el dueño escribe qué cambiar → la IA afina la idea ACTUAL (no empieza de cero).
+    function wizArteChat(){
+      var msg=document.getElementById('wiz-arte-chat'); var ajuste=(msg.value||'').trim(); if(!ajuste||!wizId) return;
+      var ta=document.getElementById('wiz-arteidea'); var actual=(ta.value||'').trim();
+      var go=document.getElementById('wiz-arte-chat-go');
+      msg.disabled=true; if(go) go.disabled=true; ta.placeholder='💭 Afinando la idea…';
+      var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','sugerir_arte'); fd.append('id',wizId);
+      fd.append('estilo_arte',(document.querySelector('#wiz-estilo input:checked')||{}).value||'realista');
+      fd.append('ajuste',ajuste); fd.append('idea_actual',actual);
+      fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+        msg.disabled=false; if(go) go.disabled=false; msg.value=''; ta.placeholder='Describe qué debe mostrar la imagen…';
+        if(d&&d.ok&&d.idea){ ta.value=d.idea; }
+      }).catch(function(){ msg.disabled=false; if(go) go.disabled=false; ta.placeholder='Describe qué debe mostrar la imagen…'; });
+    }
+    document.getElementById('wiz-arte-chat-go').addEventListener('click', wizArteChat);
+    document.getElementById('wiz-arte-chat').addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); wizArteChat(); } });
     g.addEventListener('click', function(){
       if(!wizId) return;
       loaderShow('Generando tu imagen…', ['Imaginando la escena…','Ajustando la luz y el encuadre…','Aplicando tu logo de marca…','Puliendo texturas y detalles…','Casi lista…']);
@@ -2147,6 +2164,11 @@ $cf = [
       <label class="fl" style="margin-top:4px"><?= ico('lightbulb') ?> Idea para la imagen <span style="color:var(--muted);font-weight:500">(el Diseñador la propone — ajústala a tu gusto)</span></label>
       <textarea id="wiz-arteidea" rows="3" placeholder="El Diseñador está pensando la idea…"></textarea>
       <button type="button" class="fbnew" id="wiz-arte-sug" style="width:100%;margin:8px 0 4px"><?= ico('refresh') ?> Sugiéreme otra idea</button>
+      <div style="display:flex;gap:8px;margin:2px 0 4px" id="wiz-arte-chatrow">
+        <input type="text" id="wiz-arte-chat" placeholder="O dile qué cambiar: 'más colorido', 'de noche', 'sin la playa'…" autocomplete="off"
+          style="flex:1;min-width:0;font-family:inherit;font-size:15px;border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;background:#fff">
+        <button type="button" class="art-go" id="wiz-arte-chat-go" style="flex:none;width:auto;margin:0;padding:0 16px" aria-label="Aplicar cambio"><?= ico('send') ?></button>
+      </div>
       <div class="wiz-art" id="wiz-art"></div>
       <div class="wiz-artbtns">
         <button type="button" class="art-go" id="wiz-gen"><?= ico('palette') ?> Generar la imagen con esta idea</button>
