@@ -165,6 +165,12 @@ function crear_marca(PDO $pdo, array $d): int {
     $slug = slugify($d['nombre_negocio']) . '-' . $id;
     $pdo->prepare("UPDATE crecer_marca SET slug=? WHERE id=?")->execute([$slug, $id]);
 
+    // PILOTO AUTOMÁTICO ON por defecto: el "done-for-you" es la promesa — el corillo
+    // prepara posts SOLO (solo corre de verdad con plan vigente o cuenta de prueba;
+    // ver correr_corillo). El dueño lo puede apagar en Configuración. (2026-07-20)
+    try { $pdo->prepare("UPDATE crecer_marca SET autopilot=1 WHERE id=?")->execute([$id]); }
+    catch (Throwable $e) { /* columna autopilot aún no migrada: se ignora */ }
+
     // TONO INICIAL sugerido por la IA según el tipo de negocio (un centro de
     // psicología arranca formal; una repostería, boricua). Así el POST DE
     // MUESTRA ya sale en el tono correcto — es la única bala para vender.
@@ -1447,7 +1453,9 @@ function correr_corillo(PDO $pdo): array {
     $tot = 0; $detalle = [];
     foreach ($rows as $r) {
         $mid = (int)$r['id'];
-        if (plan_de_marca($pdo, $mid) === null) {        // sin plan vigente → no gasta IA
+        // Elegible: plan vigente O cuenta de prueba/full-access (CRECER_TEST_EMAILS). Sin eso, no gasta IA.
+        $es_prueba = function_exists('activacion_de_prueba') && activacion_de_prueba($r['email'] ?? null);
+        if (plan_de_marca($pdo, $mid) === null && !$es_prueba) {
             $detalle[] = ['marca_id' => $mid, 'creadas' => 0, 'razon' => 'sin plan activo'];
             continue;
         }
