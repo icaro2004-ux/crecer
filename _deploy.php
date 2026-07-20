@@ -8,6 +8,18 @@
 // ============================================================
 header('Content-Type: text/plain; charset=utf-8');
 
+// Carga la config (define CRON_TOKEN) ANTES de hacer nada.
+require __DIR__ . '/includes/db.php';
+
+// GATE (hardening 2026-07-20): no es público. Ábrelo con  ?key=TU_CRON_TOKEN.
+// Evita que cualquiera fuerce opcache_reset (DoS barato) o vea el estado interno.
+$__tok = defined('CRON_TOKEN') ? CRON_TOKEN : '';
+if ($__tok === '' || !hash_equals($__tok, (string)($_GET['key'] ?? ''))) {
+    http_response_code(403);
+    echo "403 — no autorizado. Abre esta página añadiendo  ?key=TU_CRON_TOKEN  al final de la URL.\n";
+    exit;
+}
+
 $out = [];
 
 // 1) Limpiar TODO el caché de opcode (esto hace que el próximo request compile
@@ -19,7 +31,6 @@ if (function_exists('opcache_reset')) {
 }
 
 // 2) Cargar el código real desde disco y verificar marcadores del código NUEVO.
-require __DIR__ . '/includes/db.php';
 require __DIR__ . '/includes/genoma.php';
 
 $out['---'] = '--- ¿Qué código está vivo? ---';

@@ -8,6 +8,13 @@
 // ============================================================
 
 if (session_status() === PHP_SESSION_NONE) {
+    // Cookie de sesión endurecida: HttpOnly (no la ve JS), SameSite=Lax (frena CSRF
+    // cross-site), Secure en HTTPS. (hardening 2026-07-20)
+    session_set_cookie_params([
+        'lifetime' => 0, 'path' => '/',
+        'secure'   => !empty($_SERVER['HTTPS']) || (($_SERVER['SERVER_PORT'] ?? '') == 443),
+        'httponly' => true, 'samesite' => 'Lax',
+    ]);
     session_start();
 }
 
