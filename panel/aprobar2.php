@@ -636,19 +636,15 @@ require __DIR__ . '/_shell.php';
   .art-divider{display:flex;align-items:center;gap:10px;margin:18px 0 4px;color:var(--muted);font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
   .art-divider::before,.art-divider::after{content:"";flex:1;height:1px;background:var(--line)}
   /* Encabezado liderado por La Creativa (look del dashboard) */
-  .cfhead{display:flex;gap:16px;align-items:center;max-width:600px;border-radius:var(--r-lg);padding:18px 20px;
-    background:linear-gradient(180deg,color-mix(in srgb,#ff2d6f 9%,#fff),var(--card));
-    border:1.5px solid color-mix(in srgb,#ff2d6f 26%,#fff);box-shadow:0 16px 34px -22px rgba(255,45,111,.55)}
-  .cf-orb{width:72px;height:72px;border-radius:50%;flex:none;display:grid;place-items:center;
-    background:radial-gradient(circle,#fff 0 42%,color-mix(in srgb,#ff2d6f 14%,#fff));
-    box-shadow:inset 0 0 0 2px color-mix(in srgb,#ff2d6f 12%,#fff),0 0 0 1px color-mix(in srgb,#ff2d6f 20%,#fff)}
-  .cf-orb img{width:48px;height:48px}
+  /* Header de contenido — LIMPIO, igual que el modo Calendario (sin card gradiente ni orb). */
+  .cfhead{max-width:600px;margin:0 0 4px}
+  .cf-orb{display:none}                     /* fuera el orb pesado que se veía fuera de lugar */
+  .cf-body{min-width:0}
   .cf-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-  .cf-top h1{font-family:var(--font-impact);text-transform:uppercase;font-size:clamp(26px,5vw,36px);margin:0;line-height:1;letter-spacing:.02em}
-  .cf-pill{font-weight:900;font-size:11px;letter-spacing:.04em;text-transform:uppercase;padding:6px 12px;border-radius:999px;
-    background:color-mix(in srgb,#ff2d6f 16%,#fff);color:color-mix(in srgb,#ff2d6f 80%,#000);border:1px solid color-mix(in srgb,#ff2d6f 30%,#fff)}
-  .cfhead p{margin:6px 0 0;color:var(--muted);font-size:14.5px}
-  @media(max-width:520px){.cf-orb{width:56px;height:56px}.cf-orb img{width:36px;height:36px}}
+  .cf-top h1{font-family:var(--font-impact);font-weight:400;text-transform:uppercase;font-size:clamp(25px,4vw,37px);margin:0;line-height:1.02;letter-spacing:.02em;color:var(--tinta)}
+  .cf-pill{font-weight:700;font-size:11px;letter-spacing:.04em;text-transform:uppercase;padding:5px 11px;border-radius:999px;
+    background:var(--crema-2);color:var(--muted);border:1px solid var(--line)}
+  .cfhead p{margin:8px 0 0;color:var(--muted);font-size:14.5px;line-height:1.5;max-width:52ch}
   /* Preview "cómo se ve en redes" (igual que Gráficas) */
   .prev-ov{display:none;position:fixed;inset:0;background:rgba(20,12,8,.7);z-index:96;align-items:flex-start;justify-content:center;padding:28px 16px;overflow:auto}
   .prev-ov.show{display:flex}
