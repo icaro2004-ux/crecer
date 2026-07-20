@@ -241,9 +241,12 @@ require __DIR__ . '/_shell.php';
   .mk-tab svg{width:16px;height:16px}
   .mk-tab.on{border-color:transparent;background:linear-gradient(135deg,var(--teal),var(--teal-700));color:#fff;box-shadow:0 8px 20px -10px rgba(0,164,159,.45)}
   .mk-tab.on svg{color:#fff}
-  .mk-pane{display:none;animation:mkin .25s ease both}
-  .mk-pane.on{display:block}
-  @keyframes mkin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  /* MOLDE ventana limpia + slide lateral (igual que Configuración) */
+  .mk-view{overflow:hidden;transition:height .38s var(--ease)}
+  .mk-track{display:flex;align-items:flex-start;transition:transform .38s var(--ease);will-change:transform}
+  .mk-pane{flex:0 0 100%;min-width:0;padding:2px}
+  #mk-voz{order:0}#mk-identidad{order:1}#mk-aprendido{order:2}   /* orden visual = orden de los tabs (aunque el DOM difiera) */
+  @media (prefers-reduced-motion: reduce){.mk-view,.mk-track{transition:none}}
   .mk-pane .sec-h:first-child{margin-top:14px}
 </style>
 
@@ -263,6 +266,7 @@ require __DIR__ . '/_shell.php';
   <button type="button" class="mk-tab" data-pane="aprendido" role="tab"><?= ico('lightbulb') ?> Lo aprendido</button>
 </div>
 
+<div class="mk-view" id="mkView"><div class="mk-track" id="mkTrack">
 <section class="mk-pane on" id="mk-voz">
 <h2 class="sec-h"><?= ico('mic') ?> Tu tono de voz</h2>
 <p class="subline">Define cómo te escribe La Creativa: mueve los controles, genera ejemplos y guárdalo. Así suena <b>todo tu contenido</b>.</p>
@@ -492,20 +496,38 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
   }
 </script>
 </section>
+</div></div><!-- /mk-track /mk-view -->
 
 <script>
-// §8.4 — Tabs de Mi marca (Voz / Identidad / Lo aprendido).
+// Mi marca — molde ventana limpia + slide lateral (Voz / Identidad / Lo aprendido).
 (function(){
-  var tabs=document.querySelectorAll('.mk-tab');
-  function show(name){
-    tabs.forEach(function(t){ t.classList.toggle('on', t.dataset.pane===name); });
-    document.querySelectorAll('.mk-pane').forEach(function(p){ p.classList.toggle('on', p.id==='mk-'+name); });
+  var order=['voz','identidad','aprendido'];
+  var tabs=[].slice.call(document.querySelectorAll('.mk-tab'));
+  var view=document.getElementById('mkView'), track=document.getElementById('mkTrack');
+  var secBy={voz:document.getElementById('mk-voz'),identidad:document.getElementById('mk-identidad'),aprendido:document.getElementById('mk-aprendido')};
+  if(!view||!track) return;
+  var cur=0;
+  function fitHeight(){ var s=secBy[order[cur]]; if(s) view.style.height=s.offsetHeight+'px'; }
+  function go(i){
+    i=Math.max(0,Math.min(order.length-1,i)); cur=i;
+    track.style.transform='translateX(-'+(i*100)+'%)';
+    tabs.forEach(function(t){ t.classList.toggle('on', t.dataset.pane===order[i]); });
+    fitHeight(); window.scrollTo({top:0,behavior:'smooth'});
   }
-  tabs.forEach(function(t){ t.addEventListener('click', function(){ show(t.dataset.pane); }); });
-  var init='voz';
-  if(location.hash==='#cerebro') init='aprendido';               // volver de corregir/descartar memoria
-  else if(/[?&]ok=/.test(location.search)) init='identidad';     // volver de generar logo
-  show(init);
+  tabs.forEach(function(t){ t.addEventListener('click', function(){ go(order.indexOf(t.dataset.pane)); }); });
+
+  var init=0;
+  if(location.hash==='#cerebro') init=2;                         // volver de corregir/descartar memoria
+  else if(/[?&]ok=/.test(location.search)) init=1;               // volver de generar logo
+  track.style.transition='none'; go(init); requestAnimationFrame(function(){ track.style.transition=''; });
+  window.addEventListener('resize', fitHeight);
+  window.addEventListener('load', fitHeight);
+  if(window.ResizeObserver){ new ResizeObserver(fitHeight).observe(track); }
+
+  var x0=null,y0=null,lock=null;
+  view.addEventListener('touchstart',function(e){var t=e.touches[0];x0=t.clientX;y0=t.clientY;lock=null;},{passive:true});
+  view.addEventListener('touchmove',function(e){ if(x0===null)return; var t=e.touches[0],dx=t.clientX-x0,dy=t.clientY-y0; if(lock===null&&(Math.abs(dx)>8||Math.abs(dy)>8)) lock=Math.abs(dx)>Math.abs(dy)?'x':'y'; },{passive:true});
+  view.addEventListener('touchend',function(e){ if(x0===null||lock!=='x'){x0=null;return;} var dx=e.changedTouches[0].clientX-x0; if(dx<-45)go(cur+1); else if(dx>45)go(cur-1); x0=null; },{passive:true});
 })();
 </script>
 
