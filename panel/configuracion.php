@@ -109,6 +109,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ' . $volver . 'negocio&ok=1'); exit;
     }
 
+    // "Corre el corillo AHORA" — dispara el trabajo autónomo a demanda (no espera al cron semanal).
+    if ($accion === 'corre_ahora') {
+        $elegible = (function_exists('activacion_de_prueba') && activacion_de_prueba($usuario['email'] ?? null));
+        if (!$elegible) { try { $elegible = plan_de_marca($pdo, $marca_id) !== null; } catch (Throwable $e) {} }
+        if (!$elegible) { header('Location: ' . $volver . 'negocio&error=' . urlencode('Activa tu plan para que el corillo trabaje solo.')); exit; }
+        try {
+            $res = trabajo_autonomo($pdo, $marca_id);
+            $nn  = (int)($res['creadas'] ?? 0);
+            $msg = $nn > 0
+                ? "El corillo te dejó {$nn} post" . ($nn === 1 ? '' : 's') . " en Propuestas → Revisar."
+                : "El corillo revisó — ya tienes suficientes borradores por ahora.";
+            header('Location: ' . $volver . 'negocio&corillo=' . urlencode($msg)); exit;
+        } catch (Throwable $e) {
+            header('Location: ' . $volver . 'negocio&error=' . urlencode('El corillo no pudo ahora: ' . substr($e->getMessage(), 0, 90))); exit;
+        }
+    }
+
     header('Location: ' . $volver . $h($tab)); exit;
 }
 
@@ -200,6 +217,7 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
 
   <?php if ($ok): ?><div class="cfg-msg ok"><?= ico('check-circle') ?>Guardado.</div><?php endif; ?>
   <?php if ($okpass): ?><div class="cfg-msg ok"><?= ico('check-circle') ?>Contraseña actualizada.</div><?php endif; ?>
+  <?php if (($corillo = $_GET['corillo'] ?? '') !== ''): ?><div class="cfg-msg ok"><?= ico('sparkles') ?><?= $h($corillo) ?></div><?php endif; ?>
   <?php if ($error): ?><div class="cfg-msg err">⚠️ <?= $h($error) ?></div><?php endif; ?>
 
   <div class="cfg-view" id="cfgView"><div class="cfg-track" id="cfgTrack">
@@ -320,6 +338,15 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
         </select>
         <div class="cfg-hint">Solo escribe los textos automático; el arte lo creas tú al aprobar (así controlas el costo). <?php if(!empty($m['autopilot_ultimo'])): ?><br>Última corrida: <?= $h(date('d/m/Y H:i', strtotime($m['autopilot_ultimo']))) ?>.<?php endif; ?></div>
         <button class="cfg-save" type="submit">Guardar</button>
+      </div>
+    </form>
+
+    <form method="post" action="<?= $turl('negocio') ?>" onsubmit="var b=this.querySelector('button');b.textContent='✨ El corillo está trabajando…';b.disabled=true;">
+      <?= csrf_field() ?><input type="hidden" name="accion" value="corre_ahora">
+      <div class="cfg-card">
+        <h2><?= ico('sparkles') ?> ¿No quieres esperar?</h2>
+        <p class="sub">Dispara el corillo ahora mismo: te prepara los posts que falten y los deja como borradores en Propuestas → Revisar. (Sin esperar al piloto semanal.)</p>
+        <button class="cfg-save" type="submit">⚡ Corre el corillo ahora</button>
       </div>
     </form>
 

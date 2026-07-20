@@ -964,19 +964,25 @@ SYS;
         . "- tema: 2-4 palabras.\n"
         . "- idea: 1-2 oraciones ESPECÍFICAS con el gancho (qué se ve y por qué engancha). Concreta, de este negocio.";
 
-    $r = ia_ejecutar($pdo, 'planificador', "Planificar {$n_piezas} piezas {$mes}/{$anio}", $prompt, [
-        'marca_id'   => $marca_id,
-        'sistema'    => $sistema,
-        'json'       => true,
-        'temperatura'=> 0.8,
-        'max_tokens' => 4096,
-        'thinking_budget' => 0,   // tarea estructurada: sin pensamiento, JSON completo
-        'mock_texto' => '{"piezas":[{"dia":5,"plataforma":"instagram","tipo":"post","tema":"Producto estrella","idea":"Foto del bizcocho de guayaba con CTA por WhatsApp."}]}',
-    ]);
-
-    $plan = json_decode($r['texto'], true);
-    $piezas = $plan['piezas'] ?? [];
-    if (!$piezas) throw new RuntimeException("El planificador no devolvió piezas. Respuesta: " . substr($r['texto'], 0, 300));
+    // Reintento acotado: si el modelo devuelve JSON truncado/inválido (pasa a veces), reintenta.
+    // Crítico para el corillo AUTÓNOMO: un fallo transitorio no debe dejar la semana sin posts.
+    $plan = null; $piezas = [];
+    for ($try = 1; $try <= 3; $try++) {
+        $r = ia_ejecutar($pdo, 'planificador', "Planificar {$n_piezas} piezas {$mes}/{$anio}", $prompt, [
+            'marca_id'   => $marca_id,
+            'sistema'    => $sistema,
+            'json'       => true,
+            'temperatura'=> 0.8,
+            'max_tokens' => 6144,        // margen para que NO se trunque (truncar = JSON inválido)
+            'thinking_budget' => 0,      // tarea estructurada: sin pensamiento, JSON completo
+            'mock_texto' => '{"piezas":[{"dia":5,"plataforma":"instagram","tipo":"post","tema":"Producto estrella","idea":"Foto del bizcocho de guayaba con CTA por WhatsApp."}]}',
+        ]);
+        $plan = json_decode((string)$r['texto'], true);
+        $piezas = $plan['piezas'] ?? [];
+        if ($piezas) break;              // JSON válido con piezas → listo
+        error_log("planificar_mes: intento {$try}/3 sin piezas (JSON truncado/inválido) marca={$marca_id}");
+    }
+    if (!$piezas) throw new RuntimeException("El planificador no devolvió piezas tras 3 intentos. Respuesta: " . substr((string)$r['texto'], 0, 300));
 
     // Crear/obtener el calendario del periodo (UNIQUE por marca+anio+mes).
     $pdo->prepare(
