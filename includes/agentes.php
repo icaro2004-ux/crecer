@@ -320,36 +320,59 @@ function generar_logo(PDO $pdo, int $marca_id, array $opts = []): array {
  * profesional para redes (mantiene el producto real; regla de IP).
  */
 /**
- * DIRECTOR DE ARTE — lee el caption + el negocio + el tono y propone, en
- * español sencillo, QUÉ debe mostrar la imagen para que PEGUE con el post.
- * El dueño lee y aprueba la idea (no escribe prompts). Se le pasa luego a
- * generar_grafica como 'instrucciones' → el arte coincide con lo prometido.
- * Es una llamada de TEXTO (barata): sugerir ideas no quema generaciones de imagen.
+ * ESTILO de arte elegido por el dueño → dirección visual para el Director de Arte
+ * (sugerir) y para la generación de imagen (generar). Da VARIEDAD real: ya no todo
+ * es hiperrealista. Desconocido → 'realista'.
+ * @return array{label:string, sugerir:string, generar:string}
  */
-function sugerir_arte(PDO $pdo, int $marca_id, string $caption, string $ajuste = '', string $evitar = ''): string {
+function estilo_arte_direccion(string $estilo): array {
+    $map = [
+        'realista' => [
+            'label'   => 'Realista',
+            'sugerir' => "ESTILO: fotografía REAL y premium, como la tomaría un fotógrafo profesional.",
+            'generar' => "Fotografía profesional real: luz natural suave y direccional, sombras creíbles, profundidad de campo (bokeh), texturas ricas, acabado editorial. Nada de look plástico/CGI.",
+        ],
+        'creativo' => [
+            'label'   => 'Creativo',
+            'sugerir' => "ESTILO: CREATIVO y estilizado — composición audaz, colores vivos, un giro visual inesperado que sorprenda (sin volverse genérico ni caótico).",
+            'generar' => "Estilo CREATIVO y artístico: composición audaz e inesperada, colores vibrantes, contraste fuerte, un concepto visual con gancho. Puede estilizar la realidad (no tiene que ser foto literal), pero limpio y de alta calidad.",
+        ],
+        'fantasia' => [
+            'label'   => 'Fantasía',
+            'sugerir' => "ESTILO: FANTÁSTICO y de ensueño — elementos mágicos o surrealistas, atmósfera de cuento, luz de ensueño, algo memorable y espectacular.",
+            'generar' => "Estilo FANTÁSTICO / de ensueño: atmósfera mágica y surrealista, luz dramática y brillos, elementos oníricos, paleta rica y saturada, sensación de cuento. Espectacular pero coherente con el mensaje del post.",
+        ],
+        'ilustracion' => [
+            'label'   => 'Ilustración',
+            'sugerir' => "ESTILO: ILUSTRACIÓN / arte digital — trazo, formas y color de ilustración (no foto), moderno y con personalidad.",
+            'generar' => "Estilo ILUSTRACIÓN / arte digital: formas limpias, trazo definido, paleta plana o con degradados suaves, composición moderna. NO es fotografía — es ilustración con carácter.",
+        ],
+    ];
+    return $map[strtolower(trim($estilo))] ?? $map['realista'];
+}
+
+/**
+ * DIRECTOR DE ARTE — lee el CAPTION y propone una imagen que ILUSTRE lo que el
+ * texto dice (mismo mensaje, no dos cosas sueltas). El dueño la lee y aprueba.
+ * $estilo_arte: realista|creativo|fantasia|ilustracion. Es una llamada de TEXTO (barata).
+ */
+function sugerir_arte(PDO $pdo, int $marca_id, string $caption, string $ajuste = '', string $evitar = '', string $estilo_arte = 'realista'): string {
     $m = leer_marca($pdo, $marca_id);
     $ctx = marca_contexto($m);
-    $sistema = "Eres el DIRECTOR DE ARTE de Crecer. Tomas lo que el dueño quiere y lo conviertes "
-        . "en una idea visual CONCRETA y VÍVIDA para la imagen del post — como la dirigiría un "
-        . "fotógrafo profesional. El dueño (que no sabe de diseño) la lee y la aprueba.\n"
-        . "Devuelve 2-3 frases en español sencillo (sin jerga, sin la palabra \"prompt\") que "
-        . "describan con DETALLE: (1) el sujeto principal, (2) el entorno y los props concretos, "
-        . "(3) el ángulo/encuadre, (4) la luz y el ambiente, (5) la paleta de color. "
-        . "Sé ESPECÍFICO, no genérico: nombra cosas concretas (ej. \"sobre tabla de madera rústica "
-        . "con harina espolvoreada y un paño de lino al lado\", NO \"en una mesa\"). Realista, "
-        . "apetitoso, premium. Sin texto dentro de la imagen salvo que ayude; deja aire arriba por "
-        . "si va texto encima.\n\n"
-        . "SÉ CREATIVO Y SORPRENDE — no repitas el mismo tipo de escena post tras post. "
-        . "No caigas POR DEFECTO en el cliché gastado de teléfono / tablet / laptop con redes sociales o apps, "
-        . "'persona en un escritorio con café', pantallas o notificaciones flotantes — se ve genérico y aburre. "
-        . "Si el post lo pide de verdad, úsalo; si no, busca algo más fresco.\n"
-        . "Escoge UNA dirección visual según lo que pida ESTE post, y rótala entre estas: "
-        . "(a) el producto o servicio EN ACCIÓN / primer plano; (b) las MANOS del dueño creando o trabajando; "
-        . "(c) el LOCAL o el ambiente real del negocio; (d) un CLIENTE disfrutando el resultado; "
-        . "(e) los INGREDIENTES o materiales crudos; (f) la CALLE, la plaza o el pueblo boricua; "
-        . "(g) un MOMENTO de vida cotidiana; (h) un CONCEPTO gráfico audaz y colorido. "
-        . "Si el negocio es un SERVICIO (sin producto físico), muestra el RESULTADO real, la gente o el "
-        . "impacto — nunca un dispositivo con pantalla como muleta.";
+    $est = estilo_arte_direccion($estilo_arte);
+    $sistema = "Eres el DIRECTOR DE ARTE de Crecer. Tu trabajo: leer el TEXTO del post y proponer una imagen que "
+        . "ILUSTRE LO QUE EL TEXTO DICE — su tema, su mensaje, su emoción. La imagen y el copy tienen que ser UNA "
+        . "sola idea, NO dos cosas sueltas.\n"
+        . "PIENSA PRIMERO: ¿de qué habla ESTE post exactamente? ¿cuál es el sujeto y la emoción? LUEGO propón una "
+        . "escena que haga VISIBLE ese mensaje. Si el post habla de una marca/logo, muestra identidad/diseño; si "
+        . "habla de un producto, muestra ESE producto; si es un servicio, muestra el RESULTADO, la gente o el "
+        . "impacto — NUNCA una escena random (café, amanecer, escritorio) que no tenga que ver con el texto.\n"
+        . "Devuelve 2-3 frases en español sencillo (sin jerga, sin la palabra \"prompt\") con DETALLE concreto: "
+        . "(1) el sujeto principal, (2) el entorno y props concretos, (3) el ángulo/encuadre, (4) la luz y el "
+        . "ambiente, (5) la paleta. Específico, no genérico. Deja aire arriba por si va texto encima.\n"
+        . "Varía las escenas post a post, PERO siempre PEGADO a lo que dice el copy. Evita el cliché de pantallas "
+        . "de celular/laptop con apps o notificaciones flotantes.\n"
+        . $est['sugerir'];
     if (function_exists('tono_instruccion')) $sistema .= tono_instruccion($m);
     $prompt = "Perfil del negocio:\n{$ctx}\n\nTexto del post (la imagen TIENE que pegar con esto):\n\"{$caption}\"\n";
     if (trim($ajuste) !== '') $prompt .= "\nLO QUE PIDE EL DUEÑO (es lo más importante — EXPÁNDELO con detalle visual, no lo ignores): {$ajuste}\n";
@@ -725,12 +748,14 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
     if ($linea !== '') $prompt .= "- LÍNEA DE DISEÑO DE LA MARCA — MANTÉN SIEMPRE este estilo visual (colores, mood, tratamiento) para que todos los posts se vean de la misma familia: {$linea}\n";
     $instr = trim($opts['instrucciones'] ?? '');
     if ($instr !== '') $prompt .= "- LO QUE PIDE EL DUEÑO PARA ESTA IMAGEN (prioriza esto, sin romper la línea de diseño): {$instr}\n";
+    // ESTILO elegido por el dueño (realista/creativo/fantasia/ilustracion). Con FOTO real se fuerza
+    // realista: no se distorsiona el producto del negocio (regla de IP). Sin foto, respeta la elección.
+    $est_arte = $tiene_foto ? estilo_arte_direccion('realista') : estilo_arte_direccion(trim($opts['estilo_arte'] ?? 'realista'));
     $prompt .= "- DIRECCIÓN DE ARTE (calidad tope, que NO se vea \"AI genérico\" ni barato):\n"
-             . "  · Fotografía profesional real: iluminación natural suave y direccional (golden hour / softbox), sombras creíbles.\n"
-             . "  · Composición intencional (regla de tercios), profundidad de campo con fondo desenfocado (bokeh), foco nítido en el protagonista.\n"
-             . "  · Texturas y detalles ricos y reales; colores cálidos boricuas pero NATURALES (sin sobresaturar); acabado editorial premium.\n"
-             . "  · EVITA a toda costa: look plástico/CGI, objetos deformes o flotando, texto inventado, watermarks falsos, simetría artificial, ruido, y el cliché de pantallas de celular/tablet/laptop con redes sociales o notificaciones flotantes (a menos que el post sea literalmente sobre eso).\n"
-             . "  · Meta: una foto que un fotógrafo profesional tomaría para redes, sobre EL TEMA del post — nítida, con alma, lista para publicar.";
+             . "  · {$est_arte['generar']}\n"
+             . "  · Composición intencional (regla de tercios), foco nítido en el protagonista, acabado premium.\n"
+             . "  · EVITA a toda costa: objetos deformes o flotando, texto inventado, watermarks falsos, ruido, y el cliché de pantallas de celular/tablet/laptop con redes sociales o notificaciones flotantes (a menos que el post sea literalmente sobre eso).\n"
+             . "  · Meta: una imagen sobre EL TEMA del post — nítida, con alma, lista para publicar.";
 
     // Calidad make-or-break: SIEMPRE el Pro (Nano Banana Pro). Antes el "sin texto"
     // caía al flash barato y se notaba la baja calidad. El Pro (~$0.13) vale la pena

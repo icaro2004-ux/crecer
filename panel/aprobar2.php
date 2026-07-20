@@ -101,8 +101,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($cap === false) { echo json_encode(['ok'=>false,'err'=>'Post no encontrado.']); exit; }
         $ajuste = trim((string)($_POST['ajuste'] ?? ''));
         $evitar = trim((string)($_POST['evitar'] ?? ''));   // idea anterior → dame otra distinta
+        $estilo_arte = trim((string)($_POST['estilo_arte'] ?? 'realista'));
         try {
-            $idea = sugerir_arte($pdo, $marca_id, (string)$cap, $ajuste, $evitar);
+            $idea = sugerir_arte($pdo, $marca_id, (string)$cap, $ajuste, $evitar, $estilo_arte);
             echo json_encode(['ok'=>true, 'idea'=>$idea], JSON_UNESCAPED_UNICODE);
         } catch (Throwable $e) {
             echo json_encode(['ok'=>false, 'err'=>substr($e->getMessage(),0,160)], JSON_UNESCAPED_UNICODE);
@@ -187,6 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'con_logo'     => !empty($_POST['con_logo']),
                 'logo_estilo'  => $_POST['logo_estilo'] ?? 'esquina',
                 'estilo'       => $_POST['estilo'] ?? '',
+                'estilo_arte'  => $_POST['estilo_arte'] ?? 'realista',   // realista/creativo/fantasia/ilustracion
                 'instrucciones'=> trim($_POST['instrucciones'] ?? ''),
             ]);
             $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, arte_intentos=arte_intentos+1, updated_at=NOW() WHERE id=? AND marca_id=?")
