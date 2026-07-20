@@ -293,9 +293,9 @@ body{
   /* Navegación consolidada: en móvil la barra de abajo ES la navegación primaria.
      El panel del avatar NO repite esos 4 destinos — solo Biblioteca + perfil. */
   .side nav:not(.nav-perfil) a:not([href*="biblioteca"]){display:none}
-  /* El avatar es el acceso al menú: fuera el hamburger que duplicaba la barra. */
-  .ptop-menu .bars{display:none}
-  .ptop-menu{padding:4px}
+  /* El avatar es el acceso al menú. El hamburger al lado SEÑALA que ahí hay
+     menú (sin él, la inicial sola no se lee como botón). */
+  .ptop-menu .bars{display:flex}
 }
 
 /* ── Lightbox (agrandar imágenes al tocar) ── */
