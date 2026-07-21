@@ -50,7 +50,15 @@ try {
     // 3) Prueba EN VIVO contra OpenAI (opcional): añade  &test=img  a la URL.
     //    Hace 1 llamada real y muestra el resultado o el ERROR EXACTO (ej. "org
     //    no verificada"). Cuesta ~$0.17 la prueba.
-    if (($_GET['test'] ?? '') === 'img') {
+    // Los tests EN VIVO gastan dinero (llaman a OpenAI/Gemini) → exigen el CRON_TOKEN real,
+    // no el 'crecer' público. Evita que alguien te queme el balance con &test=img/arte en loop.
+    $__test = $_GET['test'] ?? '';
+    $__tok  = defined('CRON_TOKEN') ? CRON_TOKEN : '';
+    if ($__test !== '' && ($__tok === '' || !hash_equals($__tok, (string)($_GET['t'] ?? '')))) {
+        echo "\n(Para las pruebas en vivo &test=img/arte añade  &t=TU_CRON_TOKEN  — gastan dinero, por eso van protegidas.)\n";
+        $__test = '';
+    }
+    if ($__test === 'img') {
         echo "\n--- Prueba EN VIVO a OpenAI (gpt-image-1) ---\n";
         try {
             $r = openai_imagen('Un café boricua humeante sobre madera, luz cálida, foto premium', ['aspect' => '1:1']);
@@ -68,7 +76,7 @@ try {
 
     // Prueba REAL del arte de los posts: corre generar_grafica() end-to-end.
     //    Añade  &test=arte  a la URL. Dice si genera, con qué modelo y si guarda el archivo.
-    if (($_GET['test'] ?? '') === 'arte') {
+    if ($__test === 'arte') {
         echo "\n--- Prueba REAL de generar_grafica (el arte de los posts) ---\n";
         try {
             require_once __DIR__ . '/includes/agentes.php';

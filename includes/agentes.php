@@ -1033,6 +1033,7 @@ SYS;
         error_log("planificar_mes: intento {$try}/3 sin piezas (JSON truncado/inválido) marca={$marca_id}");
     }
     if (!$piezas) throw new RuntimeException("El planificador no devolvió piezas tras 3 intentos. Respuesta: " . substr((string)$r['texto'], 0, 300));
+    $piezas = array_slice($piezas, 0, max(1, $n_piezas));   // no materializar de más (controla el costo de imágenes)
 
     // Crear/obtener el calendario del periodo (UNIQUE por marca+anio+mes).
     $pdo->prepare(
@@ -1205,7 +1206,7 @@ function debate_creativo(PDO $pdo, int $marca_id, string $idea, string $platafor
 
         return [
             'brief'   => $brief,
-            'visual'  => trim((string)($angulos[$idx]['visual'] ?? '')),   // concepto de imagen del ángulo ganador
+            'visual'  => (is_string($__v = ($angulos[$idx]['visual'] ?? '')) ? trim($__v) : ''),   // concepto de imagen del ángulo ganador
             'angulos' => $angulos,
             'elegido' => $elegido,
             'razon'   => trim((string)($dec['razon'] ?? '')),
@@ -1222,7 +1223,7 @@ function debate_creativo(PDO $pdo, int $marca_id, string $idea, string $platafor
  * concreta y el escritor lo SUBE una vez (sin perder voz ni inventar datos). Es el
  * "kick": la parte que se niega a lo genérico. Devuelve ['caption', 'nota'].
  */
-function criticar_y_afinar(PDO $pdo, int $marca_id, string $caption, string $brief, string $sistema_escritor): array {
+function criticar_y_afinar(PDO $pdo, int $marca_id, string $caption, string $brief, string $sistema_escritor, string $ctx = ''): array {
     $caption = trim($caption);
     if ($caption === '') return ['caption' => $caption, 'nota' => ''];
     try {
@@ -1237,17 +1238,23 @@ function criticar_y_afinar(PDO $pdo, int $marca_id, string $caption, string $bri
             'temperatura' => 0.5, 'max_tokens' => 160, 'thinking_budget' => 0, 'mock_texto' => 'OK',
         ]);
         $nota = trim((string)$rc['texto']);
-        if ($nota === '' || stripos($nota, 'OK') === 0 || mb_strlen($nota) < 8) {
-            return ['caption' => $caption, 'nota' => '']; // pasó la vara
+        // Pasa la vara SOLO si respondió exactamente "OK" (le pedí eso). Cualquier otra
+        // cosa es una nota (antes "Ok, pero…" pasaba por error, y notas cortas se botaban).
+        if ($nota === '' || preg_match('/^\s*ok[.!]?\s*$/i', $nota)) {
+            return ['caption' => $caption, 'nota' => ''];
         }
-        // UNA revisión: el escritor lo sube atendiendo la nota, con su misma voz y reglas.
+        // UNA revisión: el escritor lo sube atendiendo la nota, con su voz Y con los HECHOS
+        // del negocio delante (para NO inventar datos ni romper el CTA en la reescritura).
         $rr = ia_ejecutar($pdo, 'creador', 'Afinar el post (nota del Director)',
-            "Tu caption:\n\"{$caption}\"\n\nEl Director Creativo te dice: \"{$nota}\"\n\nReescríbelo SUBIÉNDOLO con esa "
-            . "nota: más cabrón, más específico y más humano — misma voz, mismos datos, sin inventar nada. Devuelve SOLO el caption.", [
+            ($ctx !== '' ? "Negocio (estos son los HECHOS — no inventes nada fuera de esto):\n{$ctx}\n\n" : '')
+            . "Tu caption:\n\"{$caption}\"\n\nEl Director Creativo te dice: \"{$nota}\"\n\nReescríbelo SUBIÉNDOLO con esa "
+            . "nota: más cabrón, más específico y más humano — misma voz, mismos datos reales, sin inventar nada, y "
+            . "conserva el llamado a la acción y los hashtags. Devuelve SOLO el caption.", [
             'marca_id' => $marca_id, 'sistema' => $sistema_escritor,
             'temperatura' => 0.95, 'max_tokens' => 420, 'thinking_budget' => 0, 'mock_texto' => $caption,
         ]);
         $mejor = trim((string)$rr['texto']);
+        if (function_exists('_limpiar_cta_rota')) $mejor = _limpiar_cta_rota($mejor);   // mata CTA colgante ("al .")
         return ['caption' => ($mejor !== '' ? $mejor : $caption), 'nota' => $nota];
     } catch (Throwable $e) {
         error_log('criticar_y_afinar: ' . $e->getMessage());
@@ -1333,7 +1340,7 @@ SYS;
     $caption = trim((string)$r['texto']);
 
     // EL DIRECTOR CREATIVO sube la vara: una revisión si el caption salió genérico.
-    $crit = criticar_y_afinar($pdo, (int)$pieza['marca_id'], $caption, $debate['brief'], $sistema);
+    $crit = criticar_y_afinar($pdo, (int)$pieza['marca_id'], $caption, $debate['brief'], $sistema, $ctx);
     $caption = $crit['caption'];
 
     $pdo->prepare("UPDATE crecer_contenido SET caption = ?, ia_log_id = ?, updated_at = NOW() WHERE id = ?")
@@ -1377,7 +1384,7 @@ SYS;
     $prompt = "Perfil del negocio:\n{$ctx}\n\n"
         . "Plataforma: {$pieza['plataforma']} | Tipo: {$pieza['tipo']}\n";
     // La mesa del corillo solo entra en TEMA nuevo; si el dueño trajo su borrador, se respeta su voz.
-    $debate = ['brief' => '', 'angulos' => [], 'elegido' => '', 'razon' => ''];
+    $debate = ['brief' => '', 'visual' => '', 'angulos' => [], 'elegido' => '', 'razon' => ''];
     if (trim($borrador) !== '') {
         $prompt .= "El DUEÑO escribió este BORRADOR del post. MEJÓRALO: corrige, pule y dale chispa "
                  . "boricua, pero RESPETA su intención y sus datos (precios, fechas, productos). "
@@ -1405,7 +1412,7 @@ SYS;
 
     // EL DIRECTOR CREATIVO sube la vara (una revisión si salió genérico) — solo en tema nuevo.
     $crit = ($debate['brief'] !== '')
-        ? criticar_y_afinar($pdo, (int)$pieza['marca_id'], $caption, $debate['brief'], $sistema)
+        ? criticar_y_afinar($pdo, (int)$pieza['marca_id'], $caption, $debate['brief'], $sistema, $ctx)
         : ['caption' => $caption, 'nota' => ''];
     $caption = $crit['caption'];
 
@@ -1428,9 +1435,15 @@ function redactar_calendario(PDO $pdo, int $calendario_id): array {
     $resultados = [];
     $costo_total = 0.0;
     foreach ($ids->fetchAll(PDO::FETCH_COLUMN) as $cid) {
-        $res = redactar_pieza($pdo, (int)$cid);
-        $costo_total += $res['costo'];
-        $resultados[] = ['contenido_id' => (int)$cid] + $res;
+        // Aísla el fallo por pieza: un error transitorio en una NO debe abortar el lote.
+        try {
+            $res = redactar_pieza($pdo, (int)$cid);
+            $costo_total += $res['costo'];
+            $resultados[] = ['contenido_id' => (int)$cid] + $res;
+        } catch (Throwable $e) {
+            error_log("redactar_calendario pieza {$cid}: " . $e->getMessage());
+            $resultados[] = ['contenido_id' => (int)$cid, 'error' => true];
+        }
     }
     return ['piezas' => $resultados, 'costo_total' => round($costo_total, 6)];
 }

@@ -23,10 +23,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && csrf_ok()) {
         if ($v !== '') $nombres[$key] = mb_substr($v, 0, 24);
     }
     $json = $nombres ? json_encode($nombres, JSON_UNESCAPED_UNICODE) : null;
-    $pdo->prepare("UPDATE crecer_marca SET equipo_nombres = ? WHERE id = ?")->execute([$json, $marca_id]);
-    // Recarga la marca para reflejar lo guardado.
-    $marca['equipo_nombres'] = $json;
-    $guardado = true;
+    try {
+        $pdo->prepare("UPDATE crecer_marca SET equipo_nombres = ? WHERE id = ?")->execute([$json, $marca_id]);
+        $marca['equipo_nombres'] = $json;   // refleja lo guardado
+        $guardado = true;
+    } catch (Throwable $e) {
+        // Falta la migración equipo_nombres en esta base → no reventar con 500.
+        $guardar_err = 'No se pudo guardar (falta correr la migración de equipo en la base de datos).';
+    }
 }
 
 $nombres = equipo_nombres($marca);
@@ -61,6 +65,9 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   <div class="eq-sub">Estos son los que trabajan para ti. Ponles el nombre que quieras — así se sienten tuyos. Los verás con ese nombre cuando armen tus posts. (Déjalo en blanco para usar el nombre por defecto.)</div>
 </div>
 
+<?php if (!empty($guardar_err)): ?>
+  <div style="background:#ffe0d6;border:1px solid #f2b3a0;color:#8a2a1a;border-radius:12px;padding:11px 15px;margin-bottom:16px;font-weight:700;font-size:13.5px">⚠️ <?= $h($guardar_err) ?></div>
+<?php endif; ?>
 <?php if ($guardado): ?>
   <div style="background:#e6f7f4;border:1px solid #9ad9d0;color:#0a6a5f;border-radius:12px;padding:11px 15px;margin-bottom:16px;font-weight:700;font-size:13.5px">✓ Listo — tu equipo quedó bautizado.</div>
 <?php endif; ?>

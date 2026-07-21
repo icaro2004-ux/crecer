@@ -464,7 +464,22 @@ $n_pend = $n_revisar; $n_aprob = $n_listos;                                // al
 // §8.2 — Contenido entra DIRECTO al estado más útil, sin hub duplicado.
 if ($es_hub) {
     $dest = ($n_revisar > 0) ? 'revisar' : (($n_listos > 0) ? 'listos' : (($n_biblioteca > 0) ? 'biblioteca' : 'revisar'));
-    header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&tab={$dest}"); exit;
+    // FIX (flujo editar): preservar ?edit= y rutear al TAB donde vive ese post,
+    // para que el auto-open encuentre el card y abra el editor (antes el redirect
+    // botaba el edit → "Ajustar" no abría nada).
+    $extra = '';
+    if (isset($_GET['edit']) && ctype_digit((string)$_GET['edit'])) {
+        $eid = (int)$_GET['edit'];
+        try {
+            $est = $pdo->prepare("SELECT estado FROM crecer_contenido WHERE id=? AND marca_id=?");
+            $est->execute([$eid, $marca_id]); $e = (string)$est->fetchColumn();
+            if ($e === 'borrador') $dest = 'revisar';
+            elseif (in_array($e, ['aprobado','programado','fallido'], true)) $dest = 'listos';
+            elseif ($e === 'publicado') $dest = 'biblioteca';
+        } catch (Throwable $ex) {}
+        $extra = "&edit={$eid}";
+    }
+    header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&tab={$dest}{$extra}"); exit;
     // (el bloque HTML del hub de abajo queda inalcanzable a propósito)
 }
 
