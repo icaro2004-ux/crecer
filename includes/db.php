@@ -81,6 +81,11 @@ try {
             PDO::ATTR_EMULATE_PREPARES   => false,
         ]
     );
+    // Mantener la conexión viva durante operaciones LARGAS: generar una imagen con
+    // IA deja la conexión inactiva ~15-30s (o más si son varias), y Hostinger la
+    // cierra rápido (wait_timeout bajo) → "MySQL server has gone away" al guardar.
+    // Subir el timeout de la sesión a 10 min evita que se caiga a mitad.
+    try { $pdo->exec("SET SESSION wait_timeout=600, interactive_timeout=600"); } catch (Throwable $e) {}
 } catch (PDOException $e) {
     error_log('db.php — conexión PDO falló: ' . $e->getMessage());
     http_response_code(500);
