@@ -354,7 +354,21 @@ function estilo_arte_direccion(string $estilo): array {
             'generar' => "Estilo ILUSTRACIÓN / arte digital: formas limpias, trazo definido, paleta plana o con degradados suaves, composición moderna. NO es fotografía — es ilustración con carácter.",
         ],
     ];
-    return $map[strtolower(trim($estilo))] ?? $map['realista'];
+    // Permite COMBINAR estilos: "creativo+fantasia" → funde ambas direcciones en una.
+    $claves = array_values(array_filter(
+        array_map('trim', preg_split('/[+,]/', strtolower(trim($estilo)))),
+        fn($k) => isset($map[$k])
+    ));
+    if (count($claves) <= 1) return $map[$claves[0] ?? 'realista'] ?? $map['realista'];
+
+    $labels = $sug = $gen = [];
+    foreach ($claves as $k) { $labels[] = $map[$k]['label']; $sug[] = $map[$k]['sugerir']; $gen[] = $map[$k]['generar']; }
+    $etq = implode(' + ', $labels);
+    return [
+        'label'   => $etq,
+        'sugerir' => "ESTILO COMBINADO ({$etq}): mezcla estas vibras en UNA sola imagen coherente, no un collage.\n- " . implode("\n- ", $sug),
+        'generar' => "ESTILO COMBINADO ({$etq}) — funde estas direcciones en UNA sola imagen coherente y de alta calidad (no un collage ni dos mitades):\n- " . implode("\n- ", $gen),
+    ];
 }
 
 /**
@@ -1073,6 +1087,74 @@ function aprender_de_edicion(PDO $pdo, int $marca_id, string $original, string $
     } catch (Throwable $e) { return null; }
 }
 
+/**
+ * LA MESA DEL CORILLO — debate creativo para que el post salga ATREVIDO, no
+ * genérico. EL PROVOCADOR (creativo guerrillero, vanguardista) lanza 3 ángulos
+ * audaces para ESTE negocio y su público; LA ESTRATEGA elige el que mejor le
+ * pega al público objetivo y lo afila en un BRIEF concreto para el escritor.
+ * Ambos loguean → el dueño ve a su equipo pensando (evidencia XPRIZE #2).
+ *
+ * REGLA DE ORO: proponen ÁNGULOS y GANCHOS creativos, NUNCA inventan hechos del
+ * negocio (precios, productos, promesas). Atrevido en la FORMA, honesto en el
+ * FONDO — el grounding lo siguen cuidando el escritor y el editor.
+ *
+ * @return array{brief:string, angulos:array, elegido:string, razon:string}
+ *   brief='' si el debate falló → el escritor sigue con la idea original.
+ */
+function debate_creativo(PDO $pdo, int $marca_id, string $idea, string $plataforma = '', string $tipo = 'post'): array {
+    $vacio = ['brief' => '', 'angulos' => [], 'elegido' => '', 'razon' => ''];
+    $idea = trim($idea);
+    if ($idea === '') return $vacio;
+    try {
+        $m = leer_marca($pdo, $marca_id);
+        $ctx = marca_contexto($m);
+
+        // ── 1) EL PROVOCADOR: 3 ángulos audaces ──
+        $sysProv = "Eres EL PROVOCADOR de Crecer: un creativo publicitario GUERRILLERO y vanguardista que domina "
+            . "todo tipo de marketing (guerrilla, disruptivo, FOMO/escasez, storytelling, emocional, meme, nostalgia, "
+            . "contraste, prueba social) y sabe cómo llegarle al público REAL de un negocio boricua. Tu trabajo: lanzar "
+            . "3 ÁNGULOS distintos y ATREVIDOS para este post — ganchos que FRENEN el scroll, nada tibio ni genérico. "
+            . "Cada ángulo = una táctica + un gancho concreto para ESTE negocio y su público.\n"
+            . "REGLA DE ORO: propones ENFOQUES y GANCHOS, NUNCA inventas hechos del negocio (precios, productos, "
+            . "promesas que no existen). Atrevido en la FORMA, honesto en el FONDO. Responde SOLO JSON.";
+        $promProv = "Negocio:\n{$ctx}\n\nPlataforma: {$plataforma} · Tipo: {$tipo}\nIdea base del post: \"{$idea}\"\n\n"
+            . 'Devuelve JSON EXACTO: {"angulos":[{"tactica":"nombre corto","gancho":"el ángulo/gancho en 1 frase","porque_pega":"por qué le llega a ESTE público"}]} con 3 ángulos DISTINTOS y audaces.';
+        $rp = ia_ejecutar($pdo, 'provocador', 'Lanzar ángulos audaces', $promProv, [
+            'marca_id' => $marca_id, 'sistema' => $sysProv, 'json' => true,
+            'modelo' => CRECER_COPILOTO_MODEL, 'temperatura' => 1.0, 'max_tokens' => 650, 'thinking_budget' => 0,
+            'mock_texto' => '{"angulos":[{"tactica":"Escasez","gancho":"Solo 10 esta semana","porque_pega":"lo que se acaba mueve al boricua"},{"tactica":"Nostalgia","gancho":"Como los de abuela","porque_pega":"conecta con la memoria"},{"tactica":"Reto","gancho":"Te reto a que no repitas","porque_pega":"la gente comparte retos"}]}',
+        ]);
+        $angulos = json_decode((string)$rp['texto'], true)['angulos'] ?? [];
+        if (!$angulos) return $vacio;
+
+        // ── 2) LA ESTRATEGA: elige el ganador y lo afila en un brief ──
+        $lista = '';
+        foreach ($angulos as $i => $a) {
+            $lista .= ($i + 1) . ") [" . ($a['tactica'] ?? '') . "] " . ($a['gancho'] ?? '') . " — " . ($a['porque_pega'] ?? '') . "\n";
+        }
+        $sysEst = "Eres LA ESTRATEGA de Crecer. De estos ángulos, ELIGE el que mejor le pega al público objetivo de "
+            . "ESTE negocio y conviértelo en un BRIEF corto y concreto para el escritor: qué gancho usar, qué emoción "
+            . "disparar y qué debe lograr el post. Atrevido pero aterrizado; no inventes datos. Responde SOLO JSON: "
+            . '{"elegido":N,"razon":"por qué este gana","brief":"instrucción concreta para el escritor"}.';
+        $promEst = "Negocio:\n{$ctx}\n\nIdea base: \"{$idea}\"\n\nÁngulos que lanzó el Provocador:\n{$lista}\n¿Cuál gana y por qué? Dame el brief.";
+        $re = ia_ejecutar($pdo, 'estratega', 'Elegir el ángulo ganador', $promEst, [
+            'marca_id' => $marca_id, 'sistema' => $sysEst, 'json' => true,
+            'modelo' => CRECER_COPILOTO_MODEL, 'temperatura' => 0.6, 'max_tokens' => 400, 'thinking_budget' => 0,
+            'mock_texto' => '{"elegido":1,"razon":"la escasez jala compras rápidas","brief":"Empuja el gancho de escasez con urgencia real y CTA por WhatsApp. Sin inventar cantidades que el dueño no dijo."}',
+        ]);
+        $dec = json_decode((string)$re['texto'], true) ?: [];
+        $idx = max(1, min(count($angulos), (int)($dec['elegido'] ?? 1))) - 1;
+        $elegido = trim(($angulos[$idx]['tactica'] ?? '') . ': ' . ($angulos[$idx]['gancho'] ?? ''));
+        $brief = trim((string)($dec['brief'] ?? ''));
+        if ($brief === '') $brief = trim((string)($angulos[$idx]['gancho'] ?? ''));
+
+        return ['brief' => $brief, 'angulos' => $angulos, 'elegido' => $elegido, 'razon' => trim((string)($dec['razon'] ?? ''))];
+    } catch (Throwable $e) {
+        error_log('debate_creativo: ' . $e->getMessage());
+        return $vacio;
+    }
+}
+
 function redactar_pieza(PDO $pdo, int $contenido_id, array $extra = []): array {
     $c = $pdo->prepare("SELECT * FROM crecer_contenido WHERE id = ?");
     $c->execute([$contenido_id]);
@@ -1082,6 +1164,8 @@ function redactar_pieza(PDO $pdo, int $contenido_id, array $extra = []): array {
     $m = leer_marca($pdo, (int)$pieza['marca_id']);
     $ctx = marca_contexto($m);
     $idea = $pieza['caption']; // en el borrador, el caption guarda la IDEA del plan
+    // LA MESA DEL CORILLO decide el ángulo atrevido ANTES de escribir.
+    $debate = debate_creativo($pdo, (int)$pieza['marca_id'], (string)$idea, (string)$pieza['plataforma'], (string)$pieza['tipo']);
 
     $sistema = <<<SYS
 Eres el CREADOR de contenido de Crecer. Escribes captions para redes
@@ -1101,8 +1185,12 @@ SYS;
 
     $prompt = "Perfil del negocio:\n{$ctx}\n\n"
         . "Plataforma: {$pieza['plataforma']} | Tipo: {$pieza['tipo']}\n"
-        . "Idea de esta pieza: {$idea}\n\n"
-        . "Escribe el caption.";
+        . "Idea de esta pieza: {$idea}\n";
+    if ($debate['brief'] !== '') {
+        $prompt .= "\n🔥 BRIEF DEL CORILLO (síguelo — dale ESTE ángulo atrevido, sin inventar datos del negocio):\n"
+                 . $debate['brief'] . "\n";
+    }
+    $prompt .= "\nEscribe el caption.";
 
     $r = ia_ejecutar($pdo, 'creador', "Redactar caption pieza #{$contenido_id}", $prompt, array_merge([
         'marca_id'    => (int)$pieza['marca_id'],
@@ -1117,7 +1205,7 @@ SYS;
         "UPDATE crecer_contenido SET caption = ?, ia_log_id = ?, updated_at = NOW() WHERE id = ?"
     )->execute([trim($r['texto']), $r['ia_log_id'], $contenido_id]);
 
-    return ['caption' => trim($r['texto']), 'ia_log_id' => $r['ia_log_id'], 'costo' => $r['costo']];
+    return ['caption' => trim($r['texto']), 'ia_log_id' => $r['ia_log_id'], 'costo' => $r['costo'], 'debate' => $debate];
 }
 
 /**
@@ -1152,6 +1240,8 @@ SYS;
 
     $prompt = "Perfil del negocio:\n{$ctx}\n\n"
         . "Plataforma: {$pieza['plataforma']} | Tipo: {$pieza['tipo']}\n";
+    // La mesa del corillo solo entra en TEMA nuevo; si el dueño trajo su borrador, se respeta su voz.
+    $debate = ['brief' => '', 'angulos' => [], 'elegido' => '', 'razon' => ''];
     if (trim($borrador) !== '') {
         $prompt .= "El DUEÑO escribió este BORRADOR del post. MEJÓRALO: corrige, pule y dale chispa "
                  . "boricua, pero RESPETA su intención y sus datos (precios, fechas, productos). "
@@ -1159,6 +1249,11 @@ SYS;
         if (trim($tema) !== '') $prompt .= "Tema/contexto extra: {$tema}\n";
     } else {
         $prompt .= "El DUEÑO pidió un post sobre este TEMA específico: \"{$tema}\".\n";
+        $debate = debate_creativo($pdo, (int)$pieza['marca_id'], (string)$tema, (string)$pieza['plataforma'], (string)$pieza['tipo']);
+        if ($debate['brief'] !== '') {
+            $prompt .= "\n🔥 BRIEF DEL CORILLO (síguelo — dale ESTE ángulo atrevido, sin inventar datos del negocio):\n"
+                     . $debate['brief'] . "\n";
+        }
     }
     $prompt .= "\nEscribe el caption final.";
 
@@ -1175,7 +1270,7 @@ SYS;
         "UPDATE crecer_contenido SET caption = ?, ia_log_id = ?, updated_at = NOW() WHERE id = ?"
     )->execute([trim($r['texto']), $r['ia_log_id'], $contenido_id]);
 
-    return ['caption' => trim($r['texto']), 'ia_log_id' => $r['ia_log_id'], 'costo' => $r['costo']];
+    return ['caption' => trim($r['texto']), 'ia_log_id' => $r['ia_log_id'], 'costo' => $r['costo'], 'debate' => $debate];
 }
 
 /**

@@ -305,10 +305,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare("INSERT INTO crecer_contenido (calendario_id, marca_id, plataforma, tipo, caption, fecha_programada, estado) VALUES (?,?,?,?,?,?, 'borrador')")
                 ->execute([$calid, $marca_id, 'instagram', 'post', $idea, $fecha_dt]);
             $nid=(int)$pdo->lastInsertId();
-            try { redactar_sugerido($pdo, $nid, $tema, $borrador); } catch (Throwable $e) {}
+            $debate = null;
+            try { $rr = redactar_sugerido($pdo, $nid, $tema, $borrador); $debate = $rr['debate'] ?? null; } catch (Throwable $e) {}
             $q=$pdo->prepare("SELECT caption FROM crecer_contenido WHERE id=?"); $q->execute([$nid]);
             $cap = trim((string)$q->fetchColumn()); if ($cap==='') $cap=$idea;
-            echo json_encode(['ok'=>true, 'id'=>$nid, 'caption'=>$cap], JSON_UNESCAPED_UNICODE); exit;
+            echo json_encode(['ok'=>true, 'id'=>$nid, 'caption'=>$cap, 'debate'=>$debate], JSON_UNESCAPED_UNICODE); exit;
         }
 
         if ($tema !== '' || $borrador !== '') {
@@ -1549,6 +1550,7 @@ $cf = [
       if(!d.ok){ if(d.err==='paywall'){ toast('🔒 Usaste tu muestra. Actívate para crear más.'); } else toast('No se pudo crear. Intenta otra vez.'); return; }
       wizId=d.id; wizImg='';
       document.getElementById('wiz-cap').textContent=d.caption||'';
+      renderDebate(d.debate);
       document.getElementById('wiz-editbox').style.display='none';
       document.getElementById('wiz-edit').style.display='inline-block';
       document.getElementById('wiz-art').innerHTML=''; document.getElementById('wiz-next2').style.display='none';
@@ -1557,6 +1559,32 @@ $cf = [
       wizSugerirArte();   // el Diseñador propone la idea del arte (texto) para que la veas/ajustes
     }).catch(function(){ loaderHide(); toast('Error de conexión. Intenta otra vez.'); });
   }
+  // ── EL LOG DE LA DISCUSIÓN — para el que quiera ver cómo el corillo pensó el post.
+  //   Colapsable: por defecto una línea; se abre y muestra los ángulos del Provocador
+  //   y por qué la Estratega eligió el ganador. Si no hubo debate, no se muestra nada.
+  function renderDebate(deb){
+    var box=document.getElementById('wiz-debate'); if(!box) return;
+    box.innerHTML='';
+    if(!deb || !deb.angulos || !deb.angulos.length){ return; }
+    var ang=deb.angulos, elegidoTxt=(deb.elegido||'').toLowerCase();
+    var items='';
+    for(var i=0;i<ang.length;i++){
+      var a=ang[i]||{}, tac=a.tactica||'', gan=a.gancho||'', pq=a.porque_pega||'';
+      var gano = elegidoTxt && (elegidoTxt.indexOf((tac||'').toLowerCase())>=0 || elegidoTxt.indexOf((gan||'').toLowerCase())>=0);
+      items+='<div class="dbt-ang'+(gano?' win':'')+'">'
+           +'<div class="dbt-tac">'+(gano?'🏆 ':'')+_esc(tac)+'</div>'
+           +'<div class="dbt-gan">"'+_esc(gan)+'"</div>'
+           +(pq?'<div class="dbt-pq">'+_esc(pq)+'</div>':'')+'</div>';
+    }
+    var razon = deb.razon ? '<div class="dbt-razon"><b>La Estratega eligió:</b> '+_esc(deb.razon)+'</div>' : '';
+    box.innerHTML =
+      '<details class="dbt">'
+      + '<summary>🔥 Cómo lo pensó el corillo <span class="dbt-hint">('+ang.length+' ángulos · toca para ver la discusión)</span></summary>'
+      + '<div class="dbt-body"><div class="dbt-lead">El Provocador lanzó estos ángulos y la Estratega escogió el más cabrón para tu público:</div>'
+      + items + razon + '</div>'
+      + '</details>';
+  }
+
   // Director de Arte: propone en TEXTO qué debe mostrar la imagen (para ver/ajustar
   // antes de generar). Rellena el textarea de la idea.
   function wizSugerirArte(ajuste){
@@ -1566,7 +1594,7 @@ $cf = [
     if(!ajuste) ta.value=''; ta.placeholder='💭 El Diseñador está pensando la idea…';
     if(b){ b.disabled=true; }
     var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','sugerir_arte'); fd.append('id',wizId);
-    fd.append('estilo_arte', (document.querySelector('#wiz-estilo input:checked')||{}).value||'realista');
+    fd.append('estilo_arte', (Array.from(document.querySelectorAll('#wiz-estilo input:checked')).map(function(x){return x.value;}).join('+')||'realista'));
     if(ajuste) fd.append('ajuste',ajuste); else if(prev) fd.append('evitar',prev);   // "otra idea" → distinta a la anterior
     fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
       if(b){ b.disabled=false; }
@@ -1634,7 +1662,7 @@ $cf = [
       var go=document.getElementById('wiz-arte-chat-go');
       msg.disabled=true; if(go) go.disabled=true; ta.placeholder='💭 Afinando la idea…';
       var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','sugerir_arte'); fd.append('id',wizId);
-      fd.append('estilo_arte',(document.querySelector('#wiz-estilo input:checked')||{}).value||'realista');
+      fd.append('estilo_arte',(Array.from(document.querySelectorAll('#wiz-estilo input:checked')).map(function(x){return x.value;}).join('+')||'realista'));
       fd.append('ajuste',ajuste); fd.append('idea_actual',actual);
       fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
         msg.disabled=false; if(go) go.disabled=false; msg.value=''; ta.placeholder='Describe qué debe mostrar la imagen…';
@@ -1648,7 +1676,7 @@ $cf = [
       loaderShow('Generando tu imagen…', ['Imaginando la escena…','Ajustando la luz y el encuadre…','Aplicando tu logo de marca…','Puliendo texturas y detalles…','Casi lista…']);
       var idea=document.getElementById('wiz-arteidea').value.trim();
       var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','arte'); fd.append('id',wizId); fd.append('con_logo','1');
-      fd.append('estilo_arte', (document.querySelector('#wiz-estilo input:checked')||{}).value||'realista');
+      fd.append('estilo_arte', (Array.from(document.querySelectorAll('#wiz-estilo input:checked')).map(function(x){return x.value;}).join('+')||'realista'));
       if(idea) fd.append('instrucciones', idea);   // genera con la idea que ves/ajustaste
       fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
         loaderHide(); if(!d.ok){ wizArteErr(d); return; } wizPintaArte(d.img);
@@ -2181,9 +2209,25 @@ $cf = [
       <button type="button" class="art-go" id="wiz-crear">Crear el post →</button>
     </div>
 
+    <style>
+      #wiz-debate{margin:4px 0 2px}
+      .dbt{border:1px solid var(--line);border-radius:12px;background:var(--crema,#F7F5F1);overflow:hidden}
+      .dbt>summary{cursor:pointer;list-style:none;padding:10px 13px;font-weight:700;font-size:13.5px;color:var(--tinta);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+      .dbt>summary::-webkit-details-marker{display:none}
+      .dbt-hint{font-weight:500;color:var(--muted);font-size:12px}
+      .dbt-body{padding:2px 13px 13px}
+      .dbt-lead{font-size:12.5px;color:var(--muted);margin-bottom:9px;line-height:1.45}
+      .dbt-ang{border-left:3px solid var(--line);padding:6px 0 6px 11px;margin-bottom:8px}
+      .dbt-ang.win{border-left-color:var(--magenta,#EF4375);background:linear-gradient(90deg,rgba(239,67,117,.06),transparent)}
+      .dbt-tac{font-weight:800;font-size:12.5px;letter-spacing:.2px;color:var(--tinta)}
+      .dbt-gan{font-size:13.5px;color:var(--tinta);margin:1px 0}
+      .dbt-pq{font-size:12px;color:var(--muted);line-height:1.4}
+      .dbt-razon{font-size:12.5px;color:var(--tinta);background:#fff;border:1px solid var(--line);border-radius:9px;padding:8px 10px;margin-top:4px;line-height:1.45}
+    </style>
     <div class="wiz-pane" data-pane="2" style="display:none">
       <h3>Ahora el arte</h3>
       <div class="wiz-cap" id="wiz-cap"></div>
+      <div id="wiz-debate"></div>
       <a href="#" class="wiz-editlink" id="wiz-edit"><?= ico('edit') ?> Corregir el texto a mano</a>
       <div class="wiz-editbox" id="wiz-editbox" style="display:none">
         <textarea id="wiz-capedit" rows="5"></textarea>
@@ -2193,12 +2237,12 @@ $cf = [
         </div>
         <div class="art-note">Si cambias una palabra o el tono, la IA aprende tu preferencia para los próximos posts.</div>
       </div>
-      <label class="fl" style="margin-top:4px"><?= ico('palette') ?> Estilo del arte <span style="color:var(--muted);font-weight:500">(cambia cómo se ve — la idea se ajusta sola)</span></label>
+      <label class="fl" style="margin-top:4px"><?= ico('palette') ?> Estilo del arte <span style="color:var(--muted);font-weight:500">(puedes combinar varios — el Diseñador los funde)</span></label>
       <div class="chips" id="wiz-estilo" style="margin-bottom:8px">
-        <label class="chip-opt"><input type="radio" name="wiz_estilo_arte" value="realista" checked><span>📷 Realista</span></label>
-        <label class="chip-opt"><input type="radio" name="wiz_estilo_arte" value="creativo"><span>🎨 Creativo</span></label>
-        <label class="chip-opt"><input type="radio" name="wiz_estilo_arte" value="fantasia"><span>✨ Fantasía</span></label>
-        <label class="chip-opt"><input type="radio" name="wiz_estilo_arte" value="ilustracion"><span>🖌️ Ilustración</span></label>
+        <label class="chip-opt"><input type="checkbox" name="wiz_estilo_arte" value="realista" checked><span>📷 Realista</span></label>
+        <label class="chip-opt"><input type="checkbox" name="wiz_estilo_arte" value="creativo"><span>🎨 Creativo</span></label>
+        <label class="chip-opt"><input type="checkbox" name="wiz_estilo_arte" value="fantasia"><span>✨ Fantasía</span></label>
+        <label class="chip-opt"><input type="checkbox" name="wiz_estilo_arte" value="ilustracion"><span>🖌️ Ilustración</span></label>
       </div>
       <label class="fl" style="margin-top:4px"><?= ico('lightbulb') ?> Idea para la imagen <span style="color:var(--muted);font-weight:500">(el Diseñador la propone — ajústala a tu gusto)</span></label>
       <textarea id="wiz-arteidea" rows="3" placeholder="El Diseñador está pensando la idea…"></textarea>
