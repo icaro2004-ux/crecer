@@ -7,6 +7,7 @@
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/agentes.php';
+require_once __DIR__ . '/../includes/iconos.php';   // ico() se usa antes de _shell.php
 requiere_login();
 
 $usuario = usuario_actual($pdo);
