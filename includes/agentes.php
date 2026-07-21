@@ -1720,6 +1720,111 @@ function gerente_despachar(PDO $pdo, int $marca_id, string $peticion, bool $pued
 }
 
 /**
+ * EL CONSEJO DEL CORILLO — reunión de staff SEMANAL. El Gerente trae un recap y
+ * PREGUNTAS para el dueño; el dueño participa; y lo que el dueño enseña se GUARDA
+ * en la memoria del negocio → TODOS los agentes aprenden. 1 vez por semana,
+ * conversación limitada. Evidencia XPRIZE #2: la IA aprende del negocio en vivo.
+ */
+
+/** ¿Toca Consejo esta semana? (se bloquea al participar; 1 por 7 días). */
+function consejo_disponible(PDO $pdo, int $marca_id): array {
+    try {
+        $q = $pdo->prepare("SELECT created_at FROM crecer_ia_log
+                            WHERE marca_id=? AND agente='gerente' AND accion='Consejo: charla'
+                            ORDER BY id DESC LIMIT 1");
+        $q->execute([$marca_id]);
+        $ult = $q->fetchColumn();
+        if ($ult && (time() - strtotime((string)$ult)) < 7 * 24 * 3600) {
+            return ['ok' => false, 'proximo' => date('Y-m-d', strtotime((string)$ult) + 7 * 24 * 3600), 'ultimo' => $ult];
+        }
+    } catch (Throwable $e) {}
+    return ['ok' => true, 'proximo' => null, 'ultimo' => null];
+}
+
+/** EL GERENTE abre el Consejo: recap breve + 1 preocupación + 2-3 preguntas para aprender. */
+function consejo_abrir(PDO $pdo, int $marca_id): array {
+    $m = leer_marca($pdo, $marca_id);
+    $ctx = marca_contexto($m);
+    $pend = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$marca_id} AND estado='borrador'")->fetchColumn();
+    $pub  = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$marca_id} AND estado='publicado'")->fetchColumn();
+    $temas = '';
+    try {
+        $q = $pdo->prepare("SELECT caption FROM crecer_contenido WHERE marca_id=? ORDER BY id DESC LIMIT 5");
+        $q->execute([$marca_id]);
+        $caps = array_filter(array_map(fn($c) => trim(mb_substr((string)$c, 0, 60)), $q->fetchAll(PDO::FETCH_COLUMN)));
+        if ($caps) $temas = "Últimos temas: " . implode('; ', $caps);
+    } catch (Throwable $e) {}
+
+    $gte = equipo_nombre($m, 'gerente');
+    $sys = "Eres {$gte}, el GERENTE del corillo (Account Director de la agencia). Estás ABRIENDO la reunión de staff "
+        . "SEMANAL con el dueño del negocio. Tono cercano, boricua suave, de socio motivador (no robot). CORTO (máx 90 "
+        . "palabras). Haz: 1) saludo + recap de 1 frase de lo que el equipo hizo; 2) UNA cosa que al equipo le importa "
+        . "para mejorar (basada en el estado real); 3) 2-3 PREGUNTAS concretas para APRENDER del negocio (qué empujar, "
+        . "fechas/eventos que vienen, qué le ha funcionado, algún cambio). Termina invitándolo a contestar. Sin listas corporativas.";
+    $prompt = "Negocio:\n{$ctx}\n\nEstado: {$pend} posts esperando OK, {$pub} publicados en total. {$temas}\n\nAbre la reunión de staff.";
+    $r = ia_ejecutar($pdo, 'gerente', 'Consejo: apertura', $prompt, [
+        'marca_id' => $marca_id, 'sistema' => $sys, 'modelo' => CRECER_COPILOTO_MODEL,
+        'temperatura' => 0.85, 'max_tokens' => 340, 'thinking_budget' => 0,
+        'mock_texto' => "¡Wepa! Esta semana el corillo te dejó {$pend} posts listos. Nos falta una cosa para afinar la puntería: saber qué quieres mover ahora. Dime tres cosas — ¿qué producto está pegando?, ¿se viene alguna fecha o evento?, y ¿qué post te ha funcionado mejor? Con eso el equipo aprende y te tira mejor contenido.",
+    ]);
+    return ['respuesta' => trim((string)$r['texto'])];
+}
+
+/** EL GERENTE conversa en el Consejo y CAPTURA lo que el dueño enseña → memoria (todos aprenden). */
+function consejo_hablar(PDO $pdo, int $marca_id, string $mensaje, array $historial = []): array {
+    require_once __DIR__ . '/memoria.php';
+    $m = leer_marca($pdo, $marca_id);
+    $gte = equipo_nombre($m, 'gerente');
+
+    // 1) Aprender: extraer datos DURABLES del mensaje del dueño → memoria del negocio.
+    $aprendido = [];
+    if (function_exists('memoria_escribir')) {
+        try {
+            $sysX = "Del mensaje del dueño en la reunión de staff, extrae SOLO datos DURABLES y accionables para el "
+                . "marketing (qué producto empujar, fechas/eventos que vienen, promociones, preferencias de voz/estilo, "
+                . "qué le funciona, qué NO quiere). Ignora saludos y charla vacía. Responde SOLO JSON: "
+                . '{"memorias":[{"titulo":"corto","detalle":"lo aprendido, accionable","dominio":"marketing|producto|voz|calendario"}]} (lista vacía si no hay nada durable).';
+            $rx = ia_ejecutar($pdo, 'gerente', 'Consejo: aprender', "Mensaje del dueño:\n\"{$mensaje}\"", [
+                'marca_id' => $marca_id, 'sistema' => $sysX, 'json' => true, 'modelo' => CRECER_COPILOTO_MODEL,
+                'temperatura' => 0.3, 'max_tokens' => 400, 'thinking_budget' => 0, 'mock_texto' => '{"memorias":[]}',
+            ]);
+            $mem = json_decode((string)$rx['texto'], true)['memorias'] ?? [];
+            foreach ($mem as $it) {
+                $det = trim((string)($it['detalle'] ?? ''));
+                if ($det === '') continue;
+                memoria_escribir($pdo, $marca_id, [
+                    'tipo' => 'aprendizaje', 'dominio' => substr((string)($it['dominio'] ?? 'marketing'), 0, 20),
+                    'titulo' => (string)($it['titulo'] ?? $det), 'detalle' => $det,
+                    'porque' => 'Lo dijo el dueño en el Consejo semanal', 'fuente' => 'consejo',
+                    'confianza' => 80, 'peso' => 70,
+                ]);
+                $aprendido[] = trim((string)($it['titulo'] ?? $det));
+            }
+        } catch (Throwable $e) { error_log('consejo aprender: ' . $e->getMessage()); }
+    }
+
+    // 2) El Gerente responde (confirma lo aprendido, sigue la agenda o cierra).
+    $mensajes = [];
+    foreach ($historial as $h) {
+        $rol = ($h['rol'] ?? '') === 'user' ? 'user' : 'model';
+        $txt = trim((string)($h['texto'] ?? ''));
+        if ($txt !== '') $mensajes[] = ['role' => $rol, 'texto' => $txt];
+    }
+    $sys = "Eres {$gte}, el GERENTE del corillo, en la reunión de staff semanal con el dueño. Responde CORTO (máx 70 "
+        . "palabras), cercano y boricua suave. Confirma/agradece lo que te dijo y, si hace falta, haz UNA pregunta de "
+        . "seguimiento. Si ya tienes buena info, cierra diciendo qué hará el equipo con eso esta semana. No inventes datos.";
+    $prompt = "El dueño dijo:\n\"{$mensaje}\"\n"
+        . ($aprendido ? "\n(El equipo ya anotó: " . implode('; ', $aprendido) . ")\n" : '')
+        . "\nResponde como gerente en la reunión.";
+    $r = ia_ejecutar($pdo, 'gerente', 'Consejo: charla', $prompt, [
+        'marca_id' => $marca_id, 'sistema' => $sys, 'modelo' => CRECER_COPILOTO_MODEL,
+        'historial' => $mensajes, 'temperatura' => 0.8, 'max_tokens' => 280, 'thinking_budget' => 0,
+        'mock_texto' => 'Buenísimo, eso me sirve un montón. El equipo lo anota y lo mete en los próximos posts. ¿Algo más que quieras que el corillo empuje?',
+    ]);
+    return ['respuesta' => trim((string)$r['texto']), 'aprendido' => $aprendido];
+}
+
+/**
  * EL LOOP DEL CORILLO AUTÓNOMO. Recorre las marcas con piloto automático
  * activo y plan vigente, corre el EQUIPO (relevo_del_corillo), y avisa al dueño
  * por email cuando dejó posts nuevos. Pensado para correr por cron (semanal).
