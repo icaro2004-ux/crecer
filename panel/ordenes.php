@@ -14,6 +14,8 @@ $marca_id = (int)$marca['id'];
 // ── POST (PRG) ───────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accion = $_POST['accion'] ?? '';
+    // CSRF: crear/editar órdenes muta estado. Sin token válido, no corre.
+    if (!function_exists('csrf_ok') || !csrf_ok()) { header('Location: ' . $_SERVER['REQUEST_URI']); exit; }
     if ($accion === 'crear' && trim($_POST['cliente_nombre'] ?? '') !== '') {
         $st = $pdo->prepare("INSERT INTO crecer_ordenes
             (marca_id, cliente_nombre, cliente_contacto, descripcion, monto, fecha_entrega, estado)
@@ -173,22 +175,22 @@ require __DIR__ . '/_shell.php';
           </div>
           <div class="acts">
             <?php if ($estado==='recibida'): ?>
-              <form method="post"><input type="hidden" name="accion" value="estado"><input type="hidden" name="id" value="<?= $o['id'] ?>"><input type="hidden" name="estado" value="en_proceso"><button>▶ Empezar</button></form>
-              <form method="post"><input type="hidden" name="accion" value="estado"><input type="hidden" name="id" value="<?= $o['id'] ?>"><input type="hidden" name="estado" value="completada"><button class="go">✓ Completar</button></form>
+              <form method="post"><input type="hidden" name="accion" value="estado"><input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(),ENT_QUOTES) ?>"><input type="hidden" name="id" value="<?= $o['id'] ?>"><input type="hidden" name="estado" value="en_proceso"><button>▶ Empezar</button></form>
+              <form method="post"><input type="hidden" name="accion" value="estado"><input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(),ENT_QUOTES) ?>"><input type="hidden" name="id" value="<?= $o['id'] ?>"><input type="hidden" name="estado" value="completada"><button class="go">✓ Completar</button></form>
             <?php elseif ($estado==='en_proceso'): ?>
-              <form method="post"><input type="hidden" name="accion" value="estado"><input type="hidden" name="id" value="<?= $o['id'] ?>"><input type="hidden" name="estado" value="completada"><button class="go">✓ Completar</button></form>
+              <form method="post"><input type="hidden" name="accion" value="estado"><input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(),ENT_QUOTES) ?>"><input type="hidden" name="id" value="<?= $o['id'] ?>"><input type="hidden" name="estado" value="completada"><button class="go">✓ Completar</button></form>
             <?php elseif ($estado==='completada'): ?>
               <?php if (!$o['review_solicitada']):
                 $msg = "¡Gracias por tu orden en {$marca['nombre_negocio']}! 🙌 ¿Nos regalas una reseña? Nos ayuda un montón a crecer. 🇵🇷";
                 $wa = wa_link($o['cliente_contacto'], $msg); ?>
                 <?php if ($wa): ?><a class="rev" href="<?= $h($wa) ?>" target="_blank" onclick="setTimeout(()=>this.closest('.ord').querySelector('.mark-rev').click(),300)"><?= ico('star') ?> Pedir reseña (WhatsApp)</a><?php endif; ?>
-                <form method="post" style="display:inline"><input type="hidden" name="accion" value="review"><input type="hidden" name="id" value="<?= $o['id'] ?>"><button class="mark-rev rev" style="<?= $wa?'display:none':'' ?>"><?= ico('star') ?> Marcar reseña pedida</button></form>
+                <form method="post" style="display:inline"><input type="hidden" name="accion" value="review"><input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(),ENT_QUOTES) ?>"><input type="hidden" name="id" value="<?= $o['id'] ?>"><button class="mark-rev rev" style="<?= $wa?'display:none':'' ?>"><?= ico('star') ?> Marcar reseña pedida</button></form>
               <?php else: ?>
                 <span class="mut"><?= ico('star') ?> Reseña pedida ✓</span>
               <?php endif; ?>
             <?php endif; ?>
             <?php if ($estado!=='completada'): ?>
-              <form method="post"><input type="hidden" name="accion" value="estado"><input type="hidden" name="id" value="<?= $o['id'] ?>"><input type="hidden" name="estado" value="cancelada"><button class="mut">✕</button></form>
+              <form method="post"><input type="hidden" name="accion" value="estado"><input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(),ENT_QUOTES) ?>"><input type="hidden" name="id" value="<?= $o['id'] ?>"><input type="hidden" name="estado" value="cancelada"><button class="mut">✕</button></form>
             <?php endif; ?>
           </div>
         </div>
@@ -204,7 +206,7 @@ require __DIR__ . '/_shell.php';
     <h2>Nueva orden</h2>
     <p style="color:var(--muted);font-size:14px">Apúntala aquí — entró por WhatsApp, llamada o en persona.</p>
     <form method="post">
-      <input type="hidden" name="accion" value="crear">
+      <input type="hidden" name="accion" value="crear"><input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(),ENT_QUOTES) ?>">
       <label>Cliente *</label>
       <input name="cliente_nombre" required placeholder="Nombre del cliente">
       <div class="r2">
