@@ -380,20 +380,19 @@ function sugerir_arte(PDO $pdo, int $marca_id, string $caption, string $ajuste =
     $m = leer_marca($pdo, $marca_id);
     $ctx = marca_contexto($m);
     $est = estilo_arte_direccion($estilo_arte);
-    $sistema = "Eres el DIRECTOR DE ARTE de Crecer. Tu trabajo: leer el TEXTO del post y proponer una imagen que "
-        . "ILUSTRE LO QUE EL TEXTO DICE — su tema, su mensaje, su emoción. La imagen y el copy tienen que ser UNA "
-        . "sola idea, NO dos cosas sueltas.\n"
-        . "PIENSA PRIMERO: ¿de qué habla ESTE post exactamente? ¿cuál es el sujeto y la emoción? LUEGO propón una "
-        . "escena que haga VISIBLE ese mensaje. Si el post habla de una marca/logo, muestra identidad/diseño; si "
-        . "habla de un producto, muestra ESE producto; si es un servicio, muestra el RESULTADO, la gente o el "
-        . "impacto — NUNCA una escena random (café, amanecer, escritorio) que no tenga que ver con el texto.\n"
-        . "Devuelve 2-3 frases en español sencillo (sin jerga, sin la palabra \"prompt\") con DETALLE concreto: "
-        . "(1) el sujeto principal, (2) el entorno y props concretos, (3) el ángulo/encuadre, (4) la luz y el "
-        . "ambiente, (5) la paleta. Específico, no genérico. Deja aire arriba por si va texto encima.\n"
-        . "Varía las escenas post a post, PERO siempre PEGADO a lo que dice el copy. Evita el cliché de pantallas "
-        . "de celular/laptop con apps o notificaciones flotantes.\n"
+    $sistema = "Eres EL DIRECTOR DE ARTE de Crecer — creativo, atrevido, con ojo de agencia top. Tu misión: una imagen "
+        . "que FRENE EL SCROLL y conecte con el MENSAJE del post (imagen y copy = una sola idea), pero NUNCA la foto "
+        . "obvia y aburrida.\n"
+        . "PIENSA PRIMERO: ¿de qué habla ESTE post y qué emoción dispara? LUEGO elige UNA táctica visual y comprométete:\n"
+        . "- Producto heroico (macro dramático, luz de estudio)   - Metáfora visual (un objeto/escena simbólica inesperada)\n"
+        . "- Detrás de cámara (manos, proceso, taller en acción)   - Humano/emoción (una persona real disfrutando/reaccionando)\n"
+        . "- Contraste o giro visual sorpresa   - Escena de uso (el producto en la vida real del cliente)\n"
+        . "- Gráfico audaz (composición tipográfica con colores de marca)   - Macro/textura (acercamiento que da deseo)\n"
+        . "Sé CABRÓN y ESPECÍFICO: (1) sujeto principal, (2) entorno y props concretos, (3) ángulo/encuadre, (4) luz y "
+        . "ambiente, (5) paleta. Nada genérico ni tibio. Deja aire arriba por si va texto. Evita clichés (café/amanecer/"
+        . "escritorio, pantallas con apps flotantes) a menos que el post SEA literalmente de eso.\n"
         . $est['sugerir']
-        . "\nEmpieza DIRECTO con la descripción de la escena — SIN saludos, sin \"mi gente\", sin preámbulos ni emojis. Es una DESCRIPCIÓN VISUAL para el diseñador, no un caption.";
+        . "\nDevuelve 2-3 frases, DIRECTO con la escena — sin saludos, sin \"mi gente\", sin preámbulos ni emojis. Es una dirección visual para el diseñador, no un caption.";
     $prompt = "Perfil del negocio:\n{$ctx}\n\nTexto del post (la imagen TIENE que pegar con esto):\n\"{$caption}\"\n";
     $idea_actual = trim($idea_actual);
     if ($idea_actual !== '' && trim($ajuste) !== '') {
@@ -405,15 +404,16 @@ function sugerir_arte(PDO $pdo, int $marca_id, string $caption, string $ajuste =
     } else {
         if (trim($ajuste) !== '') $prompt .= "\nLO QUE PIDE EL DUEÑO (es lo más importante — EXPÁNDELO con detalle visual, no lo ignores): {$ajuste}\n";
         if (trim($evitar) !== '') {
-            $prompt .= "\nEL DUEÑO YA VIO esta idea y pidió OTRA — dale algo CATEGÓRICAMENTE DISTINTO: "
-                     . "cambia el TIPO de escena, el ángulo, el lugar y los props por completo. NO la reconfigures "
-                     . "ni la parafrasees; invéntate algo fresco y diferente de esto:\n\"" . mb_substr(trim($evitar), 0, 400) . "\"\n";
+            $prompt .= "\nEL DUEÑO YA VIO esta idea y pidió OTRA — dale algo CATEGÓRICAMENTE DISTINTO: elige una TÁCTICA "
+                     . "VISUAL DIFERENTE (si la anterior era producto heroico, tira metáfora, detrás de cámara, humano, "
+                     . "gráfico audaz, etc.) y cambia el tipo de escena, el ángulo, el lugar y los props por completo. NO "
+                     . "la reconfigures ni la parafrasees; invéntate algo fresco y diferente de esto:\n\"" . mb_substr(trim($evitar), 0, 400) . "\"\n";
         }
         $prompt .= "\nDescribe en 2-3 frases, con detalle concreto, qué va a mostrar la imagen.";
     }
     $r = ia_ejecutar($pdo, 'diseñador', 'Sugerir idea de arte', $prompt, [
         'marca_id' => $marca_id, 'sistema' => $sistema,
-        'temperatura' => (trim($evitar) !== '' ? 1.15 : 0.9), 'max_tokens' => 300, 'thinking_budget' => 0,
+        'temperatura' => (trim($evitar) !== '' ? 1.2 : 1.05), 'max_tokens' => 320, 'thinking_budget' => 0,
         'mock_texto' => 'Un bizcocho de guayaba en primer plano sobre una mesa de madera, con luz cálida de tarde y un fondo simple; se ve fresco y apetitoso, con espacio arriba por si le quieres poner texto.',
     ]);
     return trim((string)$r['texto']);
@@ -1135,7 +1135,7 @@ function aprender_de_edicion(PDO $pdo, int $marca_id, string $original, string $
  *   brief='' si el debate falló → el escritor sigue con la idea original.
  */
 function debate_creativo(PDO $pdo, int $marca_id, string $idea, string $plataforma = '', string $tipo = 'post'): array {
-    $vacio = ['brief' => '', 'angulos' => [], 'elegido' => '', 'razon' => ''];
+    $vacio = ['brief' => '', 'visual' => '', 'angulos' => [], 'elegido' => '', 'razon' => ''];
     $idea = trim($idea);
     if ($idea === '') return $vacio;
     try {
@@ -1151,11 +1151,11 @@ function debate_creativo(PDO $pdo, int $marca_id, string $idea, string $platafor
             . "REGLA DE ORO: propones ENFOQUES y GANCHOS, NUNCA inventas hechos del negocio (precios, productos, "
             . "promesas que no existen). Atrevido en la FORMA, honesto en el FONDO. Responde SOLO JSON.";
         $promProv = "Negocio:\n{$ctx}\n\nPlataforma: {$plataforma} · Tipo: {$tipo}\nIdea base del post: \"{$idea}\"\n\n"
-            . 'Devuelve JSON EXACTO: {"angulos":[{"tactica":"nombre corto","gancho":"el ángulo/gancho en 1 frase","porque_pega":"por qué le llega a ESTE público"}]} con 3 ángulos DISTINTOS y audaces.';
+            . 'Devuelve JSON EXACTO: {"angulos":[{"tactica":"nombre corto","gancho":"el ángulo/gancho en 1 frase","porque_pega":"por qué le llega a ESTE público","visual":"una IMAGEN concreta y ATREVIDA para este ángulo — qué se ve, encuadre y mood; creativa, NO la foto obvia del producto"}]} con 3 ángulos DISTINTOS y audaces.';
         $rp = ia_ejecutar($pdo, 'provocador', 'Lanzar ángulos audaces', $promProv, [
             'marca_id' => $marca_id, 'sistema' => $sysProv, 'json' => true,
-            'modelo' => CRECER_COPILOTO_MODEL, 'temperatura' => 1.0, 'max_tokens' => 650, 'thinking_budget' => 0,
-            'mock_texto' => '{"angulos":[{"tactica":"Escasez","gancho":"Solo 10 esta semana","porque_pega":"lo que se acaba mueve al boricua"},{"tactica":"Nostalgia","gancho":"Como los de abuela","porque_pega":"conecta con la memoria"},{"tactica":"Reto","gancho":"Te reto a que no repitas","porque_pega":"la gente comparte retos"}]}',
+            'modelo' => CRECER_COPILOTO_MODEL, 'temperatura' => 1.0, 'max_tokens' => 750, 'thinking_budget' => 0,
+            'mock_texto' => '{"angulos":[{"tactica":"Escasez","gancho":"Solo 10 esta semana","porque_pega":"lo que se acaba mueve al boricua","visual":"Un reloj de arena hecho de harina cayendo sobre una bandeja, dramático, luz lateral"},{"tactica":"Nostalgia","gancho":"Como los de abuela","porque_pega":"conecta con la memoria","visual":"Manos arrugadas y jóvenes partiendo el mismo bizcocho, blanco y negro cálido"},{"tactica":"Reto","gancho":"Te reto a que no repitas","porque_pega":"la gente comparte retos","visual":"Primerísimo plano de una mordida, migajas volando, fondo de color vibrante"}]}',
         ]);
         $angulos = json_decode((string)$rp['texto'], true)['angulos'] ?? [];
         if (!$angulos) return $vacio;
@@ -1181,11 +1181,86 @@ function debate_creativo(PDO $pdo, int $marca_id, string $idea, string $platafor
         $brief = trim((string)($dec['brief'] ?? ''));
         if ($brief === '') $brief = trim((string)($angulos[$idx]['gancho'] ?? ''));
 
-        return ['brief' => $brief, 'angulos' => $angulos, 'elegido' => $elegido, 'razon' => trim((string)($dec['razon'] ?? ''))];
+        return [
+            'brief'   => $brief,
+            'visual'  => trim((string)($angulos[$idx]['visual'] ?? '')),   // concepto de imagen del ángulo ganador
+            'angulos' => $angulos,
+            'elegido' => $elegido,
+            'razon'   => trim((string)($dec['razon'] ?? '')),
+        ];
     } catch (Throwable $e) {
         error_log('debate_creativo: ' . $e->getMessage());
         return $vacio;
     }
+}
+
+/**
+ * EL DIRECTOR CREATIVO (crítico exigente). Mira el caption ya escrito y, con vara
+ * ALTA, decide si está a la altura o le falta punch. Si le falta, da UNA nota
+ * concreta y el escritor lo SUBE una vez (sin perder voz ni inventar datos). Es el
+ * "kick": la parte que se niega a lo genérico. Devuelve ['caption', 'nota'].
+ */
+function criticar_y_afinar(PDO $pdo, int $marca_id, string $caption, string $brief, string $sistema_escritor): array {
+    $caption = trim($caption);
+    if ($caption === '') return ['caption' => $caption, 'nota' => ''];
+    try {
+        $sysC = "Eres EL DIRECTOR CREATIVO de Crecer, exigente de verdad. Juzga este caption con vara ALTA: ¿frena el "
+            . "scroll?, ¿el gancho es fuerte y ESPECÍFICO (no genérico ni tibio)?, ¿suena a persona boricua real (no a "
+            . "IA)?, ¿cumple el brief?, ¿da ganas de comprar o compartir? Si YA está a la altura, responde EXACTO: OK. "
+            . "Si NO, responde en UNA sola frase la nota más importante para subirlo (qué cambiar para que pegue más). "
+            . "No reescribas tú. No inventes datos del negocio.";
+        $promC = ($brief !== '' ? "Brief del corillo: {$brief}\n\n" : '') . "Caption a juzgar:\n\"{$caption}\"\n\n¿OK, o cuál es la nota?";
+        $rc = ia_ejecutar($pdo, 'editor', 'Criticar el post', $promC, [
+            'marca_id' => $marca_id, 'sistema' => $sysC, 'modelo' => CRECER_COPILOTO_MODEL,
+            'temperatura' => 0.5, 'max_tokens' => 160, 'thinking_budget' => 0, 'mock_texto' => 'OK',
+        ]);
+        $nota = trim((string)$rc['texto']);
+        if ($nota === '' || stripos($nota, 'OK') === 0 || mb_strlen($nota) < 8) {
+            return ['caption' => $caption, 'nota' => '']; // pasó la vara
+        }
+        // UNA revisión: el escritor lo sube atendiendo la nota, con su misma voz y reglas.
+        $rr = ia_ejecutar($pdo, 'creador', 'Afinar el post (nota del Director)',
+            "Tu caption:\n\"{$caption}\"\n\nEl Director Creativo te dice: \"{$nota}\"\n\nReescríbelo SUBIÉNDOLO con esa "
+            . "nota: más cabrón, más específico y más humano — misma voz, mismos datos, sin inventar nada. Devuelve SOLO el caption.", [
+            'marca_id' => $marca_id, 'sistema' => $sistema_escritor,
+            'temperatura' => 0.95, 'max_tokens' => 420, 'thinking_budget' => 0, 'mock_texto' => $caption,
+        ]);
+        $mejor = trim((string)$rr['texto']);
+        return ['caption' => ($mejor !== '' ? $mejor : $caption), 'nota' => $nota];
+    } catch (Throwable $e) {
+        error_log('criticar_y_afinar: ' . $e->getMessage());
+        return ['caption' => $caption, 'nota' => ''];
+    }
+}
+
+/** Arma la CONVERSACIÓN del corillo (para mostrarla al dueño y guardarla). null si no hubo debate. */
+function corillo_conversacion(array $debate, array $crit = []): ?array {
+    if (empty($debate['angulos'])) return null;
+    $angs = [];
+    foreach ($debate['angulos'] as $a) {
+        $angs[] = [
+            'tactica' => (string)($a['tactica'] ?? ''),
+            'gancho'  => (string)($a['gancho'] ?? ''),
+            'porque'  => (string)($a['porque_pega'] ?? ''),
+            'visual'  => (string)($a['visual'] ?? ''),
+        ];
+    }
+    return [
+        'angulos' => $angs,
+        'elegido' => (string)($debate['elegido'] ?? ''),
+        'razon'   => (string)($debate['razon'] ?? ''),
+        'visual'  => (string)($debate['visual'] ?? ''),
+        'nota'    => (string)($crit['nota'] ?? ''),
+    ];
+}
+
+/** Guarda la conversación del corillo en la pieza (best-effort; si falta la columna, se ignora). */
+function corillo_guardar(PDO $pdo, int $contenido_id, ?array $corillo): void {
+    if (!$corillo) return;
+    try {
+        $pdo->prepare("UPDATE crecer_contenido SET corillo_json = ? WHERE id = ?")
+            ->execute([json_encode($corillo, JSON_UNESCAPED_UNICODE), $contenido_id]);
+    } catch (Throwable $e) { /* columna corillo_json aún no migrada */ }
 }
 
 function redactar_pieza(PDO $pdo, int $contenido_id, array $extra = []): array {
@@ -1233,12 +1308,18 @@ SYS;
         'thinking_budget' => 0,
         'mock_texto'  => "[MOCK] Caption para: {$idea}",
     ], $extra));
+    $caption = trim((string)$r['texto']);
 
-    $pdo->prepare(
-        "UPDATE crecer_contenido SET caption = ?, ia_log_id = ?, updated_at = NOW() WHERE id = ?"
-    )->execute([trim($r['texto']), $r['ia_log_id'], $contenido_id]);
+    // EL DIRECTOR CREATIVO sube la vara: una revisión si el caption salió genérico.
+    $crit = criticar_y_afinar($pdo, (int)$pieza['marca_id'], $caption, $debate['brief'], $sistema);
+    $caption = $crit['caption'];
 
-    return ['caption' => trim($r['texto']), 'ia_log_id' => $r['ia_log_id'], 'costo' => $r['costo'], 'debate' => $debate];
+    $pdo->prepare("UPDATE crecer_contenido SET caption = ?, ia_log_id = ?, updated_at = NOW() WHERE id = ?")
+        ->execute([$caption, $r['ia_log_id'], $contenido_id]);
+    $corillo = corillo_conversacion($debate, $crit);
+    corillo_guardar($pdo, $contenido_id, $corillo);   // best-effort (columna corillo_json)
+
+    return ['caption' => $caption, 'ia_log_id' => $r['ia_log_id'], 'costo' => $r['costo'], 'debate' => $debate, 'corillo' => $corillo];
 }
 
 /**
@@ -1298,12 +1379,20 @@ SYS;
         'thinking_budget' => 0,
         'mock_texto'  => "[MOCK] " . (trim($borrador) ?: trim($tema)),
     ]);
+    $caption = trim((string)$r['texto']);
 
-    $pdo->prepare(
-        "UPDATE crecer_contenido SET caption = ?, ia_log_id = ?, updated_at = NOW() WHERE id = ?"
-    )->execute([trim($r['texto']), $r['ia_log_id'], $contenido_id]);
+    // EL DIRECTOR CREATIVO sube la vara (una revisión si salió genérico) — solo en tema nuevo.
+    $crit = ($debate['brief'] !== '')
+        ? criticar_y_afinar($pdo, (int)$pieza['marca_id'], $caption, $debate['brief'], $sistema)
+        : ['caption' => $caption, 'nota' => ''];
+    $caption = $crit['caption'];
 
-    return ['caption' => trim($r['texto']), 'ia_log_id' => $r['ia_log_id'], 'costo' => $r['costo'], 'debate' => $debate];
+    $pdo->prepare("UPDATE crecer_contenido SET caption = ?, ia_log_id = ?, updated_at = NOW() WHERE id = ?")
+        ->execute([$caption, $r['ia_log_id'], $contenido_id]);
+    $corillo = corillo_conversacion($debate, $crit);
+    corillo_guardar($pdo, $contenido_id, $corillo);
+
+    return ['caption' => $caption, 'ia_log_id' => $r['ia_log_id'], 'costo' => $r['costo'], 'debate' => $debate, 'corillo' => $corillo];
 }
 
 /**
@@ -1560,13 +1649,13 @@ function trabajo_autonomo(PDO $pdo, int $marca_id, string $enfoque = ''): array 
     $reprog = $pdo->prepare("UPDATE crecer_contenido SET fecha_programada=? WHERE id=? AND marca_id=?");
     foreach ($plan['piezas'] as $pz) {
         $cid = (int)$pz['id'];
-        $cap = '';
-        try { $rr = redactar_pieza($pdo, $cid); $cap = (string)($rr['caption'] ?? ''); } catch (Throwable $e) { /* queda la idea para editar */ }
+        $cap = ''; $visual = '';
+        try { $rr = redactar_pieza($pdo, $cid); $cap = (string)($rr['caption'] ?? ''); $visual = (string)($rr['debate']['visual'] ?? ''); } catch (Throwable $e) { /* queda la idea para editar */ }
         // El Diseñador deja el ARTE listo también → el dueño recibe el post COMPLETO
-        // (arte + copy), no un caption pelao. Best-effort: si el arte falla, no rompe el relevo.
+        // (arte + copy), no un caption pelao. El concepto visual del corillo maneja la imagen.
         if ($cap !== '') {
             try {
-                $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => true]);
+                $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => true, 'instrucciones' => $visual]);
                 if (!empty($g['archivo'])) {
                     $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")
                         ->execute([$g['archivo'], $cid, $marca_id]);
@@ -1720,11 +1809,11 @@ function gerente_despachar(PDO $pdo, int $marca_id, string $peticion, bool $pued
         $reprog = $pdo->prepare("UPDATE crecer_contenido SET fecha_programada=? WHERE id=? AND marca_id=?");
         foreach ($plan['piezas'] as $pz) {
             $cid = (int)$pz['id'];
-            $cap = '';
-            try { $rr = redactar_pieza($pdo, $cid); $cap = (string)($rr['caption'] ?? ''); $ok++; } catch (Throwable $e) {}
-            if ($cap !== '') {   // deja el arte listo también (post completo)
+            $cap = ''; $visual = '';
+            try { $rr = redactar_pieza($pdo, $cid); $cap = (string)($rr['caption'] ?? ''); $visual = (string)($rr['debate']['visual'] ?? ''); $ok++; } catch (Throwable $e) {}
+            if ($cap !== '') {   // deja el arte listo también (post completo), con el concepto del corillo
                 try {
-                    $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => true]);
+                    $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => true, 'instrucciones' => $visual]);
                     if (!empty($g['archivo'])) {
                         $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")
                             ->execute([$g['archivo'], $cid, $marca_id]);
