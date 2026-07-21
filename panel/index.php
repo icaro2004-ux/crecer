@@ -560,7 +560,7 @@ $credito  = $has_deck
           <p class="tcard-cap"><?= $h($card['cap'] !== '' ? $card['cap'] : 'Sin texto todavía') ?></p>
           <button type="button" class="tn-ok" data-act="aprobar">Vamos con este</button>
           <div class="tn-sub">
-            <a class="tn-adj" href="<?= $BASE ?>/aprobar2.php?edit=<?= $card['id'] ?>&<?= $mid ?>#cap-<?= $card['id'] ?>">Ajustar</a>
+            <button type="button" class="tn-adj" data-edit>Ajustar</button>
             <button type="button" class="tn-no" data-act="rechazar">No es esto</button>
           </div>
         </div>
@@ -641,7 +641,7 @@ $credito  = $has_deck
   // swipe horizontal → siguiente / anterior (mirar sin decidir)
   var sx = 0, dragging = false, active = null;
   deck.addEventListener('pointerdown', function (e) {
-    if (e.target.closest('[data-act],a')) return;
+    if (e.target.closest('[data-act],a,button')) return;
     active = cards[idx]; if (!active) return;
     dragging = true; sx = e.clientX; active.style.transition = 'none';
     try { active.setPointerCapture(e.pointerId); } catch (x) {}
@@ -667,4 +667,81 @@ $credito  = $has_deck
 })();
 </script>
 
+<!-- ── HOJA DE EDICIÓN INLINE (Opción A): editar el post SIN salir del home ── -->
+<div class="edsheet-back" id="edBack" aria-hidden="true">
+  <div class="edsheet" role="dialog" aria-modal="true" aria-label="Editar el texto del post">
+    <div class="edsheet-grip"></div>
+    <div class="edsheet-h">El texto de tu post</div>
+    <textarea id="edText" rows="6" placeholder="El texto del post…"></textarea>
+    <div class="edsheet-note">Corrige lo que quieras — la IA aprende tu voz para los próximos.</div>
+    <button type="button" class="edsheet-regen" id="edRegen"><?= ico('refresh') ?> Que la IA lo reescriba</button>
+    <div class="edsheet-row">
+      <button type="button" class="edsheet-cancel" id="edCancel">Cancelar</button>
+      <button type="button" class="edsheet-save" id="edSave">Guardar</button>
+    </div>
+  </div>
+</div>
+<style>
+  .edsheet-back{position:fixed;inset:0;z-index:200;background:rgba(20,12,20,.5);display:none;align-items:flex-end;justify-content:center}
+  .edsheet-back.on{display:flex}
+  .edsheet{background:var(--card,#fff);width:100%;max-width:520px;border-radius:22px 22px 0 0;padding:10px 20px calc(20px + env(safe-area-inset-bottom));box-shadow:0 -20px 60px -20px rgba(20,12,20,.5);transform:translateY(100%);transition:transform .28s cubic-bezier(.16,1,.3,1)}
+  .edsheet-back.on .edsheet{transform:none}
+  @media(min-width:560px){.edsheet-back{align-items:center}.edsheet{border-radius:22px;transform:translateY(14px) scale(.98)}.edsheet-back.on .edsheet{transform:none}}
+  .edsheet-grip{width:38px;height:4px;border-radius:99px;background:var(--line);margin:2px auto 12px}
+  .edsheet-h{font-family:'Oswald',sans-serif;font-weight:700;font-size:18px;color:var(--tinta);margin-bottom:10px}
+  .edsheet textarea{width:100%;font-family:inherit;font-size:15px;line-height:1.5;color:var(--tinta);border:1.5px solid var(--line);border-radius:14px;padding:13px 14px;min-height:130px;resize:vertical;box-sizing:border-box}
+  .edsheet textarea:focus{outline:0;border-color:var(--magenta,#EF4375)}
+  .edsheet-note{font-size:12px;color:var(--muted);margin:8px 2px}
+  .edsheet-regen{width:100%;border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-family:inherit;font-weight:700;font-size:14px;padding:11px;border-radius:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;margin-bottom:12px}
+  .edsheet-regen svg{width:17px;height:17px}
+  .edsheet-regen:disabled{opacity:.6;cursor:default}
+  .edsheet-row{display:flex;gap:10px}
+  .edsheet-cancel{flex:0 0 auto;border:1.5px solid var(--line);background:#fff;color:var(--muted);font-family:inherit;font-weight:700;font-size:15px;padding:14px 20px;border-radius:14px;cursor:pointer}
+  .edsheet-save{flex:1;border:0;background:var(--btn-grad,linear-gradient(135deg,#FF6B3D,#EF4375));color:#fff;font-family:inherit;font-weight:800;font-size:15px;padding:14px;border-radius:14px;cursor:pointer}
+  .edsheet-save:disabled{opacity:.6;cursor:default}
+</style>
+<script>
+(function(){
+  var CSRF=<?= json_encode(csrf_token()) ?>, MARCA=<?= (int)$marca_id ?>, BASE=<?= json_encode($BASE) ?>;
+  var back=document.getElementById('edBack'), ta=document.getElementById('edText'),
+      save=document.getElementById('edSave'), cancel=document.getElementById('edCancel'), regen=document.getElementById('edRegen');
+  var card=null;
+  function capEl(c){ return c ? c.querySelector('.tcard-cap') : null; }
+  function abrir(c){ card=c; var el=capEl(c); ta.value=(el && el.dataset.full)? el.dataset.full : (el? el.textContent.trim():''); back.classList.add('on'); setTimeout(function(){ta.focus();},250); }
+  function cerrar(){ back.classList.remove('on'); card=null; }
+  // "Ajustar" en el deck abre la hoja (sin salir de la página)
+  var deck=document.getElementById('deck');
+  if(deck) deck.addEventListener('click', function(e){
+    var b=e.target.closest('[data-edit]'); if(!b) return;
+    e.preventDefault(); e.stopPropagation();
+    abrir(b.closest('.tcard'));
+  });
+  cancel.addEventListener('click', cerrar);
+  back.addEventListener('click', function(e){ if(e.target===back) cerrar(); });
+
+  function post(accion, extra){
+    var fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion',accion); fd.append('id', card.getAttribute('data-id')); fd.append('ajax','1');
+    for(var k in (extra||{})) fd.append(k, extra[k]);
+    return fetch(BASE+'/aprobar2.php?marca='+MARCA,{method:'POST',body:fd}).then(function(r){return r.json();});
+  }
+  save.addEventListener('click', function(){
+    if(!card) return; var txt=ta.value.trim(); if(!txt){ return; }
+    save.disabled=true; save.textContent='Guardando…';
+    post('editar',{caption:txt}).then(function(d){
+      save.disabled=false; save.textContent='Guardar';
+      if(d && d.ok){ var el=capEl(card); if(el){ el.textContent=d.caption||txt; el.dataset.full=d.caption||txt; } cerrar(); }
+      else { alert((d&&d.err)||'No se pudo guardar.'); }
+    }).catch(function(){ save.disabled=false; save.textContent='Guardar'; alert('Se cayó la conexión.'); });
+  });
+  regen.addEventListener('click', function(){
+    if(!card) return; regen.disabled=true; var old=regen.innerHTML; regen.textContent='La IA está reescribiendo…';
+    post('regenerar',{}).then(function(d){
+      regen.disabled=false; regen.innerHTML=old;
+      if(d && d.ok && d.caption){ ta.value=d.caption; }
+      else if(d && d.paywall){ alert('Regenerar es parte del plan. Actívalo para que la IA reescriba.'); }
+      else { alert('No se pudo reescribir. Intenta otra vez.'); }
+    }).catch(function(){ regen.disabled=false; regen.innerHTML=old; alert('Se cayó la conexión.'); });
+  });
+})();
+</script>
 <?php require __DIR__ . '/_shell_foot.php'; ?>

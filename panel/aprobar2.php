@@ -973,6 +973,7 @@ $cf = [
       <form method="post" action="/crecer/panel/generar.php"
             onsubmit="var b=this.querySelector('button');b.textContent='✨ Creando tu mes…';b.disabled=true;">
         <input type="hidden" name="marca" value="<?= $marca_id ?>">
+        <input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>">
         <button type="submit" style="border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:15px;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));padding:15px 26px;border-radius:99px;box-shadow:0 12px 28px rgba(255,43,133,.3)">Que la IA prepare mi primer mes</button>
       </form>
       <p style="color:var(--muted);font-size:12.5px;margin-top:12px">Tarda un minutito — la IA está creando tu contenido.</p>

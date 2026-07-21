@@ -43,6 +43,7 @@
 
 <form method="post" class="tono" id="tonoForm">
   <input type="hidden" name="accion" value="tono">
+  <input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>">
   <input type="hidden" name="preset" id="t_preset" value="<?= $h($Tpreset) ?>">
 
   <div class="presets" id="tpresets">
@@ -112,7 +113,7 @@
   var gen=document.getElementById('tgen'), res=document.getElementById('tres');
   gen.addEventListener('click',function(){
     gen.disabled=true; var old=gen.textContent; gen.textContent='✍️ La Creativa está escribiendo…'; res.innerHTML='';
-    var fd=new FormData(); fd.append('accion','tono_preview');
+    var fd=new FormData(); fd.append('accion','tono_preview'); fd.append('csrf', <?= json_encode(csrf_token()) ?>);
     ids.forEach(function(k){fd.append('t_'+k,S[k].value);});
     fetch(location.pathname+location.search,{method:'POST',body:fd})
       .then(function(r){return r.json();})

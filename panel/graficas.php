@@ -43,6 +43,8 @@ $puede_arte = $pagado ? ($restantes_sem > 0) : $perm_img['ok'];
 $err = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accion = $_POST['accion'] ?? '';
+    // CSRF: estas acciones gastan IA / mutan estado. Sin token válido, no corren.
+    if (!function_exists('csrf_ok') || !csrf_ok()) { $err = 'Sesión expiró, recarga la página e intenta de nuevo.'; $accion = ''; }
     if ($accion === 'subir' && !empty($_FILES['foto']['tmp_name'])) {
         $f = $_FILES['foto'];
         if ($f['error'] !== UPLOAD_ERR_OK)      $err = 'No se pudo subir la foto.';
@@ -185,6 +187,7 @@ require __DIR__ . '/_shell.php';
   <div class="d">Sube fotos reales de tus productos (la IA nunca inventa tu producto).</div>
   <form class="card2" method="post" enctype="multipart/form-data">
     <input type="hidden" name="accion" value="subir">
+    <input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>">
     <div class="uprow" style="display:flex;align-items:center;gap:8px">
       <input type="file" id="fpGrafFoto" name="foto" class="fp-in" accept="image/png,image/jpeg,image/webp" required>
       <label for="fpGrafFoto" class="filepick" style="flex:1"><?= ico('camera') ?><span class="fp-tx" data-default="Escoge una foto de tu producto">Escoge una foto de tu producto</span></label>
@@ -197,6 +200,7 @@ require __DIR__ . '/_shell.php';
   <h2>2. Crea el arte de tu post</h2>
   <form class="card2" method="post" onsubmit="var b=this.querySelector('.genbtn');b.textContent='✨ Creando… (~15s)';b.disabled=true;">
     <input type="hidden" name="accion" value="arte">
+    <input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>">
     <input type="hidden" name="post" value="<?= $post_id ?>">
     <?php if ($post_id): ?>
       <div style="background:var(--okk-bg);color:var(--okk-ink);font-weight:700;font-size:13.5px;padding:11px 14px;border-radius:12px;margin-bottom:14px">🎯 Creando el arte para tu post — al terminar se adjunta solo. <a href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>" style="color:var(--okk-ink);font-weight:800">← volver al post</a></div>
@@ -315,7 +319,7 @@ require __DIR__ . '/_shell.php';
     <div class="prev-actions">
       <button type="button" class="pa" onclick="copiarCopy()"><?= ico('copy') ?> Copiar copy</button>
       <a class="pa" id="pa-dl" href="" download>⬇ Descargar imagen</a>
-      <form method="post" style="display:inline" id="pubform"><input type="hidden" name="accion" value="publicar"><input type="hidden" name="gid" id="pub-gid"><button class="pa pub" type="submit">Publicar</button></form>
+      <form method="post" style="display:inline" id="pubform"><input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="accion" value="publicar"><input type="hidden" name="gid" id="pub-gid"><button class="pa pub" type="submit">Publicar</button></form>
     </div>
     <div class="prev-note">Por ahora "Publicar" lo marca como publicado y te da el copy + la imagen para subirla. La publicación automática a IG/FB (conexión con Meta) viene pronto.</div>
   </div>

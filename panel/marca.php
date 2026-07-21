@@ -23,6 +23,13 @@ $final = (int)$marca['logo_final'] === 1;
 $err = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accion = $_POST['accion'] ?? '';
+    // CSRF: estas acciones mutan la marca / gastan IA. Sin token válido, no corren.
+    if (!function_exists('csrf_ok') || !csrf_ok()) {
+        if (in_array($accion, ['sugerir_estilo','tono_preview','bloquear'], true) || !empty($_POST['ajax'])) {
+            header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'Sesión expiró, recarga la página.']); exit;
+        }
+        header("Location: /crecer/panel/marca.php?marca={$marca_id}"); exit;
+    }
 
     // El Cerebro: el dueño controla su conocimiento (corregir / descartar).
     if ($accion === 'memoria_descartar' && function_exists('memoria_descartar')) {
@@ -293,12 +300,12 @@ $tipo_lbl = ['patron'=>'Patrón detectado','preferencia'=>'Preferencia','decisio
         <div class="cer-acts">
           <button type="button" class="cer-link" onclick="cerEdit(<?= (int)$mm['id'] ?>)">Corregir</button>
           <form method="post" onsubmit="return confirm('¿Descartar este aprendizaje? El corillo dejará de usarlo.')" style="display:inline">
-            <input type="hidden" name="accion" value="memoria_descartar"><input type="hidden" name="mid" value="<?= (int)$mm['id'] ?>">
+            <input type="hidden" name="accion" value="memoria_descartar"><input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(),ENT_QUOTES) ?>"><input type="hidden" name="mid" value="<?= (int)$mm['id'] ?>">
             <button type="submit" class="cer-link danger">Descartar</button>
           </form>
         </div>
         <form method="post" class="cer-editform" id="cerf-<?= (int)$mm['id'] ?>" style="display:none">
-          <input type="hidden" name="accion" value="memoria_editar"><input type="hidden" name="mid" value="<?= (int)$mm['id'] ?>">
+          <input type="hidden" name="accion" value="memoria_editar"><input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(),ENT_QUOTES) ?>"><input type="hidden" name="mid" value="<?= (int)$mm['id'] ?>">
           <textarea name="detalle" rows="2"><?= $h($mm['detalle']) ?></textarea>
           <div><button type="submit" class="btn-save">Guardar</button> &nbsp;<button type="button" class="cer-link" onclick="cerCancel(<?= (int)$mm['id'] ?>)">Cancelar</button></div>
         </form>
@@ -319,7 +326,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
 <?php if (!empty($_GET['estilo'])): ?><div class="ok-banner">✓ Línea de diseño guardada.</div><?php endif; ?>
 <div class="genbox" style="margin-bottom:18px">
   <form method="post" onsubmit="var b=this.querySelector('.genbtn');b.disabled=true;b.textContent='Guardando…';">
-    <input type="hidden" name="accion" value="guardar_estilo">
+    <input type="hidden" name="accion" value="guardar_estilo"><input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(),ENT_QUOTES) ?>">
     <textarea name="estilo_visual" id="estilo-ta" rows="4" placeholder="Ej: paleta cálida (terracota y crema), luz natural de tarde, fotos reales sobre madera, composición limpia con aire para texto, vibra artesanal y acogedora…"><?= $h($ev_actual) ?></textarea>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
       <button class="genbtn" type="submit" style="margin:0">Guardar línea de diseño</button>
@@ -334,7 +341,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
   b.addEventListener('click', function(){
     var ta=document.getElementById('estilo-ta'), old=b.textContent;
     b.disabled=true; b.textContent='💭 Pensando tu estilo…';
-    var fd=new FormData(); fd.append('accion','sugerir_estilo'); fd.append('ajuste', ta.value.trim());
+    var fd=new FormData(); fd.append('accion','sugerir_estilo'); fd.append('ajuste', ta.value.trim()); fd.append('csrf', <?= json_encode(csrf_token()) ?>);
     fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
       b.disabled=false; b.textContent=old;
       if(d && d.ok && d.estilo){ ta.value=d.estilo; ta.focus(); }
@@ -358,7 +365,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
   <h3 style="font-size:15px;margin:0 0 4px"><?= ico('upload') ?> Sube tu logo</h3>
   <p class="subline" style="margin-bottom:10px">¿Ya tienes logo? Súbelo (principal y/o secundarios). La IA lo usará como referencia en tus posts. Lo ideal: <b>PNG con fondo transparente</b>.</p>
   <form method="post" enctype="multipart/form-data" onsubmit="var b=this.querySelector('.genbtn');b.textContent='Subiendo…';b.disabled=true;">
-    <input type="hidden" name="accion" value="subir_logo">
+    <input type="hidden" name="accion" value="subir_logo"><input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(),ENT_QUOTES) ?>">
     <input type="file" id="logoFile" name="logo_file" class="fp-in" accept="image/png,image/jpeg,image/webp" required>
     <label for="logoFile" class="filepick" style="margin-bottom:10px">
       <?= ico('upload') ?><span class="fp-tx" data-default="Escoge tu logo (PNG, JPG o WEBP)">Escoge tu logo (PNG, JPG o WEBP)</span>
@@ -378,7 +385,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
 <?php elseif (!$final && $restantes > 0): ?>
   <div class="genbox">
     <form method="post" onsubmit="var b=this.querySelector('.genbtn');b.textContent='✨ Creando… (~15s)';b.disabled=true;">
-      <input type="hidden" name="accion" value="logo">
+      <input type="hidden" name="accion" value="logo"><input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(),ENT_QUOTES) ?>">
 
       <label class="fl">Descripción del negocio <span style="color:var(--muted);font-weight:500">(edítala a tu gusto)</span></label>
       <textarea name="descripcion" rows="2"><?= $h($marca['descripcion']) ?></textarea>
@@ -439,7 +446,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
         <?php if ($es): ?>
           <div class="badge">✓ Tu logo</div>
         <?php elseif (!$final): ?>
-          <form method="post"><input type="hidden" name="accion" value="elegir"><input type="hidden" name="logo_id" value="<?= $l['id'] ?>">
+          <form method="post"><input type="hidden" name="accion" value="elegir"><input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(),ENT_QUOTES) ?>"><input type="hidden" name="logo_id" value="<?= $l['id'] ?>">
             <button class="pick" type="submit">Elegir este</button></form>
         <?php endif; ?>
       </div>
@@ -485,7 +492,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
       // Primera descarga = finaliza la elección (bloquea los demás)
       if (!_locked){
         _locked = true;
-        fetch('?marca=<?= $marca_id ?>', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:'accion=bloquear'});
+        fetch('?marca=<?= $marca_id ?>', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:'accion=bloquear&csrf='+encodeURIComponent(<?= json_encode(csrf_token()) ?>)});
         document.querySelectorAll('.tile .pick').forEach(function(b){b.style.display='none';});
         document.querySelectorAll('.genbox').forEach(function(b){b.style.display='none';});
         document.querySelectorAll('.tile:not(.sel)').forEach(function(t){t.classList.add('locked');});

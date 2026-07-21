@@ -22,6 +22,11 @@ $n_piezas = (int)($_POST['n'] ?? 6);
 $own = $pdo->prepare("SELECT 1 FROM crecer_marca WHERE id = ? AND usuario_id = ?");
 $own->execute([$marca_id, (int)$usuario['id']]);
 if (!$own->fetchColumn()) { http_response_code(403); exit('No autorizado.'); }
+// CSRF: esto dispara generación costosa (planificar + redactar). Exige token válido.
+if (!function_exists('csrf_ok') || !csrf_ok()) {
+    header('Location: /crecer/panel/aprobar2.php?marca=' . $marca_id . '&err=' . urlencode('Sesión expiró, recarga e intenta de nuevo.'));
+    exit;
+}
 
 // Periodo: el próximo mes.
 $anio = (int)date('Y');
