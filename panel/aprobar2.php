@@ -307,11 +307,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare("INSERT INTO crecer_contenido (calendario_id, marca_id, plataforma, tipo, caption, fecha_programada, estado) VALUES (?,?,?,?,?,?, 'borrador')")
                 ->execute([$calid, $marca_id, 'instagram', 'post', $idea, $fecha_dt]);
             $nid=(int)$pdo->lastInsertId();
-            $debate = null;
-            try { $rr = redactar_sugerido($pdo, $nid, $tema, $borrador); $debate = $rr['debate'] ?? null; } catch (Throwable $e) {}
+            $debate = null; $corillo = null;
+            try { $rr = redactar_sugerido($pdo, $nid, $tema, $borrador); $debate = $rr['debate'] ?? null; $corillo = $rr['corillo'] ?? null; } catch (Throwable $e) {}
             $q=$pdo->prepare("SELECT caption FROM crecer_contenido WHERE id=?"); $q->execute([$nid]);
             $cap = trim((string)$q->fetchColumn()); if ($cap==='') $cap=$idea;
-            echo json_encode(['ok'=>true, 'id'=>$nid, 'caption'=>$cap, 'debate'=>$debate], JSON_UNESCAPED_UNICODE); exit;
+            echo json_encode(['ok'=>true, 'id'=>$nid, 'caption'=>$cap, 'debate'=>$debate, 'corillo'=>$corillo], JSON_UNESCAPED_UNICODE); exit;
         }
 
         if ($tema !== '' || $borrador !== '') {
@@ -1548,7 +1548,7 @@ $cf = [
       if(!d.ok){ if(d.err==='paywall'){ toast('🔒 Usaste tu muestra. Actívate para crear más.'); } else toast('No se pudo crear. Intenta otra vez.'); return; }
       wizId=d.id; wizImg='';
       document.getElementById('wiz-cap').textContent=d.caption||'';
-      renderDebate(d.debate);
+      renderDebate(d.debate, d.corillo);
       document.getElementById('wiz-editbox').style.display='none';
       document.getElementById('wiz-edit').style.display='inline-block';
       document.getElementById('wiz-art').innerHTML=''; document.getElementById('wiz-next2').style.display='none';
@@ -1561,7 +1561,7 @@ $cf = [
   //   Colapsable: por defecto una línea; se abre y muestra los ángulos del Provocador
   //   y por qué la Estratega eligió el ganador. Si no hubo debate, no se muestra nada.
   var EQUIPO = <?= json_encode(['provocador'=>equipo_nombre($marca,'provocador'), 'estratega'=>equipo_nombre($marca,'estratega')], JSON_UNESCAPED_UNICODE) ?>;
-  function renderDebate(deb){
+  function renderDebate(deb, cor){
     var box=document.getElementById('wiz-debate'); if(!box) return;
     box.innerHTML='';
     if(!deb || !deb.angulos || !deb.angulos.length){ return; }
@@ -1569,19 +1569,21 @@ $cf = [
     var ang=deb.angulos, elegidoTxt=(deb.elegido||'').toLowerCase();
     var items='';
     for(var i=0;i<ang.length;i++){
-      var a=ang[i]||{}, tac=a.tactica||'', gan=a.gancho||'', pq=a.porque_pega||'';
+      var a=ang[i]||{}, tac=a.tactica||'', gan=a.gancho||'', pq=a.porque_pega||'', vis=a.visual||'';
       var gano = elegidoTxt && (elegidoTxt.indexOf((tac||'').toLowerCase())>=0 || elegidoTxt.indexOf((gan||'').toLowerCase())>=0);
       items+='<div class="dbt-ang'+(gano?' win':'')+'">'
            +'<div class="dbt-tac">'+(gano?'🏆 ':'')+_esc(tac)+'</div>'
            +'<div class="dbt-gan">"'+_esc(gan)+'"</div>'
-           +(pq?'<div class="dbt-pq">'+_esc(pq)+'</div>':'')+'</div>';
+           +(pq?'<div class="dbt-pq">'+_esc(pq)+'</div>':'')
+           +(vis?'<div class="dbt-vis">🎨 '+_esc(vis)+'</div>':'')+'</div>';
     }
     var razon = deb.razon ? '<div class="dbt-razon"><b>'+_esc(EST)+' eligió:</b> '+_esc(deb.razon)+'</div>' : '';
+    var nota = (cor && cor.nota) ? '<div class="dbt-nota"><b>✍️ El Director Creativo lo subió:</b> '+_esc(cor.nota)+'</div>' : '';
     box.innerHTML =
       '<details class="dbt">'
       + '<summary>🔥 Cómo lo pensó el corillo <span class="dbt-hint">('+ang.length+' ángulos · toca para ver la discusión)</span></summary>'
       + '<div class="dbt-body"><div class="dbt-lead">'+_esc(PROV)+' lanzó estos ángulos y '+_esc(EST)+' escogió el más cabrón para tu público:</div>'
-      + items + razon + '</div>'
+      + items + razon + nota + '</div>'
       + '</details>';
   }
 
@@ -2222,7 +2224,9 @@ $cf = [
       .dbt-tac{font-weight:800;font-size:12.5px;letter-spacing:.2px;color:var(--tinta)}
       .dbt-gan{font-size:13.5px;color:var(--tinta);margin:1px 0}
       .dbt-pq{font-size:12px;color:var(--muted);line-height:1.4}
+      .dbt-vis{font-size:12px;color:var(--teal,#00A49F);font-weight:600;margin-top:3px;line-height:1.4}
       .dbt-razon{font-size:12.5px;color:var(--tinta);background:#fff;border:1px solid var(--line);border-radius:9px;padding:8px 10px;margin-top:4px;line-height:1.45}
+      .dbt-nota{font-size:12.5px;color:var(--tinta);background:#fff;border:1px solid var(--line);border-radius:9px;padding:8px 10px;margin-top:6px;line-height:1.45}
     </style>
     <div class="wiz-pane" data-pane="2" style="display:none">
       <h3>Ahora el arte</h3>
