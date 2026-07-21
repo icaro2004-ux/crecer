@@ -17,6 +17,7 @@ $marca_id = (int)$marca['id'];
 
 // ── AJAX: el dueño habla en la sala ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    @set_time_limit(0);   // producir una campaña (planificar + escribir + arte) toma su tiempo
     header('Content-Type: application/json; charset=utf-8');
     if (!csrf_ok()) { echo json_encode(['ok'=>false,'err'=>'Sesión expiró. Recarga la página.']); exit; }
     $mensaje = trim((string)($_POST['mensaje'] ?? ''));

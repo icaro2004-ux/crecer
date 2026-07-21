@@ -70,6 +70,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'con_logo'     => !empty($_POST['con_logo']),
                 'logo_estilo'  => $_POST['logo_estilo'] ?? 'esquina',
                 'estilo'       => $_POST['estilo'] ?? '',
+                'estilo_arte'  => (is_array($_POST['estilo_arte'] ?? null)
+                                    ? implode('+', array_map('strval', $_POST['estilo_arte']))
+                                    : ($_POST['estilo_arte'] ?? 'realista')) ?: 'realista',   // combinable
                 'instrucciones'=> trim($_POST['instrucciones'] ?? ''),
             ]);
             // Si vino de un post del calendario, le pegamos el arte
@@ -222,12 +225,8 @@ require __DIR__ . '/_shell.php';
       <label class="chip-opt"><input type="radio" name="con_texto" value="1"><span>Con texto (gancho del copy)</span></label>
     </div>
 
-    <label class="fl">Estilo</label>
-    <div class="chips">
-      <?php foreach (['Auto'=>'', 'Boricua'=>'boricua, alegre', 'Elegante'=>'elegante y premium', 'Minimalista'=>'minimalista y limpio', 'Vibrante'=>'colores vibrantes', 'Apetitoso'=>'apetitoso, food photography'] as $lb=>$val): ?>
-        <label class="chip-opt"><input type="radio" name="estilo" value="<?= $h($val) ?>" <?= $lb==='Auto'?'checked':'' ?>><span><?= $h($lb) ?></span></label>
-      <?php endforeach; ?>
-    </div>
+    <label class="fl">Tipo de arte <span style="color:var(--muted);font-weight:500">(combina si quieres)</span></label>
+    <div style="margin-bottom:6px"><?php $sel_id = 'graf-estilo'; include __DIR__ . '/_estilo_arte.php'; ?></div>
 
     <label class="fl">Dile a la IA cómo editar la foto <span style="color:var(--muted);font-weight:500">(opcional)</span></label>
     <textarea name="instrucciones" rows="2" placeholder="Ej. &quot;quítale el fondo y ponlo en una mesa de madera&quot;, &quot;añade confeti&quot;, &quot;que se vea de noche&quot;, &quot;estilo navideño&quot;…"></textarea>

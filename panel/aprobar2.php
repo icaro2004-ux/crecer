@@ -194,7 +194,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'con_logo'     => !empty($_POST['con_logo']),
                 'logo_estilo'  => $_POST['logo_estilo'] ?? 'esquina',
                 'estilo'       => $_POST['estilo'] ?? '',
-                'estilo_arte'  => $_POST['estilo_arte'] ?? 'realista',   // realista/creativo/fantasia/ilustracion
+                'estilo_arte'  => (is_array($_POST['estilo_arte'] ?? null)
+                                    ? implode('+', array_map('strval', $_POST['estilo_arte']))
+                                    : ($_POST['estilo_arte'] ?? 'realista')) ?: 'realista',   // combinable
                 'instrucciones'=> trim($_POST['instrucciones'] ?? ''),
             ]);
             $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, arte_intentos=arte_intentos+1, updated_at=NOW() WHERE id=? AND marca_id=?")
@@ -1154,12 +1156,8 @@ $cf = [
       <label class="chip-opt"><input type="radio" name="con_texto" value="1"><span>Con texto (gancho)</span></label>
     </div>
 
-    <label class="fl">Estilo</label>
-    <div class="chips">
-      <?php foreach (['Auto'=>'', 'Boricua'=>'boricua, alegre', 'Elegante'=>'elegante y premium', 'Minimalista'=>'minimalista y limpio', 'Vibrante'=>'colores vibrantes', 'Apetitoso'=>'apetitoso, food photography'] as $lb=>$val): ?>
-        <label class="chip-opt"><input type="radio" name="estilo" value="<?= $h($val) ?>" <?= $lb==='Auto'?'checked':'' ?>><span><?= $h($lb) ?></span></label>
-      <?php endforeach; ?>
-    </div>
+    <label class="fl">Tipo de arte <span style="color:var(--muted);font-weight:500">(combina si quieres)</span></label>
+    <div style="margin-bottom:6px"><?php $sel_id = 'art-estilo'; include __DIR__ . '/_estilo_arte.php'; ?></div>
 
     <label class="fl" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
       <span><?= ico("pen") ?> Qué va a mostrar el arte <span style="color:var(--muted);font-weight:500">(el Diseñador lo sugiere — cámbialo en tus palabras)</span></span>
@@ -2240,12 +2238,7 @@ $cf = [
         <div class="art-note">Si cambias una palabra o el tono, la IA aprende tu preferencia para los próximos posts.</div>
       </div>
       <label class="fl" style="margin-top:4px"><?= ico('palette') ?> Estilo del arte <span style="color:var(--muted);font-weight:500">(puedes combinar varios — el Diseñador los funde)</span></label>
-      <div class="chips" id="wiz-estilo" style="margin-bottom:8px">
-        <label class="chip-opt"><input type="checkbox" name="wiz_estilo_arte" value="realista" checked><span>📷 Realista</span></label>
-        <label class="chip-opt"><input type="checkbox" name="wiz_estilo_arte" value="creativo"><span>🎨 Creativo</span></label>
-        <label class="chip-opt"><input type="checkbox" name="wiz_estilo_arte" value="fantasia"><span>✨ Fantasía</span></label>
-        <label class="chip-opt"><input type="checkbox" name="wiz_estilo_arte" value="ilustracion"><span>🖌️ Ilustración</span></label>
-      </div>
+      <div style="margin-bottom:10px"><?php $sel_id = 'wiz-estilo'; include __DIR__ . '/_estilo_arte.php'; ?></div>
       <label class="fl" style="margin-top:4px"><?= ico('lightbulb') ?> Idea para la imagen <span style="color:var(--muted);font-weight:500">(el Diseñador la propone — ajústala a tu gusto)</span></label>
       <textarea id="wiz-arteidea" rows="3" placeholder="El Diseñador está pensando la idea…"></textarea>
       <button type="button" class="fbnew" id="wiz-arte-sug" style="width:100%;margin:8px 0 4px"><?= ico('refresh') ?> Sugiéreme otra idea</button>
