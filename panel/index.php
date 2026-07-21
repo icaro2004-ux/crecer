@@ -353,30 +353,32 @@ $fe_arte  = $featured && !empty($featured['grafica_path']) && !$fe_video;
 $fe_cap   = $featured ? trim((string)$featured['caption']) : '';
 
 // Quién trabajó de verdad (evidencia real: atributos de la pieza + actividad reciente).
+// Los nombres salen del equipo que el dueño bautizó (equipo_nombre); si no, el rol.
 $ags = array_column($feed, 'agente');
+$NM = fn($k) => function_exists('equipo_nombre') ? equipo_nombre($marca, $k) : $k;
 $w_creativa  = ($fe_cap !== '') || array_intersect(['creador', 'editor', 'aprendiz'], $ags);
 $w_disenador = $fe_arte || $fe_video || in_array('diseñador', $ags, true);
 $w_estratega = !empty($featured['fecha_programada']) || array_intersect(['planificador', 'intake', 'estratega'], $ags);
 
 $evidencia = [];
-if ($w_creativa)  $evidencia[] = 'La Creativa terminó el post de hoy.';
-if ($w_disenador) $evidencia[] = ($fe_video && !$fe_arte) ? 'El Diseñador preparó el video.' : 'El Diseñador dejó listo el arte.';
+if ($w_creativa)  $evidencia[] = $NM('escritor') . ' terminó el post de hoy.';
+if ($w_disenador) $evidencia[] = ($fe_video && !$fe_arte) ? $NM('disenador') . ' preparó el video.' : $NM('disenador') . ' dejó listo el arte.';
 if ($w_estratega) $evidencia[] = !empty($featured['fecha_programada'])
-    ? 'La Estratega escogió la mejor hora — ' . _fecha_humana($featured['fecha_programada']) . '.'
-    : 'La Estratega cuadró el plan de la semana.';
+    ? $NM('estratega') . ' escogió la mejor hora — ' . _fecha_humana($featured['fecha_programada']) . '.'
+    : $NM('estratega') . ' cuadró el plan de la semana.';
 
 // Rellenar con más pruebas REALES si faltan (nunca texto inventado).
 $otras = (int)($cuenta['borrador'] ?? 0) + (int)($cuenta['aprobado'] ?? 0) + (int)($cuenta['programado'] ?? 0) - ($featured ? 1 : 0);
 if (count($evidencia) < 3 && $otras > 0)
     $evidencia[] = 'El corillo adelantó ' . $otras . ' pieza' . ($otras == 1 ? '' : 's') . ' más para la semana.';
 if (count($evidencia) < 3 && (int)($tot_ins['n'] ?? 0) > 0 && (int)($tot_ins['alcance'] ?? 0) > 0)
-    $evidencia[] = 'El Analista revisó los números — ' . number_format((int)$tot_ins['alcance']) . ' personas alcanzadas este mes.';
+    $evidencia[] = $NM('analista') . ' revisó los números — ' . number_format((int)$tot_ins['alcance']) . ' personas alcanzadas este mes.';
 if (count($evidencia) < 3 && in_array('provocador', $ags, true))
-    $evidencia[] = 'El Provocador lanzó ángulos atrevidos para tus posts.';
+    $evidencia[] = $NM('provocador') . ' lanzó ángulos atrevidos para tus posts.';
 if (count($evidencia) < 3 && in_array('analitica', $ags, true))
-    $evidencia[] = 'El Analista revisó cómo va tu presencia.';
+    $evidencia[] = $NM('analista') . ' revisó cómo va tu presencia.';
 if (count($evidencia) < 3 && !empty($memorias))
-    $evidencia[] = 'La Estratega aprendió algo nuevo de tu voz.';
+    $evidencia[] = $NM('estratega') . ' aprendió algo nuevo de tu voz.';
 $evidencia = array_slice($evidencia, 0, 3);
 
 // Modo del relevo.

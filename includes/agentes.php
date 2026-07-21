@@ -1713,8 +1713,10 @@ function gerente_despachar(PDO $pdo, int $marca_id, string $peticion, bool $pued
             'respuesta' => "Empecé a montar lo de \"{$tema}\" pero se me trabó el equipo a mitad. Dame un momento y pídemelo otra vez."];
     }
 
+    $mk = leer_marca($pdo, $marca_id);
     $resp = "¡Dale! Le repartí el trabajo al corillo y te armé {$ok} post" . ($ok === 1 ? '' : 's') . " sobre \"{$tema}\". "
-        . "El Provocador tiró los ángulos, la Estratega escogió el que más pega, y el Creador los escribió en tu voz. "
+        . equipo_nombre($mk, 'provocador') . " tiró los ángulos, " . equipo_nombre($mk, 'estratega') . " escogió el que más pega, y "
+        . equipo_nombre($mk, 'escritor') . " los escribió en tu voz. "
         . "Ya están en Propuestas esperando tu OK — dale una mirada y me dices si ajustamos algo.";
     return ['ok' => true, 'respuesta' => $resp, 'accion' => 'campana', 'creadas' => $ok];
 }
