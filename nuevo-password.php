@@ -38,7 +38,8 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Nueva contraseña · Encuéntralo</title>
-<link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/encuentralo-pin.svg">
+<link rel="icon" type="image/png" href="/crecer/assets/brand/crecer-icon.png">
+<link rel="apple-touch-icon" href="/crecer/assets/brand/crecer-icon.png">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link href="/crecer/assets/encuentralo-ui.css?v=20" rel="stylesheet">
 <style>
@@ -68,7 +69,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 </head>
 <body>
 <div class="auth">
-  <div class="top"><a href="/crecer/crecer.php"><img src="/crecer/assets/brand/crecer-mark.svg" alt=""><b>encuéntralo <i>crecer</i></b></a></div>
+  <div class="top"><a href="/crecer/crecer.php"><img src="/crecer/assets/brand/crecer-icon.png" alt=""><b>encuéntralo <i>crecer</i></b></a></div>
   <h1>Crea tu contraseña nueva</h1>
 
   <div class="card">

@@ -40,7 +40,8 @@ $nav_perfil = [
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title><?= $h(($page_title ?? 'Panel') . ' · ' . $marca['nombre_negocio']) ?> — Encuéntralo</title>
-<link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/crecer-mark.svg">
+<link rel="icon" type="image/png" href="/crecer/assets/brand/crecer-icon.png">
+<link rel="apple-touch-icon" href="/crecer/assets/brand/crecer-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -49,7 +50,7 @@ $nav_perfil = [
 <body>
 <div class="layout">
   <aside class="side" id="side">
-    <a class="sbrand" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="text-decoration:none;color:inherit"><img src="/crecer/assets/brand/crecer-mark.svg" alt="Inicio"><b>encuéntralo <span style="color:var(--teal)">crecer</span></b></a>
+    <a class="sbrand" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="text-decoration:none;color:inherit"><img src="/crecer/assets/brand/crecer-icon.png" alt="Inicio"><b>encuéntralo <span style="color:var(--teal)">crecer</span></b></a>
     <nav>
       <?php foreach ($nav as $n): ?>
         <a href="<?= $n['hr'] ?>" class="<?= $n['key']===$active?'on':'' ?>">
@@ -98,7 +99,7 @@ $nav_perfil = [
   <div class="main">
     <div class="ptop">
       <a href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit">
-        <img src="/crecer/assets/brand/crecer-mark.svg" alt="Inicio"><b>encuéntralo <span style="color:var(--teal)">crecer</span></b></a>
+        <img src="/crecer/assets/brand/crecer-icon.png" alt="Inicio"><b>encuéntralo <span style="color:var(--teal)">crecer</span></b></a>
       <button id="burger" class="ptop-menu" aria-label="Abrir menú">
         <span class="bars" aria-hidden="true"><span></span><span></span><span></span></span>
         <span class="av"><?= $h(mb_strtoupper(mb_substr($marca['nombre_negocio'],0,1))) ?></span>

@@ -39,7 +39,8 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Planes · <?= $h($marca['nombre_negocio']) ?> — Encuéntralo</title>
-<link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/encuentralo-pin.svg">
+<link rel="icon" type="image/png" href="/crecer/assets/brand/crecer-icon.png">
+<link rel="apple-touch-icon" href="/crecer/assets/brand/crecer-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -133,7 +134,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   $plan_actual = null; foreach($planes as $pp){ if($activa && ($su['plan_slug'] ?? '')===$pp['slug']) $plan_actual=$pp; }
 ?>
 <div class="wrap">
-  <div class="top"><img src="/crecer/assets/brand/crecer-mark.svg" alt=""><b>encuéntralo <span>crecer</span></b></div>
+  <div class="top"><img src="/crecer/assets/brand/crecer-icon.png" alt=""><b>encuéntralo <span>crecer</span></b></div>
   <a class="back" href="/crecer/panel/index.php?marca=<?= $marca_id ?>">← Volver</a>
 
   <?php

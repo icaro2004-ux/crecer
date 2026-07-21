@@ -100,7 +100,8 @@ $paginas = $_SESSION['meta_paginas'][$marca_id] ?? [];
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Conectar redes · <?= $h($marca['nombre_negocio']) ?></title>
-<link rel="icon" type="image/svg+xml" href="/crecer/assets/brand/crecer-mark.svg">
+<link rel="icon" type="image/png" href="/crecer/assets/brand/crecer-icon.png">
+<link rel="apple-touch-icon" href="/crecer/assets/brand/crecer-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link href="/crecer/assets/encuentralo-ui.css?v=20" rel="stylesheet">

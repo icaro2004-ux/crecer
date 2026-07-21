@@ -31,7 +31,13 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Crecer · El Corillo que trabaja por tu negocio</title>
 <meta name="description" content="Escribe el nombre de tu negocio y conoce al Corillo: un equipo de marketing que trabaja por ti.">
-<link rel="icon" type="image/png" href="/crecer/assets/brand/encuentralo-crecer-pin-drop.png">
+<link rel="icon" type="image/png" href="/crecer/assets/brand/crecer-icon.png">
+<link rel="apple-touch-icon" href="/crecer/assets/brand/crecer-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Crecer · El Corillo que trabaja por tu negocio">
+<meta property="og:description" content="Un equipo de marketing con IA que trabaja por tu negocio boricua. Tú apruebas desde el celular.">
+<meta property="og:image" content="https://encuentraloahora.com/crecer/assets/brand/crecer-logo.png">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">

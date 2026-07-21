@@ -92,7 +92,8 @@ $plan_lbl = ['crecer'=>'Crecer','despegar'=>'Despegar'][$plan_intent] ?? '';
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Crear cuenta · Encuéntralo Crecer</title>
-<link rel="icon" type="image/png" href="/crecer/assets/brand/encuentralo-crecer-pin-drop.png">
+<link rel="icon" type="image/png" href="/crecer/assets/brand/crecer-icon.png">
+<link rel="apple-touch-icon" href="/crecer/assets/brand/crecer-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -149,7 +150,7 @@ $plan_lbl = ['crecer'=>'Crecer','despegar'=>'Despegar'][$plan_intent] ?? '';
 
 <nav class="cnav">
   <div class="in wrap">
-    <a class="cbrand" href="/crecer/crecer.php"><img src="/crecer/assets/brand/crecer-mark.svg" alt=""><b>encuéntralo <span class="teal">crecer</span></b></a>
+    <a class="cbrand" href="/crecer/crecer.php"><img src="/crecer/assets/brand/crecer-icon.png" alt=""><b>encuéntralo <span class="teal">crecer</span></b></a>
     <span class="sp"></span>
     <a class="lg" href="/crecer/login.php">¿Ya tienes cuenta? Entra →</a>
   </div>
