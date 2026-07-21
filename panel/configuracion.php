@@ -115,7 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$elegible) { try { $elegible = plan_de_marca($pdo, $marca_id) !== null; } catch (Throwable $e) {} }
         if (!$elegible) { header('Location: ' . $volver . 'negocio&error=' . urlencode('Activa tu plan para que el corillo trabaje solo.')); exit; }
         try {
-            $res = trabajo_autonomo($pdo, $marca_id);
+            $res = relevo_del_corillo($pdo, $marca_id);   // corre el EQUIPO completo, no solo el creador
             $nn  = (int)($res['creadas'] ?? 0);
             $msg = $nn > 0
                 ? "El corillo te dejó {$nn} post" . ($nn === 1 ? '' : 's') . " en Propuestas → Revisar."

@@ -936,7 +936,7 @@ function grounding_producto_instruccion(array $m): string {
  *
  * @param int $n_piezas  cuántas piezas planificar (ej. 8 para un mes ligero)
  */
-function planificar_mes(PDO $pdo, int $marca_id, int $anio, int $mes, int $n_piezas = 8): array {
+function planificar_mes(PDO $pdo, int $marca_id, int $anio, int $mes, int $n_piezas = 8, string $enfoque = ''): array {
     $m = leer_marca($pdo, $marca_id);
     $ctx = marca_contexto($m);
 
@@ -956,7 +956,9 @@ Reglas:
 - Responde SOLO JSON válido, sin texto extra.
 SYS;
 
+    $enfoque = trim($enfoque);
     $prompt = "Perfil del negocio:\n{$ctx}\n\n"
+        . ($enfoque !== '' ? "ENFOQUE DE LA SEMANA (lo fijó la Estratega — alinea las piezas a esto):\n\"{$enfoque}\"\n\n" : '')
         . "Diseña la estrategia de {$n_piezas} piezas para el mes {$mes}/{$anio}, con pilares variados.\n"
         . "Devuelve un JSON con esta forma EXACTA:\n"
         . '{"piezas":[{"dia":1,"plataforma":"instagram","tipo":"post","pilar":"producto","tema":"...","idea":"..."}]}'
@@ -1402,7 +1404,7 @@ SYS;
  *
  * @return array{creadas:int, ids:array, razon:string}
  */
-function trabajo_autonomo(PDO $pdo, int $marca_id): array {
+function trabajo_autonomo(PDO $pdo, int $marca_id, string $enfoque = ''): array {
     $m = leer_marca($pdo, $marca_id);
     $objetivo = max(1, (int)($m['autopilot_n'] ?? 3));
 
@@ -1419,7 +1421,7 @@ function trabajo_autonomo(PDO $pdo, int $marca_id): array {
 
     $anio = (int)date('Y'); $mes = (int)date('n');
     try {
-        $plan = planificar_mes($pdo, $marca_id, $anio, $mes, $faltan);
+        $plan = planificar_mes($pdo, $marca_id, $anio, $mes, $faltan, $enfoque);
     } catch (Throwable $e) {
         return ['creadas' => 0, 'ids' => [], 'razon' => 'planificador falló: ' . substr($e->getMessage(), 0, 100)];
     }
@@ -1442,9 +1444,98 @@ function trabajo_autonomo(PDO $pdo, int $marca_id): array {
 }
 
 /**
+ * LA ESTRATEGA (autónoma). En cada relevo fija el ENFOQUE de la semana para
+ * ESTE negocio: una dirección concreta (qué empujar y por qué), mirando su
+ * perfil y lo último trabajado. Ese enfoque ALIMENTA al planificador (no es
+ * adorno). Logueado como 'estratega' → aparece en el relevo del home.
+ * @return string  el enfoque (o '' si falló).
+ */
+function estratega_enfoque_semana(PDO $pdo, int $marca_id): string {
+    try {
+        $m = leer_marca($pdo, $marca_id);
+        $ctx = marca_contexto($m);
+        // Señal real: temas de las últimas piezas (para NO repetir el mismo ángulo).
+        $recientes = '';
+        try {
+            $q = $pdo->prepare("SELECT caption FROM crecer_contenido WHERE marca_id=? ORDER BY id DESC LIMIT 6");
+            $q->execute([$marca_id]);
+            $caps = array_filter(array_map(fn($c) => trim(mb_substr((string)$c, 0, 90)), $q->fetchAll(PDO::FETCH_COLUMN)));
+            if ($caps) $recientes = "Últimos temas trabajados:\n- " . implode("\n- ", $caps) . "\n";
+        } catch (Throwable $e) {}
+
+        $hoy = date('Y-m-d');
+        $sistema = "Eres LA ESTRATEGA de Crecer para un negocio boricua. En 1-2 frases define el ENFOQUE "
+            . "de ESTA semana: qué debe empujar el negocio y POR QUÉ (aprovecha fechas boricuas, la quincena, "
+            . "el fin de semana, la temporada, o un pilar que falte por trabajar). Concreto, accionable y de "
+            . "ESTE negocio. NO repitas el ángulo de los últimos temas. Devuelve SOLO el enfoque, sin títulos ni saludo.";
+        $prompt = "Perfil del negocio:\n{$ctx}\n\nHoy es {$hoy}.\n{$recientes}\n¿Cuál es el enfoque de la semana?";
+        $r = ia_ejecutar($pdo, 'estratega', 'Enfoque de la semana', $prompt, [
+            'marca_id' => $marca_id, 'sistema' => $sistema,
+            'modelo' => CRECER_COPILOTO_MODEL,
+            'temperatura' => 0.85, 'max_tokens' => 200, 'thinking_budget' => 0,
+            'mock_texto' => 'Esta semana empuja el producto estrella con una oferta de fin de semana, que es cuando más se compra.',
+        ]);
+        return trim((string)($r['texto'] ?? ''));
+    } catch (Throwable $e) { error_log('estratega_enfoque_semana: ' . $e->getMessage()); return ''; }
+}
+
+/**
+ * EL ANALISTA (autónomo). Cierra el relevo mirando los números REALES del
+ * negocio (posts publicados, piezas listas, lo que creó el corillo este mes)
+ * y deja un resumen corto + 1 sugerencia. NO inventa ventas ni métricas.
+ * Logueado como 'analitica'. No hace nada si aún no hay señal.
+ */
+function analitica_del_relevo(PDO $pdo, int $marca_id): void {
+    try {
+        $ini = date('Y-m-01 00:00:00');
+        $publicados = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$marca_id} AND estado='publicado'")->fetchColumn();
+        $listos     = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$marca_id} AND estado IN ('borrador','aprobado','programado')")->fetchColumn();
+        $piezas_mes = 0;
+        try { $piezas_mes = (int)$pdo->query("SELECT COUNT(*) FROM crecer_ia_log WHERE marca_id={$marca_id} AND estado='ok' AND created_at>='{$ini}'")->fetchColumn(); } catch (Throwable $e) {}
+        if ($publicados === 0 && $listos === 0) return;   // nada que analizar todavía
+
+        $m = leer_marca($pdo, $marca_id);
+        $sistema = "Eres EL ANALISTA de Crecer. En 1-2 frases cálidas y en cristiano, dile al dueño boricua cómo "
+            . "va su presencia y UNA sugerencia concreta. Habla SOLO de estos números; NO inventes ventas ni "
+            . "métricas que no te di. Sin títulos ni saludo.";
+        $prompt = "Negocio: {$m['nombre_negocio']}\n"
+            . "Posts publicados en total: {$publicados}.\n"
+            . "Posts listos (esperando OK o programados): {$listos}.\n"
+            . "Piezas que creó el corillo este mes: {$piezas_mes}.\n\n"
+            . "Escribe el resumen corto para el dueño.";
+        ia_ejecutar($pdo, 'analitica', 'Cómo va la cosa', $prompt, [
+            'marca_id' => $marca_id, 'sistema' => $sistema,
+            'modelo' => CRECER_COPILOTO_MODEL,
+            'temperatura' => 0.7, 'max_tokens' => 220, 'thinking_budget' => 0,
+            'mock_texto' => 'Vas bien: el corillo te mantiene contenido listo. Cuando publiques, dale jueves o viernes, que es cuando más se mueve la gente.',
+        ]);
+    } catch (Throwable $e) { error_log('analitica_del_relevo: ' . $e->getMessage()); }
+}
+
+/**
+ * EL RELEVO DEL CORILLO — para UNA marca corre el EQUIPO completo, no solo el
+ * creador: el Aprendiz aprende tu estilo, la Estratega fija el enfoque, el
+ * Creador redacta alineado a ese enfoque, y el Analista cierra con los números.
+ * Cada agente loguea → el home enciende su parte del relevo (evidencia real,
+ * criterio XPRIZE). Best-effort: si un agente falla, el relevo sigue.
+ * Devuelve lo mismo que trabajo_autonomo (creadas/ids/razon).
+ */
+function relevo_del_corillo(PDO $pdo, int $marca_id): array {
+    // 1) El Aprendiz: aprende la línea visual de lo que el dueño aprobó (si hay señal).
+    try { aprender_estilo_visual($pdo, $marca_id); } catch (Throwable $e) { error_log('relevo aprendiz: ' . $e->getMessage()); }
+    // 2) La Estratega: fija el enfoque de la semana (alimenta al creador).
+    $enfoque = estratega_enfoque_semana($pdo, $marca_id);
+    // 3) El Creador: redacta los borradores que falten, alineados al enfoque.
+    $res = trabajo_autonomo($pdo, $marca_id, $enfoque);
+    // 4) El Analista: cierra el relevo con los números reales.
+    analitica_del_relevo($pdo, $marca_id);
+    return $res;
+}
+
+/**
  * EL LOOP DEL CORILLO AUTÓNOMO. Recorre las marcas con piloto automático
- * activo y plan vigente, les genera el trabajo, y avisa al dueño por email
- * cuando dejó posts nuevos. Pensado para correr por cron (semanal).
+ * activo y plan vigente, corre el EQUIPO (relevo_del_corillo), y avisa al dueño
+ * por email cuando dejó posts nuevos. Pensado para correr por cron (semanal).
  *
  * @return array{marcas:int, creadas:int, detalle:array}
  */
@@ -1466,7 +1557,7 @@ function correr_corillo(PDO $pdo): array {
             $detalle[] = ['marca_id' => $mid, 'creadas' => 0, 'razon' => 'sin plan activo'];
             continue;
         }
-        $res = trabajo_autonomo($pdo, $mid);
+        $res = relevo_del_corillo($pdo, $mid);   // corre el EQUIPO, no solo el creador
         $tot += $res['creadas'];
         $detalle[] = ['marca_id' => $mid, 'creadas' => $res['creadas'], 'razon' => $res['razon']];
 

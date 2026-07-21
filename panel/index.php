@@ -371,6 +371,8 @@ if (count($evidencia) < 3 && $otras > 0)
     $evidencia[] = 'El corillo adelantó ' . $otras . ' pieza' . ($otras == 1 ? '' : 's') . ' más para la semana.';
 if (count($evidencia) < 3 && (int)($tot_ins['n'] ?? 0) > 0 && (int)($tot_ins['alcance'] ?? 0) > 0)
     $evidencia[] = 'El Analista revisó los números — ' . number_format((int)$tot_ins['alcance']) . ' personas alcanzadas este mes.';
+if (count($evidencia) < 3 && in_array('analitica', $ags, true))
+    $evidencia[] = 'El Analista revisó cómo va tu presencia.';
 if (count($evidencia) < 3 && !empty($memorias))
     $evidencia[] = 'La Estratega aprendió algo nuevo de tu voz.';
 $evidencia = array_slice($evidencia, 0, 3);
