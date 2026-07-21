@@ -63,7 +63,31 @@ try {
             echo "  o cambia OPENAI_IMG_MODEL a 'dall-e-3' en el config (no exige verificación).\n";
         }
     } else {
-        echo "\n(Para probar OpenAI de verdad, abre esta URL con  &test=img  al final.)\n";
+        echo "\n(Para probar OpenAI, abre esta URL con  &test=img  al final.)\n";
+    }
+
+    // Prueba REAL del arte de los posts: corre generar_grafica() end-to-end.
+    //    Añade  &test=arte  a la URL. Dice si genera, con qué modelo y si guarda el archivo.
+    if (($_GET['test'] ?? '') === 'arte') {
+        echo "\n--- Prueba REAL de generar_grafica (el arte de los posts) ---\n";
+        try {
+            require_once __DIR__ . '/includes/agentes.php';
+            $mid = (int)$pdo->query("SELECT id FROM crecer_marca ORDER BY id DESC LIMIT 1")->fetchColumn();
+            echo "marca de prueba: #{$mid}\n";
+            $t0 = microtime(true);
+            $r = generar_grafica($pdo, $mid, null, ['copy' => 'Café boricua recién colado, ven a probarlo hoy', 'con_texto' => false, 'con_logo' => false]);
+            $seg = round(microtime(true) - $t0, 1);
+            echo "RESULTADO: ✅ generó arte en {$seg}s\n";
+            echo "  archivo (url) : " . ($r['archivo'] ?? '(?)') . "\n";
+            echo "  modelo        : " . ($r['modelo'] ?? '(?)') . "\n";
+            $url = (string)($r['archivo'] ?? '');
+            $rel = ltrim(str_replace(rtrim(UPLOADS_URL, '/'), '', $url), '/');
+            $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+            echo "  archivo en disco: " . (is_file($abs) ? ('SÍ ✅ (' . filesize($abs) . ' bytes)') : "NO ❌  (ruta: {$abs})") . "\n";
+        } catch (Throwable $e) {
+            echo "RESULTADO: ❌ FALLÓ\n";
+            echo "  ERROR EXACTO: " . $e->getMessage() . "\n";
+        }
     }
 } catch (Throwable $e) {
     echo "No pude cargar el diagnóstico: " . $e->getMessage() . "\n";
