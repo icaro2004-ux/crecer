@@ -1628,6 +1628,68 @@ function relevo_del_corillo(PDO $pdo, int $marca_id): array {
 }
 
 /**
+ * EL GERENTE GENERAL — el Account Director del corillo. Lee lo que el dueño pide
+ * en el chat y decide: ¿es una ORDEN de trabajo (arma una campaña / hazme N posts
+ * de X) o una consulta? Si es ORDEN, DESPACHA al equipo (planifica el tema y lo
+ * redacta pieza por pieza pasando por la mesa del corillo) y reporta como un
+ * gerente que repartió el trabajo. Si es consulta, devuelve null → responde la
+ * Estratega. Logueado como 'gerente' (evidencia XPRIZE #2).
+ *
+ * @param bool $puede_producir  ¿la cuenta puede crear contenido? (plan/prueba)
+ * @return array|null  ['ok'=>true,'respuesta'=>...,'accion'=>...,'creadas'=>n] o null
+ */
+function gerente_despachar(PDO $pdo, int $marca_id, string $peticion, bool $puede_producir, array $historial = []): ?array {
+    // 1) Clasificar la intención (barato, JSON): ¿producir o conversar?
+    try {
+        $sys = "Eres EL GERENTE GENERAL del corillo (Account Director de una agencia de marketing). Clasifica lo que "
+            . "el dueño escribe. ¿Es una ORDEN de PRODUCIR contenido (ej: 'arma una campaña de X', 'hazme 4 posts de "
+            . "Y', 'necesito contenido para el Día de Madres', 'súbeme algo del combo nuevo') o es una consulta, "
+            . "pregunta, saludo o pedido de consejo? Si es orden de producir, extrae el TEMA y cuántas piezas "
+            . "(1-6; si no lo dice, 3). Responde SOLO JSON: {\"accion\":\"producir\"|\"conversar\",\"tema\":\"...\",\"n\":N}.";
+        $r = ia_ejecutar($pdo, 'gerente', 'Repartir el trabajo', "El dueño escribe:\n\"{$peticion}\"", [
+            'marca_id' => $marca_id, 'sistema' => $sys, 'json' => true,
+            'modelo' => CRECER_COPILOTO_MODEL, 'temperatura' => 0.2, 'max_tokens' => 150, 'thinking_budget' => 0,
+            'mock_texto' => '{"accion":"conversar","tema":"","n":3}',
+        ]);
+        $d = json_decode((string)$r['texto'], true) ?: [];
+    } catch (Throwable $e) { return null; }
+
+    if (($d['accion'] ?? '') !== 'producir') return null;   // consulta → la responde la Estratega
+    $tema = trim((string)($d['tema'] ?? ''));
+    $n = max(1, min(6, (int)($d['n'] ?? 3)));
+    if ($tema === '') return null;
+
+    // Cuenta sin plan/prueba: no despacha producción (upsell suave, en voz de gerente).
+    if (!$puede_producir) {
+        return ['ok' => true, 'accion' => 'upsell', 'creadas' => 0,
+            'respuesta' => "Me encantaría poner al corillo a trabajar en lo de \"{$tema}\" ahora mismo. Para que el equipo "
+                . "te produzca contenido a pedido, activa tu plan y me sueltas las riendas — ahí te armo campañas completas cuando quieras."];
+    }
+
+    // 2) DESPACHAR: planifica el tema (enfoque = la campaña) y redacta cada pieza (con debate del corillo).
+    try {
+        $anio = (int)date('Y'); $mes = (int)date('n');
+        $plan = planificar_mes($pdo, $marca_id, $anio, $mes, $n, "Campaña que pidió el dueño: {$tema}");
+        $ok = 0; $i = 0;
+        $reprog = $pdo->prepare("UPDATE crecer_contenido SET fecha_programada=? WHERE id=? AND marca_id=?");
+        foreach ($plan['piezas'] as $pz) {
+            $cid = (int)$pz['id'];
+            try { redactar_pieza($pdo, $cid); $ok++; } catch (Throwable $e) {}
+            $reprog->execute([date('Y-m-d 10:00:00', strtotime('+' . (++$i) . ' day')), $cid, $marca_id]);
+        }
+    } catch (Throwable $e) {
+        error_log('gerente_despachar: ' . $e->getMessage());
+        return ['ok' => true, 'accion' => 'error', 'creadas' => 0,
+            'respuesta' => "Empecé a montar lo de \"{$tema}\" pero se me trabó el equipo a mitad. Dame un momento y pídemelo otra vez."];
+    }
+
+    $resp = "¡Dale! Le repartí el trabajo al corillo y te armé {$ok} post" . ($ok === 1 ? '' : 's') . " sobre \"{$tema}\". "
+        . "El Provocador tiró los ángulos, la Estratega escogió el que más pega, y el Creador los escribió en tu voz. "
+        . "Ya están en Propuestas esperando tu OK — dale una mirada y me dices si ajustamos algo.";
+    return ['ok' => true, 'respuesta' => $resp, 'accion' => 'campana', 'creadas' => $ok];
+}
+
+/**
  * EL LOOP DEL CORILLO AUTÓNOMO. Recorre las marcas con piloto automático
  * activo y plan vigente, corre el EQUIPO (relevo_del_corillo), y avisa al dueño
  * por email cuando dejó posts nuevos. Pensado para correr por cron (semanal).

@@ -24,7 +24,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!is_array($historial)) $historial = [];
     $limite = copiloto_limite_uso($pdo, $marca_id);
     if (empty($limite['ok'])) { echo json_encode(['ok'=>false, 'err'=>$limite['err']], JSON_UNESCAPED_UNICODE); exit; }
+    // ¿La cuenta puede producir contenido a pedido? (plan activo o cuenta de prueba)
+    require_once __DIR__ . '/../includes/suscripcion.php';
+    $puede_producir = (function_exists('activacion_de_prueba') && activacion_de_prueba($usuario['email'] ?? null))
+        || (function_exists('plan_de_marca') && plan_de_marca($pdo, $marca_id) !== null);
     try {
+        // EL GERENTE primero: si es una ORDEN de producir, despacha al equipo y reporta.
+        $g = gerente_despachar($pdo, $marca_id, mb_substr($pregunta, 0, 1000), $puede_producir, $historial);
+        if ($g !== null) { echo json_encode($g, JSON_UNESCAPED_UNICODE); exit; }
+        // Si no era orden, responde la Estratega (consejo).
         $r = estratega_responder($pdo, $marca_id, mb_substr($pregunta, 0, 1000), $historial);
         echo json_encode($r, JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
@@ -64,7 +72,7 @@ require __DIR__ . '/_shell.php';
 
 <div class="es-head">
   <div class="es-orb"><img src="/crecer/assets/brand/estratega.png" alt=""></div>
-  <div><h1 class="es-h1">La Estratega</h1><div class="es-sub" style="margin:2px 0 0">Tu asesora de negocio. Mira tu negocio, entiende el panel y te ayuda a decidir el próximo movimiento.</div></div>
+  <div><h1 class="es-h1">La Estratega</h1><div class="es-sub" style="margin:2px 0 0">Tu asesora de negocio — y tu gerente. Pídele consejo… o <b>mándala a producir</b>: "hazme 3 posts del combo nuevo" y le reparte el trabajo al corillo.</div></div>
 </div>
 
 <div class="es-radar">
@@ -76,6 +84,7 @@ require __DIR__ . '/_shell.php';
 <div class="es-chips" id="es-chips">
   <button type="button" class="es-chip">Qué necesita atención ahora</button>
   <button type="button" class="es-chip">Qué promoción hago esta semana</button>
+  <button type="button" class="es-chip">Hazme 3 posts del producto estrella</button>
   <button type="button" class="es-chip">Cómo consigo más clientes</button>
   <button type="button" class="es-chip">Qué aprendiste de mi marca</button>
 </div>
