@@ -21,6 +21,7 @@ $viendo_como_admin = ($es_admin && (int)$marca['usuario_id'] !== (int)($u_actual
 $nav = [
   ['key'=>'inicio',    'ic'=>'home',    'lb'=>'Inicio',     'hr'=>"$BASE/index.php?marca=$marca_id"],
   ['key'=>'contenido', 'ic'=>'image','lb'=>'Propuestas',  'hr'=>"$BASE/propuestas.php?marca=$marca_id"],
+  ['key'=>'equipo',    'ic'=>'users',   'lb'=>'Tu equipo',  'hr'=>"$BASE/equipo.php?marca=$marca_id"],
   ['key'=>'resultados','ic'=>'chart',   'lb'=>'Resultados', 'hr'=>"$BASE/resultados.php?marca=$marca_id"],
   ['key'=>'marca',     'ic'=>'palette', 'lb'=>'Mi marca',   'hr'=>"$BASE/marca.php?marca=$marca_id"],
   ['key'=>'biblioteca','ic'=>'foto',    'lb'=>'Biblioteca', 'hr'=>"$BASE/biblioteca.php?marca=$marca_id"],

@@ -813,6 +813,36 @@ function leer_marca(PDO $pdo, int $marca_id): array {
     return $row;
 }
 
+/**
+ * EL ROSTER DEL CORILLO — los agentes que el dueño ve como su "equipo". Cada uno
+ * con su rol por defecto, su cara (emoji) y qué hace. El dueño puede bautizarlos
+ * (equipo_nombres) para el sentido de equipo. La clave mapea al agente que loguea.
+ */
+function equipo_roster(): array {
+    return [
+        'gerente'    => ['rol' => 'El Gerente',    'emoji' => '🧑‍💼', 'hace' => 'Reparte el trabajo y te reporta.',           'log' => 'gerente'],
+        'provocador' => ['rol' => 'El Provocador', 'emoji' => '🔥',   'hace' => 'Lanza los ángulos más atrevidos.',           'log' => 'provocador'],
+        'estratega'  => ['rol' => 'La Estratega',  'emoji' => '🧭',   'hace' => 'Escoge el ángulo que más vende y cuadra el plan.', 'log' => 'estratega'],
+        'escritor'   => ['rol' => 'El Escritor',   'emoji' => '✍️',   'hace' => 'Escribe los posts en tu voz boricua.',        'log' => 'creador'],
+        'disenador'  => ['rol' => 'El Diseñador',  'emoji' => '🎨',   'hace' => 'Crea el arte de cada post.',                  'log' => 'diseñador'],
+        'analista'   => ['rol' => 'El Analista',   'emoji' => '📊',   'hace' => 'Revisa los números y qué está funcionando.', 'log' => 'analitica'],
+    ];
+}
+
+/** Nombres personalizados del equipo (JSON en crecer_marca.equipo_nombres). */
+function equipo_nombres(array $marca): array {
+    $j = json_decode((string)($marca['equipo_nombres'] ?? ''), true);
+    return is_array($j) ? $j : [];
+}
+
+/** Nombre a mostrar de un agente: el que el dueño le puso, o el rol por defecto. */
+function equipo_nombre(array $marca, string $key): string {
+    $n = trim((string)(equipo_nombres($marca)[$key] ?? ''));
+    if ($n !== '') return $n;
+    $r = equipo_roster();
+    return $r[$key]['rol'] ?? ucfirst($key);
+}
+
 /** Resume el perfil de la marca en texto para meterlo en un prompt. */
 function marca_contexto(array $m): string {
     $prod = $m['productos'] ? implode(', ', array_map(

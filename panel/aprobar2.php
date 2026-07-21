@@ -1562,10 +1562,12 @@ $cf = [
   // ── EL LOG DE LA DISCUSIÓN — para el que quiera ver cómo el corillo pensó el post.
   //   Colapsable: por defecto una línea; se abre y muestra los ángulos del Provocador
   //   y por qué la Estratega eligió el ganador. Si no hubo debate, no se muestra nada.
+  var EQUIPO = <?= json_encode(['provocador'=>equipo_nombre($marca,'provocador'), 'estratega'=>equipo_nombre($marca,'estratega')], JSON_UNESCAPED_UNICODE) ?>;
   function renderDebate(deb){
     var box=document.getElementById('wiz-debate'); if(!box) return;
     box.innerHTML='';
     if(!deb || !deb.angulos || !deb.angulos.length){ return; }
+    var PROV=EQUIPO.provocador||'El Provocador', EST=EQUIPO.estratega||'La Estratega';
     var ang=deb.angulos, elegidoTxt=(deb.elegido||'').toLowerCase();
     var items='';
     for(var i=0;i<ang.length;i++){
@@ -1576,11 +1578,11 @@ $cf = [
            +'<div class="dbt-gan">"'+_esc(gan)+'"</div>'
            +(pq?'<div class="dbt-pq">'+_esc(pq)+'</div>':'')+'</div>';
     }
-    var razon = deb.razon ? '<div class="dbt-razon"><b>La Estratega eligió:</b> '+_esc(deb.razon)+'</div>' : '';
+    var razon = deb.razon ? '<div class="dbt-razon"><b>'+_esc(EST)+' eligió:</b> '+_esc(deb.razon)+'</div>' : '';
     box.innerHTML =
       '<details class="dbt">'
       + '<summary>🔥 Cómo lo pensó el corillo <span class="dbt-hint">('+ang.length+' ángulos · toca para ver la discusión)</span></summary>'
-      + '<div class="dbt-body"><div class="dbt-lead">El Provocador lanzó estos ángulos y la Estratega escogió el más cabrón para tu público:</div>'
+      + '<div class="dbt-body"><div class="dbt-lead">'+_esc(PROV)+' lanzó estos ángulos y '+_esc(EST)+' escogió el más cabrón para tu público:</div>'
       + items + razon + '</div>'
       + '</details>';
   }
