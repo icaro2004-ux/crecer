@@ -22,12 +22,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($pregunta === '') { echo json_encode(['ok'=>false,'err'=>'Escribe tu pregunta.']); exit; }
     $historial = json_decode((string)($_POST['historial'] ?? '[]'), true);
     if (!is_array($historial)) $historial = [];
-    $limite = copiloto_limite_uso($pdo, $marca_id);
-    if (empty($limite['ok'])) { echo json_encode(['ok'=>false, 'err'=>$limite['err']], JSON_UNESCAPED_UNICODE); exit; }
     // ¿La cuenta puede producir contenido a pedido? (plan activo o cuenta de prueba)
     require_once __DIR__ . '/../includes/suscripcion.php';
     $puede_producir = (function_exists('activacion_de_prueba') && activacion_de_prueba($usuario['email'] ?? null))
         || (function_exists('plan_de_marca') && plan_de_marca($pdo, $marca_id) !== null);
+    // El límite del copiloto solo aplica a cuentas FREE (plan/prueba entran libre).
+    if (!$puede_producir) {
+        $limite = copiloto_limite_uso($pdo, $marca_id);
+        if (empty($limite['ok'])) { echo json_encode(['ok'=>false, 'err'=>$limite['err']], JSON_UNESCAPED_UNICODE); exit; }
+    }
     try {
         // EL GERENTE primero: si es una ORDEN de producir, despacha al equipo y reporta.
         $g = gerente_despachar($pdo, $marca_id, mb_substr($pregunta, 0, 1000), $puede_producir, $historial);

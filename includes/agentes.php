@@ -11,10 +11,10 @@
 require_once __DIR__ . '/ia.php';
 require_once __DIR__ . '/memoria.php';   // El Cerebro del Negocio (RAG + escritura)
 
-if (!defined('CRECER_COPILOTO_HORA'))       define('CRECER_COPILOTO_HORA', 3);         // mensajes por negocio / hora con plan
-if (!defined('CRECER_COPILOTO_DIA'))        define('CRECER_COPILOTO_DIA', 8);         // mensajes por negocio / dia con plan
-if (!defined('CRECER_COPILOTO_FREE_DIA'))   define('CRECER_COPILOTO_FREE_DIA', 3);    // mensajes por negocio / dia sin plan
-if (!defined('CRECER_COPILOTO_GLOBAL_DIA')) define('CRECER_COPILOTO_GLOBAL_DIA', 80); // fusible de todo Crecer / dia
+if (!defined('CRECER_COPILOTO_HORA'))       define('CRECER_COPILOTO_HORA', 25);        // mensajes por negocio / hora con plan
+if (!defined('CRECER_COPILOTO_DIA'))        define('CRECER_COPILOTO_DIA', 120);        // mensajes por negocio / dia con plan
+if (!defined('CRECER_COPILOTO_FREE_DIA'))   define('CRECER_COPILOTO_FREE_DIA', 10);    // mensajes por negocio / dia sin plan
+if (!defined('CRECER_COPILOTO_GLOBAL_DIA')) define('CRECER_COPILOTO_GLOBAL_DIA', 600); // fusible de todo Crecer / dia
 if (!defined('CRECER_COPILOTO_MODEL'))      define('CRECER_COPILOTO_MODEL', 'gemini-2.5-flash-lite');
 
 // Límites de generación de imágenes (control de costos)

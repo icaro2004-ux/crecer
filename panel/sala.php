@@ -23,11 +23,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($mensaje === '') { echo json_encode(['ok'=>false,'err'=>'Escribe o di algo.']); exit; }
     $historial = json_decode((string)($_POST['historial'] ?? '[]'), true);
     if (!is_array($historial)) $historial = [];
-    $limite = copiloto_limite_uso($pdo, $marca_id);
-    if (empty($limite['ok'])) { echo json_encode(['ok'=>false, 'err'=>$limite['err']], JSON_UNESCAPED_UNICODE); exit; }
     require_once __DIR__ . '/../includes/suscripcion.php';
     $puede_producir = (function_exists('activacion_de_prueba') && activacion_de_prueba($usuario['email'] ?? null))
         || (function_exists('plan_de_marca') && plan_de_marca($pdo, $marca_id) !== null);
+    // El límite del copiloto solo aplica a cuentas FREE (protege costo). Plan/prueba: libre —
+    // La Sala es el centro de trabajo y cada mensaje usa varios agentes por dentro.
+    if (!$puede_producir) {
+        $limite = copiloto_limite_uso($pdo, $marca_id);
+        if (empty($limite['ok'])) { echo json_encode(['ok'=>false, 'err'=>$limite['err']], JSON_UNESCAPED_UNICODE); exit; }
+    }
     try {
         $r = sala_responder($pdo, $marca_id, mb_substr($mensaje, 0, 1000), $historial, $puede_producir);
         echo json_encode($r, JSON_UNESCAPED_UNICODE);
