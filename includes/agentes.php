@@ -378,7 +378,7 @@ function estilo_arte_direccion(string $estilo): array {
  */
 function sugerir_arte(PDO $pdo, int $marca_id, string $caption, string $ajuste = '', string $evitar = '', string $estilo_arte = 'realista', string $idea_actual = ''): string {
     $m = leer_marca($pdo, $marca_id);
-    $ctx = marca_contexto($m);
+    $ctx = cerebro_negocio($pdo, (int)$m['id'], $m);   // el CEREBRO del negocio permea cada decisión
     $est = estilo_arte_direccion($estilo_arte);
     $sistema = "Eres EL DIRECTOR DE ARTE de Crecer — creativo, atrevido, con ojo de agencia top. Tu misión: una imagen "
         . "que FRENE EL SCROLL y conecte con el MENSAJE del post (imagen y copy = una sola idea), pero NUNCA la foto "
@@ -426,7 +426,7 @@ function sugerir_arte(PDO $pdo, int $marca_id, string $caption, string $ajuste =
  */
 function sugerir_temas(PDO $pdo, int $marca_id, int $n = 5): array {
     $m = leer_marca($pdo, $marca_id);
-    $ctx = marca_contexto($m);
+    $ctx = cerebro_negocio($pdo, (int)$m['id'], $m);   // el CEREBRO del negocio permea cada decisión
     // Lo reciente, para no repetir.
     $rec = $pdo->prepare("SELECT caption FROM crecer_contenido WHERE marca_id=? AND caption<>'' ORDER BY id DESC LIMIT 8");
     $rec->execute([$marca_id]);
@@ -439,7 +439,7 @@ function sugerir_temas(PDO $pdo, int $marca_id, int $n = 5): array {
         . "(producto, proceso/detrás de cámara, prueba social, tip, promo, temporada, "
         . "pregunta). Nada genérico. Responde SOLO JSON válido.";
     if (function_exists('tono_instruccion'))  $sistema .= tono_instruccion($m);
-    if (function_exists('memoria_para_prompt')) $sistema .= memoria_para_prompt($pdo, $marca_id);
+    // (la memoria aprendida ya viene dentro del cerebro_negocio, en el contexto)
 
     $prompt = "Perfil del negocio:\n{$ctx}\n";
     if ($recientes) $prompt .= "\nYA tiene esto (NO lo repitas, propón cosas distintas):\n- " . implode("\n- ", $recientes) . "\n";
@@ -469,7 +469,7 @@ function sugerir_temas(PDO $pdo, int $marca_id, int $n = 5): array {
  */
 function sugerir_estilo_visual(PDO $pdo, int $marca_id, string $ajuste = ''): string {
     $m = leer_marca($pdo, $marca_id);
-    $ctx = marca_contexto($m);
+    $ctx = cerebro_negocio($pdo, (int)$m['id'], $m);   // el CEREBRO del negocio permea cada decisión
     $sistema = "Eres el DIRECTOR DE ARTE de Crecer. Defines la LÍNEA DE DISEÑO (estilo visual) "
         . "de una marca boricua: el look CONSISTENTE que tendrán TODAS sus imágenes de redes. "
         . "Devuelve 2-3 frases en español sencillo (sin jerga, sin la palabra \"prompt\") que "
@@ -574,7 +574,7 @@ function asistente_snapshot_operacional(PDO $pdo, int $marca_id): string {
 
 function estratega_responder(PDO $pdo, int $marca_id, string $pregunta, array $historial = []): array {
     $m = leer_marca($pdo, $marca_id);
-    $ctx = marca_contexto($m);
+    $ctx = cerebro_negocio($pdo, (int)$m['id'], $m);   // el CEREBRO del negocio permea cada decisión
     $snapshot = asistente_snapshot_operacional($pdo, $marca_id);
 
     $sistema = <<<SYS
@@ -612,7 +612,7 @@ SYS;
         . "- Suena premium, sereno y profesional; no menciones ni imites a Jarvis ni a personajes existentes.\n";
     // NO se inyecta tono_instruccion($m): esos sliders son la voz del CONTENIDO
     // (posts). La Estratega, al hablar con el dueño, se mantiene profesional y neutral.
-    if (function_exists('memoria_para_prompt')) $sistema .= memoria_para_prompt($pdo, $marca_id);
+    // (la memoria aprendida ya viene dentro del cerebro_negocio, en el contexto)
 
     // Contexto de desempeño reciente (para aterrizar el consejo).
     try {
@@ -669,7 +669,7 @@ function aprender_estilo_visual(PDO $pdo, int $marca_id): bool {
     if (count($imagenes) < 2) return false;   // aún no hay suficiente señal
 
     $m = leer_marca($pdo, $marca_id);
-    $ctx = marca_contexto($m);
+    $ctx = cerebro_negocio($pdo, (int)$m['id'], $m);   // el CEREBRO del negocio permea cada decisión
     $sistema = "Eres el DIRECTOR DE ARTE de Crecer. Te muestro varias imágenes que ESTE negocio "
         . "boricua APROBÓ para sus redes. Deduce su LÍNEA DE DISEÑO común: el estilo visual que se "
         . "repite y que hay que MANTENER en los próximos posts. Devuelve 2-3 frases en español "
@@ -982,7 +982,7 @@ function grounding_producto_instruccion(array $m): string {
  */
 function planificar_mes(PDO $pdo, int $marca_id, int $anio, int $mes, int $n_piezas = 8, string $enfoque = ''): array {
     $m = leer_marca($pdo, $marca_id);
-    $ctx = marca_contexto($m);
+    $ctx = cerebro_negocio($pdo, (int)$m['id'], $m);   // el CEREBRO del negocio permea cada decisión
 
     $sistema = <<<SYS
 Eres el ESTRATEGA de contenido de Crecer, un departamento de marketing con IA
@@ -1001,7 +1001,7 @@ Reglas:
 SYS;
     // Lo que el dueño le enseñó al corillo (fechas especiales, ofertas, prioridades)
     // manda en el plan: se inyecta como memoria del negocio.
-    if (function_exists('memoria_para_prompt')) $sistema .= "\n" . memoria_para_prompt($pdo, $marca_id);
+    // (la memoria aprendida ya viene dentro del cerebro_negocio, en el contexto)
 
     $enfoque = trim($enfoque);
     $prompt = "Perfil del negocio:\n{$ctx}\n\n"
@@ -1121,6 +1121,28 @@ function aprender_de_edicion(PDO $pdo, int $marca_id, string $original, string $
 }
 
 /**
+ * EL CEREBRO DEL NEGOCIO (Business Genome, permanente). El entendimiento VIVO de
+ * quién es este negocio — su identidad, la voz REAL del dueño, su línea visual, y
+ * TODO lo que el corillo ha aprendido (Consejo, ediciones, lo que funciona). Es la
+ * terminal a la que TODO agente se conecta antes de decidir: el ADN que permea cada
+ * post, estrategia e imagen. No se queda en el onboarding — vive en cada movida.
+ * DB-only (barato): se puede llamar en cada agente sin costo de IA.
+ */
+function cerebro_negocio(PDO $pdo, int $marca_id, ?array $m = null): string {
+    $m = $m ?? leer_marca($pdo, $marca_id);
+    $b = "🧠 EL NEGOCIO (su ADN — respétalo en toda decisión):\n" . marca_contexto($m);
+    $voz = trim((string)($m['voz'] ?? '') ?: (string)($m['descripcion'] ?? ''));
+    if ($voz !== '') $b .= "\nLa voz REAL del dueño (su esencia — captúrala, no la calques literal): \"" . mb_substr($voz, 0, 450) . "\"";
+    $linea = trim((string)($m['estilo_visual'] ?? ''));
+    if ($linea !== '') $b .= "\nLínea visual del negocio (mantén esta familia en las imágenes): {$linea}";
+    if (function_exists('memoria_para_prompt')) {
+        $mem = trim((string)memoria_para_prompt($pdo, $marca_id));
+        if ($mem !== '') $b .= "\n" . $mem;
+    }
+    return $b;
+}
+
+/**
  * LA MESA DEL CORILLO — debate creativo para que el post salga ATREVIDO, no
  * genérico. EL PROVOCADOR (creativo guerrillero, vanguardista) lanza 3 ángulos
  * audaces para ESTE negocio y su público; LA ESTRATEGA elige el que mejor le
@@ -1140,7 +1162,7 @@ function debate_creativo(PDO $pdo, int $marca_id, string $idea, string $platafor
     if ($idea === '') return $vacio;
     try {
         $m = leer_marca($pdo, $marca_id);
-        $ctx = marca_contexto($m);
+        $ctx = cerebro_negocio($pdo, (int)$m['id'], $m);   // el CEREBRO del negocio permea cada decisión
 
         // ── 1) EL PROVOCADOR: 3 ángulos audaces ──
         $sysProv = "Eres EL PROVOCADOR de Crecer: un creativo publicitario GUERRILLERO y vanguardista que domina "
@@ -1270,7 +1292,7 @@ function redactar_pieza(PDO $pdo, int $contenido_id, array $extra = []): array {
     if (!$pieza) throw new RuntimeException("Contenido #$contenido_id no existe.");
 
     $m = leer_marca($pdo, (int)$pieza['marca_id']);
-    $ctx = marca_contexto($m);
+    $ctx = cerebro_negocio($pdo, (int)$m['id'], $m);   // el CEREBRO del negocio permea cada decisión
     $idea = $pieza['caption']; // en el borrador, el caption guarda la IDEA del plan
     // LA MESA DEL CORILLO decide el ángulo atrevido ANTES de escribir.
     $debate = debate_creativo($pdo, (int)$pieza['marca_id'], (string)$idea, (string)$pieza['plataforma'], (string)$pieza['tipo']);
@@ -1289,7 +1311,7 @@ SYS;
         $sistema .= "\n\nVOCABULARIO DEL NEGOCIO (el dueño lo corrigió — RESPÉTALO SIEMPRE, no repitas los errores):\n" . $m['glosario'];
     }
     $sistema .= tono_instruccion($m);
-    if (function_exists('memoria_para_prompt')) $sistema .= memoria_para_prompt($pdo, (int)$m['id']);
+    // (la memoria aprendida ya viene dentro del cerebro_negocio, en el contexto)
 
     $prompt = "Perfil del negocio:\n{$ctx}\n\n"
         . "Plataforma: {$pieza['plataforma']} | Tipo: {$pieza['tipo']}\n"
@@ -1334,7 +1356,7 @@ function redactar_sugerido(PDO $pdo, int $contenido_id, string $tema = '', strin
     if (!$pieza) throw new RuntimeException("Contenido #$contenido_id no existe.");
 
     $m = leer_marca($pdo, (int)$pieza['marca_id']);
-    $ctx = marca_contexto($m);
+    $ctx = cerebro_negocio($pdo, (int)$m['id'], $m);   // el CEREBRO del negocio permea cada decisión
 
     $sistema = <<<SYS
 Eres el CREADOR de contenido de Crecer. Escribes captions para redes
@@ -1350,7 +1372,7 @@ SYS;
         $sistema .= "\n\nVOCABULARIO DEL NEGOCIO (el dueño lo corrigió — RESPÉTALO SIEMPRE, no repitas los errores):\n" . $m['glosario'];
     }
     $sistema .= tono_instruccion($m);
-    if (function_exists('memoria_para_prompt')) $sistema .= memoria_para_prompt($pdo, (int)$m['id']);
+    // (la memoria aprendida ya viene dentro del cerebro_negocio, en el contexto)
 
     $prompt = "Perfil del negocio:\n{$ctx}\n\n"
         . "Plataforma: {$pieza['plataforma']} | Tipo: {$pieza['tipo']}\n";
@@ -1424,7 +1446,7 @@ function redactar_calendario(PDO $pdo, int $calendario_id): array {
  */
 function asistente_responder(PDO $pdo, int $marca_id, string $pregunta, array $historial = []): array {
     $m = leer_marca($pdo, $marca_id);
-    $ctx = marca_contexto($m);
+    $ctx = cerebro_negocio($pdo, (int)$m['id'], $m);   // el CEREBRO del negocio permea cada decisión
     $snapshot = asistente_snapshot_operacional($pdo, $marca_id);
 
     $sistema = <<<SYS
@@ -1471,7 +1493,7 @@ SYS;
     }
     // NO se inyecta tono_instruccion($m): esos sliders son la voz del CONTENIDO
     // (posts). El Copiloto que habla con el dueño se mantiene neutral y profesional.
-    if (function_exists('memoria_para_prompt')) $sistema .= memoria_para_prompt($pdo, (int)$m['id']);
+    // (la memoria aprendida ya viene dentro del cerebro_negocio, en el contexto)
     // El Cerebro: el asistente conoce todo lo aprendido del negocio (para
     // responder "¿qué has aprendido?", "¿qué prefiero?", "¿cómo cambió mi marca?").
     if (function_exists('memoria_listar')) {
@@ -1522,7 +1544,7 @@ SYS;
  */
 function mensaje_retencion(PDO $pdo, int $marca_id, array $cli, string $segmento): array {
     $m = leer_marca($pdo, $marca_id);
-    $ctx = marca_contexto($m);
+    $ctx = cerebro_negocio($pdo, (int)$m['id'], $m);   // el CEREBRO del negocio permea cada decisión
 
     $guias = [
         'dormido'   => 'Hace rato que no compra. Escríbele con cariño, sin sonar a venta desesperada: que lo extrañas y lo invitas a volver. Puedes mencionar una de tus ofertas.',
@@ -1683,7 +1705,7 @@ function trabajo_autonomo(PDO $pdo, int $marca_id, string $enfoque = ''): array 
 function estratega_enfoque_semana(PDO $pdo, int $marca_id): string {
     try {
         $m = leer_marca($pdo, $marca_id);
-        $ctx = marca_contexto($m);
+        $ctx = cerebro_negocio($pdo, (int)$m['id'], $m);   // el CEREBRO del negocio permea cada decisión
         // Señal real: temas de las últimas piezas (para NO repetir el mismo ángulo).
         $recientes = '';
         try {
@@ -1861,7 +1883,7 @@ function consejo_disponible(PDO $pdo, int $marca_id): array {
 /** EL GERENTE abre el Consejo: recap breve + 1 preocupación + 2-3 preguntas para aprender. */
 function consejo_abrir(PDO $pdo, int $marca_id): array {
     $m = leer_marca($pdo, $marca_id);
-    $ctx = marca_contexto($m);
+    $ctx = cerebro_negocio($pdo, (int)$m['id'], $m);   // el CEREBRO del negocio permea cada decisión
     $pend = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$marca_id} AND estado='borrador'")->fetchColumn();
     $pub  = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$marca_id} AND estado='publicado'")->fetchColumn();
     $temas = '';
@@ -1890,7 +1912,7 @@ function consejo_abrir(PDO $pdo, int $marca_id): array {
 /** EL GERENTE abre una reunión de AGENDA (on-demand): fechas especiales, agenda y ofertas. */
 function consejo_abrir_agenda(PDO $pdo, int $marca_id): array {
     $m = leer_marca($pdo, $marca_id);
-    $ctx = marca_contexto($m);
+    $ctx = cerebro_negocio($pdo, (int)$m['id'], $m);   // el CEREBRO del negocio permea cada decisión
     $gte = equipo_nombre($m, 'gerente');
     $sys = "Eres {$gte}, el GERENTE del corillo. El dueño te llamó a una reunión rápida de PLANIFICACIÓN. Tono cercano, "
         . "boricua suave, directo. CORTO (máx 85 palabras). Pregúntale, concreto, por: 1) FECHAS especiales que se "
