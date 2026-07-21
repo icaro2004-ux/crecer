@@ -999,6 +999,9 @@ Reglas:
 - Variedad de plataformas (instagram, facebook) y tipos (post, story, reel).
 - Responde SOLO JSON válido, sin texto extra.
 SYS;
+    // Lo que el dueño le enseñó al corillo (fechas especiales, ofertas, prioridades)
+    // manda en el plan: se inyecta como memoria del negocio.
+    if (function_exists('memoria_para_prompt')) $sistema .= "\n" . memoria_para_prompt($pdo, $marca_id);
 
     $enfoque = trim($enfoque);
     $prompt = "Perfil del negocio:\n{$ctx}\n\n"
@@ -1772,8 +1775,30 @@ function consejo_abrir(PDO $pdo, int $marca_id): array {
     return ['respuesta' => trim((string)$r['texto'])];
 }
 
-/** EL GERENTE conversa en el Consejo y CAPTURA lo que el dueño enseña → memoria (todos aprenden). */
-function consejo_hablar(PDO $pdo, int $marca_id, string $mensaje, array $historial = []): array {
+/** EL GERENTE abre una reunión de AGENDA (on-demand): fechas especiales, agenda y ofertas. */
+function consejo_abrir_agenda(PDO $pdo, int $marca_id): array {
+    $m = leer_marca($pdo, $marca_id);
+    $ctx = marca_contexto($m);
+    $gte = equipo_nombre($m, 'gerente');
+    $sys = "Eres {$gte}, el GERENTE del corillo. El dueño te llamó a una reunión rápida de PLANIFICACIÓN. Tono cercano, "
+        . "boricua suave, directo. CORTO (máx 85 palabras). Pregúntale, concreto, por: 1) FECHAS especiales que se "
+        . "vengan esta semana o este mes (aperturas, ferias, Día de las Madres, cumpleaños del negocio, quincena…); "
+        . "2) si hay alguna OFERTA o promoción especial que quiera empujar y cuándo; 3) qué quiere priorizar. Invítalo a soltarlo.";
+    $prompt = "Negocio:\n{$ctx}\n\nHoy es " . date('Y-m-d') . ". Abre la reunión de agenda.";
+    $r = ia_ejecutar($pdo, 'gerente', 'Agenda: apertura', $prompt, [
+        'marca_id' => $marca_id, 'sistema' => $sys, 'modelo' => CRECER_COPILOTO_MODEL,
+        'temperatura' => 0.8, 'max_tokens' => 300, 'thinking_budget' => 0,
+        'mock_texto' => "¡Dale, planifiquemos! Dime tres cosas y el corillo cuadra el mes: ¿qué FECHAS especiales se te vienen (algún evento, feria, o fecha grande)?, ¿tienes alguna OFERTA o promo que quieras empujar y para cuándo?, y ¿qué quieres que priorcemos estos días? Suéltalo y yo reparto el trabajo.",
+    ]);
+    return ['respuesta' => trim((string)$r['texto'])];
+}
+
+/**
+ * EL GERENTE conversa en el meeting y CAPTURA lo que el dueño enseña → memoria
+ * (todos los agentes aprenden). $accion distingue el Consejo semanal de la reunión
+ * de agenda (para que la de agenda NO consuma el consejo semanal).
+ */
+function consejo_hablar(PDO $pdo, int $marca_id, string $mensaje, array $historial = [], string $accion = 'Consejo: charla'): array {
     require_once __DIR__ . '/memoria.php';
     $m = leer_marca($pdo, $marca_id);
     $gte = equipo_nombre($m, 'gerente');
@@ -1818,12 +1843,85 @@ function consejo_hablar(PDO $pdo, int $marca_id, string $mensaje, array $histori
     $prompt = "El dueño dijo:\n\"{$mensaje}\"\n"
         . ($aprendido ? "\n(El equipo ya anotó: " . implode('; ', $aprendido) . ")\n" : '')
         . "\nResponde como gerente en la reunión.";
-    $r = ia_ejecutar($pdo, 'gerente', 'Consejo: charla', $prompt, [
+    $r = ia_ejecutar($pdo, 'gerente', $accion, $prompt, [
         'marca_id' => $marca_id, 'sistema' => $sys, 'modelo' => CRECER_COPILOTO_MODEL,
         'historial' => $mensajes, 'temperatura' => 0.8, 'max_tokens' => 280, 'thinking_budget' => 0,
         'mock_texto' => 'Buenísimo, eso me sirve un montón. El equipo lo anota y lo mete en los próximos posts. ¿Algo más que quieras que el corillo empuje?',
     ]);
     return ['respuesta' => trim((string)$r['texto']), 'aprendido' => $aprendido];
+}
+
+// ── LA SALA DEL CORILLO (War Room) ───────────────────────────────────────────
+//  Un solo espacio para conversar con el equipo: brainstorm, dar órdenes que
+//  producen, fijar fechas/ofertas/agenda, y el staff meeting semanal. Todo lo
+//  que el dueño dice se APRENDE (→ memoria, todos los agentes lo usan).
+
+/** Extrae datos DURABLES del mensaje del dueño (fechas, ofertas, agenda, voz) → memoria. */
+function corillo_aprender(PDO $pdo, int $marca_id, string $mensaje): array {
+    require_once __DIR__ . '/memoria.php';
+    if (!function_exists('memoria_escribir')) return [];
+    $aprendido = [];
+    try {
+        $sysX = "Del mensaje del dueño en la sala del corillo, extrae SOLO datos DURABLES y accionables para el "
+            . "marketing: qué producto empujar, FECHAS/eventos que vienen (con la fecha si la dice), OFERTAS/promos y "
+            . "cuándo, agenda/prioridades, preferencias de voz/estilo, qué le funciona, qué NO quiere. Ignora saludos y "
+            . "charla vacía. Responde SOLO JSON: {\"memorias\":[{\"titulo\":\"corto\",\"detalle\":\"lo aprendido, "
+            . "accionable, con la fecha si aplica\",\"dominio\":\"marketing|producto|voz|calendario|oferta\"}]} (lista vacía si no hay nada durable).";
+        $rx = ia_ejecutar($pdo, 'gerente', 'Sala: aprender', "Mensaje del dueño:\n\"{$mensaje}\"", [
+            'marca_id' => $marca_id, 'sistema' => $sysX, 'json' => true, 'modelo' => CRECER_COPILOTO_MODEL,
+            'temperatura' => 0.3, 'max_tokens' => 420, 'thinking_budget' => 0, 'mock_texto' => '{"memorias":[]}',
+        ]);
+        $mem = json_decode((string)$rx['texto'], true)['memorias'] ?? [];
+        foreach ($mem as $it) {
+            $det = trim((string)($it['detalle'] ?? ''));
+            if ($det === '') continue;
+            memoria_escribir($pdo, $marca_id, [
+                'tipo' => 'aprendizaje', 'dominio' => substr((string)($it['dominio'] ?? 'marketing'), 0, 20),
+                'titulo' => (string)($it['titulo'] ?? $det), 'detalle' => $det,
+                'porque' => 'Lo dijo el dueño en la Sala del Corillo', 'fuente' => 'sala',
+                'confianza' => 80, 'peso' => 70,
+            ]);
+            $aprendido[] = trim((string)($it['titulo'] ?? $det));
+        }
+    } catch (Throwable $e) { error_log('corillo_aprender: ' . $e->getMessage()); }
+    return $aprendido;
+}
+
+/** El saludo al entrar a la Sala: 1x/semana el equipo abre el staff meeting; si no, un saludo. */
+function sala_saludo(PDO $pdo, int $marca_id): array {
+    $disp = consejo_disponible($pdo, $marca_id);
+    if (!empty($disp['ok'])) {
+        try {
+            $ap = consejo_abrir($pdo, $marca_id);
+            // Marca el staff meeting como abierto esta semana (no re-abrir por 7 días).
+            try {
+                $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,costo_usd,latencia_ms,estado)
+                               VALUES (?,?,?,?,?,?,0,0,'ok')")
+                    ->execute([$marca_id, 'gerente', 'Consejo: charla', '-', 'staff meeting semanal', '']);
+            } catch (Throwable $e) {}
+            return ['respuesta' => $ap['respuesta'], 'meeting' => true];
+        } catch (Throwable $e) {}
+    }
+    $m = leer_marca($pdo, $marca_id);
+    $gte = equipo_nombre($m, 'gerente');
+    return ['respuesta' => "Aquí está el corillo, listo. 👋 Dime en qué andamos: una idea que quieras montar, fechas u ofertas "
+        . "que se vengan, o una orden directa como \"hazme 3 posts del combo nuevo\" y lo repartimos al equipo. — {$gte}",
+        'meeting' => false];
+}
+
+/**
+ * EL CORILLO RESPONDE en la Sala (War Room). Cada mensaje: 1) aprende lo durable
+ * (memoria), 2) si es ORDEN de producir, despacha al equipo; 3) si no, el equipo
+ * conversa/aconseja. Devuelve respuesta + lo aprendido + qué hizo.
+ */
+function sala_responder(PDO $pdo, int $marca_id, string $mensaje, array $historial, bool $puede_producir): array {
+    $aprendido = corillo_aprender($pdo, $marca_id, $mensaje);
+    $g = gerente_despachar($pdo, $marca_id, $mensaje, $puede_producir, $historial);
+    if ($g !== null) {
+        return ['ok' => true, 'respuesta' => $g['respuesta'], 'aprendido' => $aprendido, 'accion' => $g['accion'] ?? 'produjo'];
+    }
+    $r = estratega_responder($pdo, $marca_id, $mensaje, $historial);
+    return ['ok' => true, 'respuesta' => trim((string)($r['respuesta'] ?? '')), 'aprendido' => $aprendido, 'accion' => 'conversar'];
 }
 
 /**
