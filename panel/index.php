@@ -449,9 +449,15 @@ $credito  = $has_deck
 
   .tcard-media{position:absolute;inset:0}
   .tcard-media img,.tcard-media video{width:100%;height:100%;object-fit:cover;display:block}
-  .tcard-nomedia{position:absolute;inset:0;display:grid;place-items:center;color:rgba(255,255,255,.35);
+  .tcard-nomedia{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:26px;
     background:linear-gradient(150deg,#2a2733,#141019)}
-  .tcard-nomedia svg{width:44px;height:44px}
+  .tcard-nomedia::before{content:'';position:absolute;inset:0;background:radial-gradient(120% 85% at 50% 38%,rgba(239,67,117,.24),transparent 62%);pointer-events:none}
+  .tcard-nm-badge{width:62px;height:62px;border-radius:19px;display:grid;place-items:center;position:relative;z-index:1;
+    background:linear-gradient(135deg,#FF6B3D,#EF4375);box-shadow:0 14px 34px -12px rgba(239,67,117,.7);animation:nmfloat 2.4s ease-in-out infinite}
+  .tcard-nm-badge svg{width:30px;height:30px;color:#fff}
+  @keyframes nmfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+  .tcard-nm-txt{position:relative;z-index:1;color:rgba(255,255,255,.9);font-weight:800;font-size:15px;line-height:1.35;max-width:230px}
+  .tcard-nm-sub{position:relative;z-index:1;color:rgba(255,255,255,.5);font-size:12.5px;max-width:230px;line-height:1.4}
   .tcard-scrim{position:absolute;inset:0;pointer-events:none;
     background:linear-gradient(to top,rgba(8,5,10,.9) 2%,rgba(8,5,10,.5) 26%,rgba(8,5,10,0) 52%)}
   .tcard-tag{position:absolute;top:15px;left:15px;font-size:11px;font-weight:700;color:#fff;text-transform:capitalize;
@@ -541,7 +547,11 @@ $credito  = $has_deck
           <?php elseif ($card['img']): ?>
             <img src="<?= $h($card['img']) ?>" alt="">
           <?php else: ?>
-            <div class="tcard-nomedia"><?= ico('image') ?></div>
+            <div class="tcard-nomedia">
+              <div class="tcard-nm-badge"><?= ico('image') ?></div>
+              <div class="tcard-nm-txt">El arte está en camino</div>
+              <div class="tcard-nm-sub"><?= $h($NM('disenador')) ?> lo está montando</div>
+            </div>
           <?php endif; ?>
         </div>
         <div class="tcard-scrim"></div>

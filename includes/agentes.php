@@ -820,12 +820,12 @@ function leer_marca(PDO $pdo, int $marca_id): array {
  */
 function equipo_roster(): array {
     return [
-        'gerente'    => ['rol' => 'El Gerente',    'emoji' => '🧑‍💼', 'hace' => 'Reparte el trabajo y te reporta.',           'log' => 'gerente'],
-        'provocador' => ['rol' => 'El Provocador', 'emoji' => '🔥',   'hace' => 'Lanza los ángulos más atrevidos.',           'log' => 'provocador'],
-        'estratega'  => ['rol' => 'La Estratega',  'emoji' => '🧭',   'hace' => 'Escoge el ángulo que más vende y cuadra el plan.', 'log' => 'estratega'],
-        'escritor'   => ['rol' => 'El Escritor',   'emoji' => '✍️',   'hace' => 'Escribe los posts en tu voz boricua.',        'log' => 'creador'],
-        'disenador'  => ['rol' => 'El Diseñador',  'emoji' => '🎨',   'hace' => 'Crea el arte de cada post.',                  'log' => 'diseñador'],
-        'analista'   => ['rol' => 'El Analista',   'emoji' => '📊',   'hace' => 'Revisa los números y qué está funcionando.', 'log' => 'analitica'],
+        'gerente'    => ['rol' => 'El Gerente',    'ico' => 'briefcase', 'hace' => 'Reparte el trabajo y te reporta.',              'log' => 'gerente'],
+        'provocador' => ['rol' => 'El Provocador', 'ico' => 'bolt',      'hace' => 'Lanza los ángulos más atrevidos.',              'log' => 'provocador'],
+        'estratega'  => ['rol' => 'La Estratega',  'ico' => 'compass',   'hace' => 'Escoge el ángulo que más vende y cuadra el plan.', 'log' => 'estratega'],
+        'escritor'   => ['rol' => 'El Escritor',   'ico' => 'pen',       'hace' => 'Escribe los posts en tu voz boricua.',          'log' => 'creador'],
+        'disenador'  => ['rol' => 'El Diseñador',  'ico' => 'palette',   'hace' => 'Crea el arte de cada post.',                    'log' => 'diseñador'],
+        'analista'   => ['rol' => 'El Analista',   'ico' => 'chart',     'hace' => 'Revisa los números y qué está funcionando.',    'log' => 'analitica'],
     ];
 }
 
@@ -1528,7 +1528,8 @@ SYS;
  * EL CORILLO AUTÓNOMO. Para UNA marca: si tiene menos borradores pendientes
  * que su meta (autopilot_n), planifica y redacta los que falten SOLO, los
  * deja como borradores en los próximos días y los registra. El dueño los
- * aprueba después. No genera arte (lo caro lo controla el dueño al aprobar).
+ * aprueba después. Genera también el ARTE de cada pieza (post completo, no un
+ * caption pelao); el dueño aprueba antes de publicar.
  *
  * @return array{creadas:int, ids:array, razon:string}
  */
@@ -1559,7 +1560,19 @@ function trabajo_autonomo(PDO $pdo, int $marca_id, string $enfoque = ''): array 
     $reprog = $pdo->prepare("UPDATE crecer_contenido SET fecha_programada=? WHERE id=? AND marca_id=?");
     foreach ($plan['piezas'] as $pz) {
         $cid = (int)$pz['id'];
-        try { redactar_pieza($pdo, $cid); } catch (Throwable $e) { /* queda la idea para editar */ }
+        $cap = '';
+        try { $rr = redactar_pieza($pdo, $cid); $cap = (string)($rr['caption'] ?? ''); } catch (Throwable $e) { /* queda la idea para editar */ }
+        // El Diseñador deja el ARTE listo también → el dueño recibe el post COMPLETO
+        // (arte + copy), no un caption pelao. Best-effort: si el arte falla, no rompe el relevo.
+        if ($cap !== '') {
+            try {
+                $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => true]);
+                if (!empty($g['archivo'])) {
+                    $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")
+                        ->execute([$g['archivo'], $cid, $marca_id]);
+                }
+            } catch (Throwable $e) { error_log('relevo arte: ' . $e->getMessage()); }
+        }
         // Repartir en los próximos días (look "te dejé la semana lista")
         $fecha = date('Y-m-d 10:00:00', strtotime('+' . ($i + 1) . ' day'));
         $reprog->execute([$fecha, $cid, $marca_id]);
@@ -1707,7 +1720,17 @@ function gerente_despachar(PDO $pdo, int $marca_id, string $peticion, bool $pued
         $reprog = $pdo->prepare("UPDATE crecer_contenido SET fecha_programada=? WHERE id=? AND marca_id=?");
         foreach ($plan['piezas'] as $pz) {
             $cid = (int)$pz['id'];
-            try { redactar_pieza($pdo, $cid); $ok++; } catch (Throwable $e) {}
+            $cap = '';
+            try { $rr = redactar_pieza($pdo, $cid); $cap = (string)($rr['caption'] ?? ''); $ok++; } catch (Throwable $e) {}
+            if ($cap !== '') {   // deja el arte listo también (post completo)
+                try {
+                    $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => true]);
+                    if (!empty($g['archivo'])) {
+                        $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")
+                            ->execute([$g['archivo'], $cid, $marca_id]);
+                    }
+                } catch (Throwable $e) { error_log('gerente arte: ' . $e->getMessage()); }
+            }
             $reprog->execute([date('Y-m-d 10:00:00', strtotime('+' . (++$i) . ' day')), $cid, $marca_id]);
         }
     } catch (Throwable $e) {

@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $saludo = sala_saludo($pdo, $marca_id);
 $roster = equipo_roster();
-$gerente = ['emoji' => $roster['gerente']['emoji'], 'nombre' => equipo_nombre($marca, 'gerente')];
+$gerente = ['svg' => ico($roster['gerente']['ico']), 'nombre' => equipo_nombre($marca, 'gerente')];
 $active = 'sala';
 $page_title = 'La Sala';
 require __DIR__ . '/_shell.php';
@@ -57,7 +57,8 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .sc-team{display:flex;gap:14px;overflow-x:auto;padding:14px 2px 4px;margin:0 -2px;scrollbar-width:none}
   .sc-team::-webkit-scrollbar{display:none}
   .sc-mem{flex:none;display:flex;flex-direction:column;align-items:center;gap:5px;width:58px;text-align:center}
-  .sc-mem .face{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;font-size:23px;background:var(--card,#fff);border:1.5px solid var(--line);box-shadow:var(--shadow-sm);position:relative}
+  .sc-mem .face{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;background:var(--card,#fff);border:1.5px solid var(--line);box-shadow:var(--shadow-sm);position:relative}
+  .sc-mem .face svg{width:22px;height:22px;color:var(--magenta,#EF4375)}
   .sc-mem .face::after{content:'';position:absolute;right:1px;bottom:1px;width:11px;height:11px;border-radius:50%;background:var(--teal,#00A49F);border:2px solid var(--crema,#F7F5F1)}
   .sc-mem .nm{font-size:11px;font-weight:700;color:var(--tinta);line-height:1.15;max-width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
@@ -66,7 +67,8 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .sc-row{display:flex;gap:9px;max-width:92%;align-items:flex-end}
   .sc-row.ia{align-self:flex-start}
   .sc-row.me{align-self:flex-end;flex-direction:row-reverse}
-  .sc-face{width:32px;height:32px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:17px;background:var(--card,#fff);border:1.5px solid var(--line);box-shadow:var(--shadow-sm)}
+  .sc-face{width:32px;height:32px;border-radius:50%;flex:none;display:grid;place-items:center;background:var(--card,#fff);border:1.5px solid var(--line);box-shadow:var(--shadow-sm)}
+  .sc-face svg{width:17px;height:17px;color:var(--magenta,#EF4375)}
   .sc-bubble{padding:11px 15px;border-radius:18px;font-size:14.5px;line-height:1.55;white-space:pre-wrap;word-wrap:break-word}
   .sc-row.ia .sc-bubble{background:var(--card,#fff);border:1px solid var(--line);color:var(--tinta);border-bottom-left-radius:6px;box-shadow:var(--shadow-sm)}
   .sc-row.me .sc-bubble{background:linear-gradient(135deg,var(--coral,#FF6B3D),var(--magenta,#EF4375));color:#fff;border-bottom-right-radius:6px}
@@ -84,14 +86,18 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .sc-composer{display:flex;gap:9px;align-items:center;position:sticky;bottom:0;background:linear-gradient(to top,var(--crema,#F7F5F1) 74%,transparent);padding:12px 0 6px}
   .sc-input{flex:1;font-family:inherit;font-size:15px;border:1.5px solid var(--line);border-radius:16px;padding:14px 16px;background:var(--card,#fff);color:var(--tinta)}
   .sc-input:focus{outline:0;border-color:var(--magenta,#EF4375)}
-  .sc-mic{border:1.5px solid var(--line);background:var(--card,#fff);cursor:pointer;width:52px;height:52px;border-radius:16px;font-size:22px;flex:none;display:grid;place-items:center;transition:transform .12s,background .15s,border-color .15s}
+  .sc-mic{border:1.5px solid var(--line);background:var(--card,#fff);cursor:pointer;width:52px;height:52px;border-radius:16px;flex:none;display:grid;place-items:center;transition:transform .12s,background .15s,border-color .15s}
+  .sc-mic svg{width:23px;height:23px;color:var(--tinta)}
   .sc-mic:active{transform:scale(.94)}
-  .sc-mic.rec{background:#e0245e;border-color:transparent;color:#fff;animation:scpulse 1.1s infinite}
+  .sc-mic.rec{background:#e0245e;border-color:transparent;animation:scpulse 1.1s infinite}
+  .sc-mic.rec svg{color:#fff}
   @keyframes scpulse{0%,100%{box-shadow:0 0 0 0 rgba(224,36,94,.45)}70%{box-shadow:0 0 0 12px rgba(224,36,94,0)}}
   .sc-send{border:0;cursor:pointer;background:linear-gradient(135deg,var(--coral,#FF6B3D),var(--magenta,#EF4375));color:#fff;font-weight:800;height:52px;padding:0 20px;border-radius:16px;font-family:inherit;font-size:15px;flex:none}
   .sc-send:disabled{opacity:.5;cursor:default}
-  .sc-speak{border:1.5px solid var(--line);background:var(--card,#fff);cursor:pointer;width:38px;height:38px;border-radius:11px;font-size:17px;display:grid;place-items:center;flex:none}
+  .sc-speak{border:1.5px solid var(--line);background:var(--card,#fff);cursor:pointer;width:38px;height:38px;border-radius:11px;display:grid;place-items:center;flex:none}
+  .sc-speak svg{width:18px;height:18px;color:var(--tinta)}
   .sc-speak.on{background:linear-gradient(135deg,var(--coral,#FF6B3D),var(--magenta,#EF4375));border-color:transparent}
+  .sc-speak.on svg{color:#fff}
   .sc-tools{display:flex;align-items:center;gap:8px}
   .sc-listen{font-size:12px;color:var(--muted);text-align:center;margin:2px 0 0;min-height:16px;font-weight:600}
 
@@ -106,13 +112,13 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <h1>La Sala del Corillo</h1>
     <p>Tu war room con el equipo. Tira ideas, da órdenes (“hazme 3 posts de X”), fija fechas y ofertas — el corillo aprende y ejecuta.</p>
   </div>
-  <button type="button" class="sc-speak" id="sc-speak" title="Que el corillo te conteste en voz">🔈</button>
+  <button type="button" class="sc-speak" id="sc-speak" title="Que el corillo te conteste en voz"><?= ico('volume') ?></button>
 </div>
 
 <div class="sc-team">
   <?php foreach ($roster as $key => $ag): ?>
     <div class="sc-mem" title="<?= $h($ag['hace']) ?>">
-      <div class="face"><?= $ag['emoji'] ?></div>
+      <div class="face"><?= ico($ag['ico']) ?></div>
       <div class="nm"><?= $h(equipo_nombre($marca, $key)) ?></div>
     </div>
   <?php endforeach; ?>
@@ -120,14 +126,14 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
 <div class="sc-thread" id="sc-msgs">
   <div class="sc-row ia">
-    <div class="sc-face"><?= $gerente['emoji'] ?></div>
+    <div class="sc-face"><?= $gerente['svg'] ?></div>
     <div class="sc-bubble"><div class="sc-who"><?= $h($gerente['nombre']) ?></div><?= $h($saludo['respuesta']) ?></div>
   </div>
 </div>
 
 <form class="sc-composer" id="sc-form" autocomplete="off">
-  <button type="button" class="sc-mic" id="sc-mic" title="Hablar">🎤</button>
-  <input type="text" class="sc-input" id="sc-input" placeholder="Escribe o toca el 🎤 para hablar…" maxlength="1000">
+  <button type="button" class="sc-mic" id="sc-mic" title="Hablar"><?= ico('mic') ?></button>
+  <input type="text" class="sc-input" id="sc-input" placeholder="Escribe o toca el micrófono para hablar…" maxlength="1000">
   <button type="submit" class="sc-send" id="sc-send">Enviar</button>
 </form>
 <div class="sc-listen" id="sc-listen"></div>
@@ -149,12 +155,12 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   }
   function iaBubble(t){
     var row=document.createElement('div'); row.className='sc-row ia';
-    row.innerHTML='<div class="sc-face">'+GTE.emoji+'</div><div class="sc-bubble"><div class="sc-who">'+esc(GTE.nombre)+'</div>'+esc(t)+'</div>';
+    row.innerHTML='<div class="sc-face">'+GTE.svg+'</div><div class="sc-bubble"><div class="sc-who">'+esc(GTE.nombre)+'</div>'+esc(t)+'</div>';
     msgs.appendChild(row); scroll(row); return row;
   }
   function loadBubble(){
     var row=document.createElement('div'); row.className='sc-row ia';
-    row.innerHTML='<div class="sc-face">'+GTE.emoji+'</div><div class="sc-bubble load"><span class="sc-dots"><span></span><span></span><span></span></span> el corillo lo está viendo…</div>';
+    row.innerHTML='<div class="sc-face">'+GTE.svg+'</div><div class="sc-bubble load"><span class="sc-dots"><span></span><span></span><span></span></span> el corillo lo está viendo…</div>';
     msgs.appendChild(row); scroll(row); return row;
   }
   function learn(items){ if(!items||!items.length) return;
@@ -170,7 +176,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
   // ── VOZ: que el corillo lea su respuesta (se activa con el 🔈) ──
   var speakOn=false, spk=document.getElementById('sc-speak');
-  spk.addEventListener('click',function(){ speakOn=!speakOn; spk.classList.toggle('on',speakOn); spk.textContent=speakOn?'🔊':'🔈'; if(!speakOn&&window.speechSynthesis)speechSynthesis.cancel(); });
+  spk.addEventListener('click',function(){ speakOn=!speakOn; spk.classList.toggle('on',speakOn); if(!speakOn&&window.speechSynthesis)speechSynthesis.cancel(); });
   function decir(t){ if(!speakOn||!('speechSynthesis' in window)) return;
     try{ speechSynthesis.cancel(); var u=new SpeechSynthesisUtterance(t); u.lang='es-US'; u.rate=1.03;
       var vs=speechSynthesis.getVoices(); var v=vs.filter(function(x){return /es(-|_)/i.test(x.lang);})[0]; if(v)u.voice=v;
@@ -203,8 +209,8 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       input.value=(fin||intr); };
     rec.onerror=function(){ parar(); };
     rec.onend=function(){ parar(); if((input.value||'').trim()) enviar(input.value); };
-    function arrancar(){ try{ input.value=''; rec.start(); grabando=true; mic.classList.add('rec'); mic.textContent='⏹'; listen.textContent='🎙️ Escuchando… habla y para cuando termines.'; }catch(e){} }
-    function parar(){ grabando=false; mic.classList.remove('rec'); mic.textContent='🎤'; listen.textContent=''; }
+    function arrancar(){ try{ input.value=''; rec.start(); grabando=true; mic.classList.add('rec'); listen.textContent='Escuchando… habla y para cuando termines.'; }catch(e){} }
+    function parar(){ grabando=false; mic.classList.remove('rec'); listen.textContent=''; }
     mic.addEventListener('click',function(){ if(grabando){ try{rec.stop();}catch(e){} } else { arrancar(); } });
   }
 })();

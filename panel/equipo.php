@@ -43,7 +43,8 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   @media(max-width:640px){.eq-grid{grid-template-columns:1fr}}
   .eq-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:15px 16px;box-shadow:var(--shadow-sm);display:flex;gap:13px;align-items:flex-start;transition:border-color .15s,transform .1s}
   .eq-card:focus-within{border-color:var(--magenta,#EF4375)}
-  .eq-emoji{font-size:30px;line-height:1;flex:none;width:46px;height:46px;display:grid;place-items:center;background:var(--crema,#F7F5F1);border-radius:13px}
+  .eq-emoji{flex:none;width:46px;height:46px;display:grid;place-items:center;background:var(--crema,#F7F5F1);border-radius:13px}
+  .eq-emoji svg{width:23px;height:23px;color:var(--magenta,#EF4375)}
   .eq-body{flex:1;min-width:0}
   .eq-rol{font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted)}
   .eq-name{width:100%;font-family:'Oswald',sans-serif;font-weight:700;font-size:19px;color:var(--tinta);border:0;border-bottom:2px dashed var(--line);background:transparent;padding:2px 0 4px;margin:1px 0 5px}
@@ -69,7 +70,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   <div class="eq-grid">
     <?php foreach ($roster as $key => $ag): ?>
       <label class="eq-card">
-        <div class="eq-emoji"><?= $ag['emoji'] ?></div>
+        <div class="eq-emoji"><?= ico($ag['ico']) ?></div>
         <div class="eq-body">
           <div class="eq-rol"><?= $h($ag['rol']) ?></div>
           <input class="eq-name" type="text" name="nombre[<?= $h($key) ?>]" maxlength="24"
