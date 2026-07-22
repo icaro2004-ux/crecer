@@ -383,7 +383,7 @@ function gemini_imagen(string $prompt, array $opts = []): array {
 //  El Director de Arte (Gemini) puede enrutar aquí el arte conceptual desde
 //  cero. Si no hay OPENAI_API_KEY, TODO cae a Gemini (degrada con gracia).
 if (!defined('OPENAI_API_KEY'))   define('OPENAI_API_KEY', '');
-if (!defined('OPENAI_IMG_MODEL')) define('OPENAI_IMG_MODEL', 'gpt-image-1');
+if (!defined('OPENAI_IMG_MODEL')) define('OPENAI_IMG_MODEL', 'dall-e-3');   // DALL·E 3 hd/vivid: imágenes completas y vívidas, sin manchas ni verificación de org
 // Calidad de gpt-image-1: low|medium|high|auto. 'high' = la buena ("otro nivel"),
 // ~$0.17 por imagen 1:1. Reversible a 'medium' (~$0.04) si hay que bajar costo.
 if (!defined('OPENAI_IMG_QUALITY')) define('OPENAI_IMG_QUALITY', 'high');
@@ -412,8 +412,9 @@ function openai_imagen(string $prompt, array $opts = []): array {
     $aspect   = $opts['aspect'] ?? '1:1';
     $es_dalle = (stripos($modelo, 'dall-e') !== false);
 
-    if ($es_dalle) {   // dall-e-3: no soporta edits ni verificación; solo generación
+    if ($es_dalle) {   // dall-e-3: solo generación (sin edits ni verificación de org); hd + vivid = lo máximo
         $size = ['1:1'=>'1024x1024','4:5'=>'1024x1792','9:16'=>'1024x1792','3:4'=>'1024x1792','16:9'=>'1792x1024','4:3'=>'1792x1024'][$aspect] ?? '1024x1024';
+        $prompt = mb_substr($prompt, 0, 3800);   // DALL·E 3 corta a ~4000 chars → recorta o falla
         $body = ['model'=>$modelo, 'prompt'=>$prompt, 'n'=>1, 'size'=>$size, 'response_format'=>'b64_json', 'quality'=>'hd', 'style'=>'vivid'];
         $resp = ia_http_post_retry('https://api.openai.com/v1/images/generations',
             ['Content-Type: application/json', 'Authorization: Bearer ' . OPENAI_API_KEY],
