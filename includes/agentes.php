@@ -739,9 +739,23 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
     }
 
     $tiene_foto = (bool)($foto_abs && is_file($foto_abs));
+    // GROUNDING del producto: qué VENDE/HACE el negocio de verdad. Sin esto, el modelo
+    // llena el vacío con lo que el NOMBRE sugiere (ej. "shtsnbubbles" jabones → bubble tea).
+    $prods_raw = $m['productos'] ?? [];
+    if (is_string($prods_raw)) $prods_raw = json_decode($prods_raw, true) ?: [];
+    $prods = [];
+    foreach ((array)$prods_raw as $p) { $nom = is_array($p) ? trim((string)($p['nombre'] ?? '')) : trim((string)$p); if ($nom !== '') $prods[] = $nom; }
+    $que_vende = $prods ? implode(', ', array_slice($prods, 0, 8)) : trim((string)($m['descripcion'] ?? ''));
+
     $prompt = "Crea el ARTE (imagen cuadrada 1:1) para el post de un negocio boricua"
             . ($m['nombre_negocio'] !== '' ? " llamado \"{$m['nombre_negocio']}\"" : '') . ".\n"
             . "- EL NOMBRE ES SOLO UNA ETIQUETA DE MARCA, no el tema de la imagen. La ESCENA sale del MENSAJE del texto del post (abajo), NUNCA del nombre. No ilustres el nombre ni interpretes sus palabras de forma literal ni por parecido; trátalas como un rótulo, no como objetos.\n";
+    if ($que_vende !== '') {
+        $prompt .= "- ⚓ QUÉ ES ESTE NEGOCIO (ANCLA la imagen a ESTO — es lo REAL, manda sobre el nombre): "
+                 . "hace/vende **{$que_vende}**. La imagen SIEMPRE vive en el mundo de este negocio. JAMÁS muestres "
+                 . "un producto de otra industria aunque el NOMBRE lo sugiera por casualidad (ej.: negocio de JABONES "
+                 . "con 'bubbles' en el nombre → burbujas/barras de JABÓN, NUNCA bubble tea ni bebidas).\n";
+    }
     if ($copy !== '') {
         // El TEMA DEL POST manda sobre el tipo de negocio: evita imágenes fuera de tema.
         $prompt .= "- ⭐ LO MÁS IMPORTANTE: la imagen ILUSTRA EL MENSAJE DE ESTE POST (lo que el texto realmente dice), no el nombre ni algo genérico. Lee el texto y muestra de qué habla de verdad:\n"
