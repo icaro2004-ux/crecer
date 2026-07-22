@@ -1211,6 +1211,87 @@ function radiografia_capitulo(PDO $pdo, int $marca_id, string $cap): string {
 }
 
 /**
+ * LA ENTREVISTA (adaptativa). Un agente entrevista al dueño con preguntas que
+ * DEPENDEN de lo que va diciendo (no un guion fijo): si vende jabones pregunta de
+ * jabones. Devuelve la SIGUIENTE pregunta, o done=true cuando ya tiene material.
+ * @return array{done:bool, pregunta:string}
+ */
+function entrevista_siguiente(PDO $pdo, int $marca_id, array $historial): array {
+    $m = leer_marca($pdo, $marca_id);
+    $nombre = trim((string)($m['nombre_negocio'] ?? ''));
+    $sys = "Eres un consultor cálido que ENTREVISTA a un microempresario boricua para conocer su negocio a FONDO. Haz "
+        . "UNA sola pregunta a la vez, ADAPTADA a lo que ya te dijo — NUNCA genérica ni de guion fijo: si vende jabones, "
+        . "pregúntale de sus jabones; si da un servicio, ahonda en ESE servicio. Breve, cercano, boricua suave. Cubre con "
+        . "el tiempo: qué hace/vende EXACTAMENTE, quién le compra, qué lo hace DISTINTO, su historia/origen, qué quiere "
+        . "vender más, y su tono. Solo TERMINA cuando estés SEGURO de que entiendes el negocio A FONDO (qué vende "
+        . "exactamente, a quién, qué lo hace único y su voz). Si te queda CUALQUIER duda, sigue preguntando — no hay "
+        . "prisa. Nunca termines antes de 4 respuestas útiles. Responde SOLO JSON: {\"done\":true|false,\"pregunta\":\"la siguiente pregunta (vacío si done)\"}.";
+    $mensajes = [];
+    foreach ($historial as $h) {
+        $rol = ($h['rol'] ?? '') === 'user' ? 'user' : 'model';
+        $txt = trim((string)($h['texto'] ?? '')); if ($txt !== '') $mensajes[] = ['role' => $rol, 'texto' => $txt];
+    }
+    $prompt = ($nombre !== '' ? "El negocio se llama \"{$nombre}\".\n" : '')
+        . "¿Cuál es la MEJOR siguiente pregunta para conocerlo mejor, o ya tienes suficiente?";
+    try {
+        $r = ia_ejecutar($pdo, 'intake', 'Entrevista: siguiente pregunta', $prompt, [
+            'marca_id' => $marca_id, 'sistema' => $sys, 'json' => true, 'modelo' => CRECER_COPILOTO_MODEL,
+            'historial' => $mensajes, 'temperatura' => 0.75, 'max_tokens' => 220, 'thinking_budget' => 0,
+            'mock_texto' => '{"done":false,"pregunta":"Cuéntame, ¿qué es exactamente lo que haces o vendes?"}',
+        ]);
+        $j = json_decode((string)$r['texto'], true) ?: [];
+        $preg = trim((string)($j['pregunta'] ?? ''));
+        return ['done' => (!empty($j['done']) && $preg === ''), 'pregunta' => $preg];
+    } catch (Throwable $e) {
+        return ['done' => false, 'pregunta' => 'Cuéntame, ¿qué es exactamente lo que haces o vendes?'];
+    }
+}
+
+/**
+ * Cierra la ENTREVISTA: el Genome escribe el PERFIL completo del negocio a partir
+ * de las respuestas, lo GUARDA (descripción, voz, productos, público, ofertas) y
+ * dispara la RADIOGRAFÍA con el perfil nuevo. Basura in = basura out: aquí entra lo rico.
+ * @return array{ok:bool, descripcion:string}
+ */
+function entrevista_finalizar(PDO $pdo, int $marca_id, array $historial): array {
+    $m = leer_marca($pdo, $marca_id);
+    $conv = '';
+    foreach ($historial as $h) {
+        $t = trim((string)($h['texto'] ?? '')); if ($t === '') continue;
+        $conv .= (($h['rol'] ?? '') === 'user' ? 'DUEÑO: ' : 'CORILLO: ') . $t . "\n";
+    }
+    $sys = "De esta ENTREVISTA a un microempresario boricua, arma su PERFIL completo. NO inventes: usa SOLO lo que dijo. "
+        . "Responde SOLO JSON: {\"descripcion\":\"descripción rica del negocio en 3-5 frases, tercera persona\","
+        . "\"voz\":\"cómo habla el dueño, en SUS palabras (cita frases suyas)\",\"productos\":[\"...\"],"
+        . "\"publico\":\"quién le compra\",\"ofertas\":\"promos/servicios si los mencionó, o vacío\"}.";
+    $prompt = ($m['nombre_negocio'] ? "Negocio: {$m['nombre_negocio']}\n" : '') . "Entrevista:\n{$conv}\n\nArma el perfil.";
+    try {
+        $r = ia_ejecutar($pdo, 'intake', 'Entrevista: armar perfil', $prompt, [
+            'marca_id' => $marca_id, 'sistema' => $sys, 'json' => true, 'modelo' => CRECER_COPILOTO_MODEL,
+            'temperatura' => 0.5, 'max_tokens' => 750, 'thinking_budget' => 0, 'mock_texto' => '{}',
+        ]);
+        $j = json_decode((string)$r['texto'], true) ?: [];
+        $desc = trim((string)($j['descripcion'] ?? ''));
+        $voz  = trim((string)($j['voz'] ?? ''));
+        $pub  = trim((string)($j['publico'] ?? ''));
+        $ofe  = trim((string)($j['ofertas'] ?? ''));
+        $prods = array_values(array_filter(array_map(fn($x) => trim((string)$x), (array)($j['productos'] ?? [])), fn($x) => $x !== ''));
+        $set = []; $vals = [];
+        if ($desc !== '') { $set[] = 'descripcion=?'; $vals[] = $desc; }
+        if ($voz  !== '') { $set[] = 'voz=?'; $vals[] = $voz; }
+        if ($pub  !== '') { $set[] = 'publico_objetivo=?'; $vals[] = $pub; }
+        if ($ofe  !== '') { $set[] = 'ofertas=?'; $vals[] = $ofe; }
+        if ($prods)       { $set[] = 'productos=?'; $vals[] = json_encode($prods, JSON_UNESCAPED_UNICODE); }
+        if ($set) { $vals[] = $marca_id; $pdo->prepare("UPDATE crecer_marca SET " . implode(',', $set) . " WHERE id=?")->execute($vals); }
+        try { genoma_radiografia($pdo, $marca_id, true); } catch (Throwable $e) {}   // reconstruye la radiografía con el perfil rico
+        return ['ok' => true, 'descripcion' => $desc];
+    } catch (Throwable $e) {
+        error_log('entrevista_finalizar: ' . $e->getMessage());
+        return ['ok' => false, 'descripcion' => ''];
+    }
+}
+
+/**
  * LA MESA DEL CORILLO — debate creativo para que el post salga ATREVIDO, no
  * genérico. EL PROVOCADOR (creativo guerrillero, vanguardista) lanza 3 ángulos
  * audaces para ESTE negocio y su público; LA ESTRATEGA elige el que mejor le

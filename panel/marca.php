@@ -258,6 +258,11 @@ require __DIR__ . '/_shell.php';
 </style>
 
 <?php $logo_url = (string)($marca['logo_path'] ?? '') ?: (string)($elegido['archivo'] ?? ''); ?>
+<a href="/crecer/panel/entrevista.php?marca=<?= $marca_id ?>" style="display:flex;align-items:center;gap:12px;text-decoration:none;background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;border-radius:16px;padding:14px 18px;margin-bottom:16px;box-shadow:0 12px 30px -12px rgba(239,67,117,.5)">
+  <span style="font-size:22px"><?= ico('chat') ?></span>
+  <span style="flex:1"><b style="font-size:15px">Cuéntame de tu negocio (entrevista)</b><br><span style="font-size:12.5px;opacity:.9">Una conversación — mientras mejor te conozca el corillo, mejor sale todo (copy, arte, estrategia).</span></span>
+  <span style="font-size:18px;opacity:.9">→</span>
+</a>
 <div class="mk-hero">
   <div class="mk-av"><?php if ($logo_url): ?><img src="<?= $h($logo_url) ?>" alt=""><?php else: ?><span class="ini"><?= $h(mb_strtoupper(mb_substr($marca['nombre_negocio'],0,1))) ?></span><?php endif; ?></div>
   <div>
