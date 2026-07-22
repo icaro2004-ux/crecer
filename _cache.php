@@ -28,9 +28,15 @@ echo "\n--- Generador de imágenes ---\n";
 try {
     require __DIR__ . '/includes/db.php';    // define las constantes de config
     require __DIR__ . '/includes/ia.php';    // motor de imagen
+    require_once __DIR__ . '/includes/agentes.php';
+
+    // ── ¿ESTÁ VIVO EL CÓDIGO NUEVO DE LA ENTREVISTA? (lo que se acaba de subir) ──
+    echo "ENTREVISTA adaptativa (nueva)  : " . (function_exists('entrevista_siguiente') ? "SÍ ✅  (código NUEVO)\n" : "NO ❌  (código VIEJO — OPcache no se limpió)\n");
+    echo "Radiografía por capítulos      : " . (function_exists('genoma_radiografia') ? "SÍ ✅\n" : "NO ❌\n");
+    echo "Post de muestra (helper nuevo) : " . (function_exists('crear_post_muestra') ? "SÍ ✅\n" : "NO ❌\n");
 
     // ¿Está el CÓDIGO NUEVO vivo? (la función edits solo existe en el código nuevo)
-    echo "Código nuevo (gpt-image-1 edits) : "
+    echo "\nCódigo nuevo (gpt-image-1 edits) : "
        . (function_exists('openai_imagen_edit') ? "SÍ ✅\n" : "NO ❌  (falta Redeploy)\n");
 
     // ¿Está el KEY de OpenAI en el config de PROD?
