@@ -1291,6 +1291,24 @@ function entrevista_finalizar(PDO $pdo, int $marca_id, array $historial): array 
     }
 }
 
+/** Crea el POST DE MUESTRA de bienvenida (caption + imagen), ya aterrizado en el
+ *  perfil/radiografía recién armados por la entrevista. Devuelve el contenido_id. */
+function crear_post_muestra(PDO $pdo, int $marca_id): int {
+    $ca = (int)date('Y'); $cm = (int)date('n');
+    $pdo->prepare("INSERT INTO crecer_calendario (marca_id,anio,mes,estado,generado_por_ia) VALUES (?,?,?, 'borrador',1) ON DUPLICATE KEY UPDATE updated_at=NOW()")->execute([$marca_id, $ca, $cm]);
+    $calid = (int)$pdo->query("SELECT id FROM crecer_calendario WHERE marca_id={$marca_id} AND anio={$ca} AND mes={$cm}")->fetchColumn();
+    $pdo->prepare("INSERT INTO crecer_contenido (calendario_id,marca_id,plataforma,tipo,caption,fecha_programada,estado) VALUES (?,?, 'instagram','post',?,?, 'borrador')")
+        ->execute([$calid, $marca_id, 'Post de bienvenida: preséntale el negocio a la gente, cálido y boricua', date('Y-m-d 10:00:00')]);
+    $cid = (int)$pdo->lastInsertId();
+    $cap = '';
+    try { $r = redactar_pieza($pdo, $cid); $cap = (string)($r['caption'] ?? ''); } catch (Throwable $e) {}
+    try {
+        $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => false]);
+        if (!empty($g['archivo'])) $pdo->prepare("UPDATE crecer_contenido SET grafica_path=? WHERE id=?")->execute([$g['archivo'], $cid]);
+    } catch (Throwable $e) {}
+    return $cid;
+}
+
 /**
  * LA MESA DEL CORILLO — debate creativo para que el post salga ATREVIDO, no
  * genérico. EL PROVOCADOR (creativo guerrillero, vanguardista) lanza 3 ángulos

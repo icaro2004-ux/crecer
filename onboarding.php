@@ -23,6 +23,12 @@ $USUARIO_ID = (int)$usuario['id'];
 $ya = marca_del_usuario($pdo, $USUARIO_ID);
 if ($ya && empty($_GET['otra'])) { header('Location: /crecer/panel/index.php?marca=' . (int)$ya['id']); exit; }
 
+// El onboarding ahora es LA ENTREVISTA (chat). Cualquier visita (GET) → al chat.
+// (El POST viejo queda por compatibilidad, pero ya no se usa: el wizard no se renderiza.)
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header('Location: /crecer/panel/entrevista.php' . (!empty($_GET['otra']) ? '?otra=1' : '')); exit;
+}
+
 // ── POST (AJAX, multipart): voz + foto + nombre → marca + post muestra ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');

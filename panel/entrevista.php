@@ -12,8 +12,25 @@ require_once __DIR__ . '/../includes/iconos.php';   // ico() se usa antes de _sh
 requiere_login();
 
 $usuario = usuario_actual($pdo);
+$nuevo = !empty($_GET['nuevo']);
+
+// ── Arranque del onboarding: crear el negocio (solo el nombre) para empezar ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear_negocio') {
+    header('Content-Type: application/json; charset=utf-8');
+    if (!csrf_ok()) { echo json_encode(['ok'=>false,'err'=>'Sesión expiró. Recarga.']); exit; }
+    $nombre = trim((string)($_POST['nombre'] ?? ''));
+    if ($nombre === '') { echo json_encode(['ok'=>false,'err'=>'Ponle nombre a tu negocio.']); exit; }
+    try {
+        $mid = crear_marca($pdo, ['usuario_id' => (int)$usuario['id'], 'nombre_negocio' => mb_substr($nombre, 0, 80)]);
+        echo json_encode(['ok'=>true, 'marca_id'=>$mid]);
+    } catch (Throwable $e) { echo json_encode(['ok'=>false, 'err'=>substr($e->getMessage(), 0, 120)]); }
+    exit;
+}
+
 $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (int)$_GET['marca'] : null);
-if (!$marca) { header('Location: /crecer/onboarding.php'); exit; }
+if (!empty($_GET['otra'])) $marca = null;   // "crear otro negocio" → pide nombre nuevo
+// Sin negocio → pantalla de arranque: pide el nombre y arranca la entrevista.
+if (!$marca) { include __DIR__ . '/_entrevista_arranque.php'; exit; }
 $marca_id = (int)$marca['id'];
 
 // ── AJAX: el dueño contesta → siguiente pregunta, o cierre ──
@@ -28,7 +45,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $sig = entrevista_siguiente($pdo, $marca_id, $historial);
         if (!empty($sig['done'])) {
             $fin = entrevista_finalizar($pdo, $marca_id, $historial);
-            echo json_encode(['ok'=>true, 'done'=>true, 'resumen'=>(string)($fin['descripcion'] ?? '')], JSON_UNESCAPED_UNICODE);
+            if ($nuevo) { try { crear_post_muestra($pdo, $marca_id); } catch (Throwable $e) {} }   // deja el post de muestra listo
+            echo json_encode(['ok'=>true, 'done'=>true, 'resumen'=>(string)($fin['descripcion'] ?? ''), 'redirect'=>'/crecer/panel/index.php?marca=' . $marca_id], JSON_UNESCAPED_UNICODE);
         } else {
             echo json_encode(['ok'=>true, 'done'=>false, 'pregunta'=>(string)$sig['pregunta']], JSON_UNESCAPED_UNICODE);
         }
@@ -109,11 +127,13 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   function me(t){var r=document.createElement('div');r.className='en-row me';r.innerHTML='<div class="en-b">'+esc(t)+'</div>';msgs.appendChild(r);scroll(r);}
   function ia(t){var r=document.createElement('div');r.className='en-row ia';r.innerHTML='<div class="en-face">'+FACE+'</div><div class="en-b">'+esc(t)+'</div>';msgs.appendChild(r);scroll(r);}
   function loading(){var r=document.createElement('div');r.className='en-row ia';r.innerHTML='<div class="en-face">'+FACE+'</div><div class="en-b load"><span class="en-dots"><span></span><span></span><span></span></span></div>';msgs.appendChild(r);scroll(r);return r;}
-  function done(resumen){
+  function done(resumen, redirect){
     cerrado=true; form.style.display='none'; listen.textContent='';
+    var url = redirect || ('/crecer/panel/index.php?marca='+MARCA);
     var d=document.createElement('div'); d.className='en-done';
-    d.innerHTML='<h3>✓ Ya entiendo tu negocio</h3>'+(resumen?'<p>'+esc(resumen)+'</p>':'<p>Armé tu perfil y el corillo ya lo tiene.</p>')+'<a href="/crecer/panel/index.php?marca='+MARCA+'">Ver mi corillo →</a>';
+    d.innerHTML='<h3>✓ Ya entiendo tu negocio</h3>'+(resumen?'<p>'+esc(resumen)+'</p>':'<p>Armé tu perfil y el corillo ya lo tiene.</p>')+'<a href="'+url+'">Ver mi primer post →</a>';
     msgs.appendChild(d); scroll(d);
+    setTimeout(function(){ location.href=url; }, 2800);   // llévalo a ver su post
   }
   function enviar(t){
     t=(t||'').trim(); if(!t||cerrado) return;
@@ -123,7 +143,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
       load.remove();
       if(!d.ok){ ia('Perdona, se me trabó. Repíteme eso último.'); input.disabled=false; send.disabled=false; input.focus(); return; }
-      if(d.done){ done(d.resumen); return; }
+      if(d.done){ done(d.resumen, d.redirect); return; }
       ia(d.pregunta||'¿Algo más que deba saber?'); hist.push({rol:'ia',texto:d.pregunta||''});
       input.disabled=false; send.disabled=false; input.focus();
     }).catch(function(){ load.remove(); ia('Se cayó la conexión. Intenta otra vez.'); input.disabled=false; send.disabled=false; });
