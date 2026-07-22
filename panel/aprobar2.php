@@ -1750,7 +1750,7 @@ $cf = [
     function wizWhatsApp(){
       var url=wizImg||'', cap=(document.getElementById('wiz-cap')||{}).textContent||'';
       if(navigator.clipboard && cap) navigator.clipboard.writeText(cap).catch(function(){});
-      var cerrar=function(msg){ wizCerrar(); toast(msg); setTimeout(function(){ location.reload(); }, 1200); };
+      var cerrar=function(msg){ wizCerrar(); toast(msg); setTimeout(function(){ location.href='/crecer/panel/index.php?marca=<?= $marca_id ?>'; }, 1200); };
       if(url && puedeCompartirArchivo()){
         fetch(url).then(function(r){return r.blob();}).then(function(bl){
           var esVid=(bl.type||'').indexOf('video')===0;
@@ -1758,8 +1758,8 @@ $cf = [
           var data={files:[file], text:cap};
           if(navigator.canShare && navigator.canShare(data)) navigator.share(data).catch(function(){});
           else navigator.share({text:cap}).catch(function(){});
-          cerrar('📲 Escoge WhatsApp → Estado. Lo guardamos en Contenido.');
-        }).catch(function(){ cerrar('Guardado en Contenido. Compártelo a mano desde el celular.'); });
+          cerrar('📲 Escoge WhatsApp → Estado. Tu post quedó guardado.');
+        }).catch(function(){ cerrar('Guardado. Compártelo a mano desde el celular.'); });
       } else {
         if(url){ var a=document.createElement('a'); a.href=url; a.download='crecer-estado'; document.body.appendChild(a); a.click(); a.remove(); }
         cerrar('📥 Descargado + copy copiado. Súbelo a tu Estado desde el celular.');
@@ -1781,7 +1781,10 @@ $cf = [
       }).catch(function(){ pubErr('Error de conexión. Intenta otra vez.'); });
     }
     document.getElementById('wiz-later').addEventListener('click', function(){
-      wizCerrar(); toast('✅ Guardado. Lo ves en Contenido → Revisar.'); setTimeout(function(){ location.reload(); }, 1000);
+      // Llévalo a VER su post (el home lo muestra de protagonista) — antes recargaba
+      // esta lista con un texto viejo y el post "se perdía".
+      wizCerrar(); toast('✅ Guardado — aquí está tu post.');
+      setTimeout(function(){ location.href='/crecer/panel/index.php?marca=<?= $marca_id ?>'; }, 900);
     });
     // OJO: NO cerrar el wizard al tocar el fondo — se perdía el trabajo por un
     // clic accidental. Solo cierra con la X (arriba a la derecha).
