@@ -787,8 +787,12 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
     if ($con_texto) {
         $prompt .= "- Añade un TEXTO corto y llamativo (un gancho sacado del mensaje), perfectamente escrito y bien diseñado sobre la imagen.\n";
     } else {
-        $prompt .= "- SIN texto sobre la imagen: solo la foto/arte limpio y bonito.\n";
+        $prompt .= "- SIN texto sobre la imagen: solo la escena/arte, pero LLENA y con vida (no minimalista vacío).\n";
     }
+    // ⛔ REGLA DURA anti-fondo-blanco: el modelo tiende a dejar blanco cuando oye "limpio".
+    $prompt .= "- ⛔ EL FONDO NUNCA blanco liso, plano ni vacío. SIEMPRE un entorno REAL con TEXTURA, luz, color y "
+             . "profundidad (mesa de madera, taller, cocina, ingredientes, el local, la calle boricua, un ambiente) que "
+             . "LLENE TODO EL CUADRO de borde a borde. Prohibidas las áreas blancas o vacías sin sentido.\n";
     if ($estilo !== '') $prompt .= "- Estilo: {$estilo}.\n";
     // LÍNEA DE DISEÑO de la marca (definida en Mi marca): se conserva en TODAS las
     // imágenes → feed consistente, como una marca de verdad.

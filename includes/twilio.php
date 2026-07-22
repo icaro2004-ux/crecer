@@ -83,8 +83,19 @@ function sms_enviar_codigo(string $telefono): array {
         $ok = in_array(($r['status'] ?? ''), ['pending', 'approved'], true);
         return ['ok' => $ok, 'err' => $ok ? '' : 'No se pudo enviar el código. Intenta otra vez.', 'e164' => $e164];
     } catch (Throwable $e) {
-        error_log('sms_enviar_codigo: ' . $e->getMessage());
-        return ['ok' => false, 'err' => 'No pudimos enviar el SMS ahora mismo. Intenta en un momento.', 'e164' => $e164];
+        $msg = $e->getMessage();
+        error_log('sms_enviar_codigo: ' . $msg);
+        // Detecta las causas típicas para no dejar al dueño a ciegas.
+        $err = 'No pudimos enviar el SMS ahora mismo. Intenta en un momento.';
+        if (stripos($msg, 'unverified') !== false || stripos($msg, 'trial') !== false
+            || strpos($msg, '21608') !== false || strpos($msg, '21211') !== false) {
+            $err = 'Tu cuenta de Twilio está en modo prueba: solo puede enviar a números verificados en la consola de Twilio. Verifica el número o pasa la cuenta a pago.';
+        } elseif (strpos($msg, '20003') !== false || stripos($msg, 'authenticate') !== false || strpos($msg, '401') !== false) {
+            $err = 'Las credenciales de Twilio no cuadran (revisa Auth Token / SID en el config).';
+        } elseif (strpos($msg, '20404') !== false || stripos($msg, 'not found') !== false) {
+            $err = 'El Verify Service de Twilio no existe (revisa TWILIO_VERIFY_SID en el config).';
+        }
+        return ['ok' => false, 'err' => $err, 'e164' => $e164];
     }
 }
 
