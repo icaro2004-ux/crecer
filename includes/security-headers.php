@@ -14,7 +14,9 @@ if (headers_sent() || PHP_SAPI === 'cli') return;
 header('X-Frame-Options: SAMEORIGIN');
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: strict-origin-when-cross-origin');
-header('Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()');
+// microphone=(self): el dictado por voz (Web Speech API) del propio sitio necesita el mic.
+// El resto queda denegado. (self) NO se lo da a iframes de terceros.
+header('Permissions-Policy: geolocation=(), microphone=(self), camera=(), payment=()');
 
 // ── HSTS: solo producción + HTTPS ───────────────────────────
 $is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
