@@ -80,6 +80,31 @@ try {
         echo "\n(Para probar OpenAI, abre esta URL con  &test=img  al final.)\n";
     }
 
+    // Prueba REAL del SMS: manda un código de verdad y muestra el ERROR CRUDO de Twilio.
+    //    Añade  &test=sms&to=7875551234  (con &t=TU_CRON_TOKEN). Cuesta unos centavos.
+    if ($__test === 'sms') {
+        echo "\n--- Prueba EN VIVO del SMS (Twilio Verify) ---\n";
+        require_once __DIR__ . '/includes/twilio.php';
+        echo "twilio_configurado()          : " . (twilio_configurado() ? "SÍ ✅\n" : "NO ❌ (faltan constantes en config)\n");
+        echo "TWILIO_ACCOUNT_SID definido    : " . (defined('TWILIO_ACCOUNT_SID') && TWILIO_ACCOUNT_SID !== '' ? ("SÍ (empieza " . substr(TWILIO_ACCOUNT_SID,0,4) . "…)\n") : "NO ❌\n");
+        echo "TWILIO_AUTH_TOKEN definido     : " . (defined('TWILIO_AUTH_TOKEN')  && TWILIO_AUTH_TOKEN  !== '' ? ("SÍ (len " . strlen(TWILIO_AUTH_TOKEN) . ")\n") : "NO ❌\n");
+        echo "TWILIO_VERIFY_SID definido     : " . (defined('TWILIO_VERIFY_SID')  && TWILIO_VERIFY_SID  !== '' ? ("SÍ (empieza " . substr(TWILIO_VERIFY_SID,0,4) . "…)\n") : "NO ❌\n");
+        $to = tel_e164((string)($_GET['to'] ?? ''));
+        if ($to === '') {
+            echo "\n→ Añade  &to=7875551234  (tu celular) para el envío real.\n";
+        } else {
+            echo "\nEnviando a {$to} …\n";
+            try {
+                $r = twilio_api('POST', 'v2/Services/' . TWILIO_VERIFY_SID . '/Verifications', ['To' => $to, 'Channel' => 'sms']);
+                echo "RESULTADO: ✅ Twilio aceptó (status=" . ($r['status'] ?? '?') . "). Revisa tu celular.\n";
+            } catch (Throwable $e) {
+                echo "RESULTADO: ❌ Twilio RECHAZÓ.\n";
+                echo "ERROR CRUDO: " . $e->getMessage() . "\n";
+                echo "→ Busca el número de error de Twilio en ese mensaje (ej. 60410=geo bloqueada, 20003=auth, 20404=Verify SID malo).\n";
+            }
+        }
+    }
+
     // Prueba REAL del arte de los posts: corre generar_grafica() end-to-end.
     //    Añade  &test=arte  a la URL. Dice si genera, con qué modelo y si guarda el archivo.
     if ($__test === 'arte') {
