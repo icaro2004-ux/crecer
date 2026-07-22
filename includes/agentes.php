@@ -393,6 +393,8 @@ function sugerir_arte(PDO $pdo, int $marca_id, string $caption, string $ajuste =
         . "escritorio, pantallas con apps flotantes) a menos que el post SEA literalmente de eso.\n"
         . $est['sugerir']
         . "\nDevuelve 2-3 frases, DIRECTO con la escena — sin saludos, sin \"mi gente\", sin preámbulos ni emojis. Es una dirección visual para el diseñador, no un caption.";
+    $radio_img = radiografia_capitulo($pdo, $marca_id, 'reglas_imagen');
+    if ($radio_img !== '') $sistema .= "\nREGLAS DE IMAGEN DEL NEGOCIO (las escribió el Business Genome — obedécelas SIEMPRE): {$radio_img}";
     $prompt = "Perfil del negocio:\n{$ctx}\n\nTexto del post (la imagen TIENE que pegar con esto):\n\"{$caption}\"\n";
     $idea_actual = trim($idea_actual);
     if ($idea_actual !== '' && trim($ajuste) !== '') {
@@ -756,6 +758,9 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
                  . "un producto de otra industria aunque el NOMBRE lo sugiera por casualidad (ej.: negocio de JABONES "
                  . "con 'bubbles' en el nombre → burbujas/barras de JABÓN, NUNCA bubble tea ni bebidas).\n";
     }
+    // El capítulo de IMAGEN de la RADIOGRAFÍA (lo redactó el Business Genome) → alinea el arte al negocio.
+    $radio_img = radiografia_capitulo($pdo, $marca_id, 'reglas_imagen');
+    if ($radio_img !== '') $prompt .= "- 📖 REGLAS DE IMAGEN DEL NEGOCIO (las escribió el Business Genome — respétalas): {$radio_img}\n";
     if ($copy !== '') {
         // El TEMA DEL POST manda sobre el tipo de negocio: evita imágenes fuera de tema.
         $prompt .= "- ⭐ LO MÁS IMPORTANTE: la imagen ILUSTRA EL MENSAJE DE ESTE POST (lo que el texto realmente dice), no el nombre ni algo genérico. Lee el texto y muestra de qué habla de verdad:\n"
@@ -1155,6 +1160,54 @@ function cerebro_negocio(PDO $pdo, int $marca_id, ?array $m = null): string {
         if ($mem !== '') $b .= "\n" . $mem;
     }
     return $b;
+}
+
+/**
+ * LA RADIOGRAFÍA DEL NEGOCIO — el Business Genome REDACTA las reglas del negocio en
+ * CAPÍTULOS, uno por agente (identidad, imagen, voz, estrategia, personalidad). Cada
+ * agente lee SU capítulo → todos quedan alineados con el mismo ADN y hacen tareas
+ * COHERENTES (ej.: el de imágenes sabe que un negocio de jabones NO hace bubble tea).
+ * Se construye UNA vez con IA (a partir del cerebro) y se CACHEA en crecer_marca.
+ * radiografia_json → después es DB-only (barato). Rebuild con $forzar=true.
+ */
+function genoma_radiografia(PDO $pdo, int $marca_id, bool $forzar = false): array {
+    static $cache = [];
+    if (!$forzar && isset($cache[$marca_id])) return $cache[$marca_id];
+    $m = leer_marca($pdo, $marca_id);
+    if (!$forzar) {
+        $j = json_decode((string)($m['radiografia_json'] ?? ''), true);
+        if (is_array($j) && !empty($j)) return $cache[$marca_id] = $j;
+    }
+    $ctx = cerebro_negocio($pdo, $marca_id, $m);
+    $sys = "Eres EL BUSINESS GENOME de Crecer: el cerebro que conoce este negocio a fondo. Redacta la RADIOGRAFÍA del "
+        . "negocio: reglas CLARAS y CONCRETAS por capítulo, una para cada agente del corillo, para que TODOS trabajen "
+        . "alineados y coherentes. Usa SOLO los datos reales (no inventes). Cada capítulo, corto y accionable. Responde SOLO JSON:\n"
+        . '{"identidad":"1-2 frases: qué ES el negocio, qué vende, su esencia",'
+        . '"reglas_imagen":"reglas para el que crea las IMÁGENES: el mundo visual REAL del negocio, qué mostrar SIEMPRE, qué NUNCA mostrar (industrias ajenas), aclara trampas del nombre, paleta y mood",'
+        . '"reglas_voz":"reglas para el ESCRITOR: cómo habla, vocabulario propio, muletillas a usar/evitar, nivel de formalidad",'
+        . '"reglas_estrategia":"reglas para la ESTRATEGA: público objetivo, qué le vende, ángulos que funcionan, fechas/temporadas clave",'
+        . '"personalidad":"para el PROVOCADOR: la personalidad de marca y hasta dónde ser atrevido SIN salirse del negocio"}';
+    $prompt = "Perfil real del negocio:\n{$ctx}\n\nRedacta la radiografía por capítulos (reglas concretas, no descripciones vagas).";
+    try {
+        $r = ia_ejecutar($pdo, 'genoma', 'Radiografía del negocio', $prompt, [
+            'marca_id' => $marca_id, 'sistema' => $sys, 'json' => true, 'modelo' => CRECER_COPILOTO_MODEL,
+            'temperatura' => 0.5, 'max_tokens' => 950, 'thinking_budget' => 0, 'mock_texto' => '{}',
+        ]);
+        $j = json_decode((string)$r['texto'], true);
+        if (is_array($j) && !empty($j)) {
+            try { $pdo->prepare("UPDATE crecer_marca SET radiografia_json=? WHERE id=?")
+                    ->execute([json_encode($j, JSON_UNESCAPED_UNICODE), $marca_id]); }
+            catch (Throwable $e) { /* columna radiografia_json aún no migrada → se reconstruye por request */ }
+            return $cache[$marca_id] = $j;
+        }
+    } catch (Throwable $e) { error_log('genoma_radiografia: ' . $e->getMessage()); }
+    return $cache[$marca_id] = [];
+}
+
+/** Devuelve el capítulo de la radiografía dedicado a un agente (o '' si no hay). */
+function radiografia_capitulo(PDO $pdo, int $marca_id, string $cap): string {
+    $r = genoma_radiografia($pdo, $marca_id);
+    return trim((string)($r[$cap] ?? ''));
 }
 
 /**
