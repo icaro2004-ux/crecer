@@ -1342,6 +1342,8 @@ function debate_creativo(PDO $pdo, int $marca_id, string $idea, string $platafor
             . "Cada ángulo = una táctica + un gancho concreto para ESTE negocio y su público.\n"
             . "REGLA DE ORO: propones ENFOQUES y GANCHOS, NUNCA inventas hechos del negocio (precios, productos, "
             . "promesas que no existen). Atrevido en la FORMA, honesto en el FONDO. Responde SOLO JSON.";
+        $__pers = radiografia_capitulo($pdo, $marca_id, 'personalidad');
+        if ($__pers !== '') $sysProv .= "\nPERSONALIDAD DE MARCA (Business Genome — hasta aquí puedes ser atrevido sin salirte del negocio): {$__pers}";
         $promProv = "Negocio:\n{$ctx}\n\nPlataforma: {$plataforma} · Tipo: {$tipo}\nIdea base del post: \"{$idea}\"\n\n"
             . 'Devuelve JSON EXACTO: {"angulos":[{"tactica":"nombre corto","gancho":"el ángulo/gancho en 1 frase","porque_pega":"por qué le llega a ESTE público","visual":"una IMAGEN concreta y ATREVIDA para este ángulo — qué se ve, encuadre y mood; creativa, NO la foto obvia del producto"}]} con 3 ángulos DISTINTOS y audaces.';
         $rp = ia_ejecutar($pdo, 'provocador', 'Lanzar ángulos audaces', $promProv, [
@@ -1361,6 +1363,8 @@ function debate_creativo(PDO $pdo, int $marca_id, string $idea, string $platafor
             . "ESTE negocio y conviértelo en un BRIEF corto y concreto para el escritor: qué gancho usar, qué emoción "
             . "disparar y qué debe lograr el post. Atrevido pero aterrizado; no inventes datos. Responde SOLO JSON: "
             . '{"elegido":N,"razon":"por qué este gana","brief":"instrucción concreta para el escritor"}.';
+        $__est = radiografia_capitulo($pdo, $marca_id, 'reglas_estrategia');
+        if ($__est !== '') $sysEst .= "\nREGLAS DE ESTRATEGIA DEL NEGOCIO (Business Genome — público y ángulos que funcionan): {$__est}";
         $promEst = "Negocio:\n{$ctx}\n\nIdea base: \"{$idea}\"\n\nÁngulos que lanzó el Provocador:\n{$lista}\n¿Cuál gana y por qué? Dame el brief.";
         $re = ia_ejecutar($pdo, 'estratega', 'Elegir el ángulo ganador', $promEst, [
             'marca_id' => $marca_id, 'sistema' => $sysEst, 'json' => true,
@@ -1487,6 +1491,8 @@ SYS;
         $sistema .= "\n\nVOCABULARIO DEL NEGOCIO (el dueño lo corrigió — RESPÉTALO SIEMPRE, no repitas los errores):\n" . $m['glosario'];
     }
     $sistema .= tono_instruccion($m);
+    $__rv = radiografia_capitulo($pdo, (int)$m['id'], 'reglas_voz');
+    if ($__rv !== '') $sistema .= "\n📖 REGLAS DE VOZ DEL NEGOCIO (las escribió el Business Genome — síguelas): {$__rv}";
     // (la memoria aprendida ya viene dentro del cerebro_negocio, en el contexto)
 
     $prompt = "Perfil del negocio:\n{$ctx}\n\n"
@@ -1548,6 +1554,8 @@ SYS;
         $sistema .= "\n\nVOCABULARIO DEL NEGOCIO (el dueño lo corrigió — RESPÉTALO SIEMPRE, no repitas los errores):\n" . $m['glosario'];
     }
     $sistema .= tono_instruccion($m);
+    $__rv = radiografia_capitulo($pdo, (int)$m['id'], 'reglas_voz');
+    if ($__rv !== '') $sistema .= "\n📖 REGLAS DE VOZ DEL NEGOCIO (las escribió el Business Genome — síguelas): {$__rv}";
     // (la memoria aprendida ya viene dentro del cerebro_negocio, en el contexto)
 
     $prompt = "Perfil del negocio:\n{$ctx}\n\n"
