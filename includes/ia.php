@@ -425,14 +425,18 @@ function openai_imagen(string $prompt, array $opts = []): array {
     $size    = ['1:1'=>'1024x1024','4:5'=>'1024x1536','9:16'=>'1024x1536','3:4'=>'1024x1536','16:9'=>'1536x1024','4:3'=>'1536x1024'][$aspect] ?? '1024x1024';
     $quality = $opts['calidad_openai'] ?? OPENAI_IMG_QUALITY;
 
-    // ¿Hay una imagen de entrada (el logo)? → edits (la incorpora al arte).
-    $entrada = null;
-    foreach (($opts['imagenes'] ?? []) as $img) {
-        $bin = base64_decode($img['data'] ?? '', true);
-        if ($bin !== false && $bin !== '') { $entrada = ['bin'=>$bin, 'mime'=>$img['mime'] ?? 'image/png']; break; }
-    }
-    if ($entrada !== null) {
-        return openai_imagen_edit($prompt, $entrada, $modelo, $size, $quality, $opts);
+    // /edits SOLO cuando hay una FOTO REAL que editar. Con un LOGO (fondo blanco) el
+    // endpoint edits produce manchas blancas sin textura → el arte desde cero va a
+    // /generations (imagen completa y de calidad). El logo se ignora aquí (mejor que romper).
+    if (!empty($opts['foto_real'])) {
+        $entrada = null;
+        foreach (($opts['imagenes'] ?? []) as $img) {
+            $bin = base64_decode($img['data'] ?? '', true);
+            if ($bin !== false && $bin !== '') { $entrada = ['bin'=>$bin, 'mime'=>$img['mime'] ?? 'image/png']; break; }
+        }
+        if ($entrada !== null) {
+            return openai_imagen_edit($prompt, $entrada, $modelo, $size, $quality, $opts);
+        }
     }
 
     $body = ['model'=>$modelo, 'prompt'=>$prompt, 'n'=>1, 'size'=>$size, 'quality'=>$quality];
