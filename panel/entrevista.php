@@ -29,6 +29,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear
 
 $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (int)$_GET['marca'] : null);
 if (!empty($_GET['otra'])) $marca = null;   // "crear otro negocio" → pide nombre nuevo
+// El nombre YA se capturó en el landing (negocio_intent) → crea la marca y salta al chat.
+if (!$marca && empty($_GET['otra'])) {
+    if (session_status() === PHP_SESSION_NONE) { @session_start(); }
+    $neg = trim((string)($_SESSION['negocio_intent'] ?? ''));
+    if ($neg !== '') {
+        try {
+            $mid = crear_marca($pdo, ['usuario_id' => (int)$usuario['id'], 'nombre_negocio' => mb_substr($neg, 0, 80)]);
+            unset($_SESSION['negocio_intent']);
+            header('Location: /crecer/panel/entrevista.php?marca=' . $mid . '&nuevo=1'); exit;
+        } catch (Throwable $e) { /* si falla, cae a la pantalla de nombre */ }
+    }
+}
 // Sin negocio → pantalla de arranque: pide el nombre y arranca la entrevista.
 if (!$marca) { include __DIR__ . '/_entrevista_arranque.php'; exit; }
 $marca_id = (int)$marca['id'];

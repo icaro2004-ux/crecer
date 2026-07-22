@@ -1226,17 +1226,20 @@ function entrevista_siguiente(PDO $pdo, int $marca_id, array $historial): array 
         . "vender más, y su tono. Solo TERMINA cuando estés SEGURO de que entiendes el negocio A FONDO (qué vende "
         . "exactamente, a quién, qué lo hace único y su voz). Si te queda CUALQUIER duda, sigue preguntando — no hay "
         . "prisa. Nunca termines antes de 4 respuestas útiles. Responde SOLO JSON: {\"done\":true|false,\"pregunta\":\"la siguiente pregunta (vacío si done)\"}.";
-    $mensajes = [];
+    // ia_ejecutar NO soporta 'historial' → la conversación va DENTRO del prompt (si no, repite).
+    $conv = '';
     foreach ($historial as $h) {
-        $rol = ($h['rol'] ?? '') === 'user' ? 'user' : 'model';
-        $txt = trim((string)($h['texto'] ?? '')); if ($txt !== '') $mensajes[] = ['role' => $rol, 'texto' => $txt];
+        $txt = trim((string)($h['texto'] ?? '')); if ($txt === '') continue;
+        $conv .= (($h['rol'] ?? '') === 'user' ? 'DUEÑO: ' : 'TÚ (entrevistador): ') . $txt . "\n";
     }
-    $prompt = ($nombre !== '' ? "El negocio se llama \"{$nombre}\".\n" : '')
-        . "¿Cuál es la MEJOR siguiente pregunta para conocerlo mejor, o ya tienes suficiente?";
+    $prompt = ($nombre !== '' ? "El negocio se llama \"{$nombre}\".\n\n" : '')
+        . "Conversación hasta ahora:\n" . ($conv !== '' ? $conv : '(aún no empieza)') . "\n"
+        . "Haz la SIGUIENTE pregunta — NUNCA repitas una que ya hiciste; CONSTRUYE sobre lo que el dueño acaba de "
+        . "contestar (menciónalo). Si ya entiendes el negocio a fondo, termina (done=true).";
     try {
         $r = ia_ejecutar($pdo, 'intake', 'Entrevista: siguiente pregunta', $prompt, [
             'marca_id' => $marca_id, 'sistema' => $sys, 'json' => true, 'modelo' => CRECER_COPILOTO_MODEL,
-            'historial' => $mensajes, 'temperatura' => 0.75, 'max_tokens' => 220, 'thinking_budget' => 0,
+            'temperatura' => 0.75, 'max_tokens' => 220, 'thinking_budget' => 0,
             'mock_texto' => '{"done":false,"pregunta":"Cuéntame, ¿qué es exactamente lo que haces o vendes?"}',
         ]);
         $j = json_decode((string)$r['texto'], true) ?: [];
