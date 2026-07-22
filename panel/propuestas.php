@@ -61,6 +61,10 @@ try {
     $props = $q->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) { $props = []; }
 
+// Los que YA aprobaste (esperan publicación) — para que no "desaparezcan": banner con enlace.
+$n_listos = 0;
+try { $n_listos = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$marca_id} AND estado IN ('aprobado','programado','fallido')")->fetchColumn(); } catch (Throwable $e) {}
+
 // ¿Qué agentes trabajaron de verdad? (para los créditos del corillo, como el lobby)
 $ags = [];
 try {
@@ -181,10 +185,24 @@ require __DIR__ . '/_shell.php';
   .est-done .acts{display:flex;gap:22px;justify-content:center;flex-wrap:wrap}
   .est-done .acts a{color:var(--teal-700);font-weight:600;font-size:14.5px;text-decoration:none}
   .est-done[hidden]{display:none}
+  .est-listos{display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;text-decoration:none;border-radius:16px;padding:14px 18px;margin:2px 0 18px;box-shadow:0 12px 30px -12px rgba(239,67,117,.5)}
+  .est-listos .ico{display:grid;place-items:center;flex:none}
+  .est-listos .ico svg{width:24px;height:24px;color:#fff}
+  .est-listos b{font-weight:800}
+  .est-listos .sub{font-size:12.5px;font-weight:500;opacity:.92}
+  .est-listos .arr{margin-left:auto;font-size:20px;font-weight:800}
 </style>
 
 <main class="est" id="est">
   <p class="est-owner">El estudio de <b><?= $h($negocio) ?></b></p>
+
+  <?php if ($n_listos > 0): ?>
+  <a class="est-listos" href="<?= $BASE ?>/aprobar2.php?marca=<?= $marca_id ?>&tab=listos">
+    <span class="ico"><?= ico('check-circle') ?></span>
+    <span><b><?= $n_listos ?></b> post<?= $n_listos === 1 ? '' : 's' ?> <b>listo<?= $n_listos === 1 ? '' : 's' ?> para publicar</b><br><span class="sub">Los que aprobaste están aquí — tócalos para publicarlos</span></span>
+    <span class="arr">→</span>
+  </a>
+  <?php endif; ?>
 
   <?php if (!$props): ?>
     <div class="est-done">

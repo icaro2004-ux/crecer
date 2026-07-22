@@ -568,8 +568,9 @@ $credito  = $has_deck
       <?php endforeach; ?>
     </div>
     <div class="tn-end" id="tnEnd">
-      <p class="tn-end-t">Al día.</p>
-      <p class="tn-end-s">El corillo sigue trabajando.</p>
+      <p class="tn-end-t">✓ Listo.</p>
+      <p class="tn-end-s">Los que aprobaste están guardados en <b>Listos para publicar</b>.</p>
+      <a class="tn-ok" href="<?= $BASE ?>/aprobar2.php?marca=<?= $marca_id ?>&tab=listos" style="margin-top:18px">Ver y publicar →</a>
     </div>
   </div>
   <?php if (count($deck) > 1): ?>
