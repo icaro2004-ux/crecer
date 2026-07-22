@@ -383,7 +383,7 @@ function gemini_imagen(string $prompt, array $opts = []): array {
 //  El Director de Arte (Gemini) puede enrutar aquí el arte conceptual desde
 //  cero. Si no hay OPENAI_API_KEY, TODO cae a Gemini (degrada con gracia).
 if (!defined('OPENAI_API_KEY'))   define('OPENAI_API_KEY', '');
-if (!defined('OPENAI_IMG_MODEL')) define('OPENAI_IMG_MODEL', 'dall-e-3');   // DALL·E 3 hd/vivid: imágenes completas y vívidas, sin manchas ni verificación de org
+if (!defined('OPENAI_IMG_MODEL')) define('OPENAI_IMG_MODEL', 'gpt-image-1');   // el MÁS cabrón (el que usa ChatGPT). dall-e-3 = respaldo sin verificación de org
 // Calidad de gpt-image-1: low|medium|high|auto. 'high' = la buena ("otro nivel"),
 // ~$0.17 por imagen 1:1. Reversible a 'medium' (~$0.04) si hay que bajar costo.
 if (!defined('OPENAI_IMG_QUALITY')) define('OPENAI_IMG_QUALITY', 'high');
