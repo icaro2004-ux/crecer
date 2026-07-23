@@ -19,14 +19,13 @@ $usuario = usuario_actual($pdo);
 if (!$usuario) { logout_usuario(); header('Location: /crecer/login.php?expirado=1'); exit; }  // cinturón + tirantes
 $USUARIO_ID = (int)$usuario['id'];
 
-// Si ya tiene una marca, el onboarding ya pasó → al panel (salvo ?otra=1).
-$ya = marca_del_usuario($pdo, $USUARIO_ID);
-if ($ya && empty($_GET['otra'])) { header('Location: /crecer/panel/index.php?marca=' . (int)$ya['id']); exit; }
-
-// El onboarding ahora es LA ENTREVISTA (chat). Cualquier visita (GET) → al chat.
-// (El POST viejo queda por compatibilidad, pero ya no se usa: el wizard no se renderiza.)
+// Entrada legacy: el GATEWAY decide dónde retomar (entrevista → escenario → venta → app).
+// ?otra=1 = usuario existente creando OTRO negocio → directo a la entrevista.
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header('Location: /crecer/panel/entrevista.php' . (!empty($_GET['otra']) ? '?otra=1' : '')); exit;
+    if (!empty($_GET['otra'])) { header('Location: /crecer/panel/entrevista.php?otra=1'); exit; }
+    require_once __DIR__ . '/includes/gateway.php';
+    gateway_redirigir($pdo, $usuario);
+    exit;
 }
 
 // ── POST (AJAX, multipart): voz + foto + nombre → marca + post muestra ──

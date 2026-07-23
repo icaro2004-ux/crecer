@@ -8,9 +8,8 @@ require_once __DIR__ . '/includes/iconos.php';
 
 if (esta_logueado()) {
     $u = usuario_actual($pdo);
-    if (($u['rol'] ?? '') === 'admin') { header('Location: /crecer/panel/admin.php'); exit; }
-    $tiene = marca_del_usuario($pdo, (int)$u['id']);
-    header('Location: ' . ($tiene ? '/crecer/panel/index.php' : '/crecer/onboarding.php')); exit;
+    if ($u) { require_once __DIR__ . '/includes/gateway.php'; gateway_redirigir($pdo, $u); }
+    logout_usuario();   // sesión fantasma → cae al formulario de entrar
 }
 
 $err = ''; $email = '';
@@ -41,15 +40,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             login_usuario($u);
             $dest = $_SESSION['after_login'] ?? null; unset($_SESSION['after_login']);
-            if (!$dest) {
-                if (($u['rol'] ?? '') === 'admin') {
-                    $dest = '/crecer/panel/admin.php';            // admin → Centro de Operaciones
-                } else {
-                    $tiene = marca_del_usuario($pdo, (int)$u['id']);
-                    $dest = $tiene ? '/crecer/panel/index.php' : '/crecer/onboarding.php';
-                }
-            }
-            header('Location: ' . $dest); exit;
+            if ($dest) { header('Location: ' . $dest); exit; }
+            // El GATEWAY retoma donde quedó (entrevista → escenario → venta) o abre el app si ya paga.
+            require_once __DIR__ . '/includes/gateway.php';
+            gateway_redirigir($pdo, $u);
         }
     }
 }

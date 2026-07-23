@@ -15,8 +15,10 @@ if ($token !== '' && ctype_xdigit($token)) {
         $pdo->prepare("UPDATE usuarios SET verificado=1, email_verificado_at=NOW(), verif_token=NULL WHERE id=?")
             ->execute([(int)$u['id']]);
         login_usuario($u);
-        $tiene = (int)$pdo->query("SELECT COUNT(*) FROM crecer_marca WHERE usuario_id=" . (int)$u['id'])->fetchColumn();
-        header('Location: ' . ($tiene ? '/crecer/panel/index.php' : '/crecer/onboarding.php?activado=1'));
+        // El GATEWAY retoma donde quedó (entrevista → escenario → venta) o abre el app si ya paga.
+        require_once __DIR__ . '/includes/gateway.php';
+        $u['verificado'] = 1;   // recién marcado arriba (el row se leyó antes del UPDATE)
+        gateway_redirigir($pdo, $u);
         exit;
     }
 }

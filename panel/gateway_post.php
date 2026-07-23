@@ -1,0 +1,260 @@
+<?php
+// ============================================================
+//  CRECER — EL ESCENARIO DEL POST (Pantalla C del Gateway)
+//  panel/gateway_post.php
+//
+//  El primer post NUNCA sale de la pantalla. La zona de acción evoluciona con
+//  el estado: verlo → ajustar/aprobar → publicar (SMS + manual/redes) → venta.
+//  Standalone (NO usa el shell del app: esto es el gateway, no el app).
+//
+//  Fase 1 (backbone): mostrar el post + aprobar + publicar (manual/redes) +
+//  celebración. El carrusel de venta pleno llega en la Fase 4.
+// ============================================================
+require __DIR__ . '/../includes/db.php';
+require __DIR__ . '/../includes/auth.php';
+require __DIR__ . '/../includes/agentes.php';
+require __DIR__ . '/../includes/suscripcion.php';
+require __DIR__ . '/../includes/gateway.php';
+requiere_login();
+
+$usuario = usuario_actual($pdo);
+if (!$usuario) { logout_usuario(); header('Location: /crecer/login.php?expirado=1'); exit; }
+$USUARIO_ID = (int)$usuario['id'];
+$marca = marca_del_usuario($pdo, $USUARIO_ID, isset($_GET['marca']) ? (int)$_GET['marca'] : null);
+
+// El router manda: si su estado NO es del escenario (sin marca, ya pagó, etc.),
+// lo mando a donde de verdad le toca. Así nadie aterriza aquí fuera de lugar.
+$estado = $marca ? gateway_estado($pdo, $usuario, $marca) : GW_ENTREVISTA;
+if ($estado !== GW_POST && $estado !== GW_VENTA) { gateway_redirigir($pdo, $usuario); exit; }
+$marca_id = (int)$marca['id'];
+
+// El post del escenario: si es venta, el publicado; si no, el borrador/aprobado más reciente.
+if ($estado === GW_VENTA) {
+    $q = $pdo->prepare("SELECT * FROM crecer_contenido WHERE marca_id=? AND estado='publicado' ORDER BY id DESC LIMIT 1");
+} else {
+    $q = $pdo->prepare("SELECT * FROM crecer_contenido WHERE marca_id=? AND estado IN ('borrador','aprobado') ORDER BY id DESC LIMIT 1");
+}
+$q->execute([$marca_id]);
+$post = $q->fetch(PDO::FETCH_ASSOC);
+if (!$post) { gateway_redirigir($pdo, $usuario); exit; }   // por si acaso: sin post, retoma el router
+$post_id = (int)$post['id'];
+
+// ── Acciones AJAX del propio escenario (aprobar / ajustar el texto) ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json; charset=utf-8');
+    if (!csrf_ok()) { echo json_encode(['ok'=>false,'err'=>'Sesión expiró, recarga.']); exit; }
+    $accion = $_POST['accion'] ?? '';
+    if ($accion === 'aprobar') {
+        $pdo->prepare("UPDATE crecer_contenido SET estado='aprobado', updated_at=NOW() WHERE id=? AND marca_id=? AND estado='borrador'")
+            ->execute([$post_id, $marca_id]);
+        echo json_encode(['ok'=>true]); exit;
+    }
+    if ($accion === 'guardar_caption') {
+        $cap = trim((string)($_POST['caption'] ?? ''));
+        if ($cap !== '') $pdo->prepare("UPDATE crecer_contenido SET caption=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$cap, $post_id, $marca_id]);
+        echo json_encode(['ok'=>true, 'caption'=>$cap]); exit;
+    }
+    echo json_encode(['ok'=>false,'err'=>'Acción inválida.']); exit;
+}
+
+// ¿Redes conectadas? (para ofrecer "publicar en mis redes")
+$redes_ok = false;
+try {
+    $cx = $pdo->query("SELECT ig_user_id, fb_page_id FROM crecer_conexiones WHERE marca_id={$marca_id} AND estado='activa' LIMIT 1")->fetch();
+    $redes_ok = (bool)$cx;
+} catch (Throwable $e) {}
+
+$nombre  = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
+$caption = (string)($post['caption'] ?? '');
+$grafica = (string)($post['grafica_path'] ?? '');
+$aprobado = ($post['estado'] ?? '') === 'aprobado';
+$publicado = ($post['estado'] ?? '') === 'publicado';
+$h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tu primer post · Encuéntralo Crecer</title>
+<link rel="icon" type="image/png" href="/crecer/assets/brand/crecer-icon.png">
+<link rel="apple-touch-icon" href="/crecer/assets/brand/crecer-icon.png">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=22" rel="stylesheet">
+<style>
+  body{background:var(--crema,#F7F5F1);min-height:100vh}
+  .gw{max-width:560px;margin:0 auto;padding:22px 18px 60px}
+  .gw-top{display:flex;align-items:center;gap:9px;margin-bottom:16px}
+  .gw-top img{height:28px}.gw-top b{font-weight:800;font-size:18px;color:var(--tinta)}
+  .gw-top .step{margin-left:auto;font-size:12px;font-weight:700;color:var(--muted)}
+  .gw-kick{font-family:var(--font-display,'Poppins');font-weight:700;font-size:clamp(22px,5.4vw,28px);letter-spacing:-.01em;color:var(--tinta);line-height:1.12;margin:0 0 6px}
+  .gw-sub{color:var(--muted);font-size:14.5px;line-height:1.5;margin:0 0 18px}
+  /* La tarjeta del post — CLAVADA, es la protagonista */
+  .card{background:var(--card,#fff);border:1px solid var(--line);border-radius:20px;overflow:hidden;box-shadow:var(--shadow-sm)}
+  .card .img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:var(--crema-2,#efece7)}
+  .card .noimg{width:100%;aspect-ratio:1/1;display:grid;place-items:center;color:var(--muted);font-size:14px;background:var(--crema-2,#efece7)}
+  .card .cap{padding:16px 17px;font-size:14.5px;line-height:1.6;color:var(--tinta);white-space:pre-wrap;word-wrap:break-word}
+  .card .cap-edit{width:100%;font-family:inherit;font-size:14.5px;line-height:1.6;border:1.5px solid var(--magenta);border-radius:12px;padding:12px 13px;min-height:130px;resize:vertical}
+  /* Zona de acción */
+  .acts{margin-top:18px;display:flex;flex-direction:column;gap:11px}
+  .btn{width:100%;border:0;cursor:pointer;font-family:var(--font-display,'Poppins');font-weight:700;font-size:16px;padding:15px;border-radius:15px;transition:transform .15s,box-shadow .15s;display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none}
+  .btn:active{transform:translateY(1px)}
+  .btn.pri{color:#fff;background:var(--btn-grad,linear-gradient(135deg,#FF6B3D,#EF4375));box-shadow:var(--btn-glow)}
+  .btn.ok{color:#fff;background:var(--palma,#00A49F)}
+  .btn.gho{background:#fff;border:1.5px solid var(--line);color:var(--ink-soft,#333)}
+  .btn:disabled{opacity:.55;cursor:default}
+  .hint{text-align:center;font-size:12.5px;color:var(--muted);margin-top:4px;line-height:1.45}
+  .row2{display:flex;gap:11px}.row2 .btn{flex:1;font-size:15px}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);background:var(--tinta);color:#fff;font-weight:600;font-size:14px;padding:12px 18px;border-radius:12px;opacity:0;transition:.25s;z-index:50}
+  .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  /* Venta (placeholder Fase 1 — el carrusel pleno llega en Fase 4) */
+  .cel{text-align:center;padding:8px 0 4px}
+  .cel .big{font-family:var(--font-display,'Poppins');font-weight:800;font-size:26px;color:var(--tinta);margin:14px 0 6px}
+  .pitch{margin-top:22px;background:linear-gradient(135deg,color-mix(in srgb,var(--magenta) 8%,#fff),color-mix(in srgb,var(--palma) 8%,#fff));border:1px solid var(--line);border-radius:18px;padding:20px 18px;text-align:center}
+  .pitch h3{font-family:var(--font-display,'Poppins');font-weight:700;font-size:18px;color:var(--tinta);margin:0 0 6px}
+  .pitch p{font-size:14px;color:var(--muted);line-height:1.55;margin:0 0 14px}
+</style>
+</head>
+<body>
+<div class="gw">
+  <div class="gw-top">
+    <img src="/crecer/assets/brand/crecer-icon.png" alt=""><b>encuéntralo <span style="color:var(--teal)">crecer</span></b>
+    <span class="step"><?= $publicado ? '¡Listo!' : ($aprobado ? 'Paso 3 de 3' : 'Paso 2 de 3') ?></span>
+  </div>
+
+<?php if ($publicado): /* ── ESTADO VENTA ── */ ?>
+  <div class="cel">
+    <div style="font-size:46px">🎉</div>
+    <div class="big">¡Tu post está publicado!</div>
+    <p class="gw-sub" style="margin-bottom:0">Acabas de publicar tu primer post — el corillo lo hizo por ti, en tu voz.</p>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <?php if ($grafica): ?><img class="img" src="<?= $h($grafica) ?>" alt=""><?php else: ?><div class="noimg">Tu post</div><?php endif; ?>
+    <?php if ($caption !== ''): ?><div class="cap"><?= $h($caption) ?></div><?php endif; ?>
+  </div>
+  <div class="acts">
+    <?php if ($redes_ok): ?><a class="btn gho" href="https://instagram.com" target="_blank" rel="noopener">Verlo en vivo en mis redes →</a><?php endif; ?>
+  </div>
+  <div class="pitch">
+    <h3>Esto puede pasar todos los días</h3>
+    <p>Tu corillo puede montarte el marketing del mes entero — posts, arte, respuestas — y tú solo apruebas desde el celular.</p>
+    <a class="btn pri" href="/crecer/registro.php?plan=crecer" style="max-width:280px;margin:0 auto">Quiero mi corillo full →</a>
+    <div class="hint" style="margin-top:10px">Carrusel de venta completo — Fase 4</div>
+  </div>
+
+<?php else: /* ── ESTADO POST (borrador/aprobado) ── */ ?>
+  <?php if ($aprobado): ?>
+    <h1 class="gw-kick">¡Aprobado! Ahora publícalo 🚀</h1>
+    <p class="gw-sub">Publícalo en tus redes o WhatsApp. Como tú lo quieras: te lo conectamos y publica solo, o lo bajas y lo subes tú.</p>
+  <?php else: ?>
+    <h1 class="gw-kick">Tu primer post está listo</h1>
+    <p class="gw-sub">El corillo lo hizo para <b><?= $h($nombre) ?></b>, en tu voz. Míralo, ajústalo si quieres, y cuando te guste, apruébalo.</p>
+  <?php endif; ?>
+
+  <div class="card">
+    <?php if ($grafica): ?><img class="img" src="<?= $h($grafica) ?>" alt=""><?php else: ?><div class="noimg">Preparando tu arte…</div><?php endif; ?>
+    <div class="cap" id="capBox"><?= $caption !== '' ? $h($caption) : '<span style="color:var(--muted)">Sin texto todavía.</span>' ?></div>
+    <textarea class="cap-edit" id="capEdit" style="display:none;margin:0 15px 15px"><?= $h($caption) ?></textarea>
+  </div>
+
+  <div class="acts" id="actsBorrador" style="<?= $aprobado ? 'display:none' : '' ?>">
+    <button class="btn ok" id="btnAprobar">✓ Aprobar este post</button>
+    <button class="btn gho" id="btnAjustar">✎ Ajustar el texto</button>
+  </div>
+  <div class="acts" id="actsEdit" style="display:none">
+    <button class="btn pri" id="btnGuardar">Guardar cambios</button>
+    <button class="btn gho" id="btnCancelar">Cancelar</button>
+  </div>
+
+  <div class="acts" id="actsPublicar" style="<?= $aprobado ? '' : 'display:none' ?>">
+    <button class="btn pri" id="btnRedes">📲 Publicar en mis redes</button>
+    <button class="btn gho" id="btnManual">Descargar y publicar yo mismo</button>
+    <div class="hint">Gratis. Solo te pedimos confirmar tu celular una vez (que eres humano).</div>
+  </div>
+  <div class="acts" id="actsManual" style="display:none">
+    <a class="btn ok" id="btnBajar" href="<?= $h($grafica) ?>" download>⬇ Bajar la imagen</a>
+    <button class="btn gho" id="btnCopiar">Copiar el texto</button>
+    <div class="hint">Baja la imagen, copia el texto, y súbelo a tu Instagram, Facebook o WhatsApp. Cuando lo publiques, dale al botón de abajo.</div>
+    <button class="btn pri" id="btnYaPubli">Ya lo publiqué →</button>
+  </div>
+<?php endif; ?>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<?php $marca_id = $marca_id; require __DIR__ . '/../includes/_sms_gate.php'; ?>
+
+<script>
+(function(){
+  var CSRF=<?= json_encode(csrf_token()) ?>, MARCA=<?= (int)$marca_id ?>, PID=<?= (int)$post_id ?>;
+  var toast=document.getElementById('toast');
+  function T(m){ toast.textContent=m; toast.classList.add('on'); setTimeout(function(){toast.classList.remove('on');},2200); }
+  function self(accion, extra){ var fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion',accion); for(var k in (extra||{})) fd.append(k,extra[k]); return fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}); }
+
+<?php if (!$publicado): ?>
+  var actsB=document.getElementById('actsBorrador'), actsE=document.getElementById('actsEdit'),
+      actsP=document.getElementById('actsPublicar'), actsM=document.getElementById('actsManual'),
+      capBox=document.getElementById('capBox'), capEdit=document.getElementById('capEdit');
+
+  // Aprobar → NO lo saco de pantalla; solo cambio la zona de acción a "publicar".
+  var btnAprobar=document.getElementById('btnAprobar');
+  if(btnAprobar) btnAprobar.addEventListener('click',function(){
+    btnAprobar.disabled=true;
+    self('aprobar').then(function(d){
+      if(d&&d.ok){ actsB.style.display='none'; actsP.style.display=''; T('✓ Aprobado'); window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'}); }
+      else { btnAprobar.disabled=false; T((d&&d.err)||'No se pudo.'); }
+    }).catch(function(){ btnAprobar.disabled=false; T('Error de conexión.'); });
+  });
+
+  // Ajustar el texto (inline, el post nunca se va)
+  var btnAjustar=document.getElementById('btnAjustar');
+  if(btnAjustar) btnAjustar.addEventListener('click',function(){ capBox.style.display='none'; capEdit.style.display='block'; actsB.style.display='none'; actsE.style.display=''; capEdit.focus(); });
+  document.getElementById('btnCancelar').addEventListener('click',function(){ capEdit.style.display='none'; capBox.style.display=''; actsE.style.display='none'; actsB.style.display=''; });
+  document.getElementById('btnGuardar').addEventListener('click',function(){
+    var b=this; b.disabled=true;
+    self('guardar_caption',{caption:capEdit.value}).then(function(d){
+      b.disabled=false;
+      if(d&&d.ok){ capBox.textContent=d.caption||capEdit.value; capBox.style.display=''; capEdit.style.display='none'; actsE.style.display='none'; actsB.style.display=''; T('Guardado'); }
+      else T((d&&d.err)||'No se pudo guardar.');
+    }).catch(function(){ b.disabled=false; T('Error de conexión.'); });
+  });
+
+  // Publicar en redes (canónico: aprobar2.php publicar_api, con gate SMS)
+  function publicarRedes(){
+    var fd=new FormData(); fd.append('accion','publicar_api'); fd.append('id',PID); fd.append('plataformas','instagram,facebook'); fd.append('ajax','1'); fd.append('csrf',CSRF);
+    return fetch('/crecer/panel/aprobar2.php?marca='+MARCA,{method:'POST',body:fd}).then(function(r){return r.json();});
+  }
+  var btnRedes=document.getElementById('btnRedes');
+  if(btnRedes) btnRedes.addEventListener('click',function(){
+    btnRedes.disabled=true; btnRedes.textContent='Publicando…';
+    publicarRedes().then(function(d){
+      btnRedes.disabled=false; btnRedes.textContent='📲 Publicar en mis redes';
+      if(d&&d.ok){ location.href='/crecer/panel/gateway_post.php?marca='+MARCA+'&venta=1'; return; }
+      if(d&&d.needs_phone){ window.crecerSmsGate.open(function(){ btnRedes.click(); }); return; }
+      if(d&&d.err==='no_conectado'){ T('Conecta tus redes primero…'); setTimeout(function(){ location.href='/crecer/panel/conectar.php?marca='+MARCA; },900); return; }
+      T((d&&d.err)||'No se pudo publicar.');
+    }).catch(function(){ btnRedes.disabled=false; btnRedes.textContent='📲 Publicar en mis redes'; T('Error de conexión.'); });
+  });
+
+  // Publicar manual (bajar + copiar)
+  var btnManual=document.getElementById('btnManual');
+  if(btnManual) btnManual.addEventListener('click',function(){ actsP.style.display='none'; actsM.style.display=''; window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'}); });
+  var btnCopiar=document.getElementById('btnCopiar');
+  if(btnCopiar) btnCopiar.addEventListener('click',function(){ var t=<?= json_encode($caption) ?>; if(navigator.clipboard){ navigator.clipboard.writeText(t).then(function(){T('Texto copiado ✓');},function(){T('Copia el texto a mano');}); } else T('Copia el texto a mano'); });
+  // "Ya lo publiqué" (manual) → marca publicado con el gate SMS y pasa a venta.
+  var btnYa=document.getElementById('btnYaPubli');
+  if(btnYa) btnYa.addEventListener('click',function(){
+    var fd=new FormData(); fd.append('accion','publicar_api'); fd.append('id',PID); fd.append('plataformas',''); fd.append('ajax','1'); fd.append('csrf',CSRF); fd.append('manual','1');
+    btnYa.disabled=true;
+    fetch('/crecer/panel/aprobar2.php?marca='+MARCA,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+      btnYa.disabled=false;
+      if(d&&d.needs_phone){ window.crecerSmsGate.open(function(){ btnYa.click(); }); return; }
+      // Con o sin API, tras verificar humano lo llevamos a la celebración/venta.
+      location.href='/crecer/panel/gateway_post.php?marca='+MARCA+'&venta=1';
+    }).catch(function(){ btnYa.disabled=false; location.href='/crecer/panel/gateway_post.php?marca='+MARCA+'&venta=1'; });
+  });
+<?php endif; ?>
+})();
+</script>
+</body>
+</html>

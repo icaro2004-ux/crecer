@@ -68,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'post_
     if (!csrf_ok()) { echo json_encode(['ok'=>false,'err'=>'Sesión expiró.']); exit; }
     @set_time_limit(0);
     try { crear_post_muestra($pdo, $marca_id); } catch (Throwable $e) { error_log('post_muestra: ' . $e->getMessage()); }
-    echo json_encode(['ok'=>true, 'redirect'=>'/crecer/panel/index.php?marca=' . $marca_id], JSON_UNESCAPED_UNICODE);
+    echo json_encode(['ok'=>true, 'redirect'=>'/crecer/panel/gateway_post.php?marca=' . $marca_id], JSON_UNESCAPED_UNICODE);
     exit;
 }
 // ── AJAX: el dueño contesta → siguiente pregunta (o done, SIN trabajo pesado aquí) ──
@@ -172,7 +172,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   function loading(){var r=document.createElement('div');r.className='en-row ia';r.innerHTML='<div class="en-face">'+FACE+'</div><div class="en-b load"><span class="en-dots"><span></span><span></span><span></span></span></div>';msgs.appendChild(r);scroll(r);return r;}
   function done(resumen, redirect){
     cerrado=true; form.style.display='none'; listen.textContent='';
-    var url = redirect || ('/crecer/panel/index.php?marca='+MARCA);
+    var url = redirect || ('/crecer/panel/gateway_post.php?marca='+MARCA);
     var d=document.createElement('div'); d.className='en-done';
     d.innerHTML='<h3>✓ Ya entiendo tu negocio</h3>'+(resumen?'<p>'+esc(resumen)+'</p>':'<p>Armé tu perfil y el corillo ya lo tiene.</p>')
       +'<a href="'+url+'">Ver mi primer post →</a>'
@@ -212,14 +212,14 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     msgs.appendChild(card); scroll(card);
     var pPerfil=card.querySelector('#pPerfil'), pPost=card.querySelector('#pPost'), resumen='';
     function hecho(el){ el.className='paso hecho'; el.querySelector('.dot').textContent='✓'; }
-    function suave(){ card.remove(); ia('Tu negocio quedó guardado. Te llevo a tu panel…'); setTimeout(function(){ location.href='/crecer/panel/index.php?marca='+MARCA; }, 1900); }
+    function suave(){ card.remove(); ia('Tu negocio quedó guardado. Te llevo a tu panel…'); setTimeout(function(){ location.href='/crecer/panel/gateway_post.php?marca='+MARCA; }, 1900); }
     post({accion:'finalizar', historial:JSON.stringify(hist)}, 90000).then(function(d){
       if(!d||!d.ok){ suave(); return; }
       resumen=d.resumen||'';
       hecho(pPerfil); pPost.className='paso activo';
       post({accion:'post_muestra'}, 90000).then(function(d2){
-        hecho(pPost); setTimeout(function(){ card.remove(); done(resumen, (d2&&d2.redirect)||('/crecer/panel/index.php?marca='+MARCA)); }, 500);
-      }).catch(function(){ card.remove(); done(resumen, '/crecer/panel/index.php?marca='+MARCA); });
+        hecho(pPost); setTimeout(function(){ card.remove(); done(resumen, (d2&&d2.redirect)||('/crecer/panel/gateway_post.php?marca='+MARCA)); }, 500);
+      }).catch(function(){ card.remove(); done(resumen, '/crecer/panel/gateway_post.php?marca='+MARCA); });
     }).catch(function(){ suave(); });
   }
   form.addEventListener('submit',function(e){ e.preventDefault(); enviar(input.value); });
