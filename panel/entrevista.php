@@ -46,6 +46,13 @@ if (!$marca && empty($_GET['otra'])) {
 if (!$marca) { include __DIR__ . '/_entrevista_arranque.php'; exit; }
 $marca_id = (int)$marca['id'];
 
+// ANTI-DUPLICADO: si esta marca YA tiene su post, NO se repite la entrevista (evita
+// que 'back' en el browser cree posts infinitos). En GET → directo al escenario.
+if (empty($_GET['otra']) && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+    $ya_post = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$marca_id}")->fetchColumn();
+    if ($ya_post > 0) { header('Location: /crecer/panel/gateway_post.php?marca=' . $marca_id . $gw); exit; }
+}
+
 // ── AJAX: el CIERRE va en 2 pasos separados para que NINGÚN request pase del
 //    timeout del proxy (~60s). Antes se hacía perfil + radiografía + imagen en un
 //    solo request (40-70s) → "se cayó la conexión". Ahora: (1) perfil, (2) post. ──
@@ -171,20 +178,25 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     background:var(--btn-grad,linear-gradient(135deg,#FF6B3D,#EF4375))}
   .cp-dot{width:9px;height:9px;border-radius:50%;background:#fff;animation:cppulse 1.2s infinite;flex:none}
   @keyframes cppulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.8)}}
-  .cp-feed{padding:14px 16px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px;min-height:170px}
-  .cp-line{opacity:0;transform:translateY(6px);animation:cpin .35s forwards}
-  .cp-line b{display:block;font-size:11.5px;font-weight:700;color:var(--magenta,#EF4375);margin-bottom:3px;letter-spacing:.01em}
-  .cp-line span{display:block;font-size:14px;line-height:1.5;color:var(--tinta);background:var(--crema,#f7f5f1);border:1px solid var(--line);border-radius:13px;border-top-left-radius:4px;padding:9px 12px}
-  .cp-line.det b{color:var(--teal,#00A49F)}
-  .cp-line.det span{background:color-mix(in srgb,var(--teal,#00A49F) 10%,#fff);border-color:color-mix(in srgb,var(--teal,#00A49F) 30%,#fff)}
-  .cp-line.cp-hype b{color:var(--coral,#FF6B3D)}
-  .cp-line.cp-hype span{font-weight:700;color:var(--tinta);border-color:color-mix(in srgb,var(--magenta,#EF4375) 38%,#fff);
-    background:linear-gradient(135deg,color-mix(in srgb,var(--coral,#FF6B3D) 20%,#fff),color-mix(in srgb,var(--magenta,#EF4375) 20%,#fff));animation:cppop .5s}
-  @keyframes cppop{0%{transform:scale(.9)}60%{transform:scale(1.03)}100%{transform:scale(1)}}
+  .cp-feed{padding:16px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:13px;min-height:190px;background:color-mix(in srgb,var(--crema,#f7f5f1) 60%,#fff)}
+  .cp-line{display:flex;gap:8px;align-items:flex-end;opacity:0;transform:translateY(9px) scale(.97);animation:cpin .34s cubic-bezier(.22,1,.36,1) forwards}
+  .cp-line .av{width:31px;height:31px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:15px;background:#fff;border:1.5px solid var(--line);box-shadow:0 3px 8px rgba(20,12,20,.1)}
+  .cp-line .bub{max-width:82%}
+  .cp-line .nm{font-size:10.5px;font-weight:700;color:var(--magenta,#EF4375);margin:0 0 3px 4px;letter-spacing:.02em;text-transform:uppercase}
+  .cp-line .tx{font-size:14px;line-height:1.5;color:var(--tinta);background:#fff;border:1px solid var(--line);border-radius:16px;border-bottom-left-radius:5px;padding:9px 13px;box-shadow:0 2px 9px rgba(20,12,20,.06)}
+  .cp-line .tx.pop{animation:cppop .32s cubic-bezier(.22,1,.36,1)}
+  .cp-line.det .nm{color:var(--teal,#00A49F)}
+  .cp-line.det .tx{background:color-mix(in srgb,var(--teal,#00A49F) 11%,#fff);border-color:color-mix(in srgb,var(--teal,#00A49F) 30%,#fff)}
+  .cp-line.cp-hype .nm{color:var(--coral,#FF6B3D)}
+  .cp-line.cp-hype .tx{font-weight:700;border-color:color-mix(in srgb,var(--magenta,#EF4375) 38%,#fff);
+    background:linear-gradient(135deg,color-mix(in srgb,var(--coral,#FF6B3D) 22%,#fff),color-mix(in srgb,var(--magenta,#EF4375) 22%,#fff))}
+  .cp-line.cp-hype .av{border-color:var(--magenta,#EF4375);animation:cppop .5s}
+  @keyframes cppop{0%{transform:scale(.82)}58%{transform:scale(1.05)}100%{transform:scale(1)}}
   @keyframes cpin{to{opacity:1;transform:none}}
-  .cp-typing span{display:inline-flex;gap:3px;padding:11px 13px}
-  .cp-typing i{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:enb 1s infinite}
+  .cp-typing{display:inline-flex;gap:4px;padding:3px 1px}
+  .cp-typing i{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:cptype 1s infinite}
   .cp-typing i:nth-child(2){animation-delay:.15s}.cp-typing i:nth-child(3){animation-delay:.3s}
+  @keyframes cptype{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
   .cp-foot{padding:14px 16px;border-top:1px solid var(--line)}
   .cp-foot h3{font-family:'Oswald',sans-serif;font-weight:700;font-size:16px;color:var(--tinta);margin:0 0 2px}
   .cp-foot .sb{font-size:12.5px;color:var(--muted);margin:0 0 12px;line-height:1.4}
@@ -281,15 +293,23 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     {k:'calido',t:'Cálido',d:'Cercano y de confianza, como un buen amigo.'},
     {k:'vendedor',t:'Vendedor',d:'Directo a la acción, con gancho de venta.'}
   ];
-  var CORILLO=[
-    ['🧠 El Estratega','Déjenme leer bien lo que nos contó…'],
-    ['✍️ La Creativa','Ya le voy cogiendo la forma de hablar.'],
-    ['📊 El Estratega','Estoy fijando quién es su cliente ideal.'],
-    ['🎨 El Director','Y yo el estilo visual que le va a pegar.'],
-    ['🧠 El corillo','Nos estamos poniendo de acuerdo…']
+  var CORILLO=[   // [emoji, nombre, texto]
+    ['🧠','El Estratega','Déjenme leer bien lo que nos contó…'],
+    ['✍️','La Creativa','Ya le voy cogiendo la forma de hablar.'],
+    ['📊','El Estratega','Estoy fijando quién es su cliente ideal.'],
+    ['🎨','El Director','Y yo el estilo visual que le va a pegar.'],
+    ['🤝','El corillo','Nos estamos poniendo de acuerdo…']
   ];
   var ovFeed=null, ovFoot=null;
-  function cpLine(ag, txt, det){ var d=document.createElement('div'); d.className='cp-line'+(det?' det':''); d.innerHTML=(ag?'<b>'+esc(ag)+'</b>':'')+'<span>'+esc(txt)+'</span>'; ovFeed.appendChild(d); ovFeed.scrollTop=ovFeed.scrollHeight; return d; }
+  // Burbuja estilo messenger: sale "escribiendo…" y luego el texto hace POP.
+  function cpSay(av, nm, tx, cls){
+    var line=document.createElement('div'); line.className='cp-line'+(cls?(' '+cls):'');
+    line.innerHTML='<div class="av">'+av+'</div><div class="bub"><div class="nm">'+esc(nm)+'</div><div class="tx"><span class="cp-typing"><i></i><i></i><i></i></span></div></div>';
+    ovFeed.appendChild(line); ovFeed.scrollTop=ovFeed.scrollHeight;
+    var txEl=line.querySelector('.tx');
+    setTimeout(function(){ txEl.classList.add('pop'); txEl.textContent=tx; ovFeed.scrollTop=ovFeed.scrollHeight; }, 620);
+    return line;
+  }
   function cerrar(){
     cerrado=true; form.style.display='none'; listen.textContent='';
     var ov=document.createElement('div'); ov.className='corillo-ov';
@@ -298,7 +318,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     requestAnimationFrame(function(){ ov.classList.add('on'); });
     ovFeed=ov.querySelector('#cpFeed'); ovFoot=ov.querySelector('#cpFoot');
     var i=0, listo=false;
-    (function tick(){ if(listo) return; if(i<CORILLO.length){ cpLine(CORILLO[i][0], CORILLO[i][1]); i++; } setTimeout(tick, 2500); })();
+    (function tick(){ if(listo) return; if(i<CORILLO.length){ cpSay(CORILLO[i][0], CORILLO[i][1], CORILLO[i][2]); i++; } setTimeout(tick, 2500); })();
     post({accion:'finalizar', historial:JSON.stringify(hist)}, 95000).then(function(d){
       listo=true;
       if(!d||!d.ok){ salirSuave(); return; }
@@ -306,22 +326,20 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       revelar(d);
     }).catch(function(){ listo=true; salirSuave(); });
   }
-  function salirSuave(){ cpLine('🧠 El corillo','Tu negocio quedó guardado — te llevo a tu post…', true); setTimeout(function(){ location.href='/crecer/panel/gateway_post.php?marca='+MARCA+GW; }, 1700); }
+  function salirSuave(){ cpSay('🤝','El corillo','Tu negocio quedó guardado — te llevo a tu post…','det'); setTimeout(function(){ location.href='/crecer/panel/gateway_post.php?marca='+MARCA+GW; }, 1900); }
   function revelar(d){
     var seq=[];
-    if(d.publico) seq.push(['📊 El Estratega','Tu cliente ideal: '+d.publico, 'det']);
-    if(d.voz)     seq.push(['✍️ La Creativa','Tu voz: '+d.voz, 'det']);
-    seq.push(['🔥 ¡El corillo lo tiene!','¡Ya lo tenemos, esto va a quedar brutal!', 'hype']);
-    if(d.resumen) seq.push(['✅ Así te entendimos', d.resumen, 'det']);
+    if(d.publico) seq.push(['📊','El Estratega','Tu cliente ideal: '+d.publico,'det']);
+    if(d.voz)     seq.push(['✍️','La Creativa','Tu voz: '+d.voz,'det']);
+    seq.push(['🔥','¡El corillo lo tiene!','¡Ya lo tenemos, esto va a quedar brutal!','cp-hype']);
+    if(d.resumen) seq.push(['✅','Así te entendimos', d.resumen,'det']);
     var head=document.querySelector('.cp-head');
     var k=0; (function step(){
-      if(k>=seq.length){ setTimeout(function(){ pedirTono(d.preset||'boricua'); }, 900); return; }
+      if(k>=seq.length){ setTimeout(function(){ pedirTono(d.preset||'boricua'); }, 1000); return; }
       var s=seq[k];
-      if(s[2]==='hype'){
-        if(head) head.innerHTML='<span class="cp-dot" style="background:var(--teal,#00A49F);animation:none"></span>¡Ya lo tenemos!';
-        var el=cpLine(s[0], s[1], true); el.className='cp-line det cp-hype';
-      } else { cpLine(s[0], s[1], true); }
-      k++; setTimeout(step, s[2]==='hype' ? 1300 : 1500);
+      if(s[3]==='cp-hype' && head) head.innerHTML='<span class="cp-dot" style="background:#fff"></span>¡Ya lo tenemos!';
+      cpSay(s[0], s[1], s[2], s[3]);
+      k++; setTimeout(step, s[3]==='cp-hype' ? 1600 : 1750);
     })();
   }
   function pedirTono(pre){
@@ -335,9 +353,8 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   }
   function crearPost(){
     ovFoot.style.display='none';
-    cpLine('🎨 El Director','Perfecto. Montando tu primer post en tu voz…');
-    var tp=cpLine('', ' '); tp.className='cp-line cp-typing'; tp.innerHTML='<span><i></i><i></i><i></i></span>';
-    function ir(url){ cpLine('✅ Listo','¡Tu primer post está montado!', true); setTimeout(function(){ location.href=url; }, 1100); }
+    cpSay('🎨','El Director','Perfecto. Montando tu primer post en tu voz…');
+    function ir(url){ cpSay('✅','Listo','¡Tu primer post está montado!','det'); setTimeout(function(){ location.href=url; }, 1200); }
     post({accion:'post_muestra'}, 95000).then(function(d2){ ir((d2&&d2.redirect)||('/crecer/panel/gateway_post.php?marca='+MARCA+GW)); }).catch(function(){ ir('/crecer/panel/gateway_post.php?marca='+MARCA+GW); });
   }
   form.addEventListener('submit',function(e){ e.preventDefault(); enviar(input.value); });

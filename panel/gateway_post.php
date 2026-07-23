@@ -60,6 +60,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($cap !== '') $pdo->prepare("UPDATE crecer_contenido SET caption=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$cap, $post_id, $marca_id]);
         echo json_encode(['ok'=>true, 'caption'=>$cap]); exit;
     }
+    // ✨ Otra sugerencia: la IA reescribe el copy desde cero (respeta el tono elegido).
+    if ($accion === 'sugerir') {
+        @set_time_limit(0);
+        try { $r = redactar_pieza($pdo, $post_id); echo json_encode(['ok'=>true, 'caption'=>(string)($r['caption'] ?? '')], JSON_UNESCAPED_UNICODE); }
+        catch (Throwable $e) { echo json_encode(['ok'=>false, 'err'=>'No pude sugerir otra ahora.']); }
+        exit;
+    }
+    // 💬 Pedir un cambio: el dueño dice qué cambiar → la IA lo aplica sin perder su voz.
+    if ($accion === 'pedir_cambio') {
+        @set_time_limit(0);
+        $nota = trim((string)($_POST['nota'] ?? ''));
+        if ($nota === '') { echo json_encode(['ok'=>false,'err'=>'Escribe qué quieres cambiar.']); exit; }
+        $cap_actual = (string)$pdo->query("SELECT caption FROM crecer_contenido WHERE id={$post_id}")->fetchColumn();
+        try { $r = redactar_sugerido($pdo, $post_id, $nota, $cap_actual); echo json_encode(['ok'=>true, 'caption'=>(string)($r['caption'] ?? '')], JSON_UNESCAPED_UNICODE); }
+        catch (Throwable $e) { echo json_encode(['ok'=>false, 'err'=>'No pude aplicar el cambio ahora.']); }
+        exit;
+    }
     echo json_encode(['ok'=>false,'err'=>'Acción inválida.']); exit;
 }
 
@@ -101,6 +118,8 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .card .noimg{width:100%;aspect-ratio:1/1;display:grid;place-items:center;color:var(--muted);font-size:14px;background:var(--crema-2,#efece7)}
   .card .cap{padding:16px 17px;font-size:14.5px;line-height:1.6;color:var(--tinta);white-space:pre-wrap;word-wrap:break-word}
   .card .cap-edit{width:100%;font-family:inherit;font-size:14.5px;line-height:1.6;border:1.5px solid var(--magenta);border-radius:12px;padding:12px 13px;min-height:130px;resize:vertical}
+  .cambio-in{width:100%;font-family:inherit;font-size:15px;border:1.5px solid var(--magenta);border-radius:13px;padding:13px 14px;box-sizing:border-box}
+  .cambio-in:focus{outline:0}
   /* Zona de acción */
   .acts{margin-top:18px;display:flex;flex-direction:column;gap:11px}
   .btn{width:100%;border:0;cursor:pointer;font-family:var(--font-display,'Poppins');font-weight:700;font-size:16px;padding:15px;border-radius:15px;transition:transform .15s,box-shadow .15s;display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none}
@@ -165,7 +184,14 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
   <div class="acts" id="actsBorrador" style="<?= $aprobado ? 'display:none' : '' ?>">
     <button class="btn ok" id="btnAprobar">✓ Aprobar este post</button>
-    <button class="btn gho" id="btnAjustar">✎ Ajustar el texto</button>
+    <button class="btn gho" id="btnSugerir">✨ Sugiéreme otra versión</button>
+    <button class="btn gho" id="btnCambio">💬 Pedir un cambio</button>
+    <button class="btn gho" id="btnAjustar">✎ Editar el texto yo mismo</button>
+  </div>
+  <div class="acts" id="actsCambio" style="display:none">
+    <input class="cambio-in" id="cambioNota" placeholder="Ej. más corto · menciona el descuento · más divertido" maxlength="160">
+    <button class="btn pri" id="btnCambioGo">Aplicar cambio</button>
+    <button class="btn gho" id="btnCambioX">Cancelar</button>
   </div>
   <div class="acts" id="actsEdit" style="display:none">
     <button class="btn pri" id="btnGuardar">Guardar cambios</button>
@@ -216,6 +242,27 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   var btnAjustar=document.getElementById('btnAjustar');
   if(btnAjustar) btnAjustar.addEventListener('click',function(){ capBox.style.display='none'; capEdit.style.display='block'; actsB.style.display='none'; actsE.style.display=''; capEdit.focus(); });
   document.getElementById('btnCancelar').addEventListener('click',function(){ capEdit.style.display='none'; capBox.style.display=''; actsE.style.display='none'; actsB.style.display=''; });
+
+  // ✨ Otra versión / 💬 Pedir un cambio — la IA reescribe respetando el TONO elegido.
+  var actsC=document.getElementById('actsCambio');
+  function aiRewrite(accion, extra){
+    var prev=capBox.textContent;
+    actsB.style.display='none'; actsC.style.display='none';
+    capBox.innerHTML='<span style="color:var(--muted)">✍️ El corillo está escribiendo…</span>';
+    self(accion, extra).then(function(d){
+      if(d&&d.ok&&d.caption){ capBox.textContent=d.caption; if(capEdit) capEdit.value=d.caption; T('Nueva versión ✓'); }
+      else { capBox.textContent=prev; T((d&&d.err)||'No se pudo ahora.'); }
+      actsB.style.display='';
+    }).catch(function(){ capBox.textContent=prev; T('Error de conexión.'); actsB.style.display=''; });
+  }
+  var btnSugerir=document.getElementById('btnSugerir');
+  if(btnSugerir) btnSugerir.addEventListener('click',function(){ aiRewrite('sugerir'); });
+  var btnCambio=document.getElementById('btnCambio');
+  if(btnCambio) btnCambio.addEventListener('click',function(){ actsB.style.display='none'; actsC.style.display=''; var n=document.getElementById('cambioNota'); if(n) n.focus(); });
+  var btnCambioX=document.getElementById('btnCambioX');
+  if(btnCambioX) btnCambioX.addEventListener('click',function(){ actsC.style.display='none'; actsB.style.display=''; });
+  var btnCambioGo=document.getElementById('btnCambioGo');
+  if(btnCambioGo) btnCambioGo.addEventListener('click',function(){ var n=(document.getElementById('cambioNota').value||'').trim(); if(!n){ T('Escribe qué cambiar.'); return; } aiRewrite('pedir_cambio',{nota:n}); });
   document.getElementById('btnGuardar').addEventListener('click',function(){
     var b=this; b.disabled=true;
     self('guardar_caption',{caption:capEdit.value}).then(function(d){

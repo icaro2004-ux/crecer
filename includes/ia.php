@@ -440,7 +440,10 @@ function openai_imagen(string $prompt, array $opts = []): array {
         }
     }
 
-    $body = ['model'=>$modelo, 'prompt'=>$prompt, 'n'=>1, 'size'=>$size, 'quality'=>$quality];
+    // background=opaque: PROHÍBE el fondo transparente (que se ve BLANCO al mostrarse).
+    // Es LA causa del "fondo blanco" — gpt-image-1 por defecto (auto) puede devolver
+    // PNG transparente; opaque lo obliga a llenar todo el lienzo con la escena.
+    $body = ['model'=>$modelo, 'prompt'=>$prompt, 'n'=>1, 'size'=>$size, 'quality'=>$quality, 'background'=>'opaque'];
     $resp = ia_http_post_retry('https://api.openai.com/v1/images/generations',
         ['Content-Type: application/json', 'Authorization: Bearer ' . OPENAI_API_KEY],
         json_encode($body, JSON_UNESCAPED_UNICODE), $opts['max_reintentos'] ?? 2);
@@ -455,12 +458,13 @@ function openai_imagen_edit(string $prompt, array $entrada, string $modelo, stri
     if ($tmp === false) throw new IaError('No se pudo crear archivo temporal para OpenAI edits.');
     file_put_contents($tmp, $entrada['bin']);
     $post = [
-        'model'   => $modelo,
-        'prompt'  => $prompt,
-        'n'       => '1',
-        'size'    => $size,
-        'quality' => $quality,
-        'image'   => new CURLFile($tmp, $mime, 'entrada.' . $ext),
+        'model'      => $modelo,
+        'prompt'     => $prompt,
+        'n'          => '1',
+        'size'       => $size,
+        'quality'    => $quality,
+        'background' => 'opaque',   // nada de transparencia (= fondo blanco al mostrar)
+        'image'      => new CURLFile($tmp, $mime, 'entrada.' . $ext),
     ];
     $ch = curl_init('https://api.openai.com/v1/images/edits');
     curl_setopt_array($ch, [

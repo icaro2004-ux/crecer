@@ -1355,6 +1355,10 @@ function entrevista_finalizar(PDO $pdo, int $marca_id, array $historial): array 
 /** Crea el POST DE MUESTRA de bienvenida (caption + imagen), ya aterrizado en el
  *  perfil/radiografía recién armados por la entrevista. Devuelve el contenido_id. */
 function crear_post_muestra(PDO $pdo, int $marca_id): int {
+    // IDEMPOTENTE: 1 post por marca en el gateway. Si YA hay uno (cualquier estado),
+    // devuélvelo — NUNCA crear otro. Mata el abuso de 'back' en el browser → posts infinitos.
+    $ya = (int)$pdo->query("SELECT id FROM crecer_contenido WHERE marca_id={$marca_id} ORDER BY id DESC LIMIT 1")->fetchColumn();
+    if ($ya) return $ya;
     $ca = (int)date('Y'); $cm = (int)date('n');
     $pdo->prepare("INSERT INTO crecer_calendario (marca_id,anio,mes,estado,generado_por_ia) VALUES (?,?,?, 'borrador',1) ON DUPLICATE KEY UPDATE updated_at=NOW()")->execute([$marca_id, $ca, $cm]);
     $calid = (int)$pdo->query("SELECT id FROM crecer_calendario WHERE marca_id={$marca_id} AND anio={$ca} AND mes={$cm}")->fetchColumn();
