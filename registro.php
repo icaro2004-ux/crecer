@@ -61,6 +61,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ins->execute([$val['nombre'], $val['email'], password_hash($pass, PASSWORD_DEFAULT), $es_prueba ? 1 : 0, $token]);
             $nuevo_id = (int)$pdo->lastInsertId();
 
+            // Persiste el nombre del negocio del landing como MARCA (no solo en sesión):
+            // así SOBREVIVE el rebote del correo y hasta abrir el email en OTRO dispositivo
+            // → la entrevista ya no vuelve a preguntar el nombre. Reusa el resume del gateway.
+            $neg = trim((string)($_SESSION['negocio_intent'] ?? ''));
+            if ($neg !== '') {
+                require_once __DIR__ . '/includes/agentes.php';
+                try { crear_marca($pdo, ['usuario_id'=>$nuevo_id, 'nombre_negocio'=>mb_substr($neg, 0, 80)]); }
+                catch (Throwable $e) { error_log('registro crear_marca: ' . $e->getMessage()); }
+            }
+
             if ($es_prueba) {
                 login_usuario(['id'=>$nuevo_id, 'nombre'=>$val['nombre'], 'rol'=>'proveedor']);
                 header('Location: /crecer/onboarding.php'); exit;   // prueba: sin correo, directo
