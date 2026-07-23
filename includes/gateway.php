@@ -21,7 +21,7 @@ const GW_APP        = 'app';         // suscrito / admin / prueba → app real (
 /**
  * Estado del gateway para $usuario. $marca opcional (se busca si no se pasa).
  */
-function gateway_estado(PDO $pdo, array $usuario, ?array $marca = null): string {
+function gateway_estado(PDO $pdo, array $usuario, ?array $marca = null, bool $forzar = false): string {
     require_once __DIR__ . '/suscripcion.php';
 
     // 1) Correo sin validar → a confirmar. (Las cuentas de prueba entran ya verificadas.)
@@ -30,10 +30,13 @@ function gateway_estado(PDO $pdo, array $usuario, ?array $marca = null): string 
     if ($marca === null) $marca = marca_del_usuario($pdo, (int)$usuario['id']);
 
     // 2) Acceso pleno = suscrito / admin / cuenta de prueba → APP real (salta el gateway).
-    $es_admin  = ($usuario['rol'] ?? '') === 'admin';
-    $es_prueba = function_exists('activacion_de_prueba') && activacion_de_prueba($usuario['email'] ?? null);
-    $pagado    = $marca && marca_es_pagada($pdo, (int)$marca['id']);
-    if ($pagado || $es_admin || $es_prueba) return GW_APP;
+    //    $forzar (?gw=1, solo para PROBAR) camina el gateway aunque la cuenta ya tenga acceso.
+    if (!$forzar) {
+        $es_admin  = ($usuario['rol'] ?? '') === 'admin';
+        $es_prueba = function_exists('activacion_de_prueba') && activacion_de_prueba($usuario['email'] ?? null);
+        $pagado    = $marca && marca_es_pagada($pdo, (int)$marca['id']);
+        if ($pagado || $es_admin || $es_prueba) return GW_APP;
+    }
 
     // 3) Sin negocio todavía → la entrevista (crea la marca al vuelo desde el nombre del landing).
     if (!$marca) return GW_ENTREVISTA;

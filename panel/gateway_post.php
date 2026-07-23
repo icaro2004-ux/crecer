@@ -22,10 +22,16 @@ if (!$usuario) { logout_usuario(); header('Location: /crecer/login.php?expirado=
 $USUARIO_ID = (int)$usuario['id'];
 $marca = marca_del_usuario($pdo, $USUARIO_ID, isset($_GET['marca']) ? (int)$_GET['marca'] : null);
 
+// ?gw=1 = modo PRUEBA: camina el gateway aunque la cuenta ya tenga acceso (fundador).
+$forzar = ($_GET['gw'] ?? '') === '1';
+$gwq = $forzar ? '&gw=1' : '';
 // El router manda: si su estado NO es del escenario (sin marca, ya pagó, etc.),
 // lo mando a donde de verdad le toca. Así nadie aterriza aquí fuera de lugar.
-$estado = $marca ? gateway_estado($pdo, $usuario, $marca) : GW_ENTREVISTA;
-if ($estado !== GW_POST && $estado !== GW_VENTA) { gateway_redirigir($pdo, $usuario); exit; }
+$estado = $marca ? gateway_estado($pdo, $usuario, $marca, $forzar) : GW_ENTREVISTA;
+if ($estado !== GW_POST && $estado !== GW_VENTA) {
+    if ($forzar) { header('Location: /crecer/panel/entrevista.php?gw=1'); exit; }
+    gateway_redirigir($pdo, $usuario); exit;
+}
 $marca_id = (int)$marca['id'];
 
 // El post del escenario: si es venta, el publicado; si no, el borrador/aprobado más reciente.
@@ -186,7 +192,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
 <script>
 (function(){
-  var CSRF=<?= json_encode(csrf_token()) ?>, MARCA=<?= (int)$marca_id ?>, PID=<?= (int)$post_id ?>;
+  var CSRF=<?= json_encode(csrf_token()) ?>, MARCA=<?= (int)$marca_id ?>, PID=<?= (int)$post_id ?>, GW=<?= json_encode($gwq) ?>;
   var toast=document.getElementById('toast');
   function T(m){ toast.textContent=m; toast.classList.add('on'); setTimeout(function(){toast.classList.remove('on');},2200); }
   function self(accion, extra){ var fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion',accion); for(var k in (extra||{})) fd.append(k,extra[k]); return fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}); }
@@ -229,7 +235,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     btnRedes.disabled=true; btnRedes.textContent='Publicando…';
     publicarRedes().then(function(d){
       btnRedes.disabled=false; btnRedes.textContent='📲 Publicar en mis redes';
-      if(d&&d.ok){ location.href='/crecer/panel/gateway_post.php?marca='+MARCA+'&venta=1'; return; }
+      if(d&&d.ok){ location.href='/crecer/panel/gateway_post.php?marca='+MARCA+'&venta=1'+GW; return; }
       if(d&&d.needs_phone){ window.crecerSmsGate.open(function(){ btnRedes.click(); }); return; }
       if(d&&d.err==='no_conectado'){ T('Conecta tus redes primero…'); setTimeout(function(){ location.href='/crecer/panel/conectar.php?marca='+MARCA; },900); return; }
       T((d&&d.err)||'No se pudo publicar.');
@@ -250,8 +256,8 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       btnYa.disabled=false;
       if(d&&d.needs_phone){ window.crecerSmsGate.open(function(){ btnYa.click(); }); return; }
       // Con o sin API, tras verificar humano lo llevamos a la celebración/venta.
-      location.href='/crecer/panel/gateway_post.php?marca='+MARCA+'&venta=1';
-    }).catch(function(){ btnYa.disabled=false; location.href='/crecer/panel/gateway_post.php?marca='+MARCA+'&venta=1'; });
+      location.href='/crecer/panel/gateway_post.php?marca='+MARCA+'&venta=1'+GW;
+    }).catch(function(){ btnYa.disabled=false; location.href='/crecer/panel/gateway_post.php?marca='+MARCA+'&venta=1'+GW; });
   });
 <?php endif; ?>
 })();

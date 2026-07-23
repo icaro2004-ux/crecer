@@ -8,11 +8,12 @@
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/agentes.php';
-require_once __DIR__ . '/../includes/iconos.php';   // ico() se usa antes de _shell
+require_once __DIR__ . '/../includes/iconos.php';   // ico() para el avatar del chat
 requiere_login();
 
 $usuario = usuario_actual($pdo);
 $nuevo = !empty($_GET['nuevo']);
+$gw = (($_GET['gw'] ?? '') === '1') ? '&gw=1' : '';   // modo prueba: caminar el gateway
 
 // ── Arranque del onboarding: crear el negocio (solo el nombre) para empezar ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear_negocio') {
@@ -37,7 +38,7 @@ if (!$marca && empty($_GET['otra'])) {
         try {
             $mid = crear_marca($pdo, ['usuario_id' => (int)$usuario['id'], 'nombre_negocio' => mb_substr($neg, 0, 80)]);
             unset($_SESSION['negocio_intent']);
-            header('Location: /crecer/panel/entrevista.php?marca=' . $mid . '&nuevo=1'); exit;
+            header('Location: /crecer/panel/entrevista.php?marca=' . $mid . '&nuevo=1' . $gw); exit;
         } catch (Throwable $e) { /* si falla, cae a la pantalla de nombre */ }
     }
 }
@@ -68,7 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'post_
     if (!csrf_ok()) { echo json_encode(['ok'=>false,'err'=>'Sesión expiró.']); exit; }
     @set_time_limit(0);
     try { crear_post_muestra($pdo, $marca_id); } catch (Throwable $e) { error_log('post_muestra: ' . $e->getMessage()); }
-    echo json_encode(['ok'=>true, 'redirect'=>'/crecer/panel/gateway_post.php?marca=' . $marca_id], JSON_UNESCAPED_UNICODE);
+    echo json_encode(['ok'=>true, 'redirect'=>'/crecer/panel/gateway_post.php?marca=' . $marca_id . $gw], JSON_UNESCAPED_UNICODE);
     exit;
 }
 // ── AJAX: el dueño contesta → siguiente pregunta (o done, SIN trabajo pesado aquí) ──
@@ -93,13 +94,24 @@ try { $primera = trim((string)(entrevista_siguiente($pdo, $marca_id, [])['pregun
 catch (Throwable $e) { $primera = ''; }
 if ($primera === '') $primera = '¡Hola! Cuéntame en tus palabras: ¿qué es exactamente lo que haces o vendes?';
 
-$active = 'marca';
-$page_title = 'La Entrevista';
-require __DIR__ . '/_shell.php';
+// STANDALONE: el gateway NO usa el shell del app (cero nav ni enlaces al app).
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
-?>
+?><!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cuéntame de tu negocio — Crecer</title>
+<link rel="icon" type="image/png" href="/crecer/assets/brand/crecer-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=22" rel="stylesheet">
 <style>
-  .content{max-width:720px}
+  body{background:var(--crema,#F7F5F1)}
+  .content{max-width:720px;margin:0 auto;padding:6px 18px 26px}
+  .en-brand{display:flex;align-items:center;gap:8px;max-width:720px;margin:0 auto;padding:16px 18px 2px}
+  .en-brand img{height:26px}
+  .en-brand b{font-weight:800;font-size:17px;color:var(--tinta)}
+  .en-brand .t{color:var(--teal,#00A49F)}
   .en-top h1{font-family:'Oswald',sans-serif;font-weight:700;font-size:23px;letter-spacing:.4px;color:var(--tinta);margin:0}
   .en-top p{font-size:13px;color:var(--muted);margin:4px 0 0;line-height:1.45;max-width:560px}
   .en-thread{display:flex;flex-direction:column;gap:14px;padding:14px 0}
@@ -142,6 +154,10 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .en-send:disabled{opacity:.5}
   .en-listen{font-size:12px;color:var(--muted);text-align:center;min-height:16px;font-weight:600}
 </style>
+</head>
+<body>
+<div class="en-brand"><img src="/crecer/assets/brand/crecer-icon.png" alt=""><b>encuéntralo <span class="t">crecer</span></b></div>
+<div class="content">
 
 <div class="en-top">
   <h1>Cuéntame de tu negocio</h1>
@@ -158,10 +174,11 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   <button type="submit" class="en-send" id="enSend">Enviar</button>
 </form>
 <div class="en-listen" id="enListen"></div>
+</div><!-- /content -->
 
 <script>
 (function(){
-  var CSRF=<?= json_encode(csrf_token()) ?>, MARCA=<?= (int)$marca_id ?>, FACE=<?= json_encode(ico('chat')) ?>, PRIMERA=<?= json_encode($primera, JSON_UNESCAPED_UNICODE) ?>;
+  var CSRF=<?= json_encode(csrf_token()) ?>, MARCA=<?= (int)$marca_id ?>, GW=<?= json_encode($gw) ?>, FACE=<?= json_encode(ico('chat')) ?>, PRIMERA=<?= json_encode($primera, JSON_UNESCAPED_UNICODE) ?>;
   var msgs=document.getElementById('enMsgs'), form=document.getElementById('enForm'), input=document.getElementById('enInput'),
       send=document.getElementById('enSend'), listen=document.getElementById('enListen');
   var hist=[{rol:'ia',texto:PRIMERA}], cerrado=false;
@@ -172,11 +189,10 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   function loading(){var r=document.createElement('div');r.className='en-row ia';r.innerHTML='<div class="en-face">'+FACE+'</div><div class="en-b load"><span class="en-dots"><span></span><span></span><span></span></span></div>';msgs.appendChild(r);scroll(r);return r;}
   function done(resumen, redirect){
     cerrado=true; form.style.display='none'; listen.textContent='';
-    var url = redirect || ('/crecer/panel/gateway_post.php?marca='+MARCA);
+    var url = redirect || ('/crecer/panel/gateway_post.php?marca='+MARCA+GW);
     var d=document.createElement('div'); d.className='en-done';
     d.innerHTML='<h3>✓ Ya entiendo tu negocio</h3>'+(resumen?'<p>'+esc(resumen)+'</p>':'<p>Armé tu perfil y el corillo ya lo tiene.</p>')
-      +'<a href="'+url+'">Ver mi primer post →</a>'
-      +'<a class="sec" href="/crecer/panel/marca.php?marca='+MARCA+'">¿La voz no te suena? Ajústala</a>';
+      +'<a href="'+url+'">Ver mi primer post →</a>';
     msgs.appendChild(d); scroll(d);
   }
   // POST con timeout (AbortController) para no colgarse esperando indefinido.
@@ -212,14 +228,14 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     msgs.appendChild(card); scroll(card);
     var pPerfil=card.querySelector('#pPerfil'), pPost=card.querySelector('#pPost'), resumen='';
     function hecho(el){ el.className='paso hecho'; el.querySelector('.dot').textContent='✓'; }
-    function suave(){ card.remove(); ia('Tu negocio quedó guardado. Te llevo a tu panel…'); setTimeout(function(){ location.href='/crecer/panel/gateway_post.php?marca='+MARCA; }, 1900); }
+    function suave(){ card.remove(); ia('Tu negocio quedó guardado. Te llevo a tu panel…'); setTimeout(function(){ location.href='/crecer/panel/gateway_post.php?marca='+MARCA+GW; }, 1900); }
     post({accion:'finalizar', historial:JSON.stringify(hist)}, 90000).then(function(d){
       if(!d||!d.ok){ suave(); return; }
       resumen=d.resumen||'';
       hecho(pPerfil); pPost.className='paso activo';
       post({accion:'post_muestra'}, 90000).then(function(d2){
-        hecho(pPost); setTimeout(function(){ card.remove(); done(resumen, (d2&&d2.redirect)||('/crecer/panel/gateway_post.php?marca='+MARCA)); }, 500);
-      }).catch(function(){ card.remove(); done(resumen, '/crecer/panel/gateway_post.php?marca='+MARCA); });
+        hecho(pPost); setTimeout(function(){ card.remove(); done(resumen, (d2&&d2.redirect)||('/crecer/panel/gateway_post.php?marca='+MARCA+GW)); }, 500);
+      }).catch(function(){ card.remove(); done(resumen, '/crecer/panel/gateway_post.php?marca='+MARCA+GW); });
     }).catch(function(){ suave(); });
   }
   form.addEventListener('submit',function(e){ e.preventDefault(); enviar(input.value); });
@@ -238,4 +254,4 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 })();
 </script>
 
-<?php require __DIR__ . '/_shell_foot.php'; ?>
+</body></html>

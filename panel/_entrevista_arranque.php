@@ -46,7 +46,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     go.disabled=true; go.textContent='Preparando…';
     var fd=new FormData(); fd.append('accion','crear_negocio'); fd.append('csrf',CSRF); fd.append('nombre',n);
     fetch('/crecer/panel/entrevista.php',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
-      if(d && d.ok && d.marca_id){ location.href='/crecer/panel/entrevista.php?marca='+d.marca_id+'&nuevo=1'; }
+      if(d && d.ok && d.marca_id){ location.href='/crecer/panel/entrevista.php?marca='+d.marca_id+'&nuevo=1<?= $gw ?>'; }
       else { go.disabled=false; go.textContent='Empezar la conversación →'; err.textContent=(d&&d.err)||'No se pudo. Intenta otra vez.'; }
     }).catch(function(){ go.disabled=false; go.textContent='Empezar la conversación →'; err.textContent='Error de conexión.'; });
   }
