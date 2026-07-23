@@ -1336,8 +1336,16 @@ function entrevista_finalizar(PDO $pdo, int $marca_id, array $historial): array 
                     ->execute([$c($j['tono_boricua']), $c($j['tono_formal']), $c($j['tono_venta']), $c($j['tono_ingenio']), $marca_id]);
             } catch (Throwable $e) { /* columnas de tono no migradas: usa el default */ }
         }
+        // Preset de voz SUGERIDO (para pre-seleccionar en el selector de tono al cierre).
+        $tb = (int)($j['tono_boricua'] ?? 60); $tf = (int)($j['tono_formal'] ?? 40);
+        $tv = (int)($j['tono_venta'] ?? 50);   $tg = (int)($j['tono_ingenio'] ?? 50);
+        $preset = 'calido';
+        if ($tf >= 65 && $tb <= 40)  $preset = 'profesional';
+        elseif ($tg >= 72)           $preset = 'creativo';
+        elseif ($tb >= 65)           $preset = 'boricua';
+        elseif ($tv >= 72)           $preset = 'vendedor';
         try { genoma_radiografia($pdo, $marca_id, true); } catch (Throwable $e) {}   // reconstruye la radiografía con el perfil rico
-        return ['ok' => true, 'descripcion' => $desc];
+        return ['ok' => true, 'descripcion' => $desc, 'voz' => $voz, 'publico' => $pub, 'preset' => $preset];
     } catch (Throwable $e) {
         error_log('entrevista_finalizar: ' . $e->getMessage());
         return ['ok' => false, 'descripcion' => ''];

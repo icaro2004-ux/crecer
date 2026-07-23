@@ -58,11 +58,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'final
     $historial = array_slice($historial, -40);
     try {
         $fin = entrevista_finalizar($pdo, $marca_id, $historial);   // perfil + radiografía (~20s)
-        echo json_encode(['ok'=>true, 'resumen'=>(string)($fin['descripcion'] ?? '')], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['ok'=>true, 'resumen'=>(string)($fin['descripcion'] ?? ''),
+            'voz'=>(string)($fin['voz'] ?? ''), 'publico'=>(string)($fin['publico'] ?? ''),
+            'preset'=>(string)($fin['preset'] ?? 'boricua')], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         echo json_encode(['ok'=>false, 'err'=>substr($e->getMessage(), 0, 160)], JSON_UNESCAPED_UNICODE);
     }
     exit;
+}
+// El dueño escoge el TONO/VOZ (paso final del chat) → aplica el preset a la marca.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'set_tono') {
+    header('Content-Type: application/json; charset=utf-8');
+    if (!csrf_ok()) { echo json_encode(['ok'=>false]); exit; }
+    $pk = trim((string)($_POST['preset'] ?? ''));
+    $t  = preset_voz_a_tono($pk);
+    if ($t) {
+        try {
+            $pdo->prepare("UPDATE crecer_marca SET tono_boricua=?, tono_formal=?, tono_venta=?, tono_ingenio=?, tono_preset=? WHERE id=?")
+                ->execute([$t['tono_boricua'], $t['tono_formal'], $t['tono_venta'], $t['tono_ingenio'], $pk, $marca_id]);
+        } catch (Throwable $e) { /* columnas de tono no migradas: se ignora */ }
+    }
+    echo json_encode(['ok'=>true]); exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'post_muestra') {
     header('Content-Type: application/json; charset=utf-8');
@@ -142,6 +158,43 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .en-armando .paso.activo .dot{border-color:var(--magenta,#EF4375)}
   .en-armando .paso.hecho{color:var(--teal,#00A49F)}
   .en-armando .paso.hecho .dot{border-color:var(--teal,#00A49F);background:var(--teal,#00A49F);color:#fff}
+  /* ── Ventana translúcida: el CORILLO trabajando (conversación de agentes) ── */
+  .corillo-ov{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:16px;opacity:0;transition:opacity .3s;
+    background:radial-gradient(130% 95% at 12% 0%, color-mix(in srgb,var(--magenta,#EF4375) 66%,transparent), transparent 58%),
+      radial-gradient(130% 95% at 100% 100%, color-mix(in srgb,var(--teal,#00A49F) 60%,transparent), transparent 58%),
+      rgba(24,14,24,.5);
+    backdrop-filter:blur(10px) saturate(1.2);-webkit-backdrop-filter:blur(10px) saturate(1.2)}
+  .corillo-ov.on{opacity:1}
+  .corillo-panel{background:var(--card,#fff);border:1px solid rgba(255,255,255,.5);border-radius:22px;
+    width:100%;max-width:440px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 40px 100px -24px rgba(20,12,20,.7);overflow:hidden}
+  .cp-head{font-family:'Oswald',sans-serif;font-weight:700;font-size:15px;color:#fff;padding:15px 18px;display:flex;align-items:center;gap:9px;
+    background:var(--btn-grad,linear-gradient(135deg,#FF6B3D,#EF4375))}
+  .cp-dot{width:9px;height:9px;border-radius:50%;background:#fff;animation:cppulse 1.2s infinite;flex:none}
+  @keyframes cppulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.8)}}
+  .cp-feed{padding:14px 16px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px;min-height:170px}
+  .cp-line{opacity:0;transform:translateY(6px);animation:cpin .35s forwards}
+  .cp-line b{display:block;font-size:11.5px;font-weight:700;color:var(--magenta,#EF4375);margin-bottom:3px;letter-spacing:.01em}
+  .cp-line span{display:block;font-size:14px;line-height:1.5;color:var(--tinta);background:var(--crema,#f7f5f1);border:1px solid var(--line);border-radius:13px;border-top-left-radius:4px;padding:9px 12px}
+  .cp-line.det b{color:var(--teal,#00A49F)}
+  .cp-line.det span{background:color-mix(in srgb,var(--teal,#00A49F) 10%,#fff);border-color:color-mix(in srgb,var(--teal,#00A49F) 30%,#fff)}
+  .cp-line.cp-hype b{color:var(--coral,#FF6B3D)}
+  .cp-line.cp-hype span{font-weight:700;color:var(--tinta);border-color:color-mix(in srgb,var(--magenta,#EF4375) 38%,#fff);
+    background:linear-gradient(135deg,color-mix(in srgb,var(--coral,#FF6B3D) 20%,#fff),color-mix(in srgb,var(--magenta,#EF4375) 20%,#fff));animation:cppop .5s}
+  @keyframes cppop{0%{transform:scale(.9)}60%{transform:scale(1.03)}100%{transform:scale(1)}}
+  @keyframes cpin{to{opacity:1;transform:none}}
+  .cp-typing span{display:inline-flex;gap:3px;padding:11px 13px}
+  .cp-typing i{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:enb 1s infinite}
+  .cp-typing i:nth-child(2){animation-delay:.15s}.cp-typing i:nth-child(3){animation-delay:.3s}
+  .cp-foot{padding:14px 16px;border-top:1px solid var(--line)}
+  .cp-foot h3{font-family:'Oswald',sans-serif;font-weight:700;font-size:16px;color:var(--tinta);margin:0 0 2px}
+  .cp-foot .sb{font-size:12.5px;color:var(--muted);margin:0 0 12px;line-height:1.4}
+  .tono{display:block;width:100%;text-align:left;font-family:inherit;cursor:pointer;border:1.5px solid var(--line);background:#fff;border-radius:13px;padding:10px 13px;margin-bottom:8px;transition:border-color .15s,box-shadow .15s}
+  .tono b{display:block;font-family:'Oswald',sans-serif;font-weight:700;font-size:14px;color:var(--tinta)}
+  .tono span{display:block;color:var(--muted);font-size:11.5px;margin-top:1px;line-height:1.3}
+  .tono.sel{border-color:var(--magenta,#EF4375);box-shadow:0 0 0 3px color-mix(in srgb,var(--magenta,#EF4375) 15%,transparent)}
+  .tono.sel b{color:var(--magenta,#EF4375)}
+  .tono-go{width:100%;border:0;cursor:pointer;background:var(--btn-grad,linear-gradient(135deg,#FF6B3D,#EF4375));color:#fff;font-family:'Oswald',sans-serif;font-weight:700;font-size:16px;padding:13px;border-radius:14px;margin-top:6px}
+  .tono-go:disabled{opacity:.6}
   .en-form{display:flex;gap:9px;align-items:center;position:sticky;bottom:0;background:linear-gradient(to top,var(--crema,#F7F5F1) 74%,transparent);padding:12px 0 6px}
   .en-input{flex:1;font-family:inherit;font-size:15px;border:1.5px solid var(--line);border-radius:16px;padding:14px 16px;background:var(--card,#fff);color:var(--tinta)}
   .en-input:focus{outline:0;border-color:var(--magenta,#EF4375)}
@@ -216,27 +269,76 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       ia(d.pregunta||'¿Algo más que deba saber?'); hist.push({rol:'ia',texto:d.pregunta||''}); reenable();
     }).catch(function(){ load.remove(); ia('Se me fue el internet un segundo — toca Enviar otra vez.'); reenable(); });
   }
-  // Cierre en 2 pasos (perfil, luego primer post) con tarjeta de progreso VISIBLE:
-  // spinner + pasos que se marcan ✓, para que el dueño SEPA que está trabajando y no
-  // crea que se colgó. Cada request es corto (no choca con el timeout del proxy).
+  // Al cerrar el chat se levanta una VENTANA TRANSLÚCIDA donde el corillo "conversa"
+  // mientras arma el perfil. Las líneas de proceso son REALES (de verdad está
+  // analizando); la DETERMINACIÓN final muestra el perfil REAL producido (voz/público/
+  // resumen) — nada inventado. Luego el dueño escoge el TONO y se monta el post.
+  var RESUMEN='';
+  var TONOS=[
+    {k:'profesional',t:'Profesional',d:'Formal y serio. Abogados, médicos, contables.'},
+    {k:'boricua',t:'Boricua',d:'Bien de la isla, con sabor y de la calle.'},
+    {k:'creativo',t:'Creativo',d:'Con chispa, humor y giros inesperados.'},
+    {k:'calido',t:'Cálido',d:'Cercano y de confianza, como un buen amigo.'},
+    {k:'vendedor',t:'Vendedor',d:'Directo a la acción, con gancho de venta.'}
+  ];
+  var CORILLO=[
+    ['🧠 El Estratega','Déjenme leer bien lo que nos contó…'],
+    ['✍️ La Creativa','Ya le voy cogiendo la forma de hablar.'],
+    ['📊 El Estratega','Estoy fijando quién es su cliente ideal.'],
+    ['🎨 El Director','Y yo el estilo visual que le va a pegar.'],
+    ['🧠 El corillo','Nos estamos poniendo de acuerdo…']
+  ];
+  var ovFeed=null, ovFoot=null;
+  function cpLine(ag, txt, det){ var d=document.createElement('div'); d.className='cp-line'+(det?' det':''); d.innerHTML=(ag?'<b>'+esc(ag)+'</b>':'')+'<span>'+esc(txt)+'</span>'; ovFeed.appendChild(d); ovFeed.scrollTop=ovFeed.scrollHeight; return d; }
   function cerrar(){
     cerrado=true; form.style.display='none'; listen.textContent='';
-    var card=document.createElement('div'); card.className='en-armando';
-    card.innerHTML='<div class="ring"></div><div class="pasos">'
-      +'<div class="paso activo" id="pPerfil"><span class="dot"></span><span>Armando el perfil de tu negocio…</span></div>'
-      +'<div class="paso" id="pPost"><span class="dot"></span><span>Creando tu primer post…</span></div></div>';
-    msgs.appendChild(card); scroll(card);
-    var pPerfil=card.querySelector('#pPerfil'), pPost=card.querySelector('#pPost'), resumen='';
-    function hecho(el){ el.className='paso hecho'; el.querySelector('.dot').textContent='✓'; }
-    function suave(){ card.remove(); ia('Tu negocio quedó guardado. Te llevo a tu panel…'); setTimeout(function(){ location.href='/crecer/panel/gateway_post.php?marca='+MARCA+GW; }, 1900); }
-    post({accion:'finalizar', historial:JSON.stringify(hist)}, 90000).then(function(d){
-      if(!d||!d.ok){ suave(); return; }
-      resumen=d.resumen||'';
-      hecho(pPerfil); pPost.className='paso activo';
-      post({accion:'post_muestra'}, 90000).then(function(d2){
-        hecho(pPost); setTimeout(function(){ card.remove(); done(resumen, (d2&&d2.redirect)||('/crecer/panel/gateway_post.php?marca='+MARCA+GW)); }, 500);
-      }).catch(function(){ card.remove(); done(resumen, '/crecer/panel/gateway_post.php?marca='+MARCA+GW); });
-    }).catch(function(){ suave(); });
+    var ov=document.createElement('div'); ov.className='corillo-ov';
+    ov.innerHTML='<div class="corillo-panel"><div class="cp-head"><span class="cp-dot"></span>El corillo está armando tu perfil</div><div class="cp-feed" id="cpFeed"></div><div class="cp-foot" id="cpFoot" style="display:none"></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function(){ ov.classList.add('on'); });
+    ovFeed=ov.querySelector('#cpFeed'); ovFoot=ov.querySelector('#cpFoot');
+    var i=0, listo=false;
+    (function tick(){ if(listo) return; if(i<CORILLO.length){ cpLine(CORILLO[i][0], CORILLO[i][1]); i++; } setTimeout(tick, 2500); })();
+    post({accion:'finalizar', historial:JSON.stringify(hist)}, 95000).then(function(d){
+      listo=true;
+      if(!d||!d.ok){ salirSuave(); return; }
+      RESUMEN=d.resumen||'';
+      revelar(d);
+    }).catch(function(){ listo=true; salirSuave(); });
+  }
+  function salirSuave(){ cpLine('🧠 El corillo','Tu negocio quedó guardado — te llevo a tu post…', true); setTimeout(function(){ location.href='/crecer/panel/gateway_post.php?marca='+MARCA+GW; }, 1700); }
+  function revelar(d){
+    var seq=[];
+    if(d.publico) seq.push(['📊 El Estratega','Tu cliente ideal: '+d.publico, 'det']);
+    if(d.voz)     seq.push(['✍️ La Creativa','Tu voz: '+d.voz, 'det']);
+    seq.push(['🔥 ¡El corillo lo tiene!','¡Ya lo tenemos, esto va a quedar brutal!', 'hype']);
+    if(d.resumen) seq.push(['✅ Así te entendimos', d.resumen, 'det']);
+    var head=document.querySelector('.cp-head');
+    var k=0; (function step(){
+      if(k>=seq.length){ setTimeout(function(){ pedirTono(d.preset||'boricua'); }, 900); return; }
+      var s=seq[k];
+      if(s[2]==='hype'){
+        if(head) head.innerHTML='<span class="cp-dot" style="background:var(--teal,#00A49F);animation:none"></span>¡Ya lo tenemos!';
+        var el=cpLine(s[0], s[1], true); el.className='cp-line det cp-hype';
+      } else { cpLine(s[0], s[1], true); }
+      k++; setTimeout(step, s[2]==='hype' ? 1300 : 1500);
+    })();
+  }
+  function pedirTono(pre){
+    var sel=pre;
+    var html='<h3>Una última cosa</h3><div class="sb">Elegimos este tono por tu tipo de negocio — cámbialo si quieres.</div>';
+    TONOS.forEach(function(o){ html+='<button type="button" class="tono'+(o.k===pre?' sel':'')+'" data-k="'+o.k+'"><b>'+o.t+'</b><span>'+o.d+'</span></button>'; });
+    html+='<button type="button" class="tono-go" id="tonoGo">Con este vamos →</button>';
+    ovFoot.innerHTML=html; ovFoot.style.display='block'; ovFoot.scrollIntoView&&ovFoot.scrollIntoView({block:'end'});
+    ovFoot.querySelectorAll('.tono').forEach(function(b){ b.addEventListener('click',function(){ ovFoot.querySelectorAll('.tono').forEach(function(x){x.classList.remove('sel');}); b.classList.add('sel'); sel=b.getAttribute('data-k'); }); });
+    document.getElementById('tonoGo').addEventListener('click',function(){ this.disabled=true; this.textContent='Perfecto…'; post({accion:'set_tono',preset:sel},20000).then(crearPost).catch(crearPost); });
+  }
+  function crearPost(){
+    ovFoot.style.display='none';
+    cpLine('🎨 El Director','Perfecto. Montando tu primer post en tu voz…');
+    var tp=cpLine('', ' '); tp.className='cp-line cp-typing'; tp.innerHTML='<span><i></i><i></i><i></i></span>';
+    function ir(url){ cpLine('✅ Listo','¡Tu primer post está montado!', true); setTimeout(function(){ location.href=url; }, 1100); }
+    post({accion:'post_muestra'}, 95000).then(function(d2){ ir((d2&&d2.redirect)||('/crecer/panel/gateway_post.php?marca='+MARCA+GW)); }).catch(function(){ ir('/crecer/panel/gateway_post.php?marca='+MARCA+GW); });
   }
   form.addEventListener('submit',function(e){ e.preventDefault(); enviar(input.value); });
 
