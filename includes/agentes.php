@@ -1223,13 +1223,40 @@ function radiografia_capitulo(PDO $pdo, int $marca_id, string $cap): string {
 function entrevista_siguiente(PDO $pdo, int $marca_id, array $historial): array {
     $m = leer_marca($pdo, $marca_id);
     $nombre = trim((string)($m['nombre_negocio'] ?? ''));
-    $sys = "Eres un consultor cálido que ENTREVISTA a un microempresario boricua para conocer su negocio a FONDO. Haz "
-        . "UNA sola pregunta a la vez, ADAPTADA a lo que ya te dijo — NUNCA genérica ni de guion fijo: si vende jabones, "
-        . "pregúntale de sus jabones; si da un servicio, ahonda en ESE servicio. Breve, cercano, boricua suave. Cubre con "
-        . "el tiempo: qué hace/vende EXACTAMENTE, quién le compra, qué lo hace DISTINTO, su historia/origen, qué quiere "
-        . "vender más, y su tono. Solo TERMINA cuando estés SEGURO de que entiendes el negocio A FONDO (qué vende "
-        . "exactamente, a quién, qué lo hace único y su voz). Si te queda CUALQUIER duda, sigue preguntando — no hay "
-        . "prisa. Nunca termines antes de 4 respuestas útiles. Responde SOLO JSON: {\"done\":true|false,\"pregunta\":\"la siguiente pregunta (vacío si done)\"}.";
+
+    // ── TOPE DURO en código (no confiar en que el modelo pare solo) ──────────────
+    // La gente se harta si la entrevista no acaba. Contamos respuestas ÚTILES del
+    // dueño y forzamos el cierre; también detectamos "no tengo más que decir".
+    $MIN = 3;   // no cerrar antes de esto (necesitamos lo esencial para el Genome)
+    $MAX = 5;   // NUNCA más preguntas que esto, pase lo que pase
+    $n_user = 0; $ultimo = '';
+    foreach ($historial as $h) {
+        if (($h['rol'] ?? '') === 'user') {
+            $t = trim((string)($h['texto'] ?? ''));
+            if ($t !== '') { $n_user++; $ultimo = $t; }
+        }
+    }
+    // ¿El dueño acaba de decir que no tiene nada más? (respuesta corta y negativa)
+    $u = mb_strtolower($ultimo, 'UTF-8');
+    $cierra_dueno = false;
+    if (mb_strlen($u, 'UTF-8') <= 30) {
+        foreach (['no','nada','ya','eso es todo','es todo','listo','ninguna','ninguno',
+                  'asi mismo','así mismo','por ahora no','creo que no','nope','ok','na'] as $stop) {
+            if (strpos($u, $stop) !== false) { $cierra_dueno = true; break; }
+        }
+    }
+    if ($n_user >= $MAX) return ['done' => true, 'pregunta' => ''];
+    if ($n_user >= $MIN && $cierra_dueno) return ['done' => true, 'pregunta' => ''];
+
+    $restantes = max(0, $MAX - $n_user);   // preguntas que aún caben
+    $sys = "Eres un consultor cálido y EFICIENTE que entrevista a un microempresario boricua. Haz UNA sola pregunta a la "
+        . "vez, ADAPTADA a lo que ya te dijo (si vende jabones, pregúntale de sus jabones). Boricua suave y cercano. "
+        . "REGLA CLAVE: cada pregunta debe ser de RESPUESTA CORTA o de SÍ/NO — nada de pedir que escriba párrafos ni su "
+        . "'historia'. Cuando puedas, PROPÓN tú y que el dueño solo confirme (ej: 'Vendes jabones artesanales, ¿cierto?', "
+        . "'¿Tu fuerte son las bodas o el día a día?'). En 3 a 5 preguntas debes captar lo esencial: qué vende, a quién y "
+        . "qué lo hace distinto. NO interrogues: {$restantes} preguntas máximo. En cuanto tengas lo esencial, TERMINA "
+        . "(done=true) — mejor cerrar temprano que cansar al dueño. NUNCA repitas un tema ni preguntes 'algo más' dos veces. "
+        . "Responde SOLO JSON: {\"done\":true|false,\"pregunta\":\"la siguiente (vacío si done)\"}.";
     // ia_ejecutar NO soporta 'historial' → la conversación va DENTRO del prompt (si no, repite).
     $conv = '';
     foreach ($historial as $h) {
@@ -1238,18 +1265,24 @@ function entrevista_siguiente(PDO $pdo, int $marca_id, array $historial): array 
     }
     $prompt = ($nombre !== '' ? "El negocio se llama \"{$nombre}\".\n\n" : '')
         . "Conversación hasta ahora:\n" . ($conv !== '' ? $conv : '(aún no empieza)') . "\n"
-        . "Haz la SIGUIENTE pregunta — NUNCA repitas una que ya hiciste; CONSTRUYE sobre lo que el dueño acaba de "
-        . "contestar (menciónalo). Si ya entiendes el negocio a fondo, termina (done=true).";
+        . "El dueño ya te dio {$n_user} respuesta(s). Te quedan {$restantes} preguntas como MÁXIMO. "
+        . "Haz la SIGUIENTE pregunta SOLO si de verdad falta algo esencial; NUNCA repitas un tema. "
+        . "Si ya entiendes qué vende, a quién y qué lo hace distinto, TERMINA ya (done=true, pregunta vacía).";
     try {
         $r = ia_ejecutar($pdo, 'intake', 'Entrevista: siguiente pregunta', $prompt, [
             'marca_id' => $marca_id, 'sistema' => $sys, 'json' => true, 'modelo' => CRECER_COPILOTO_MODEL,
-            'temperatura' => 0.75, 'max_tokens' => 220, 'thinking_budget' => 0,
+            'temperatura' => 0.7, 'max_tokens' => 220, 'thinking_budget' => 0,
             'mock_texto' => '{"done":false,"pregunta":"Cuéntame, ¿qué es exactamente lo que haces o vendes?"}',
         ]);
         $j = json_decode((string)$r['texto'], true) ?: [];
         $preg = trim((string)($j['pregunta'] ?? ''));
-        return ['done' => (!empty($j['done']) && $preg === ''), 'pregunta' => $preg];
+        // Si el modelo dice done, o ya cubrimos el mínimo y no dio pregunta → cerrar.
+        if (!empty($j['done']) || ($preg === '' && $n_user >= $MIN)) return ['done' => true, 'pregunta' => ''];
+        if ($preg === '') return ['done' => false, 'pregunta' => '¿Hay algo más que deba saber de tu negocio antes de empezar?'];
+        return ['done' => false, 'pregunta' => $preg];
     } catch (Throwable $e) {
+        // Ante fallo, no dejar el chat colgado: si ya hay lo mínimo, cerrar.
+        if ($n_user >= $MIN) return ['done' => true, 'pregunta' => ''];
         return ['done' => false, 'pregunta' => 'Cuéntame, ¿qué es exactamente lo que haces o vendes?'];
     }
 }
