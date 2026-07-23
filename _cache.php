@@ -60,7 +60,9 @@ try {
     // no el 'crecer' público. Evita que alguien te queme el balance con &test=img/arte en loop.
     $__test = $_GET['test'] ?? '';
     $__tok  = defined('CRON_TOKEN') ? CRON_TOKEN : '';
-    if ($__test !== '' && ($__tok === '' || !hash_equals($__tok, (string)($_GET['t'] ?? '')))) {
+    // La prueba de SMS NO depende del CRON_TOKEN (que en prod puede estar en otro valor):
+    // usa su propia llave fija de abajo. Solo img/arte pasan por este candado de dinero.
+    if (in_array($__test, ['img','arte'], true) && ($__tok === '' || !hash_equals($__tok, (string)($_GET['t'] ?? '')))) {
         echo "\n(Para las pruebas en vivo &test=img/arte añade  &t=TU_CRON_TOKEN  — gastan dinero, por eso van protegidas.)\n";
         $__test = '';
     }
@@ -81,8 +83,13 @@ try {
     }
 
     // Prueba REAL del SMS: manda un código de verdad y muestra el ERROR CRUDO de Twilio.
-    //    Añade  &test=sms&to=7875551234  (con &t=TU_CRON_TOKEN). Cuesta unos centavos.
-    if ($__test === 'sms') {
+    //    Añade  &test=sms&to=7875551234&s=crsms_7k2x  . Cuesta unos centavos.
+    //    Llave FIJA (no el CRON_TOKEN) para no depender del config. Bórrala/rota luego.
+    $__sms_ok = ($_GET['test'] ?? '') === 'sms' && hash_equals('crsms_7k2x', (string)($_GET['s'] ?? ''));
+    if (($_GET['test'] ?? '') === 'sms' && !$__sms_ok) {
+        echo "\n(Para la prueba de SMS añade  &s=crsms_7k2x  al final.)\n";
+    }
+    if ($__sms_ok) {
         echo "\n--- Prueba EN VIVO del SMS (Twilio Verify) ---\n";
         require_once __DIR__ . '/includes/twilio.php';
         echo "twilio_configurado()          : " . (twilio_configurado() ? "SÍ ✅\n" : "NO ❌ (faltan constantes en config)\n");
