@@ -45,7 +45,33 @@ if (!$marca && empty($_GET['otra'])) {
 if (!$marca) { include __DIR__ . '/_entrevista_arranque.php'; exit; }
 $marca_id = (int)$marca['id'];
 
-// ── AJAX: el dueño contesta → siguiente pregunta, o cierre ──
+// ── AJAX: el CIERRE va en 2 pasos separados para que NINGÚN request pase del
+//    timeout del proxy (~60s). Antes se hacía perfil + radiografía + imagen en un
+//    solo request (40-70s) → "se cayó la conexión". Ahora: (1) perfil, (2) post. ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'finalizar') {
+    header('Content-Type: application/json; charset=utf-8');
+    if (!csrf_ok()) { echo json_encode(['ok'=>false,'err'=>'Sesión expiró. Recarga.']); exit; }
+    @set_time_limit(0);
+    $historial = json_decode((string)($_POST['historial'] ?? '[]'), true);
+    if (!is_array($historial)) $historial = [];
+    $historial = array_slice($historial, -40);
+    try {
+        $fin = entrevista_finalizar($pdo, $marca_id, $historial);   // perfil + radiografía (~20s)
+        echo json_encode(['ok'=>true, 'resumen'=>(string)($fin['descripcion'] ?? '')], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        echo json_encode(['ok'=>false, 'err'=>substr($e->getMessage(), 0, 160)], JSON_UNESCAPED_UNICODE);
+    }
+    exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'post_muestra') {
+    header('Content-Type: application/json; charset=utf-8');
+    if (!csrf_ok()) { echo json_encode(['ok'=>false,'err'=>'Sesión expiró.']); exit; }
+    @set_time_limit(0);
+    try { crear_post_muestra($pdo, $marca_id); } catch (Throwable $e) { error_log('post_muestra: ' . $e->getMessage()); }
+    echo json_encode(['ok'=>true, 'redirect'=>'/crecer/panel/index.php?marca=' . $marca_id], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+// ── AJAX: el dueño contesta → siguiente pregunta (o done, SIN trabajo pesado aquí) ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json; charset=utf-8');
     if (!csrf_ok()) { echo json_encode(['ok'=>false,'err'=>'Sesión expiró. Recarga la página.']); exit; }
@@ -55,13 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $historial = array_slice($historial, -40);   // acota el contexto
     try {
         $sig = entrevista_siguiente($pdo, $marca_id, $historial);
-        if (!empty($sig['done'])) {
-            $fin = entrevista_finalizar($pdo, $marca_id, $historial);
-            if ($nuevo) { try { crear_post_muestra($pdo, $marca_id); } catch (Throwable $e) {} }   // deja el post de muestra listo
-            echo json_encode(['ok'=>true, 'done'=>true, 'resumen'=>(string)($fin['descripcion'] ?? ''), 'redirect'=>'/crecer/panel/index.php?marca=' . $marca_id], JSON_UNESCAPED_UNICODE);
-        } else {
-            echo json_encode(['ok'=>true, 'done'=>false, 'pregunta'=>(string)$sig['pregunta']], JSON_UNESCAPED_UNICODE);
-        }
+        echo json_encode(['ok'=>true, 'done'=>!empty($sig['done']), 'pregunta'=>(string)($sig['pregunta'] ?? '')], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         echo json_encode(['ok'=>false, 'err'=>substr($e->getMessage(), 0, 160)], JSON_UNESCAPED_UNICODE);
     }
@@ -147,18 +167,45 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     msgs.appendChild(d); scroll(d);
     setTimeout(function(){ location.href=url; }, 2800);   // llévalo a ver su post
   }
+  // POST con timeout (AbortController) para no colgarse esperando indefinido.
+  function post(fields, timeoutMs){
+    var ctrl=new AbortController(), to=setTimeout(function(){ctrl.abort();}, timeoutMs||60000);
+    var fd=new FormData(); fd.append('csrf',CSRF);
+    for(var k in fields){ if(fields.hasOwnProperty(k)) fd.append(k, fields[k]); }
+    return fetch(location.pathname+location.search,{method:'POST',body:fd,signal:ctrl.signal})
+      .then(function(r){ clearTimeout(to); return r.json(); },
+            function(e){ clearTimeout(to); throw e; });
+  }
+  function reenable(){ input.disabled=false; send.disabled=false; input.focus(); }
   function enviar(t){
     t=(t||'').trim(); if(!t||cerrado) return;
     me(t); hist.push({rol:'user',texto:t}); input.value=''; input.disabled=true; send.disabled=true;
     var load=loading();
-    var fd=new FormData(); fd.append('csrf',CSRF); fd.append('historial',JSON.stringify(hist));
-    fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+    post({historial:JSON.stringify(hist)}, 60000).then(function(d){
       load.remove();
-      if(!d.ok){ ia('Perdona, se me trabó. Repíteme eso último.'); input.disabled=false; send.disabled=false; input.focus(); return; }
-      if(d.done){ done(d.resumen, d.redirect); return; }
-      ia(d.pregunta||'¿Algo más que deba saber?'); hist.push({rol:'ia',texto:d.pregunta||''});
-      input.disabled=false; send.disabled=false; input.focus();
-    }).catch(function(){ load.remove(); ia('Se cayó la conexión. Intenta otra vez.'); input.disabled=false; send.disabled=false; });
+      if(!d||!d.ok){ ia('Perdona, se me trabó. Repíteme eso último.'); reenable(); return; }
+      if(d.done){ cerrar(); return; }
+      ia(d.pregunta||'¿Algo más que deba saber?'); hist.push({rol:'ia',texto:d.pregunta||''}); reenable();
+    }).catch(function(){ load.remove(); ia('Se me fue el internet un segundo — toca Enviar otra vez.'); reenable(); });
+  }
+  // Cierre en 2 pasos (perfil, luego primer post): cada request es corto, no choca
+  // con el timeout del proxy. Si algo se demora, el negocio ya quedó guardado igual.
+  function cerrar(){
+    cerrado=true; form.style.display='none'; listen.textContent='';
+    var row=document.createElement('div'); row.className='en-row ia';
+    row.innerHTML='<div class="en-face">'+FACE+'</div><div class="en-b load">Armando tu perfil…</div>';
+    msgs.appendChild(row); scroll(row);
+    var bubble=row.querySelector('.en-b'), resumen='';
+    function irHome(){ location.href='/crecer/panel/index.php?marca='+MARCA; }
+    function suave(msg){ bubble.className='en-b'; bubble.textContent=msg; setTimeout(irHome, 2000); }
+    post({accion:'finalizar', historial:JSON.stringify(hist)}, 90000).then(function(d){
+      if(!d||!d.ok){ suave('Tu negocio quedó guardado. Vamos a tu panel…'); return; }
+      resumen=d.resumen||'';
+      bubble.textContent='Listo tu perfil. Creando tu primer post…';
+      post({accion:'post_muestra'}, 90000).then(function(d2){
+        row.remove(); done(resumen, (d2&&d2.redirect)||('/crecer/panel/index.php?marca='+MARCA));
+      }).catch(function(){ row.remove(); done(resumen, '/crecer/panel/index.php?marca='+MARCA); });
+    }).catch(function(){ suave('Tu negocio quedó guardado. Vamos a tu panel…'); });
   }
   form.addEventListener('submit',function(e){ e.preventDefault(); enviar(input.value); });
 
