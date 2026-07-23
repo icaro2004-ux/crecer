@@ -119,6 +119,17 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .en-done h3{font-family:'Oswald',sans-serif;margin:0 0 8px;font-size:18px;color:var(--tinta)}
   .en-done p{font-size:13.5px;color:var(--tinta);line-height:1.5;margin:0 0 12px}
   .en-done a{display:inline-block;background:var(--tinta);color:#fff;text-decoration:none;font-weight:800;font-size:14px;padding:12px 20px;border-radius:13px}
+  .en-done a.sec{background:transparent;color:var(--muted);font-weight:700;padding:12px 8px;text-decoration:underline}
+  .en-armando{align-self:stretch;display:flex;flex-direction:column;align-items:center;gap:16px;padding:30px 20px;background:var(--card,#fff);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow-sm)}
+  .en-armando .ring{width:46px;height:46px;border-radius:50%;border:3px solid color-mix(in srgb,var(--magenta,#EF4375) 20%,#eee);border-top-color:var(--magenta,#EF4375);animation:enspin .8s linear infinite}
+  @keyframes enspin{to{transform:rotate(360deg)}}
+  .en-armando .pasos{display:flex;flex-direction:column;gap:10px;width:100%;max-width:290px}
+  .en-armando .paso{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--muted);transition:color .3s}
+  .en-armando .paso .dot{width:19px;height:19px;border-radius:50%;border:2px solid var(--line);flex:none;display:grid;place-items:center;font-size:11px;line-height:1}
+  .en-armando .paso.activo{color:var(--tinta);font-weight:700}
+  .en-armando .paso.activo .dot{border-color:var(--magenta,#EF4375)}
+  .en-armando .paso.hecho{color:var(--teal,#00A49F)}
+  .en-armando .paso.hecho .dot{border-color:var(--teal,#00A49F);background:var(--teal,#00A49F);color:#fff}
   .en-form{display:flex;gap:9px;align-items:center;position:sticky;bottom:0;background:linear-gradient(to top,var(--crema,#F7F5F1) 74%,transparent);padding:12px 0 6px}
   .en-input{flex:1;font-family:inherit;font-size:15px;border:1.5px solid var(--line);border-radius:16px;padding:14px 16px;background:var(--card,#fff);color:var(--tinta)}
   .en-input:focus{outline:0;border-color:var(--magenta,#EF4375)}
@@ -163,9 +174,10 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     cerrado=true; form.style.display='none'; listen.textContent='';
     var url = redirect || ('/crecer/panel/index.php?marca='+MARCA);
     var d=document.createElement('div'); d.className='en-done';
-    d.innerHTML='<h3>✓ Ya entiendo tu negocio</h3>'+(resumen?'<p>'+esc(resumen)+'</p>':'<p>Armé tu perfil y el corillo ya lo tiene.</p>')+'<a href="'+url+'">Ver mi primer post →</a>';
+    d.innerHTML='<h3>✓ Ya entiendo tu negocio</h3>'+(resumen?'<p>'+esc(resumen)+'</p>':'<p>Armé tu perfil y el corillo ya lo tiene.</p>')
+      +'<a href="'+url+'">Ver mi primer post →</a>'
+      +'<a class="sec" href="/crecer/panel/marca.php?marca='+MARCA+'">¿La voz no te suena? Ajústala</a>';
     msgs.appendChild(d); scroll(d);
-    setTimeout(function(){ location.href=url; }, 2800);   // llévalo a ver su post
   }
   // POST con timeout (AbortController) para no colgarse esperando indefinido.
   function post(fields, timeoutMs){
@@ -188,24 +200,27 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       ia(d.pregunta||'¿Algo más que deba saber?'); hist.push({rol:'ia',texto:d.pregunta||''}); reenable();
     }).catch(function(){ load.remove(); ia('Se me fue el internet un segundo — toca Enviar otra vez.'); reenable(); });
   }
-  // Cierre en 2 pasos (perfil, luego primer post): cada request es corto, no choca
-  // con el timeout del proxy. Si algo se demora, el negocio ya quedó guardado igual.
+  // Cierre en 2 pasos (perfil, luego primer post) con tarjeta de progreso VISIBLE:
+  // spinner + pasos que se marcan ✓, para que el dueño SEPA que está trabajando y no
+  // crea que se colgó. Cada request es corto (no choca con el timeout del proxy).
   function cerrar(){
     cerrado=true; form.style.display='none'; listen.textContent='';
-    var row=document.createElement('div'); row.className='en-row ia';
-    row.innerHTML='<div class="en-face">'+FACE+'</div><div class="en-b load">Armando tu perfil…</div>';
-    msgs.appendChild(row); scroll(row);
-    var bubble=row.querySelector('.en-b'), resumen='';
-    function irHome(){ location.href='/crecer/panel/index.php?marca='+MARCA; }
-    function suave(msg){ bubble.className='en-b'; bubble.textContent=msg; setTimeout(irHome, 2000); }
+    var card=document.createElement('div'); card.className='en-armando';
+    card.innerHTML='<div class="ring"></div><div class="pasos">'
+      +'<div class="paso activo" id="pPerfil"><span class="dot"></span><span>Armando el perfil de tu negocio…</span></div>'
+      +'<div class="paso" id="pPost"><span class="dot"></span><span>Creando tu primer post…</span></div></div>';
+    msgs.appendChild(card); scroll(card);
+    var pPerfil=card.querySelector('#pPerfil'), pPost=card.querySelector('#pPost'), resumen='';
+    function hecho(el){ el.className='paso hecho'; el.querySelector('.dot').textContent='✓'; }
+    function suave(){ card.remove(); ia('Tu negocio quedó guardado. Te llevo a tu panel…'); setTimeout(function(){ location.href='/crecer/panel/index.php?marca='+MARCA; }, 1900); }
     post({accion:'finalizar', historial:JSON.stringify(hist)}, 90000).then(function(d){
-      if(!d||!d.ok){ suave('Tu negocio quedó guardado. Vamos a tu panel…'); return; }
+      if(!d||!d.ok){ suave(); return; }
       resumen=d.resumen||'';
-      bubble.textContent='Listo tu perfil. Creando tu primer post…';
+      hecho(pPerfil); pPost.className='paso activo';
       post({accion:'post_muestra'}, 90000).then(function(d2){
-        row.remove(); done(resumen, (d2&&d2.redirect)||('/crecer/panel/index.php?marca='+MARCA));
-      }).catch(function(){ row.remove(); done(resumen, '/crecer/panel/index.php?marca='+MARCA); });
-    }).catch(function(){ suave('Tu negocio quedó guardado. Vamos a tu panel…'); });
+        hecho(pPost); setTimeout(function(){ card.remove(); done(resumen, (d2&&d2.redirect)||('/crecer/panel/index.php?marca='+MARCA)); }, 500);
+      }).catch(function(){ card.remove(); done(resumen, '/crecer/panel/index.php?marca='+MARCA); });
+    }).catch(function(){ suave(); });
   }
   form.addEventListener('submit',function(e){ e.preventDefault(); enviar(input.value); });
 

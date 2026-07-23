@@ -1300,10 +1300,13 @@ function entrevista_finalizar(PDO $pdo, int $marca_id, array $historial): array 
         $t = trim((string)($h['texto'] ?? '')); if ($t === '') continue;
         $conv .= (($h['rol'] ?? '') === 'user' ? 'DUEÑO: ' : 'CORILLO: ') . $t . "\n";
     }
-    $sys = "De esta ENTREVISTA a un microempresario boricua, arma su PERFIL completo. NO inventes: usa SOLO lo que dijo. "
+    $sys = "De esta ENTREVISTA a un microempresario boricua, arma su PERFIL completo. NO inventes el contenido: usa SOLO lo "
+        . "que dijo (el TONO sí lo eliges TÚ según el tipo de negocio). "
         . "Responde SOLO JSON: {\"descripcion\":\"descripción rica del negocio en 3-5 frases, tercera persona\","
         . "\"voz\":\"cómo habla el dueño, en SUS palabras (cita frases suyas)\",\"productos\":[\"...\"],"
-        . "\"publico\":\"quién le compra\",\"ofertas\":\"promos/servicios si los mencionó, o vacío\"}.";
+        . "\"publico\":\"quién le compra\",\"ofertas\":\"promos/servicios si los mencionó, o vacío\","
+        . "\"tono_boricua\":0-100,\"tono_formal\":0-100,\"tono_venta\":0-100,\"tono_ingenio\":0-100}.\n"
+        . tono_prompt_intake();
     $prompt = ($m['nombre_negocio'] ? "Negocio: {$m['nombre_negocio']}\n" : '') . "Entrevista:\n{$conv}\n\nArma el perfil.";
     try {
         $r = ia_ejecutar($pdo, 'intake', 'Entrevista: armar perfil', $prompt, [
@@ -1323,6 +1326,16 @@ function entrevista_finalizar(PDO $pdo, int $marca_id, array $historial): array 
         if ($ofe  !== '') { $set[] = 'ofertas=?'; $vals[] = $ofe; }
         if ($prods)       { $set[] = 'productos=?'; $vals[] = json_encode($prods, JSON_UNESCAPED_UNICODE); }
         if ($set) { $vals[] = $marca_id; $pdo->prepare("UPDATE crecer_marca SET " . implode(',', $set) . " WHERE id=?")->execute($vals); }
+        // TONO inicial que la IA eligió por TIPO de negocio → el primer post sale en
+        // el tono correcto. Sin esto la columna queda en su default 80 (bien boricua)
+        // y TODO sale "wepa mi gente". Migración-safe: si las columnas no existen, se ignora.
+        if (isset($j['tono_boricua'], $j['tono_formal'], $j['tono_venta'], $j['tono_ingenio'])) {
+            $c = fn($x) => max(0, min(100, (int)$x));
+            try {
+                $pdo->prepare("UPDATE crecer_marca SET tono_boricua=?, tono_formal=?, tono_venta=?, tono_ingenio=? WHERE id=?")
+                    ->execute([$c($j['tono_boricua']), $c($j['tono_formal']), $c($j['tono_venta']), $c($j['tono_ingenio']), $marca_id]);
+            } catch (Throwable $e) { /* columnas de tono no migradas: usa el default */ }
+        }
         try { genoma_radiografia($pdo, $marca_id, true); } catch (Throwable $e) {}   // reconstruye la radiografía con el perfil rico
         return ['ok' => true, 'descripcion' => $desc];
     } catch (Throwable $e) {
