@@ -15,58 +15,55 @@
  * Enruta al DIRECTOR CREATIVO según el modelo configurado ('openai:gpt-4o' | 'gemini' | 'openai').
  * Loguea en crecer_ia_log (evidencia del cerebro creativo). Devuelve el texto.
  */
-function director_creativo_llm(PDO $pdo, int $marca_id, string $sistema, string $mensaje, string $modelo_cfg): array {
-    // Perfil lógico ('openai:creative') → modelo concreto de hoy ('openai:gpt-4o').
+function director_creativo_llm(PDO $pdo, int $marca_id, string $sistema, string $mensaje, string $modelo_cfg, array $opts = []): array {
+    $strict = !empty($opts['strict']);   // strict = SIN fallback (v3_async: falla en vez de cambiar de modelo)
+    // Perfil lógico ('openai:creative') → modelo concreto de hoy.
     if (function_exists('resolver_modelo_ia')) $modelo_cfg = resolver_modelo_ia($modelo_cfg);
     $prov = 'openai'; $mdl = 'gpt-4o';
     if (strpos($modelo_cfg, ':') !== false) { $p = explode(':', $modelo_cfg, 2); $prov = $p[0]; $mdl = $p[1]; }
     else { $prov = $modelo_cfg; }
     $prov = strtolower(trim($prov)); $mdl = trim($mdl);
 
-    $t0 = microtime(true); $texto = ''; $ti = 0; $to = 0; $usado = $modelo_cfg; $estado = 'ok'; $err = null;
+    $t0 = microtime(true); $texto = ''; $ti = 0; $to = 0; $usado = $modelo_cfg; $estado = 'ok'; $err = null; $fallback = false; $http = null;
     try {
         if ($prov === 'openai') {
             $mdl = $mdl !== '' ? $mdl : 'gpt-4o';
             try {
-                // max_reintentos=0: si el modelo es incompatible (400), falla RÁPIDO → respaldo ya.
                 $r = openai_chat($sistema, $mensaje, $mdl, ['max_tokens' => 700, 'max_reintentos' => 0]);
             } catch (Throwable $e1) {
-                // El modelo elegido rechazó la petición (raro/incompatible) → respaldo conocido-bueno.
+                if ($strict) throw $e1;   // STRICT: NO fallback → propaga el error (se marca failed)
                 error_log('openai_chat falló con ' . $mdl . ': ' . $e1->getMessage() . ' → respaldo gpt-4o');
                 if ($mdl === 'gpt-4o') throw $e1;
                 $r = openai_chat($sistema, $mensaje, 'gpt-4o', ['max_tokens' => 700, 'max_reintentos' => 1]);
-                $mdl = 'gpt-4o(respaldo)';
+                $mdl = 'gpt-4o(respaldo)'; $fallback = true;
             }
             $texto = $r['texto']; $ti = $r['tokens_in']; $to = $r['tokens_out']; $usado = 'openai:' . $mdl;
         } else {
-            // Gemini reusa el transporte actual (system prepend, ya que gemini_generar no separa system).
             $r = gemini_generar($sistema . "\n\n" . $mensaje, ['temperatura' => 0.9, 'max_tokens' => 900]);
             $texto = $r['texto']; $ti = (int)($r['tokens_in'] ?? 0); $to = (int)($r['tokens_out'] ?? 0); $usado = 'gemini';
         }
-    } catch (Throwable $e) { $estado = 'error'; $err = substr($e->getMessage(), 0, 200); }
+    } catch (Throwable $e) {
+        $estado = 'error'; $err = substr($e->getMessage(), 0, 300);
+        if (preg_match('/HTTP (\d{3})/', $err, $mm)) $http = (int)$mm[1];
+    }
 
+    $lat = (int)round((microtime(true) - $t0) * 1000);
     try {
-        $lat = (int)round((microtime(true) - $t0) * 1000);
         $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,tokens_in,tokens_out,costo_usd,latencia_ms,estado,error_msg)
                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
             ->execute([$marca_id, 'director_creativo', 'Director Creativo v2', $usado, $mensaje, $texto, $ti, $to, null, $lat, $estado, $err]);
     } catch (Throwable $e) { /* log best-effort */ }
 
     if ($estado === 'error') throw new IaError($err ?: 'Director creativo falló');
-    return ['texto' => $texto, 'modelo' => $usado];
+    return ['texto' => $texto, 'modelo' => $usado, 'fallback' => $fallback, 'dur_ms' => $lat, 'http' => $http];
 }
 
 /**
- * IMAGE MESSENGER — empaca el contexto del negocio y deja que UN solo modelo dirija.
- * Cero creatividad propia: NO decide composición, luz, cámara, estilo ni mood.
- * @return string la descripción visual lista para gpt-image-1 (o '' si falla).
+ * Arma el SYSTEM + USER de V3 (los mismos que usa image_messenger_prompt). Separado
+ * para que el worker async pueda llamar al director directamente y capturar todo.
+ * @return array{sistema:string, mensaje:string}
  */
-function image_messenger_prompt(PDO $pdo, int $marca_id, array $m, string $copy, array $opts = []): string {
-    $modelo_cfg = trim((string)($opts['modelo'] ?? '')) !== ''
-                ? trim((string)$opts['modelo'])
-                : (defined('IMAGE_CREATIVE_MODEL') ? IMAGE_CREATIVE_MODEL : 'openai:creative');
-
-    // Datos del negocio (Crecer los aporta; el mensajero NO interpreta ni añade nada).
+function image_messenger_build(PDO $pdo, int $marca_id, array $m, string $copy): array {
     $nombre  = trim((string)($m['nombre_negocio'] ?? ''));
     $desc    = trim((string)($m['descripcion'] ?? ''));
     $publico = trim((string)($m['publico_objetivo'] ?? ''));
@@ -76,12 +73,10 @@ function image_messenger_prompt(PDO $pdo, int $marca_id, array $m, string $copy,
     $prods = [];
     foreach ((array)$prods_raw as $p) { $n = is_array($p) ? trim((string)($p['nombre'] ?? '')) : trim((string)$p); if ($n !== '') $prods[] = $n; }
     $productos = $prods ? implode(', ', $prods) : '';
-    // Personalidad de marca: capítulo de la radiografía si existe, si no la voz.
     $personalidad = function_exists('radiografia_capitulo') ? trim((string)radiografia_capitulo($pdo, $marca_id, 'personalidad')) : '';
     if ($personalidad === '') $personalidad = trim((string)($m['voz'] ?? ''));
     $objetivo = 'Crear la mejor imagen publicitaria posible para acompañar este post en Facebook e Instagram: detener el scroll y generar deseo de compra.';
 
-    // SYSTEM (V3) — EXACTO. Director Creativo: concepto/experiencia, nunca producto aislado.
     $sistema = <<<SYS
 Eres el Director Creativo de una de las mejores agencias de publicidad del mundo.
 
@@ -136,7 +131,6 @@ No uses formato JSON.
 Devuelve únicamente una descripción narrativa de la escena publicitaria ideal.
 SYS;
 
-    // USER (V3) — plantilla EXACTA con los datos del negocio interpolados.
     $mensaje = <<<USR
 NEGOCIO
 
@@ -171,9 +165,22 @@ GENOMA DEL NEGOCIO
 {$genome}
 USR;
 
+    return ['sistema' => $sistema, 'mensaje' => $mensaje];
+}
+
+/**
+ * IMAGE MESSENGER — empaca el contexto del negocio y deja que UN solo modelo dirija.
+ * Cero creatividad propia: NO decide composición, luz, cámara, estilo ni mood.
+ * @return string la descripción visual lista para gpt-image-1 (o '' si falla).
+ */
+function image_messenger_prompt(PDO $pdo, int $marca_id, array $m, string $copy, array $opts = []): string {
+    $modelo_cfg = trim((string)($opts['modelo'] ?? '')) !== ''
+                ? trim((string)$opts['modelo'])
+                : (defined('IMAGE_CREATIVE_MODEL') ? IMAGE_CREATIVE_MODEL : 'openai:creative');
+    $b = image_messenger_build($pdo, $marca_id, $m, $copy);
     // El mensajero SOLO transporta: la respuesta va DIRECTA a gpt-image-1, sin modificar.
     try {
-        $r = director_creativo_llm($pdo, $marca_id, $sistema, $mensaje, $modelo_cfg);
+        $r = director_creativo_llm($pdo, $marca_id, $b['sistema'], $b['mensaje'], $modelo_cfg, $opts);
         return trim((string)($r['texto'] ?? ''));
     } catch (Throwable $e) { error_log('image_messenger: ' . $e->getMessage()); return ''; }
 }

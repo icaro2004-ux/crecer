@@ -62,8 +62,8 @@ try {
     // Llave FIJA propia (NO el CRON_TOKEN de prod, que no cuadra — mismo lío del SMS).
     // Estas pruebas gastan dinero → protegidas con esta llave. Rota/borra luego.
     $__imgkey = 'crimg_7k2x';
-    if (in_array($__test, ['img','arte','imgmanual','compare'], true) && !hash_equals($__imgkey, (string)($_GET['t'] ?? ''))) {
-        echo "\n(Para las pruebas en vivo &test=img/arte/imgmanual/compare añade  &t=crimg_7k2x  al final.)\n";
+    if (in_array($__test, ['img','arte','imgmanual','compare','v3async'], true) && !hash_equals($__imgkey, (string)($_GET['t'] ?? ''))) {
+        echo "\n(Para las pruebas en vivo añade  &t=crimg_7k2x  al final.)\n";
         $__test = '';
     }
     if ($__test === 'img') {
@@ -134,6 +134,40 @@ try {
                 echo "✅ motor=" . ($r['modelo'] ?? '?') . " ({$seg}s)\n  VER: " . ($arch !== '' ? $arch : '(sin archivo)') . "\n";
             } catch (Throwable $e) { echo "❌ " . $e->getMessage() . "\n"; }
         }
+    }
+
+    // V3 ASYNC — encola N generaciones (default 10) y dispara los workers. Responde ya.
+    if ($__test === 'v3async') {
+        require_once __DIR__ . '/includes/agentes.php';
+        require_once __DIR__ . '/includes/gen_async.php';
+        $mid = (int)$pdo->query("SELECT id FROM crecer_marca ORDER BY id DESC LIMIT 1")->fetchColumn();
+        $cap = (string)$pdo->query("SELECT caption FROM crecer_contenido WHERE marca_id={$mid} AND caption<>'' ORDER BY id DESC LIMIT 1")->fetchColumn();
+        if ($cap === '') $cap = 'Donas artesanales recién hechas, por docena o para tus eventos. Rica Dona Express.';
+        $n = max(1, min(10, (int)($_GET['n'] ?? 10)));
+        echo "\n--- V3 ASYNC: encolando {$n} generaciones (marca #{$mid}) ---\n";
+        $ids = [];
+        for ($i = 0; $i < $n; $i++) { $gid = gen_encolar($pdo, $mid, $cap); gen_disparar($gid); $ids[] = $gid; usleep(150000); }
+        echo "encoladas + disparadas: " . implode(', ', $ids) . "\n";
+        echo "→ Corren por detrás (~1 min c/u, en paralelo). Espera ~2 min y abre:\n";
+        echo "   " . 'https://' . ($_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com') . "/crecer/_cache.php?k=crecer&test=v3report\n";
+    }
+
+    // V3 ASYNC — reporte (lee crecer_generaciones). No cuesta, no requiere llave.
+    if (($_GET['test'] ?? '') === 'v3report') {
+        echo "\n--- V3 ASYNC · REPORTE (últimas 10) ---\n";
+        try {
+            $rows = $pdo->query("SELECT id,estado,modelo_texto,modelo_imagen,dur_texto_ms,dur_imagen_ms,dur_total_ms,http_status,fallback,error_msg,archivo FROM crecer_generaciones ORDER BY id DESC LIMIT 10")->fetchAll(PDO::FETCH_ASSOC);
+            $ok=0; $fail=0; $fb=0; $pend=0;
+            foreach ($rows as $r) {
+                if ($r['estado']==='completed') $ok++; elseif ($r['estado']==='failed') $fail++; else $pend++;
+                if ($r['fallback']) $fb++;
+                echo "\n#{$r['id']} [{$r['estado']}] texto={$r['modelo_texto']} ({$r['dur_texto_ms']}ms) · imagen={$r['modelo_imagen']} ({$r['dur_imagen_ms']}ms) · total=" . round(((int)$r['dur_total_ms'])/1000,1) . "s";
+                if ($r['estado']==='failed') echo "  ❌ http={$r['http_status']} err=" . substr((string)$r['error_msg'],0,140);
+                if (!empty($r['archivo'])) echo "\n   VER: https://" . ($_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com') . '/' . ltrim((string)$r['archivo'],'/');
+            }
+            echo "\n\nRESUMEN: completadas={$ok} · fallidas={$fail} · pendientes={$pend} · con_fallback={$fb} (DEBE ser 0)\n";
+            echo "(Si hay pendientes, refresca en 30s — siguen corriendo por detrás.)\n";
+        } catch (Throwable $e) { echo "REPORTE falló (¿corriste la migración crecer_generaciones?): " . $e->getMessage() . "\n"; }
     }
 
     // Prueba REAL del SMS: manda un código de verdad y muestra el ERROR CRUDO de Twilio.
