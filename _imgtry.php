@@ -24,6 +24,12 @@ function lab_abs(string $url): string {
     $rel = ltrim(str_replace(rtrim(UPLOADS_URL, '/'), '', $url), '/');
     return rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
 }
+/** Log del worker (para diagnosticar arranque/duración/errores). */
+function lab_log(string $m): void {
+    $d = __DIR__ . '/storage/logs'; @mkdir($d, 0775, true);
+    @file_put_contents($d . '/lab_worker.log', date('c') . ' ' . $m . "\n", FILE_APPEND);
+}
+
 /** Fire-and-forget: arranca el worker por auto-HTTP (responde al instante). */
 function lab_fire(int $id, string $aspect, string $motor = 'img'): void {
     $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
@@ -37,6 +43,7 @@ function lab_fire(int $id, string $aspect, string $motor = 'img'): void {
 // ===== WORKER: genera por detrás (inmune al 504 de nginx) =====
 if (isset($_GET['work'])) {
     $wid = (int)$_GET['work']; $wa = (string)($_GET['a'] ?? '1:1'); $wmotor = (string)($_GET['motor'] ?? 'img');
+    lab_log("work={$wid} motor={$wmotor} ARRANCÓ (fcfr=" . (function_exists('fastcgi_finish_request')?'sí':'no') . ")");
     if (function_exists('fastcgi_finish_request')) { echo 'ok'; @fastcgi_finish_request(); }
     @set_time_limit(0); @ignore_user_abort(true);
     $e = lab_exp($pdo, $wid);
@@ -44,6 +51,7 @@ if (isset($_GET['work'])) {
         try {
             $t0 = microtime(true);
             if ($wmotor === 'responses') {
+                lab_log("work={$wid} llamando openai_responses_imagen…");
                 // MODO ChatGPT: el modelo se dirige solo (Responses API). El 'prompt' = el brief.
                 $r = openai_responses_imagen((string)$e['prompt'], ['aspect' => $wa]);
                 $seg = round(microtime(true) - $t0, 1);
@@ -56,6 +64,7 @@ if (isset($_GET['work'])) {
                 // 'prompt' pasa a ser el prompt REAL que el modelo escribió (para comparar).
                 $pdo->prepare("UPDATE crecer_lab_experimentos SET estado='ok', imagen=?, bytes=?, modelo=?, segundos=?, prompt=? WHERE id=?")
                     ->execute([$url, strlen($r['data']), $r['modelo'], $seg, ($rev !== '' ? $rev : (string)$e['prompt']), $wid]);
+                lab_log("work={$wid} OK {$seg}s modelo={$r['modelo']}");
             } else {
                 // Modo directo: gpt-image-1 con el prompt tal cual.
                 $r  = openai_imagen((string)$e['prompt'], ['aspect' => $wa]);
@@ -71,8 +80,17 @@ if (isset($_GET['work'])) {
         } catch (Throwable $ex) {
             $pdo->prepare("UPDATE crecer_lab_experimentos SET estado='error', observaciones=CONCAT('[error] ', ?) WHERE id=?")
                 ->execute([substr($ex->getMessage(), 0, 400), $wid]);
+            lab_log("work={$wid} ERROR " . substr($ex->getMessage(), 0, 300));
         }
-    }
+    } else { lab_log("work={$wid} no estaba 'queued' (estado=" . ($e['estado'] ?? 'no existe') . ")"); }
+    exit;
+}
+
+// ===== VISOR del log del worker =====
+if (isset($_GET['wlog'])) {
+    header('Content-Type: text/plain; charset=utf-8');
+    $f = __DIR__ . '/storage/logs/lab_worker.log';
+    echo is_file($f) ? (string)file_get_contents($f) : '(log vacío — el worker nunca escribió)';
     exit;
 }
 
