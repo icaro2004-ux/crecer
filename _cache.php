@@ -104,30 +104,36 @@ try {
         }
     }
 
-    // COMPARE: v1 (agentes) vs v2-openai vs v2-gemini — mismo negocio y copy, 3 imágenes.
+    // COMPARE: UNA imagen por request (3 juntas = 504 timeout de nginx). Se corre 3 veces
+    // con &one=v1 | v2openai | v2gemini.
     if ($__test === 'compare') {
-        echo "\n--- COMPARE: v1 vs v2-openai vs v2-gemini (mismo negocio + copy) ---\n";
-        try {
-            require_once __DIR__ . '/includes/agentes.php';
-            $mid = (int)$pdo->query("SELECT id FROM crecer_marca ORDER BY id DESC LIMIT 1")->fetchColumn();
-            $cap = (string)$pdo->query("SELECT caption FROM crecer_contenido WHERE marca_id={$mid} AND caption<>'' ORDER BY id DESC LIMIT 1")->fetchColumn();
-            if ($cap === '') $cap = 'Donas artesanales recién hechas — por docena o para tus eventos. Ven a Rica Dona Express.';
-            echo "marca #{$mid}\ncopy: " . mb_substr($cap, 0, 130) . "…\n";
-            foreach ([['v1', ['pipeline'=>'v1']],
-                      ['v2-openai', ['pipeline'=>'v2','creative_model'=>'openai:creative']],
-                      ['v2-gemini', ['pipeline'=>'v2','creative_model'=>'gemini:creative']]] as $par) {
-                $lbl = $par[0]; $o = $par[1];
-                try {
-                    $t0 = microtime(true);
-                    $r = generar_grafica($pdo, $mid, null, array_merge(['copy'=>$cap,'con_texto'=>false,'con_logo'=>false], $o));
-                    $seg = round(microtime(true) - $t0, 1);
-                    $arch = (string)($r['archivo'] ?? '');
-                    if ($arch !== '' && stripos($arch, 'http') !== 0) $arch = 'https://' . ($_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com') . '/' . ltrim($arch, '/');
-                    echo "\n{$lbl}: ✅ motor=" . ($r['modelo'] ?? '?') . " ({$seg}s)\n  VER: " . ($arch !== '' ? $arch : '(sin archivo)') . "\n";
-                } catch (Throwable $e) { echo "\n{$lbl}: ❌ " . $e->getMessage() . "\n"; }
-            }
-            echo "\n→ Abre las 3 URLs y compara. v1=agentes · v2=un solo cerebro creativo.\n";
-        } catch (Throwable $e) { echo "COMPARE falló: " . $e->getMessage() . "\n"; }
+        @set_time_limit(0);
+        $variantes = [
+            'v1'       => ['pipeline'=>'v1'],
+            'v2openai' => ['pipeline'=>'v2','creative_model'=>'openai:creative'],
+            'v2gemini' => ['pipeline'=>'v2','creative_model'=>'gemini:creative'],
+        ];
+        $one = (string)($_GET['one'] ?? '');
+        echo "\n--- COMPARE (una a la vez para no chocar con el timeout) ---\n";
+        if (!isset($variantes[$one])) {
+            echo "Corre estas 3 URLs, UNA por UNA (cada una tarda ~40s):\n";
+            foreach (array_keys($variantes) as $k)
+                echo "  https://" . ($_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com') . "/crecer/_cache.php?k=crecer&test=compare&t=crimg_7k2x&one={$k}\n";
+        } else {
+            try {
+                require_once __DIR__ . '/includes/agentes.php';
+                $mid = (int)$pdo->query("SELECT id FROM crecer_marca ORDER BY id DESC LIMIT 1")->fetchColumn();
+                $cap = (string)$pdo->query("SELECT caption FROM crecer_contenido WHERE marca_id={$mid} AND caption<>'' ORDER BY id DESC LIMIT 1")->fetchColumn();
+                if ($cap === '') $cap = 'Donas artesanales recién hechas — por docena o para tus eventos. Ven a Rica Dona Express.';
+                echo "variante: {$one}  ·  marca #{$mid}\n";
+                $t0 = microtime(true);
+                $r = generar_grafica($pdo, $mid, null, array_merge(['copy'=>$cap,'con_texto'=>false,'con_logo'=>false], $variantes[$one]));
+                $seg = round(microtime(true) - $t0, 1);
+                $arch = (string)($r['archivo'] ?? '');
+                if ($arch !== '' && stripos($arch, 'http') !== 0) $arch = 'https://' . ($_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com') . '/' . ltrim($arch, '/');
+                echo "✅ motor=" . ($r['modelo'] ?? '?') . " ({$seg}s)\n  VER: " . ($arch !== '' ? $arch : '(sin archivo)') . "\n";
+            } catch (Throwable $e) { echo "❌ " . $e->getMessage() . "\n"; }
+        }
     }
 
     // Prueba REAL del SMS: manda un código de verdad y muestra el ERROR CRUDO de Twilio.
