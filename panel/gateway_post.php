@@ -96,6 +96,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         catch (Throwable $e) { echo json_encode(['ok'=>false, 'err'=>'No pude aplicar el cambio ahora.']); }
         exit;
     }
+    // 🎨 Regenerar la IMAGEN con o sin texto (el dueño decide) → corre el director de arte.
+    if ($accion === 'regenerar_imagen') {
+        @set_time_limit(0);
+        $con_txt = ($_POST['con_texto'] ?? '') === '1';
+        $cap = (string)$pdo->query("SELECT caption FROM crecer_contenido WHERE id={$post_id}")->fetchColumn();
+        try {
+            $g = generar_grafica($pdo, $marca_id, null, ['copy'=>$cap, 'con_texto'=>$con_txt, 'con_logo'=>false]);
+            if (!empty($g['archivo'])) {
+                $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$g['archivo'], $post_id, $marca_id]);
+                echo json_encode(['ok'=>true, 'img'=>(string)$g['archivo']]); exit;
+            }
+            echo json_encode(['ok'=>false, 'err'=>'No se pudo regenerar.']); exit;
+        } catch (Throwable $e) { echo json_encode(['ok'=>false, 'err'=>'No se pudo regenerar ahora.']); exit; }
+    }
     echo json_encode(['ok'=>false,'err'=>'Acción inválida.']); exit;
 }
 
@@ -211,6 +225,14 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .price{font-family:var(--font-display,'Poppins');font-weight:800;font-size:40px;color:var(--tinta);line-height:1}
   .price span{font-size:16px;font-weight:600;color:var(--muted)}
   .price-sub{font-size:13px;color:var(--muted);margin:5px 0 13px}
+  /* Selector segmentado: la imagen con o sin texto (lo decide el dueño) */
+  .imgmode{margin-top:14px}
+  .imgmode .lbl{font-size:12.5px;font-weight:700;color:var(--muted);margin:0 2px 7px}
+  .imgmode .seg{display:flex;gap:4px;background:var(--crema-2,#efece7);border-radius:14px;padding:4px}
+  .imgmode .opt{flex:1;border:0;background:transparent;cursor:pointer;font-family:var(--font-display,'Poppins');font-weight:700;font-size:13.5px;color:var(--muted);padding:11px 8px;border-radius:11px;transition:background .2s,color .2s,box-shadow .2s;display:flex;align-items:center;justify-content:center;gap:7px}
+  .imgmode .opt:active{transform:scale(.98)}
+  .imgmode .opt.on{background:#fff;color:var(--tinta);box-shadow:0 3px 10px -3px rgba(20,12,20,.16)}
+  .imgmode .opt svg{width:16px;height:16px}
 </style>
 </head>
 <body>
@@ -268,6 +290,20 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <div class="cap" id="capBox"><?= $caption !== '' ? $h($caption) : '<span style="color:var(--muted)">Sin texto todavía.</span>' ?></div>
     <textarea class="cap-edit" id="capEdit" style="display:none;margin:0 15px 15px"><?= $h($caption) ?></textarea>
   </div>
+
+  <?php if ($grafica): ?>
+  <div class="imgmode">
+    <div class="lbl">La imagen — tú decides</div>
+    <div class="seg" id="imgMode">
+      <button type="button" class="opt on" data-txt="0">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>Foto sola
+      </button>
+      <button type="button" class="opt" data-txt="1">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>Con texto
+      </button>
+    </div>
+  </div>
+  <?php endif; ?>
 
   <div class="acts" id="actsBorrador" style="<?= $aprobado ? 'display:none' : '' ?>">
     <button class="btn ok" id="btnAprobar">✓ Aprobar este post</button>
@@ -354,6 +390,21 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   if(btnCambioX) btnCambioX.addEventListener('click',function(){ actsC.style.display='none'; actsB.style.display=''; });
   var btnCambioGo=document.getElementById('btnCambioGo');
   if(btnCambioGo) btnCambioGo.addEventListener('click',function(){ var n=(document.getElementById('cambioNota').value||'').trim(); if(!n){ T('Escribe qué cambiar.'); return; } aiRewrite('pedir_cambio',{nota:n}); });
+
+  // 🎨 Imagen con/sin texto — el dueño decide; corre el director de arte y regenera.
+  var imgMode=document.getElementById('imgMode');
+  if(imgMode) imgMode.querySelectorAll('.opt').forEach(function(b){
+    b.addEventListener('click',function(){
+      if(b.classList.contains('on')) return;
+      var ct=b.getAttribute('data-txt');
+      showLoad(ct==='1'?'El director de arte está diseñando tu gráfico…':'El director de arte está rediseñando tu foto…');
+      self('regenerar_imagen',{con_texto:ct}).then(function(d){
+        hideLoad();
+        if(d&&d.ok&&d.img){ var im=document.querySelector('.card .img'); if(im) im.src=d.img+(d.img.indexOf('?')>-1?'&':'?')+'v='+Date.now(); imgMode.querySelectorAll('.opt').forEach(function(x){x.classList.remove('on');}); b.classList.add('on'); T('Imagen lista ✓'); }
+        else T((d&&d.err)||'No se pudo ahora.');
+      }).catch(function(){ hideLoad(); T('Error de conexión.'); });
+    });
+  });
   document.getElementById('btnGuardar').addEventListener('click',function(){
     var b=this; b.disabled=true;
     self('guardar_caption',{caption:capEdit.value}).then(function(d){
