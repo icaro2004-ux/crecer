@@ -47,9 +47,10 @@ function lab_log(string $m): void {
 }
 
 /** Fire-and-forget: arranca el worker por auto-HTTP (responde al instante). */
-function lab_fire(int $id, string $aspect, string $motor = 'img'): void {
+function lab_fire(int $id, string $aspect, string $motor = 'img', string $rend = ''): void {
     $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
-    $url  = 'https://' . $host . '/crecer/_imgtry.php?k=crecer&work=' . $id . '&a=' . rawurlencode($aspect) . '&motor=' . $motor;
+    $url  = 'https://' . $host . '/crecer/_imgtry.php?k=crecer&work=' . $id . '&a=' . rawurlencode($aspect) . '&motor=' . $motor
+          . ($rend !== '' ? '&r=' . rawurlencode($rend) : '');
     $ch = curl_init($url);
     curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_CONNECTTIMEOUT_MS=>1500,
         CURLOPT_TIMEOUT_MS=>2500, CURLOPT_NOSIGNAL=>1, CURLOPT_SSL_VERIFYPEER=>false]);
@@ -82,8 +83,11 @@ if (isset($_GET['work'])) {
                     ->execute([$url, strlen($r['data']), $r['modelo'], $seg, ($rev !== '' ? $rev : (string)$e['prompt']), $wid]);
                 lab_log("work={$wid} OK {$seg}s modelo={$r['modelo']}");
             } else {
-                // Modo directo: gpt-image-1 con el prompt tal cual.
-                $r  = openai_imagen((string)$e['prompt'], ['aspect' => $wa]);
+                // Modo directo: gpt-image-1 (o el renderizador que pida &r=, ej. gpt-image-2).
+                $wrend = trim((string)($_GET['r'] ?? ''));
+                $oimg = ['aspect' => $wa];
+                if ($wrend !== '') $oimg['modelo_openai'] = $wrend;
+                $r  = openai_imagen((string)$e['prompt'], $oimg);
                 $seg = round(microtime(true) - $t0, 1);
                 $rel = 'pruebas/lab_' . substr(md5((string)microtime(true)), 0, 8) . '.png';
                 $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
@@ -362,13 +366,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 (marca_id,negocio,hipotesis,copy_txt,escena,prompt,estado) VALUES (?,?,?,?,?,?, 'queued')");
             $ins->execute([$s_marca ?: null, $neg ?: null, $hipotesis ?: null, $s_copy ?: null, $s_escena ?: null, $prompt]);
             $qid = (int)$pdo->lastInsertId();
-            lab_fire($qid, $aspect);
+            lab_fire($qid, $aspect, 'img', trim((string)($_POST['renderer'] ?? '')));
             $exp = lab_exp($pdo, $qid);   // 'queued' → el panel muestra el spinner y hace polling
         } catch (Throwable $e) {
             // Sin tabla (migración no corrida) → generación síncrona (viejo camino).
             try {
                 $t0 = microtime(true);
-                $r  = openai_imagen($prompt, ['aspect' => $aspect]);
+                $_rend = trim((string)($_POST['renderer'] ?? ''));
+                $r  = openai_imagen($prompt, ['aspect' => $aspect] + ($_rend !== '' ? ['modelo_openai' => $_rend] : []));
                 $seg = round(microtime(true) - $t0, 1);
                 $rel = 'pruebas/lab_' . substr(md5((string)microtime(true)), 0, 8) . '.png';
                 $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
@@ -404,19 +409,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $brief  = lab_brief_natural($m, $copy_in);
             $cid    = 'cmp_' . substr(md5(uniqid('', true)), 0, 12);
             $cfg    = defined('IMAGE_CREATIVE_MODEL') ? IMAGE_CREATIVE_MODEL : 'openai:creative';
+            $renderer = trim((string)($_POST['renderer'] ?? ''));   // renderizador de las variantes DIRECTAS (director/directo)
 
             // VARIANTE · Director de dos pasos (v2 image_messenger). Director INLINE (~10s), imagen async.
             $bA = image_messenger_build($pdo, $marca_id, $m, $copy_in);
             $escenaA = ''; $metaA = ['modo'=>'director', 'endpoint_texto'=>'/v1/chat/completions',
                 'endpoint_imagen'=>'/v1/images/generations', 'modelo_solicitado'=>resolver_modelo_ia($cfg),
-                'renderizador'=>'gpt-image-1', 'quality'=>'high', 'size'=>$aspect, 'background'=>'opaque',
+                'renderizador'=>($renderer ?: 'gpt-image-1'), 'quality'=>'high', 'size'=>$aspect, 'background'=>'opaque',
                 'action'=>'generate', 'system'=>$bA['sistema'], 'user'=>$bA['mensaje']];
             try { $dA = director_creativo_llm($pdo, $marca_id, $bA['sistema'], $bA['mensaje'], $cfg, ['strict'=>true]);
                   $escenaA = trim((string)($dA['texto'] ?? '')); $metaA['director_modelo'] = $dA['modelo'] ?? ''; }
             catch (Throwable $ex) { $metaA['director_error'] = $ex->getMessage(); }
 
             // VARIANTE · Prompt directo (el MISMO brief natural va directo a gpt-image-1, sin director).
-            $metaB = ['modo'=>'directo', 'endpoint_imagen'=>'/v1/images/generations', 'renderizador'=>'gpt-image-1',
+            $metaB = ['modo'=>'directo', 'endpoint_imagen'=>'/v1/images/generations', 'renderizador'=>($renderer ?: 'gpt-image-1'),
                 'quality'=>'high', 'size'=>$aspect, 'background'=>'opaque', 'action'=>'generate', 'prompt'=>$brief];
 
             // VARIANTE · Responses auto-dirigido (background:true).
@@ -448,7 +454,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $pdo->prepare("UPDATE crecer_lab_experimentos SET observaciones=? WHERE id=?")->execute(['[error] ' . $err, $eid]);
                 } elseif ($v['fire'] === 'img') { $disparar[] = $eid; }
             }
-            foreach ($disparar as $eid) lab_fire($eid, $aspect, 'img');   // A y B por el worker de imagen
+            foreach ($disparar as $eid) lab_fire($eid, $aspect, 'img', $renderer);   // A y B por el worker de imagen (renderizador elegido)
             header('Location: ?k=crecer&cmp=' . $cid); exit;
         } catch (Throwable $e) { $img_err = 'Comparador: ' . $e->getMessage(); }
     }
@@ -620,6 +626,10 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
         <option value="4:5"  <?= $aspect==='4:5'?'selected':'' ?>>Vertical 4:5</option>
         <option value="16:9" <?= $aspect==='16:9'?'selected':'' ?>>Horizontal 16:9</option>
       </select>
+      <select name="renderer" style="width:auto;margin:0">
+        <option value="">gpt-image-1 (actual)</option>
+        <option value="gpt-image-2">gpt-image-2 (nuevo · el de Responses)</option>
+      </select>
       <button type="submit">Generar imagen</button> <small>~48s</small>
     </div>
     <div class="load" id="l2">🎨 Generando… (no cierres, ~48s)</div>
@@ -671,6 +681,10 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <div class="row">
       <select name="aspect" style="width:auto;margin:0">
         <option value="1:1">Cuadrado 1:1</option><option value="4:5">Vertical 4:5</option><option value="16:9">Horizontal 16:9</option>
+      </select>
+      <select name="renderer" style="width:auto;margin:0" title="Renderizador de las variantes directas (Director/Directo). Responses siempre usa su interno.">
+        <option value="">Directas en gpt-image-1</option>
+        <option value="gpt-image-2">Directas en gpt-image-2 (comparación justa)</option>
       </select>
       <button type="submit">🆚 Comparar los 3 modos</button> <small>~15s en crear, luego se generan solas</small>
     </div>
