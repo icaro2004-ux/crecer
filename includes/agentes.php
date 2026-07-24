@@ -1442,6 +1442,12 @@ function crear_post_muestra(PDO $pdo, int $marca_id): int {
     $cid = (int)$pdo->lastInsertId();
     $cap = '';
     try { $r = redactar_pieza($pdo, $cid); $cap = (string)($r['caption'] ?? ''); } catch (Throwable $e) {}
+    // MOTOR RESPONSES (background): encola el anuncio y devuelve YA; la imagen llega por
+    // polling en el gateway (sin colgar la página ~50s). Fallback al motor viejo si falla.
+    require_once __DIR__ . '/img_responses.php';
+    if (img_resp_activo() && img_resp_encolar($pdo, $marca_id, $cid, $cap) !== '') {
+        return $cid;
+    }
     try {
         $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => false]);
         if (!empty($g['archivo'])) $pdo->prepare("UPDATE crecer_contenido SET grafica_path=? WHERE id=?")->execute([$g['archivo'], $cid]);

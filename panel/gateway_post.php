@@ -96,11 +96,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         catch (Throwable $e) { echo json_encode(['ok'=>false, 'err'=>'No pude aplicar el cambio ahora.']); }
         exit;
     }
-    // 🎨 Regenerar la IMAGEN con o sin texto (el dueño decide) → corre el director de arte.
+    // 🎨 Regenerar la IMAGEN. Motor Responses (background) → encola y el frontend hace
+    // polling; si no, motor viejo síncrono. El dueño decide con/sin texto (motor viejo).
     if ($accion === 'regenerar_imagen') {
         @set_time_limit(0);
+        require_once __DIR__ . '/../includes/img_responses.php';
         $con_txt = ($_POST['con_texto'] ?? '') === '1';
         $cap = (string)$pdo->query("SELECT caption FROM crecer_contenido WHERE id={$post_id}")->fetchColumn();
+        if (img_resp_activo() && img_resp_encolar($pdo, $marca_id, $post_id, $cap) !== '') {
+            echo json_encode(['ok'=>true, 'job'=>1]); exit;   // → el frontend consulta con poll_imagen
+        }
         try {
             $g = generar_grafica($pdo, $marca_id, null, ['copy'=>$cap, 'con_texto'=>$con_txt, 'con_logo'=>false]);
             if (!empty($g['archivo'])) {
@@ -109,6 +114,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             echo json_encode(['ok'=>false, 'err'=>'No se pudo regenerar.']); exit;
         } catch (Throwable $e) { echo json_encode(['ok'=>false, 'err'=>'No se pudo regenerar ahora.']); exit; }
+    }
+    // 🔁 Polling de la imagen en background (Responses): guarda al completar y devuelve el estado.
+    if ($accion === 'poll_imagen') {
+        require_once __DIR__ . '/../includes/img_responses.php';
+        $r = img_resp_completar($pdo, $marca_id, $post_id);
+        echo json_encode(['ok'=>true, 'estado'=>$r['estado'], 'img'=>$r['img']]); exit;
     }
     echo json_encode(['ok'=>false,'err'=>'Acción inválida.']); exit;
 }
@@ -150,6 +161,7 @@ if ($ver_url === '') {
 $nombre  = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
 $caption = (string)($post['caption'] ?? '');
 $grafica = (string)($post['grafica_path'] ?? '');
+$img_pending = (empty($grafica) && (($post['img_estado'] ?? '') === 'queued'));   // Responses generando en background
 $aprobado = in_array(($post['estado'] ?? ''), ['aprobado','fallido','publicando'], true);   // ya pasó del borrador → listo para (re)publicar
 $publicado = ($post['estado'] ?? '') === 'publicado';
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
@@ -175,7 +187,8 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   /* La tarjeta del post — CLAVADA, es la protagonista */
   .card{background:var(--card,#fff);border:1px solid var(--line);border-radius:20px;overflow:hidden;box-shadow:var(--shadow-sm)}
   .card .img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:var(--crema-2,#efece7)}
-  .card .noimg{width:100%;aspect-ratio:1/1;display:grid;place-items:center;color:var(--muted);font-size:14px;background:var(--crema-2,#efece7)}
+  .card .noimg{width:100%;aspect-ratio:1/1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:24px;color:var(--muted);font-size:14px;font-weight:600;background:var(--crema-2,#efece7)}
+  .card .noimg .spin{width:38px;height:38px;border-radius:50%;border:4px solid rgba(0,0,0,.12);border-top-color:var(--magenta,#EF4375);animation:gspin .8s linear infinite}
   .card .cap{padding:16px 17px;font-size:14.5px;line-height:1.6;color:var(--tinta);white-space:pre-wrap;word-wrap:break-word}
   .card .cap-edit{width:100%;font-family:inherit;font-size:14.5px;line-height:1.6;border:1.5px solid var(--magenta);border-radius:12px;padding:12px 13px;min-height:130px;resize:vertical}
   .cambio-in{width:100%;font-family:inherit;font-size:15px;border:1.5px solid var(--magenta);border-radius:13px;padding:13px 14px;box-sizing:border-box}
@@ -286,7 +299,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   <?php endif; ?>
 
   <div class="card">
-    <?php if ($grafica): ?><img class="img" src="<?= $h($grafica) ?>" alt=""><?php else: ?><div class="noimg">Preparando tu arte…</div><?php endif; ?>
+    <?php if ($grafica): ?><img class="img" src="<?= $h($grafica) ?>" alt=""><?php else: ?><div class="noimg" id="noimg"><span class="spin"></span>Tu equipo está diseñando tu anuncio…<br><small style="opacity:.7">Toma un par de minutos. Mientras, ajusta el texto abajo.</small></div><?php endif; ?>
     <div class="cap" id="capBox"><?= $caption !== '' ? $h($caption) : '<span style="color:var(--muted)">Sin texto todavía.</span>' ?></div>
     <textarea class="cap-edit" id="capEdit" style="display:none;margin:0 15px 15px"><?= $h($caption) ?></textarea>
   </div>
@@ -343,12 +356,28 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <script>
 (function(){
   var CSRF=<?= json_encode(csrf_token()) ?>, MARCA=<?= (int)$marca_id ?>, PID=<?= (int)$post_id ?>, GW=<?= json_encode($gwq) ?>, PLATS=<?= json_encode(implode(',', $redes_conectadas)) ?>;
+  var IMG_PENDING=<?= $img_pending ? 'true' : 'false' ?>;
   var toast=document.getElementById('toast');
   function T(m){ toast.textContent=m; toast.classList.add('on'); setTimeout(function(){toast.classList.remove('on');},2200); }
   function self(accion, extra){ var fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion',accion); for(var k in (extra||{})) fd.append(k,extra[k]); return fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}); }
   var gload=document.getElementById('gload'), gloadMsg=document.getElementById('gloadMsg');
   function showLoad(m){ gloadMsg.textContent=m||'Trabajando…'; gload.classList.add('on'); }
   function hideLoad(){ gload.classList.remove('on'); }
+  // Polling de la imagen en background (Responses/gpt-image-2). cb(url) o cb(null) si falla.
+  function pollImg(cb){
+    var t=setInterval(function(){
+      self('poll_imagen',{}).then(function(d){
+        if(d&&d.estado==='ok'&&d.img){ clearInterval(t); cb(d.img); }
+        else if(d&&d.estado==='error'){ clearInterval(t); cb(null); }
+      }).catch(function(){});
+    },4000);
+  }
+  function swapImg(url){ var im=document.querySelector('.card .img');
+    if(im){ im.src=url+(url.indexOf('?')>-1?'&':'?')+'v='+Date.now(); }
+    else { location.reload(); }   // venía del estado "generando" (sin <img>) → recarga para pintar toda la UI
+  }
+  // Al cargar: si la imagen se está generando en background, espera y refresca solo.
+  if(IMG_PENDING){ pollImg(function(url){ location.reload(); }); }
 
 <?php if (!$publicado): ?>
   var actsB=document.getElementById('actsBorrador'), actsE=document.getElementById('actsEdit'),
@@ -399,8 +428,14 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       var ct=b.getAttribute('data-txt');
       showLoad(ct==='1'?'El director de arte está diseñando tu gráfico…':'El director de arte está rediseñando tu foto…');
       self('regenerar_imagen',{con_texto:ct}).then(function(d){
+        if(d&&d.job){   // motor Responses: se generó en background → esperar por polling
+          pollImg(function(url){ hideLoad();
+            if(url){ swapImg(url); imgMode.querySelectorAll('.opt').forEach(function(x){x.classList.remove('on');}); b.classList.add('on'); T('Imagen lista ✓'); }
+            else T('No se pudo esta vez.'); });
+          return;
+        }
         hideLoad();
-        if(d&&d.ok&&d.img){ var im=document.querySelector('.card .img'); if(im) im.src=d.img+(d.img.indexOf('?')>-1?'&':'?')+'v='+Date.now(); imgMode.querySelectorAll('.opt').forEach(function(x){x.classList.remove('on');}); b.classList.add('on'); T('Imagen lista ✓'); }
+        if(d&&d.ok&&d.img){ swapImg(d.img); imgMode.querySelectorAll('.opt').forEach(function(x){x.classList.remove('on');}); b.classList.add('on'); T('Imagen lista ✓'); }
         else T((d&&d.err)||'No se pudo ahora.');
       }).catch(function(){ hideLoad(); T('Error de conexión.'); });
     });

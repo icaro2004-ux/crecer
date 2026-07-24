@@ -396,6 +396,11 @@ if (!defined('IMAGE_PIPELINE'))       define('IMAGE_PIPELINE', 'v1');
 // OpenAI/Gemini saquen algo mejor, sin tocar el resto del sistema).
 if (!defined('IMAGE_CREATIVE_MODEL')) define('IMAGE_CREATIVE_MODEL', 'openai:creative');
 
+// MOTOR DE IMAGEN DE PRODUCCIÓN. 'responses' = el modelo se dirige solo (Responses API →
+// gpt-image-2), background+polling — ganó 3/3 pruebas ciegas. 'actual' = motor viejo
+// (director→gpt-image-1). Reversible: pon 'actual' en config.local.php para volver atrás.
+if (!defined('IMAGE_ENGINE')) define('IMAGE_ENGINE', 'responses');
+
 /**
  * Resuelve un PERFIL LÓGICO ('openai:creative') al modelo concreto de HOY
  * ('openai:gpt-4o'). El código nunca conoce nombres de modelo: solo perfiles.
