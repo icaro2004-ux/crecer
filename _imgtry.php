@@ -84,6 +84,31 @@ if (isset($_GET['poll'])) {
     exit;
 }
 
+// ===== DIAGNÓSTICO Responses API (síncrono, muestra el error CRUDO) =====
+if (isset($_GET['rtest'])) {
+    header('Content-Type: text/plain; charset=utf-8');
+    @set_time_limit(0);
+    $cfg = resolver_modelo_ia(defined('IMAGE_CREATIVE_MODEL') ? IMAGE_CREATIVE_MODEL : 'openai:creative');
+    $mdl = strpos($cfg, ':') !== false ? explode(':', $cfg, 2)[1] : $cfg;
+    echo "Modelo resuelto para Modo ChatGPT: {$mdl}\n";
+    echo "Llamando a /v1/responses con la herramienta image_generation…\n\n";
+    $brief = "Crea una imagen publicitaria profesional de un frasco de miel puertorriqueña sobre una mesa rústica de madera, con luz cálida de mañana. Fotografía de producto de alta calidad.";
+    try {
+        $t0 = microtime(true);
+        $r  = openai_responses_imagen($brief, ['aspect' => '1:1']);
+        $seg = round(microtime(true) - $t0, 1);
+        $rel = 'pruebas/rtest_' . substr(md5((string)microtime(true)), 0, 8) . '.png';
+        $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+        @mkdir(dirname($abs), 0775, true); @file_put_contents($abs, $r['data']);
+        echo "✅ OK en {$seg}s\nmodelo: {$r['modelo']}\nbytes: " . strlen($r['data']) . "\n\n";
+        echo "revised_prompt (lo que el modelo escribió):\n" . ($r['revised'] ?: '(la API no lo devolvió)') . "\n\n";
+        echo "imagen: " . rtrim(UPLOADS_URL, '/') . '/' . $rel . "\n";
+    } catch (Throwable $e) {
+        echo "❌ ERROR:\n" . $e->getMessage() . "\n";
+    }
+    exit;
+}
+
 $modo    = $_POST['modo']   ?? '';
 $accion  = $_POST['accion'] ?? '';
 $prompt  = trim((string)($_POST['prompt'] ?? ''));
