@@ -121,7 +121,9 @@ try {
                     $t0 = microtime(true);
                     $r = generar_grafica($pdo, $mid, null, array_merge(['copy'=>$cap,'con_texto'=>false,'con_logo'=>false], $o));
                     $seg = round(microtime(true) - $t0, 1);
-                    echo "\n{$lbl}: ✅ motor=" . ($r['modelo'] ?? '?') . " ({$seg}s)\n  VER: " . ($r['archivo'] ?? '(sin archivo)') . "\n";
+                    $arch = (string)($r['archivo'] ?? '');
+                    if ($arch !== '' && stripos($arch, 'http') !== 0) $arch = 'https://' . ($_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com') . '/' . ltrim($arch, '/');
+                    echo "\n{$lbl}: ✅ motor=" . ($r['modelo'] ?? '?') . " ({$seg}s)\n  VER: " . ($arch !== '' ? $arch : '(sin archivo)') . "\n";
                 } catch (Throwable $e) { echo "\n{$lbl}: ❌ " . $e->getMessage() . "\n"; }
             }
             echo "\n→ Abre las 3 URLs y compara. v1=agentes · v2=un solo cerebro creativo.\n";
