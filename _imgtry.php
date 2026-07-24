@@ -24,6 +24,49 @@ function lab_abs(string $url): string {
     $rel = ltrim(str_replace(rtrim(UPLOADS_URL, '/'), '', $url), '/');
     return rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
 }
+/** Fire-and-forget: arranca el worker por auto-HTTP (responde al instante). */
+function lab_fire(int $id, string $aspect): void {
+    $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
+    $url  = 'https://' . $host . '/crecer/_imgtry.php?k=crecer&work=' . $id . '&a=' . rawurlencode($aspect);
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_CONNECTTIMEOUT_MS=>1500,
+        CURLOPT_TIMEOUT_MS=>2500, CURLOPT_NOSIGNAL=>1, CURLOPT_SSL_VERIFYPEER=>false]);
+    curl_exec($ch); curl_close($ch);
+}
+
+// ===== WORKER: genera por detrás (inmune al 504 de nginx) =====
+if (isset($_GET['work'])) {
+    $wid = (int)$_GET['work']; $wa = (string)($_GET['a'] ?? '1:1');
+    if (function_exists('fastcgi_finish_request')) { echo 'ok'; @fastcgi_finish_request(); }
+    @set_time_limit(0); @ignore_user_abort(true);
+    $e = lab_exp($pdo, $wid);
+    if ($e && $e['estado'] === 'queued') {
+        try {
+            $t0 = microtime(true);
+            $r  = openai_imagen((string)$e['prompt'], ['aspect' => $wa]);
+            $seg = round(microtime(true) - $t0, 1);
+            $rel = 'pruebas/lab_' . substr(md5((string)microtime(true)), 0, 8) . '.png';
+            $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+            @mkdir(dirname($abs), 0775, true);
+            @file_put_contents($abs, $r['data']);
+            $url = rtrim(UPLOADS_URL, '/') . '/' . $rel;
+            $pdo->prepare("UPDATE crecer_lab_experimentos SET estado='ok', imagen=?, bytes=?, modelo=?, segundos=? WHERE id=?")
+                ->execute([$url, strlen($r['data']), $r['modelo'] ?? null, $seg, $wid]);
+        } catch (Throwable $ex) {
+            $pdo->prepare("UPDATE crecer_lab_experimentos SET estado='error', observaciones=CONCAT('[error] ', ?) WHERE id=?")
+                ->execute([substr($ex->getMessage(), 0, 400), $wid]);
+        }
+    }
+    exit;
+}
+
+// ===== POLL: estado para el frontend =====
+if (isset($_GET['poll'])) {
+    header('Content-Type: application/json');
+    $e = lab_exp($pdo, (int)$_GET['poll']);
+    echo json_encode(['estado' => $e['estado'] ?? '?', 'imagen' => $e['imagen'] ?? '']);
+    exit;
+}
 
 $modo    = $_POST['modo']   ?? '';
 $accion  = $_POST['accion'] ?? '';
@@ -53,34 +96,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (Throwable $e) { $ag_err = $e->getMessage(); }
     }
 
-    // ---- MODO 2 — PROMPT DIRECTO → gpt-image-1 (INTACTO) ----
+    // ---- MODO 2 — PROMPT → gpt-image-1 (mismo prompt, misma llamada; ahora ASÍNCRONO) ----
     if ($modo === 'imagen' && $prompt !== '') {
+        $s_copy   = trim((string)($_POST['copy_txt'] ?? ''));
+        $s_escena = trim((string)($_POST['escena_h'] ?? ''));
+        $s_marca  = (int)($_POST['marca'] ?? 0);
+        $neg = '';
+        if ($s_marca) { $q = $pdo->prepare("SELECT nombre_negocio FROM crecer_marca WHERE id=?"); $q->execute([$s_marca]); $neg = (string)$q->fetchColumn(); }
         try {
-            $t0 = microtime(true);
-            $r  = openai_imagen($prompt, ['aspect' => $aspect]);
-            $seg = round(microtime(true) - $t0, 1);
-            $rel = 'pruebas/lab_' . substr(md5((string)microtime(true)), 0, 8) . '.png';
-            $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
-            @mkdir(dirname($abs), 0775, true);
-            @file_put_contents($abs, $r['data']);
-            $img_url  = rtrim(UPLOADS_URL, '/') . '/' . $rel;
-            $img_info = 'modelo ' . ($r['modelo'] ?? '?') . ' · ' . $seg . 's · ' . strlen($r['data']) . ' bytes';
-
-            // ---- (AÑADIDO) guardar el experimento — nada del flujo cambió arriba ----
-            $s_copy   = trim((string)($_POST['copy_txt'] ?? ''));
-            $s_escena = trim((string)($_POST['escena_h'] ?? ''));
-            $s_marca  = (int)($_POST['marca'] ?? 0);
-            $neg = '';
-            if ($s_marca) { $q = $pdo->prepare("SELECT nombre_negocio FROM crecer_marca WHERE id=?"); $q->execute([$s_marca]); $neg = (string)$q->fetchColumn(); }
+            // Encola (estado 'queued') y dispara el worker → inmune al 504 de nginx.
+            $ins = $pdo->prepare("INSERT INTO crecer_lab_experimentos
+                (marca_id,negocio,hipotesis,copy_txt,escena,prompt,estado) VALUES (?,?,?,?,?,?, 'queued')");
+            $ins->execute([$s_marca ?: null, $neg ?: null, $hipotesis ?: null, $s_copy ?: null, $s_escena ?: null, $prompt]);
+            $qid = (int)$pdo->lastInsertId();
+            lab_fire($qid, $aspect);
+            $exp = lab_exp($pdo, $qid);   // 'queued' → el panel muestra el spinner y hace polling
+        } catch (Throwable $e) {
+            // Sin tabla (migración no corrida) → generación síncrona (viejo camino).
             try {
-                $ins = $pdo->prepare("INSERT INTO crecer_lab_experimentos
-                    (marca_id,negocio,hipotesis,copy_txt,escena,prompt,imagen,bytes,modelo,segundos,estado)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?)");
-                $ins->execute([$s_marca ?: null, $neg ?: null, $hipotesis ?: null, $s_copy ?: null, $s_escena ?: null,
-                               $prompt, $img_url, strlen($r['data']), $r['modelo'] ?? null, $seg, 'ok']);
-                $exp = lab_exp($pdo, (int)$pdo->lastInsertId());
-            } catch (Throwable $e) { $save_warn = 'No se guardó en el historial (¿corriste la migración?): ' . $e->getMessage(); }
-        } catch (Throwable $e) { $img_err = $e->getMessage(); }
+                $t0 = microtime(true);
+                $r  = openai_imagen($prompt, ['aspect' => $aspect]);
+                $seg = round(microtime(true) - $t0, 1);
+                $rel = 'pruebas/lab_' . substr(md5((string)microtime(true)), 0, 8) . '.png';
+                $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+                @mkdir(dirname($abs), 0775, true);
+                @file_put_contents($abs, $r['data']);
+                $img_url  = rtrim(UPLOADS_URL, '/') . '/' . $rel;
+                $img_info = 'modelo ' . ($r['modelo'] ?? '?') . ' · ' . $seg . 's · ' . strlen($r['data']) . ' bytes';
+                $save_warn = 'Generado en modo directo (sin historial). Corre la migración para el historial + async.';
+            } catch (Throwable $e2) { $img_err = $e2->getMessage(); }
+        }
     }
 
     // ---- (AÑADIDO) calificar / observaciones ----
@@ -244,15 +289,31 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   if (!$exp && $img_url): ?><div class="info"><?= $h($img_info) ?></div><img class="res" src="<?= $h($img_url) ?>" alt=""><?php endif; ?>
 </div>
 
-<?php if ($exp): ?>
-<h2>Resultado del experimento #<?= (int)$exp['id'] ?></h2>
+<?php if ($exp): $est = (string)$exp['estado']; ?>
+<h2>Experimento #<?= (int)$exp['id'] ?><?= $est==='queued' ? ' — generando…' : '' ?></h2>
 <div class="box">
-  <div class="info"><?= $h(($exp['negocio'] ? $exp['negocio'] . ' · ' : '') . $exp['creado'] . ' · ' . $exp['modelo'] . ' · ' . $exp['segundos'] . 's · ' . number_format((int)$exp['bytes']) . ' bytes · ' . $exp['estado']) ?></div>
-  <?php if (!empty($exp['imagen'])): ?><img class="res" src="<?= $h($exp['imagen']) ?>" alt=""><?php endif; ?>
+  <div class="info"><?= $h(($exp['negocio'] ? $exp['negocio'] . ' · ' : '') . $exp['creado'] . ' · ' . ($est==='ok' ? $exp['modelo'] . ' · ' . $exp['segundos'] . 's · ' . number_format((int)$exp['bytes']) . ' bytes' : $est)) ?></div>
+
+  <?php if ($est === 'queued'): ?>
+    <div class="load" style="display:block">🎨 Generando la imagen… <small>(sigue aunque cierres esta pestaña; 40–70s)</small></div>
+    <script>
+      (function(){var id=<?= (int)$exp['id'] ?>;var t=setInterval(function(){
+        fetch('?k=crecer&poll='+id,{cache:'no-store'}).then(function(r){return r.json()}).then(function(d){
+          if(d.estado==='ok'||d.estado==='error'){clearInterval(t);location.href='?k=crecer&exp='+id;}
+        }).catch(function(){});
+      },3000);})();
+    </script>
+  <?php elseif ($est === 'error'): ?>
+    <div class="err">❌ <?= $h($exp['observaciones'] ?: 'La generación falló.') ?></div>
+  <?php elseif (!empty($exp['imagen'])): ?>
+    <img class="res" src="<?= $h($exp['imagen']) ?>" alt="">
+  <?php endif; ?>
+
   <?php if (!empty($exp['hipotesis'])): ?><p style="margin:12px 0 0;font-size:13.5px"><b>Hipótesis:</b> <?= $h($exp['hipotesis']) ?></p><?php endif; ?>
   <?php if (!empty($exp['escena'])): ?><details><summary>Ver escena del agente</summary><div class="escena"><?= $h($exp['escena']) ?></div></details><?php endif; ?>
   <?php if (!empty($exp['prompt'])): ?><details><summary>Ver prompt enviado a gpt-image-1</summary><div class="escena"><?= $h($exp['prompt']) ?></div></details><?php endif; ?>
 
+  <?php if ($est === 'ok'): ?>
   <!-- Calificación 1–10 + observaciones -->
   <form method="post" style="margin-top:16px">
     <input type="hidden" name="accion" value="calificar">
@@ -278,6 +339,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <div class="load" id="l3">🧠 Evaluando la pieza…</div>
   </form>
   <?php if (!empty($exp['analisis'])): ?><div class="crit"><?= $h($exp['analisis']) ?></div><?php endif; ?>
+  <?php endif; /* est ok */ ?>
 </div>
 <?php endif; ?>
 
