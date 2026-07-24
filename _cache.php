@@ -59,11 +59,11 @@ try {
     // Los tests EN VIVO gastan dinero (llaman a OpenAI/Gemini) → exigen el CRON_TOKEN real,
     // no el 'crecer' público. Evita que alguien te queme el balance con &test=img/arte en loop.
     $__test = $_GET['test'] ?? '';
-    $__tok  = defined('CRON_TOKEN') ? CRON_TOKEN : '';
-    // La prueba de SMS NO depende del CRON_TOKEN (que en prod puede estar en otro valor):
-    // usa su propia llave fija de abajo. Solo img/arte pasan por este candado de dinero.
-    if (in_array($__test, ['img','arte','imgmanual','compare'], true) && ($__tok === '' || !hash_equals($__tok, (string)($_GET['t'] ?? '')))) {
-        echo "\n(Para las pruebas en vivo &test=img/arte/imgmanual/compare añade  &t=TU_CRON_TOKEN  — gastan dinero, por eso van protegidas.)\n";
+    // Llave FIJA propia (NO el CRON_TOKEN de prod, que no cuadra — mismo lío del SMS).
+    // Estas pruebas gastan dinero → protegidas con esta llave. Rota/borra luego.
+    $__imgkey = 'crimg_7k2x';
+    if (in_array($__test, ['img','arte','imgmanual','compare'], true) && !hash_equals($__imgkey, (string)($_GET['t'] ?? ''))) {
+        echo "\n(Para las pruebas en vivo &test=img/arte/imgmanual/compare añade  &t=crimg_7k2x  al final.)\n";
         $__test = '';
     }
     if ($__test === 'img') {
