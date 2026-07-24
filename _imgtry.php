@@ -94,6 +94,15 @@ if (isset($_GET['wlog'])) {
     exit;
 }
 
+// ===== EVIDENCIA CRUDA del image_generation_call de un experimento Responses =====
+if (isset($_GET['raw'])) {
+    header('Content-Type: application/json; charset=utf-8');
+    $f = __DIR__ . '/storage/logs/responses/exp_' . (int)$_GET['raw'] . '.json';
+    echo is_file($f) ? (string)file_get_contents($f)
+        : json_encode(['error' => 'No hay crudo para ese exp. Genera uno NUEVO en Modo ChatGPT (los viejos no lo tienen).'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 // ===== DIAGNÓSTICO de configuración efectiva (qué corre PRODUCCIÓN) =====
 if (isset($_GET['cfg'])) {
     header('Content-Type: text/plain; charset=utf-8');
@@ -147,6 +156,10 @@ if (isset($_GET['poll'])) {
                 @mkdir(dirname($abs), 0775, true); @file_put_contents($abs, $bin);
                 $url = rtrim(UPLOADS_URL, '/') . '/' . $rel;
                 $rev = trim((string)$st['revised']);
+                // Evidencia cruda del image_generation_call (revised_prompt auténtico + params) por experimento.
+                $rawdir = __DIR__ . '/storage/logs/responses'; @mkdir($rawdir, 0775, true);
+                @file_put_contents($rawdir . '/exp_' . (int)$e['id'] . '.json',
+                    json_encode($st['raw'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
                 $pdo->prepare("UPDATE crecer_lab_experimentos SET estado='ok', imagen=?, bytes=?, modelo=?, segundos=TIMESTAMPDIFF(SECOND, creado, NOW()), prompt=? WHERE id=?")
                     ->execute([$url, strlen($bin), 'responses:' . ($st['model'] ?: ''), ($rev !== '' ? $rev : (string)$e['prompt']), (int)$e['id']]);
             } elseif (in_array($st['status'], ['failed', 'cancelled', 'incomplete'], true)) {

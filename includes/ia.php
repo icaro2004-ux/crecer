@@ -687,15 +687,28 @@ function openai_responses_estado(string $rid): array {
     if (!is_array($d))      throw new IaError('Responses(estado) no-JSON: ' . substr($resp, 0, 300));
     if (isset($d['error'])) throw new IaError('Responses(estado): ' . ($d['error']['message'] ?? 'error'));
     $status = (string)($d['status'] ?? '');
-    $b64 = ''; $revised = '';
+    $b64 = ''; $revised = ''; $igc = null;
     foreach (($d['output'] ?? []) as $o) {
         if (($o['type'] ?? '') === 'image_generation_call') {
             $b64 = (string)($o['result'] ?? '');
             $revised = (string)($o['revised_prompt'] ?? '');
+            $igc = $o; unset($igc['result']); $igc['_result_bytes_b64'] = strlen($b64);   // crudo SIN el base64 gigante
             break;
         }
     }
-    return ['status' => $status, 'b64' => $b64, 'revised' => $revised, 'model' => (string)($d['model'] ?? '')];
+    // 'raw' = evidencia cruda para la auditoría: modelo ORQUESTADOR (top-level) + el
+    // image_generation_call completo (que confirma el revised_prompt auténtico y si expone
+    // algún modelo/renderizador interno). NO asumir que es gpt-image-1: mirar aquí.
+    $raw = [
+        'response_id'           => (string)($d['id'] ?? ''),
+        'status'                => $status,
+        'model_orquestador'     => (string)($d['model'] ?? ''),
+        'created_at'            => $d['created_at'] ?? null,
+        'usage'                 => $d['usage'] ?? null,
+        'tools_echo'            => $d['tools'] ?? null,        // parámetros de la herramienta tal como los devuelve la API
+        'image_generation_call' => $igc,                      // revised_prompt real + cualquier campo de modelo interno
+    ];
+    return ['status' => $status, 'b64' => $b64, 'revised' => $revised, 'model' => (string)($d['model'] ?? ''), 'raw' => $raw];
 }
 
 /** gpt-image-1 /images/edits — incorpora UNA imagen (el logo) al arte, a calidad ALTA. */
