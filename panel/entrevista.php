@@ -389,13 +389,24 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   function crearPost(){
     ovFoot.style.display='none';
     var head=document.querySelector('.cp-head'); if(head) head.innerHTML='<span class="cp-dot"></span>Montando tu primer post…';
-    cpSay('🎨','El Director','Perfecto. Montando tu primer post en tu voz…');
-    // Indicador PERSISTENTE (el arte tarda 30-40s): que se vea que SÍ está trabajando,
-    // no que se trancó. Se quita cuando el post está listo.
-    var wait=document.createElement('div'); wait.className='cp-line';
-    wait.innerHTML='<div class="av">🎨</div><div class="bub"><div class="tx"><span class="cp-typing"><i></i><i></i><i></i></span></div></div>';
-    setTimeout(function(){ ovFeed.appendChild(wait); ovFeed.scrollTop=ovFeed.scrollHeight; }, 720);
-    function ir(url){ if(wait.parentNode) wait.remove(); cpSay('✅','Listo','¡Tu primer post está montado!','det'); setTimeout(function(){ location.href=url; }, 1200); }
+    cpSay('🎨','El Director','Dame unos segundos… lo bueno no se apura. Estoy montando tu primer post con calma.');
+    // Burbuja "cocinando" que rota mensajes cool mientras trabaja (el arte tarda 30-40s):
+    // así se siente VIVO y con paciencia, no trancado.
+    var frases=[
+      'Esto toma unos segundos, pero vale cada uno. 🎨',
+      'Buscando la toma perfecta para tu negocio… 📸',
+      'Ajustando la luz como un fotógrafo de verdad… 💡',
+      'Aquí no salimos con cualquier cosa — puliendo detalles… ✨',
+      'Cocinando algo que va a parar el scroll… 🔥',
+      'Casi, casi… esto va a quedar brutal. 🌶️'
+    ];
+    var row=document.createElement('div'); row.className='cp-line'; var txEl=null, fi=0, rot=null;
+    row.innerHTML='<div class="av">🍳</div><div class="bub"><div class="nm">El corillo</div><div class="tx pop"></div></div>';
+    setTimeout(function(){
+      ovFeed.appendChild(row); txEl=row.querySelector('.tx'); txEl.textContent=frases[0]; ovFeed.scrollTop=ovFeed.scrollHeight;
+      rot=setInterval(function(){ if(!txEl) return; fi=(fi+1)%frases.length; txEl.classList.remove('pop'); void txEl.offsetWidth; txEl.classList.add('pop'); txEl.textContent=frases[fi]; }, 4500);
+    }, 720);
+    function ir(url){ if(rot) clearInterval(rot); if(row.parentNode) row.remove(); cpSay('✅','Listo','¡Tu primer post está montado!','det'); setTimeout(function(){ location.href=url; }, 1200); }
     post({accion:'post_muestra'}, 95000).then(function(d2){ ir((d2&&d2.redirect)||('/crecer/panel/gateway_post.php?marca='+MARCA+GW)); }).catch(function(){ ir('/crecer/panel/gateway_post.php?marca='+MARCA+GW); });
   }
   form.addEventListener('submit',function(e){ e.preventDefault(); enviar(input.value); });
