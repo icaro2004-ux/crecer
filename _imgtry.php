@@ -94,6 +94,30 @@ if (isset($_GET['wlog'])) {
     exit;
 }
 
+// ===== DIAGNÓSTICO del Modo ChatGPT en background (pregunta directo a OpenAI) =====
+if (isset($_GET['bgstat'])) {
+    header('Content-Type: text/plain; charset=utf-8');
+    $id = (int)$_GET['bgstat'];
+    $e = $id ? lab_exp($pdo, $id)
+             : ($pdo->query("SELECT * FROM crecer_lab_experimentos WHERE modelo LIKE 'pending:%' ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC) ?: null);
+    if (!$e) { echo "No hay experimento en background pendiente."; exit; }
+    echo "exp #{$e['id']} · estado(BD)={$e['estado']} · modelo={$e['modelo']}\n";
+    if (strncmp((string)$e['modelo'], 'pending:', 8) === 0) {
+        $rid = substr((string)$e['modelo'], 8);
+        echo "response id: {$rid}\nConsultando OpenAI…\n\n";
+        try {
+            $st = openai_responses_estado($rid);
+            echo "status OpenAI: {$st['status']}\n";
+            echo "imagen lista: " . (strlen($st['b64']) ? 'SÍ (' . strlen($st['b64']) . ' chars b64)' : 'todavía no') . "\n";
+            echo "model: {$st['model']}\n";
+            echo "revised_prompt: " . (substr((string)$st['revised'], 0, 300) ?: '(vacío)') . "\n";
+        } catch (Throwable $ex) { echo "ERROR consultando OpenAI:\n" . $ex->getMessage() . "\n"; }
+    } else {
+        echo "Ya no está pendiente (estado final=" . $e['estado'] . ").\n";
+    }
+    exit;
+}
+
 // ===== POLL: estado para el frontend (y avanza los Modo ChatGPT en background) =====
 if (isset($_GET['poll'])) {
     header('Content-Type: application/json');
