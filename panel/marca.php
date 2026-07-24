@@ -31,6 +31,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header("Location: /crecer/panel/marca.php?marca={$marca_id}"); exit;
     }
 
+    // 🔁 Polling del logo que se genera en background (gpt-image-2 / Responses).
+    if ($accion === 'poll_logo') {
+        require_once __DIR__ . '/../includes/img_responses.php';
+        header('Content-Type: application/json');
+        echo json_encode(['ok'=>true] + logo_resp_completar($pdo, $marca_id)); exit;
+    }
+
     // El Cerebro: el dueño controla su conocimiento (corregir / descartar).
     if ($accion === 'memoria_descartar' && function_exists('memoria_descartar')) {
         memoria_descartar($pdo, $marca_id, (int)($_POST['mid'] ?? 0));
@@ -109,9 +116,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'detalle'       => (int)($_POST['detalle'] ?? 50),
                 'instrucciones' => $_POST['instrucciones'] ?? '',
             ];
-            try { generar_logo($pdo, $marca_id, $opts); }
+            $_glog = null;
+            try { $_glog = generar_logo($pdo, $marca_id, $opts); }
             catch (Throwable $e) { $err = 'No se pudo generar: ' . substr($e->getMessage(), 0, 120); }
-            if (!$err) { header("Location: /crecer/panel/marca.php?marca={$marca_id}&ok=1"); exit; }
+            // Motor async (gpt-image-2): se está generando en background → estado de espera.
+            if (!$err) { $qs = (!empty($_glog['job'])) ? 'logo_gen=1' : 'ok=1'; header("Location: /crecer/panel/marca.php?marca={$marca_id}&{$qs}"); exit; }
         }
     } elseif ($accion === 'subir_logo') {
         // Subir un logo propio (principal o secundario). No es premium: es tu asset.
@@ -154,9 +163,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$logos = $pdo->prepare("SELECT * FROM crecer_logos WHERE marca_id=? ORDER BY id");
+$logos = $pdo->prepare("SELECT * FROM crecer_logos WHERE marca_id=? AND archivo IS NOT NULL ORDER BY id");
 $logos->execute([$marca_id]); $logos = $logos->fetchAll();
 $elegido = null; foreach ($logos as $l) if ($l['elegido']) $elegido = $l;
+require_once __DIR__ . '/../includes/img_responses.php';
+$logo_pendiente = function_exists('logo_resp_pendiente') && logo_resp_pendiente($pdo, $marca_id);   // ¿hay uno generándose en background?
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
 // Valores actuales del tono (para precargar los sliders)
@@ -364,6 +375,22 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
 <?php endif; ?>
 <?php if (!empty($_GET['ok'])): ?><div class="ok-banner">✓ ¡Logo guardado! Mira la galería abajo.</div><?php endif; ?>
 <?php if ($err): ?><div class="err-banner">⚠️ <?= $h($err) ?></div><?php endif; ?>
+<?php if ($logo_pendiente): ?>
+<div class="ok-banner" id="logoWait" style="display:flex;align-items:center;gap:12px">
+  <span class="lspin"></span>
+  <span>🎨 El Diseñador está creando tu logo con IA de alta precisión… <b>un par de minutos.</b> Quédate aquí; aparece solo.</span>
+</div>
+<style>.lspin{width:22px;height:22px;border-radius:50%;border:3px solid rgba(0,0,0,.15);border-top-color:#EF4375;animation:lspin .8s linear infinite;flex:0 0 auto}@keyframes lspin{to{transform:rotate(360deg)}}</style>
+<script>
+(function(){var t=setInterval(function(){
+  var fd=new FormData(); fd.append('csrf',<?= json_encode(csrf_token()) ?>); fd.append('accion','poll_logo'); fd.append('ajax','1');
+  fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+    if(d&&d.listo){ clearInterval(t); location.href='/crecer/panel/marca.php?marca=<?= (int)$marca_id ?>&ok=1'; }
+    else if(d&&d.pendiente===false){ clearInterval(t); location.reload(); }
+  }).catch(function(){});
+},5000);})();
+</script>
+<?php endif; ?>
 
 <!-- SUBIR LOGO PROPIO (principal o secundarios) — no es premium -->
 <div class="genbox" style="margin-bottom:16px">

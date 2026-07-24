@@ -112,3 +112,47 @@ function img_resp_completar(PDO $pdo, int $marca_id, int $post_id): array {
         return ['estado' => 'queued', 'img' => null];   // in_progress / queued
     } catch (Throwable $e) { return ['estado' => 'queued', 'img' => null]; }   // transitorio → reintenta el próximo poll
 }
+
+// ─── LOGOS por Responses (gpt-image-2) — más preciso, sobre todo el nombre/tipografía ───
+
+/** Encola un LOGO (prompt ya armado) por Responses. Inserta un crecer_logos pendiente. Devuelve su id o 0. */
+function logo_resp_encolar(PDO $pdo, int $marca_id, string $prompt): int {
+    try {
+        $bg = openai_responses_crear_bg($prompt, ['aspect' => '1:1']);
+        $pdo->prepare("INSERT INTO crecer_logos (marca_id, archivo, job, estado) VALUES (?, NULL, ?, 'queued')")
+            ->execute([$marca_id, $bg['id']]);
+        return (int)$pdo->lastInsertId();
+    } catch (Throwable $e) { error_log('logo_resp_encolar: ' . $e->getMessage()); return 0; }
+}
+
+/** ¿Hay algún logo generándose en background para esta marca? */
+function logo_resp_pendiente(PDO $pdo, int $marca_id): bool {
+    try { return (bool)$pdo->query("SELECT COUNT(*) FROM crecer_logos WHERE marca_id=" . (int)$marca_id . " AND estado='queued'")->fetchColumn(); }
+    catch (Throwable $e) { return false; }
+}
+
+/** Consulta los logos pendientes; guarda los que completaron. Devuelve ['listo'=>bool,'pendiente'=>bool]. */
+function logo_resp_completar(PDO $pdo, int $marca_id): array {
+    $listo = false;
+    try {
+        $rows = $pdo->query("SELECT id, job FROM crecer_logos WHERE marca_id=" . (int)$marca_id . " AND estado='queued' AND job IS NOT NULL")->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) { return ['listo' => false, 'pendiente' => false]; }
+    foreach ($rows as $r) {
+        try {
+            $st = openai_responses_estado((string)$r['job']);
+            if (($st['status'] ?? '') === 'completed' && ($st['b64'] ?? '') !== '') {
+                $bin = base64_decode($st['b64']);
+                $rel = "marca_{$marca_id}/logo_resp_{$r['id']}.png";
+                $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+                @mkdir(dirname($abs), 0775, true); @file_put_contents($abs, $bin);
+                $url = rtrim(UPLOADS_URL, '/') . '/' . $rel;
+                $pdo->prepare("UPDATE crecer_logos SET archivo=?, estado='ok', job=NULL WHERE id=?")->execute([$url, $r['id']]);
+                $listo = true;
+            } elseif (in_array($st['status'] ?? '', ['failed', 'cancelled', 'incomplete'], true)) {
+                $pdo->prepare("DELETE FROM crecer_logos WHERE id=? AND estado='queued'")->execute([$r['id']]);   // limpia el fallido
+                $listo = true;
+            }
+        } catch (Throwable $e) { /* transitorio */ }
+    }
+    return ['listo' => $listo, 'pendiente' => logo_resp_pendiente($pdo, $marca_id)];
+}

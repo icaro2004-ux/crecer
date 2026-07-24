@@ -313,6 +313,12 @@ function generar_logo(PDO $pdo, int $marca_id, array $opts = []): array {
       . "- Con alma y personalidad.";
     if ($instr !== '') $prompt .= "\n\nLO QUE PIDE EL DUEÑO (prioriza esto): {$instr}";
 
+    // MOTOR gpt-image-2 (Responses, más preciso con el nombre/tipografía) en BACKGROUND.
+    // Encola y devuelve YA; el estudio de logos hace polling. Fallback a Gemini si falla.
+    require_once __DIR__ . '/img_responses.php';
+    if (img_resp_activo() && ($lid = logo_resp_encolar($pdo, $marca_id, $prompt)) > 0) {
+        return ['job' => 1, 'logo_id' => $lid, 'archivo' => ''];
+    }
     $fname = "marca_{$marca_id}/logo_" . uniqid() . ".png";
     $r = ia_imagen($pdo, 'diseñador', 'Generar logo del negocio', $prompt,
         $fname, ['marca_id' => $marca_id, 'modelo' => 'gemini-3-pro-image']);
