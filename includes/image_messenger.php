@@ -165,6 +165,15 @@ GENOMA DEL NEGOCIO
 {$genome}
 USR;
 
+    // ESTÁNDAR DE CALIDAD (Creative Playbook del laboratorio) — orienta el NIVEL, NO la
+    // escena. Lo ÚNICO del laboratorio que llega aquí es este texto (nunca las imágenes).
+    require_once __DIR__ . '/ref_lab.php';
+    $pb = function_exists('playbook_texto') ? playbook_texto($pdo) : '';
+    if (trim($pb) !== '') {
+        $sistema .= "\n\nESTÁNDAR DE CALIDAD DE CRECER (principios generales — orientan el NIVEL de calidad de la pieza, "
+                 . "NO deciden la escena; tú sigues creando el concepto único para ESTE negocio):\n" . $pb;
+    }
+
     return ['sistema' => $sistema, 'mensaje' => $mensaje];
 }
 

@@ -485,11 +485,20 @@ function _openai_pick_modelo(array $ids, bool $mini): string {
  */
 function openai_chat(string $sistema, string $mensaje, string $modelo = 'gpt-4o', array $opts = []): array {
     if (!openai_configurado()) throw new IaSinCredenciales('Falta OPENAI_API_KEY.');
+    // Contenido del user: texto, o texto + imágenes (visión) si $opts['imagenes'].
+    $userContent = $mensaje;
+    if (!empty($opts['imagenes']) && is_array($opts['imagenes'])) {
+        $userContent = [['type' => 'text', 'text' => $mensaje]];
+        foreach ($opts['imagenes'] as $im) {
+            $data = $im['data'] ?? ''; $mime = $im['mime'] ?? 'image/png';
+            if ($data !== '') $userContent[] = ['type' => 'image_url', 'image_url' => ['url' => 'data:' . $mime . ';base64,' . $data]];
+        }
+    }
     $body = [
         'model'    => $modelo,
         'messages' => [
             ['role' => 'system', 'content' => $sistema],
-            ['role' => 'user',   'content' => $mensaje],
+            ['role' => 'user',   'content' => $userContent],
         ],
         // max_completion_tokens (NO 'max_tokens') → compatible con gpt-5.x / o-series.
         // 'temperature' se OMITE: los modelos nuevos rechazan valores != 1 (HTTP 400).
