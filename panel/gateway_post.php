@@ -41,12 +41,20 @@ $marca_id = (int)$marca['id'];
 if ($estado === GW_VENTA) {
     $q = $pdo->prepare("SELECT * FROM crecer_contenido WHERE marca_id=? AND estado='publicado' ORDER BY id DESC LIMIT 1");
 } else {
-    $q = $pdo->prepare("SELECT * FROM crecer_contenido WHERE marca_id=? AND estado IN ('borrador','aprobado') ORDER BY id DESC LIMIT 1");
+    // Cualquier post NO publicado (incluye 'fallido'/'publicando' → evita el loop de
+    // redirección si una publicación a redes se cayó a mitad).
+    $q = $pdo->prepare("SELECT * FROM crecer_contenido WHERE marca_id=? AND estado NOT IN ('publicado','rechazado') ORDER BY id DESC LIMIT 1");
 }
 $q->execute([$marca_id]);
 $post = $q->fetch(PDO::FETCH_ASSOC);
 if (!$post) { gateway_redirigir($pdo, $usuario); exit; }   // por si acaso: sin post, retoma el router
 $post_id = (int)$post['id'];
+
+// Gate del teléfono (igual que aprobar2): el free confirma su celular 1 vez para publicar.
+$acceso_full = ($marca && marca_es_pagada($pdo, $marca_id))
+    || (($usuario['rol'] ?? '') === 'admin')
+    || (function_exists('activacion_de_prueba') && activacion_de_prueba($usuario['email'] ?? null));
+$necesita_telefono = !$acceso_full && trim((string)($marca['telefono_verificado'] ?? '')) === '';
 
 // ── Acciones AJAX del propio escenario (aprobar / ajustar el texto) ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -55,6 +63,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accion = $_POST['accion'] ?? '';
     if ($accion === 'aprobar') {
         $pdo->prepare("UPDATE crecer_contenido SET estado='aprobado', updated_at=NOW() WHERE id=? AND marca_id=? AND estado='borrador'")
+            ->execute([$post_id, $marca_id]);
+        echo json_encode(['ok'=>true]); exit;
+    }
+    // Publicar MANUAL (el dueño lo subió a mano) → marcar publicado. Con gate SMS
+    // (colectar teléfono), pero SIN exigir redes conectadas — por eso NO va por aprobar2.
+    if ($accion === 'publicar_manual') {
+        if ($necesita_telefono) { echo json_encode(['ok'=>false,'needs_phone'=>true]); exit; }
+        $pdo->prepare("UPDATE crecer_contenido SET estado='publicado', publicado_at=NOW(), updated_at=NOW() WHERE id=? AND marca_id=? AND estado IN ('aprobado','borrador')")
             ->execute([$post_id, $marca_id]);
         echo json_encode(['ok'=>true]); exit;
     }
@@ -120,7 +136,7 @@ if ($ver_url === '') {
 $nombre  = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
 $caption = (string)($post['caption'] ?? '');
 $grafica = (string)($post['grafica_path'] ?? '');
-$aprobado = ($post['estado'] ?? '') === 'aprobado';
+$aprobado = in_array(($post['estado'] ?? ''), ['aprobado','fallido','publicando'], true);   // ya pasó del borrador → listo para (re)publicar
 $publicado = ($post['estado'] ?? '') === 'publicado';
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 ?>
@@ -371,11 +387,9 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   // "Ya lo publiqué" (manual) → marca publicado con el gate SMS y pasa a venta.
   var btnYa=document.getElementById('btnYaPubli');
   if(btnYa) btnYa.addEventListener('click',function(){
-    var fd=new FormData(); fd.append('accion','publicar_api'); fd.append('id',PID); fd.append('plataformas',''); fd.append('ajax','1'); fd.append('csrf',CSRF); fd.append('manual','1');
     showLoad('Confirmando…');
-    fetch('/crecer/panel/aprobar2.php?marca='+MARCA,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+    self('publicar_manual').then(function(d){
       if(d&&d.needs_phone){ hideLoad(); window.crecerSmsGate.open(function(){ btnYa.click(); }); return; }
-      // Con o sin API, tras verificar humano lo llevamos a la celebración/venta.
       showLoad('¡Listo! Un momento…');
       location.href='/crecer/panel/gateway_post.php?marca='+MARCA+'&venta=1'+GW;
     }).catch(function(){ location.href='/crecer/panel/gateway_post.php?marca='+MARCA+'&venta=1'+GW; });
