@@ -28,12 +28,13 @@ function director_creativo_llm(PDO $pdo, int $marca_id, string $sistema, string 
         if ($prov === 'openai') {
             $mdl = $mdl !== '' ? $mdl : 'gpt-4o';
             try {
-                $r = openai_chat($sistema, $mensaje, $mdl, ['max_tokens' => 1200]);
+                // max_reintentos=0: si el modelo es incompatible (400), falla RÁPIDO → respaldo ya.
+                $r = openai_chat($sistema, $mensaje, $mdl, ['max_tokens' => 700, 'max_reintentos' => 0]);
             } catch (Throwable $e1) {
                 // El modelo elegido rechazó la petición (raro/incompatible) → respaldo conocido-bueno.
                 error_log('openai_chat falló con ' . $mdl . ': ' . $e1->getMessage() . ' → respaldo gpt-4o');
                 if ($mdl === 'gpt-4o') throw $e1;
-                $r = openai_chat($sistema, $mensaje, 'gpt-4o', ['max_tokens' => 1200]);
+                $r = openai_chat($sistema, $mensaje, 'gpt-4o', ['max_tokens' => 700, 'max_reintentos' => 1]);
                 $mdl = 'gpt-4o(respaldo)';
             }
             $texto = $r['texto']; $ti = $r['tokens_in']; $to = $r['tokens_out']; $usado = 'openai:' . $mdl;
