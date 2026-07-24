@@ -489,6 +489,13 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
       <div class="gap">📭 <b>Todavía no hay un canal de quejas/mensajes conectado.</b> La tabla <code>crecer_mensajes</code> está lista para recibir DMs de IG/FB/WhatsApp y que el agente <b>Responder</b> los conteste — pero ese canal aún no se ha integrado. <b>Es el próximo módulo de operación</b> (entra junto con la publicación a Meta).</div>
     <?php endif; ?>
   </div>
+
+  <!-- HERRAMIENTAS INTERNAS -->
+  <div class="sec"><h2>🧪 Herramientas internas</h2></div>
+  <div class="card">
+    <p style="margin:0 0 14px;font-size:13.5px;color:var(--muted)">Banco de pruebas para afinar al agente creador de imágenes: mira qué escena escribe para un negocio y genera imágenes directo con gpt-image-1.</p>
+    <a href="/crecer/_imgtry.php?k=crecer" style="display:inline-block;background:var(--tinta);color:#fff;font-weight:800;font-size:14px;padding:11px 20px;border-radius:11px;text-decoration:none">Abrir el Laboratorio de imágenes →</a>
+  </div>
 </div>
 </body>
 </html>
