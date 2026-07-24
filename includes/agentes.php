@@ -847,26 +847,28 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
  * @return string prompt EN INGLÉS listo para el modelo (o '' si falla → usa el de respaldo).
  */
 function dirigir_arte(PDO $pdo, int $marca_id, string $que_vende, string $copy, string $instr, array $est_arte, bool $con_texto = false): string {
-    $sys = "Eres un DIRECTOR DE ARTE de élite y prompt-engineer para un modelo de imagen profesional (gpt-image-1). "
-         . "Devuelves UN SOLO prompt EN INGLÉS, listo para generar, con calidad de foto editorial/publicitaria de revista. "
-         . "El prompt describe UNA escena concreta y vívida: sujeto principal, entorno, acción, luz, lente y ángulo de cámara, "
-         . "materiales y texturas, paleta de color y mood. Lenguaje POSITIVO y sensorial — JAMÁS uses 'avoid/no/without/not'. "
-         . "Cinematográfico, premium, fotorrealista (salvo que se pida otro estilo). Fiel al mundo del negocio (nunca otra "
-         . "industria); ilustra el MENSAJE del post, no el nombre. Composición full-bleed que llena todo el cuadro, sin fondos "
-         . "vacíos. " . ($con_texto
-             ? "Integra un texto corto, bien tipografiado y legible sacado del mensaje. "
-             : "Sin ninguna letra ni texto dentro de la imagen. ")
-         . "Un solo párrafo denso de 60-110 palabras. Devuelve SOLO el prompt, sin comillas ni explicaciones.";
-    $brief = "Negocio (lo que vende): " . ($que_vende !== '' ? $que_vende : 'un negocio boricua') . "\n"
-           . "Mensaje del post a ilustrar: " . ($copy !== '' ? $copy : 'presentación cálida del negocio a su gente') . "\n"
-           . "Estilo visual deseado: " . (trim((string)($est_arte['generar'] ?? '')) ?: 'realista, premium, cálido') . "\n"
-           . ($instr !== '' ? "Pedido específico del dueño (prioriza esto): {$instr}\n" : '')
-           . "Escribe el mejor prompt de imagen posible.";
+    // Filosofía (que Manuel comprobó en ChatGPT): SIMPLE y SIN RESTRICCIONES. Le das el
+    // copy + el contexto y el modelo cocina la imagen más cabrona. Nada de rulebooks.
+    $sys = "Eres un director creativo de clase mundial. Escribes UN prompt de imagen EN INGLÉS para un modelo "
+         . "profesional (gpt-image-1). Te doy el copy de un post de redes y lo que vende el negocio; imagina la foto MÁS "
+         . "impactante, premium y scroll-stopping que combine perfecto con ese mensaje para publicarlo en Instagram, Facebook "
+         . "y WhatsApp. Descríbela vívida y concreta (escena, sujeto, luz, cámara/lente, mood, color, textura), con total "
+         . "libertad creativa. " . ($con_texto
+             ? "Puede llevar un texto corto muy bien diseñado sacado del mensaje. "
+             : "Sin texto ni letras dentro de la imagen. ")
+         . "Quédate en el mundo real de lo que vende el negocio. Devuelve SOLO el prompt: un párrafo, sin comillas ni notas.";
+    $estilo_hint = trim((string)($est_arte['generar'] ?? ''));
+    $brief = "Es para un post AUTOMÁTICO de redes de un negocio boricua.\n"
+           . "El negocio vende: " . ($que_vende !== '' ? $que_vende : 'sus productos/servicios') . "\n"
+           . "Copy del post: \"" . ($copy !== '' ? $copy : 'presentación cálida del negocio a su gente') . "\"\n"
+           . ($instr !== '' ? "Lo que pide el dueño: {$instr}\n" : '')
+           . ($estilo_hint !== '' ? "Estilo que prefiere: {$estilo_hint}\n" : '')
+           . "Hazme el mejor prompt de imagen que combine con este copy.";
     $r = ia_ejecutar($pdo, 'creador', 'Director de arte (prompt de imagen)', $brief, [
         'marca_id'    => $marca_id,
         'sistema'     => $sys,
-        'temperatura' => 0.85,
-        'max_tokens'  => 340,
+        'temperatura' => 0.9,
+        'max_tokens'  => 320,
         'thinking_budget' => 0,
         'mock_texto'  => '',
     ]);
