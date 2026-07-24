@@ -94,10 +94,31 @@ if (isset($_GET['wlog'])) {
     exit;
 }
 
-// ===== POLL: estado para el frontend =====
+// ===== POLL: estado para el frontend (y avanza los Modo ChatGPT en background) =====
 if (isset($_GET['poll'])) {
     header('Content-Type: application/json');
     $e = lab_exp($pdo, (int)$_GET['poll']);
+    // Modo ChatGPT: si sigue 'queued' con un id de OpenAI pendiente, consúltalo.
+    if ($e && $e['estado'] === 'queued' && strncmp((string)$e['modelo'], 'pending:', 8) === 0) {
+        $rid = substr((string)$e['modelo'], 8);
+        try {
+            $st = openai_responses_estado($rid);
+            if ($st['status'] === 'completed' && $st['b64'] !== '') {
+                $bin = base64_decode($st['b64']);
+                $rel = 'pruebas/lab_' . substr(md5((string)microtime(true)), 0, 8) . '.png';
+                $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+                @mkdir(dirname($abs), 0775, true); @file_put_contents($abs, $bin);
+                $url = rtrim(UPLOADS_URL, '/') . '/' . $rel;
+                $rev = trim((string)$st['revised']);
+                $pdo->prepare("UPDATE crecer_lab_experimentos SET estado='ok', imagen=?, bytes=?, modelo=?, segundos=TIMESTAMPDIFF(SECOND, creado, NOW()), prompt=? WHERE id=?")
+                    ->execute([$url, strlen($bin), 'responses:' . ($st['model'] ?: ''), ($rev !== '' ? $rev : (string)$e['prompt']), (int)$e['id']]);
+            } elseif (in_array($st['status'], ['failed', 'cancelled', 'incomplete'], true)) {
+                $pdo->prepare("UPDATE crecer_lab_experimentos SET estado='error', observaciones=CONCAT('[error] Responses ', ?) WHERE id=?")
+                    ->execute([$st['status'], (int)$e['id']]);
+            }   // in_progress / queued → sigue esperando
+        } catch (Throwable $ex) { /* transitorio: se reintenta en el próximo poll */ }
+        $e = lab_exp($pdo, (int)$_GET['poll']);
+    }
     echo json_encode(['estado' => $e['estado'] ?? '?', 'imagen' => $e['imagen'] ?? '']);
     exit;
 }
@@ -204,12 +225,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                    . ($publico !== '' ? "Público: {$publico}\n" : '')
                    . "\nTexto del post que la imagen va a acompañar:\n\"{$copy_in}\"\n\n"
                    . "La imagen debe detener el scroll y dar ganas de comprar. Genera la mejor imagen publicitaria posible.";
+            // BACKGROUND: OpenAI corre el trabajo; nos devuelve un id al instante (sin 504).
+            $bg = openai_responses_crear_bg($brief, ['aspect' => $aspect]);
             $ins = $pdo->prepare("INSERT INTO crecer_lab_experimentos
-                (marca_id,negocio,hipotesis,copy_txt,escena,prompt,estado) VALUES (?,?,?,?,?,?, 'queued')");
-            $ins->execute([$marca_id, $nombre ?: null, $hipotesis ?: null, $copy_in, $brief, $brief]);
-            $qid = (int)$pdo->lastInsertId();
-            lab_fire($qid, $aspect, 'responses');
-            $exp = lab_exp($pdo, $qid);
+                (marca_id,negocio,hipotesis,copy_txt,escena,prompt,modelo,estado) VALUES (?,?,?,?,?,?,?, 'queued')");
+            $ins->execute([$marca_id, $nombre ?: null, $hipotesis ?: null, $copy_in, $brief, $brief, 'pending:' . $bg['id']]);
+            $exp = lab_exp($pdo, (int)$pdo->lastInsertId());   // el poll del frontend lo completa
         } catch (Throwable $e) { $img_err = $e->getMessage(); }
     }
 
@@ -410,7 +431,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
         fetch('?k=crecer&poll='+id,{cache:'no-store'}).then(function(r){return r.json()}).then(function(d){
           if(d.estado==='ok'||d.estado==='error'){clearInterval(t);location.href='?k=crecer&exp='+id;}
         }).catch(function(){});
-      },3000);})();
+      },4000);})();
     </script>
   <?php elseif ($est === 'error'): ?>
     <div class="err">❌ <?= $h($exp['observaciones'] ?: 'La generación falló.') ?></div>

@@ -637,6 +637,67 @@ function openai_responses_imagen(string $brief, array $opts = []): array {
     return ['data' => base64_decode($b64), 'mime' => 'image/png', 'modelo' => 'responses:' . $modelo, 'revised' => $revised];
 }
 
+/** Modelo concreto para las llamadas a Responses (perfil creative → gpt más nuevo). */
+function _openai_responses_modelo(array $opts): string {
+    $modelo = trim((string)($opts['modelo'] ?? ''));
+    if ($modelo === '') {
+        $cfg = resolver_modelo_ia(defined('IMAGE_CREATIVE_MODEL') ? IMAGE_CREATIVE_MODEL : 'openai:creative');
+        $modelo = strpos($cfg, ':') !== false ? explode(':', $cfg, 2)[1] : $cfg;
+    }
+    return $modelo;
+}
+
+/**
+ * MODO ChatGPT en BACKGROUND — crea la respuesta con background:true (OpenAI la corre por
+ * su lado) y devuelve el id AL INSTANTE. No hay llamada larga que el servidor deba sostener.
+ * Devuelve ['id','modelo','status'].
+ */
+function openai_responses_crear_bg(string $brief, array $opts = []): array {
+    if (!openai_configurado()) throw new IaSinCredenciales('Falta OPENAI_API_KEY.');
+    $modelo = _openai_responses_modelo($opts);
+    $aspect = $opts['aspect'] ?? '1:1';
+    $size = ['1:1'=>'1024x1024','4:5'=>'1024x1536','9:16'=>'1024x1536','16:9'=>'1536x1024','4:3'=>'1536x1024'][$aspect] ?? '1024x1024';
+    $body = [
+        'model'      => $modelo,
+        'input'      => $brief,
+        'background' => true,
+        'tools'      => [[ 'type'=>'image_generation', 'quality'=>'high', 'size'=>$size, 'background'=>'opaque' ]],
+    ];
+    $resp = ia_http_post_retry('https://api.openai.com/v1/responses',
+        ['Content-Type: application/json', 'Authorization: Bearer ' . OPENAI_API_KEY],
+        json_encode($body, JSON_UNESCAPED_UNICODE), 2);
+    $d = json_decode($resp, true);
+    if (!is_array($d))      throw new IaError('Responses(bg) no-JSON: ' . substr($resp, 0, 300));
+    if (isset($d['error'])) throw new IaError('Responses(bg): ' . ($d['error']['message'] ?? 'error'));
+    $id = (string)($d['id'] ?? '');
+    if ($id === '')         throw new IaError('Responses(bg) sin id: ' . substr($resp, 0, 300));
+    return ['id' => $id, 'modelo' => $modelo, 'status' => (string)($d['status'] ?? 'queued')];
+}
+
+/**
+ * Consulta el estado de una respuesta background (GET corto). Cuando status='completed'
+ * trae la imagen (b64) y el prompt que el modelo escribió (revised).
+ * Devuelve ['status','b64','revised','model'].
+ */
+function openai_responses_estado(string $rid): array {
+    if (!openai_configurado()) throw new IaSinCredenciales('Falta OPENAI_API_KEY.');
+    $resp = ia_http_get('https://api.openai.com/v1/responses/' . rawurlencode($rid),
+        ['Authorization: Bearer ' . OPENAI_API_KEY]);
+    $d = json_decode($resp, true);
+    if (!is_array($d))      throw new IaError('Responses(estado) no-JSON: ' . substr($resp, 0, 300));
+    if (isset($d['error'])) throw new IaError('Responses(estado): ' . ($d['error']['message'] ?? 'error'));
+    $status = (string)($d['status'] ?? '');
+    $b64 = ''; $revised = '';
+    foreach (($d['output'] ?? []) as $o) {
+        if (($o['type'] ?? '') === 'image_generation_call') {
+            $b64 = (string)($o['result'] ?? '');
+            $revised = (string)($o['revised_prompt'] ?? '');
+            break;
+        }
+    }
+    return ['status' => $status, 'b64' => $b64, 'revised' => $revised, 'model' => (string)($d['model'] ?? '')];
+}
+
 /** gpt-image-1 /images/edits — incorpora UNA imagen (el logo) al arte, a calidad ALTA. */
 function openai_imagen_edit(string $prompt, array $entrada, string $modelo, string $size, string $quality, array $opts): array {
     $mime = $entrada['mime'] ?: 'image/png';
