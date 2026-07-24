@@ -81,10 +81,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ¿Redes conectadas? (para ofrecer "publicar en mis redes")
-$redes_ok = false;
+$redes_ok = false; $redes_conectadas = [];   // publicar SOLO a lo que de verdad esté conectado
 try {
     $cx = $pdo->query("SELECT ig_user_id, fb_page_id FROM crecer_conexiones WHERE marca_id={$marca_id} AND estado='activa' LIMIT 1")->fetch();
-    $redes_ok = (bool)$cx;
+    if ($cx) {
+        if (!empty($cx['ig_user_id'])) $redes_conectadas[] = 'instagram';
+        if (!empty($cx['fb_page_id'])) $redes_conectadas[] = 'facebook';
+        $redes_ok = !empty($redes_conectadas);
+    }
 } catch (Throwable $e) {}
 
 $nombre  = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
@@ -132,6 +136,15 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .row2{display:flex;gap:11px}.row2 .btn{flex:1;font-size:15px}
   .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);background:var(--tinta);color:#fff;font-weight:600;font-size:14px;padding:12px 18px;border-radius:12px;opacity:0;transition:.25s;z-index:50}
   .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  /* Loading a pantalla completa (publicar / conectar) */
+  .gload{position:fixed;inset:0;z-index:400;display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:30px;text-align:center;
+    background:radial-gradient(120% 90% at 14% 0%,color-mix(in srgb,var(--magenta,#EF4375) 58%,transparent),transparent 58%),
+      radial-gradient(120% 90% at 100% 100%,color-mix(in srgb,var(--palma,#00A49F) 52%,transparent),transparent 58%),rgba(24,14,24,.5);
+    backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px)}
+  .gload.on{display:flex}
+  .gload .sp{width:52px;height:52px;border-radius:50%;border:4px solid rgba(255,255,255,.35);border-top-color:#fff;animation:gspin .8s linear infinite}
+  @keyframes gspin{to{transform:rotate(360deg)}}
+  .gload .msg{color:#fff;font-family:var(--font-display,'Poppins');font-weight:700;font-size:17px;max-width:300px;line-height:1.4;text-shadow:0 1px 12px rgba(0,0,0,.35)}
   /* Venta (placeholder Fase 1 — el carrusel pleno llega en Fase 4) */
   .cel{text-align:center;padding:8px 0 4px}
   .cel .big{font-family:var(--font-display,'Poppins');font-weight:800;font-size:26px;color:var(--tinta);margin:14px 0 6px}
@@ -213,15 +226,19 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="gload" id="gload"><div class="sp"></div><div class="msg" id="gloadMsg">Trabajando…</div></div>
 
 <?php $marca_id = $marca_id; require __DIR__ . '/../includes/_sms_gate.php'; ?>
 
 <script>
 (function(){
-  var CSRF=<?= json_encode(csrf_token()) ?>, MARCA=<?= (int)$marca_id ?>, PID=<?= (int)$post_id ?>, GW=<?= json_encode($gwq) ?>;
+  var CSRF=<?= json_encode(csrf_token()) ?>, MARCA=<?= (int)$marca_id ?>, PID=<?= (int)$post_id ?>, GW=<?= json_encode($gwq) ?>, PLATS=<?= json_encode(implode(',', $redes_conectadas)) ?>;
   var toast=document.getElementById('toast');
   function T(m){ toast.textContent=m; toast.classList.add('on'); setTimeout(function(){toast.classList.remove('on');},2200); }
   function self(accion, extra){ var fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion',accion); for(var k in (extra||{})) fd.append(k,extra[k]); return fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}); }
+  var gload=document.getElementById('gload'), gloadMsg=document.getElementById('gloadMsg');
+  function showLoad(m){ gloadMsg.textContent=m||'Trabajando…'; gload.classList.add('on'); }
+  function hideLoad(){ gload.classList.remove('on'); }
 
 <?php if (!$publicado): ?>
   var actsB=document.getElementById('actsBorrador'), actsE=document.getElementById('actsEdit'),
@@ -274,19 +291,18 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
   // Publicar en redes (canónico: aprobar2.php publicar_api, con gate SMS)
   function publicarRedes(){
-    var fd=new FormData(); fd.append('accion','publicar_api'); fd.append('id',PID); fd.append('plataformas','instagram,facebook'); fd.append('ajax','1'); fd.append('csrf',CSRF);
+    var fd=new FormData(); fd.append('accion','publicar_api'); fd.append('id',PID); fd.append('plataformas', PLATS||'instagram,facebook'); fd.append('ajax','1'); fd.append('csrf',CSRF);
     return fetch('/crecer/panel/aprobar2.php?marca='+MARCA,{method:'POST',body:fd}).then(function(r){return r.json();});
   }
   var btnRedes=document.getElementById('btnRedes');
   if(btnRedes) btnRedes.addEventListener('click',function(){
-    btnRedes.disabled=true; btnRedes.textContent='Publicando…';
+    showLoad('Publicando en tus redes…');
     publicarRedes().then(function(d){
-      btnRedes.disabled=false; btnRedes.textContent='📲 Publicar en mis redes';
-      if(d&&d.ok){ location.href='/crecer/panel/gateway_post.php?marca='+MARCA+'&venta=1'+GW; return; }
-      if(d&&d.needs_phone){ window.crecerSmsGate.open(function(){ btnRedes.click(); }); return; }
-      if(d&&d.err==='no_conectado'){ T('Conecta tus redes primero…'); setTimeout(function(){ location.href='/crecer/panel/conectar.php?marca='+MARCA; },900); return; }
-      T((d&&d.err)||'No se pudo publicar.');
-    }).catch(function(){ btnRedes.disabled=false; btnRedes.textContent='📲 Publicar en mis redes'; T('Error de conexión.'); });
+      if(d&&d.ok){ showLoad('¡Publicado! Un momento…'); location.href='/crecer/panel/gateway_post.php?marca='+MARCA+'&venta=1'+GW; return; }
+      if(d&&d.needs_phone){ hideLoad(); window.crecerSmsGate.open(function(){ btnRedes.click(); }); return; }
+      if(d&&d.err==='no_conectado'){ showLoad('Conectando tus redes…'); setTimeout(function(){ location.href='/crecer/panel/conectar.php?marca='+MARCA+'&desde=gateway'; }, 500); return; }
+      hideLoad(); T((d&&d.err)||'No se pudo publicar.');
+    }).catch(function(){ hideLoad(); T('Error de conexión.'); });
   });
 
   // Publicar manual (bajar + copiar)
@@ -298,13 +314,13 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   var btnYa=document.getElementById('btnYaPubli');
   if(btnYa) btnYa.addEventListener('click',function(){
     var fd=new FormData(); fd.append('accion','publicar_api'); fd.append('id',PID); fd.append('plataformas',''); fd.append('ajax','1'); fd.append('csrf',CSRF); fd.append('manual','1');
-    btnYa.disabled=true;
+    showLoad('Confirmando…');
     fetch('/crecer/panel/aprobar2.php?marca='+MARCA,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
-      btnYa.disabled=false;
-      if(d&&d.needs_phone){ window.crecerSmsGate.open(function(){ btnYa.click(); }); return; }
+      if(d&&d.needs_phone){ hideLoad(); window.crecerSmsGate.open(function(){ btnYa.click(); }); return; }
       // Con o sin API, tras verificar humano lo llevamos a la celebración/venta.
+      showLoad('¡Listo! Un momento…');
       location.href='/crecer/panel/gateway_post.php?marca='+MARCA+'&venta=1'+GW;
-    }).catch(function(){ btnYa.disabled=false; location.href='/crecer/panel/gateway_post.php?marca='+MARCA+'&venta=1'+GW; });
+    }).catch(function(){ location.href='/crecer/panel/gateway_post.php?marca='+MARCA+'&venta=1'+GW; });
   });
 <?php endif; ?>
 })();

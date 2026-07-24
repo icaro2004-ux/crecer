@@ -25,6 +25,12 @@ $marca_id = (int)$marca['id'];
 $BASE = '/crecer/panel';
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
+// ¿Vengo del GATEWAY? (para volver al ESCENARIO del post, no al app). Se guarda en
+// sesión porque el rebote de OAuth pierde los query params. El app usa el default.
+if (($_GET['desde'] ?? '') === 'gateway') $_SESSION['conectar_return'] = 'gateway';
+$es_gateway = ($_SESSION['conectar_return'] ?? '') === 'gateway';
+$volver_url = $es_gateway ? ('/crecer/panel/gateway_post.php?marca=' . $marca_id) : ($BASE . '/index.php?marca=' . $marca_id);
+
 $err = ''; $info = '';
 
 // ── Desconectar ──────────────────────────────────────────────
@@ -178,7 +184,7 @@ $paginas = $_SESSION['meta_paginas'][$marca_id] ?? [];
   $warn = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
 ?>
 <div class="cx">
-  <a class="back" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>">← Volver</a>
+  <a class="back" href="<?= $h($volver_url) ?>">← Volver</a>
   <h1>Conecta tus redes</h1>
   <p class="sub">Una vez. Después el corillo publica solo, a la hora que toca.</p>
 
@@ -218,13 +224,23 @@ $paginas = $_SESSION['meta_paginas'][$marca_id] ?? [];
         <span class="pill <?= $fb_on?'on':'off' ?>"><?= $fb_on?'Conectado':'Falta' ?></span>
       </div>
     </div>
-    <?php if (!$ig_on): ?>
-      <div class="card" style="margin-top:0">
-        <div class="amber" style="margin-top:0"><b>Falta activar Instagram.</b> Ponlo en modo <b>Business o Creator</b> y enlázalo a tu Página (<?= $h($conx['fb_page_nombre']) ?>). Luego vuelve a conectar y el corillo lo agarra.</div>
-        <a class="btn" href="?action=iniciar&marca=<?= $marca_id ?>" style="margin-top:14px">Activar Instagram</a>
-      </div>
+    <?php $algo_on = $ig_on || $fb_on; ?>
+    <?php if ($algo_on): ?>
+      <!-- Con UNA sola red ya se puede publicar — nada de bloquear. -->
+      <a class="btn" href="<?= $h($volver_url) ?>" style="margin-top:4px"><?= $check ?> Listo — <?= $es_gateway ? 'volver a publicar' : 'ir a mi panel' ?></a>
+      <?php if (!$ig_on && $fb_on): ?>
+        <div class="amber" style="margin-top:12px">Publicaremos en <b>Facebook</b>. ¿Quieres <b>Instagram</b> también? Ponlo en Business/Creator, enlázalo a tu Página y dale <a href="?action=iniciar&marca=<?= $marca_id ?>" style="color:#6b4600;font-weight:700">volver a conectar</a>. (Opcional — no hace falta para publicar.)</div>
+      <?php elseif ($ig_on && !$fb_on): ?>
+        <div class="amber" style="margin-top:12px">Publicaremos en <b>Instagram</b>. Tu <b>Página de Facebook</b> también se puede añadir si quieres, pero no hace falta.</div>
+      <?php else: ?>
+        <a class="quiet" href="?action=iniciar&marca=<?= $marca_id ?>">Volver a conectar / actualizar</a>
+      <?php endif; ?>
     <?php else: ?>
-      <a class="quiet" href="?action=iniciar&marca=<?= $marca_id ?>">Volver a conectar / actualizar</a>
+      <!-- Conexión activa pero sin IG ni FB utilizables → sí hace falta reintentar. -->
+      <div class="card" style="margin-top:0">
+        <div class="amber" style="margin-top:0"><b>No pude leer ninguna red publicable.</b> Vuelve a conectar y elige tu Página (con Instagram Business enlazado si lo tienes).</div>
+        <a class="btn" href="?action=iniciar&marca=<?= $marca_id ?>" style="margin-top:14px">Volver a conectar</a>
+      </div>
     <?php endif; ?>
     <form method="post" action="?action=desconectar&marca=<?= $marca_id ?>" onsubmit="return confirm('¿Seguro que quieres desconectar? El corillo dejará de publicar automático.')">
       <?= csrf_field() ?><button class="quiet" type="submit" style="color:var(--noo-ink,#b42318)">Desconectar</button>
