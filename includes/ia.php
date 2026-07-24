@@ -390,8 +390,38 @@ if (!defined('OPENAI_IMG_QUALITY')) define('OPENAI_IMG_QUALITY', 'high');
 // Arquitectura del prompt de imagen: v1 = pipeline de agentes (direccion_arte.php);
 // v2 = un SOLO cerebro creativo (image_messenger.php → IMAGE_CREATIVE_MODEL dirige).
 if (!defined('IMAGE_PIPELINE'))       define('IMAGE_PIPELINE', 'v1');
-// Qué modelo hace TODA la dirección creativa en v2. 'proveedor:modelo' o solo 'proveedor'.
-if (!defined('IMAGE_CREATIVE_MODEL')) define('IMAGE_CREATIVE_MODEL', 'openai:gpt-4o');
+// Quién dirige la creatividad en v2 — por PERFIL LÓGICO, no por nombre de modelo:
+// 'openai:creative' | 'openai:fast' | 'gemini:creative' | 'gemini:fast'. El mapping a
+// modelos concretos vive en resolver_modelo_ia() (un solo lugar que se cambia cuando
+// OpenAI/Gemini saquen algo mejor, sin tocar el resto del sistema).
+if (!defined('IMAGE_CREATIVE_MODEL')) define('IMAGE_CREATIVE_MODEL', 'openai:creative');
+
+/**
+ * Resuelve un PERFIL LÓGICO ('openai:creative') al modelo concreto de HOY
+ * ('openai:gpt-4o'). El código nunca conoce nombres de modelo: solo perfiles.
+ * Cuando salga un modelo mejor, se cambia AQUÍ (o vía IMAGE_MODEL_MAP en config) y
+ * todo el sistema sigue igual. Si ya viene un modelo concreto, se pasa tal cual.
+ */
+function resolver_modelo_ia(string $cfg): string {
+    $cfg = trim($cfg);
+    $map = [
+        'openai:creative' => 'gpt-4o',            // el mejor creativo disponible hoy (futuro: gpt-5.5/6)
+        'openai:fast'     => 'gpt-4o-mini',
+        'gemini:creative' => 'gemini-2.5-pro',
+        'gemini:fast'     => 'gemini-2.5-flash',
+    ];
+    // Override opcional desde config (JSON): define('IMAGE_MODEL_MAP', '{"openai:creative":"gpt-5.5"}');
+    if (defined('IMAGE_MODEL_MAP') && IMAGE_MODEL_MAP !== '') {
+        $j = json_decode(IMAGE_MODEL_MAP, true);
+        if (is_array($j)) $map = array_merge($map, $j);
+    }
+    $key = strtolower($cfg);
+    if (isset($map[$key])) {
+        $prov = explode(':', $cfg, 2)[0];
+        return $prov . ':' . $map[$key];
+    }
+    return $cfg;   // ya es 'proveedor:modelo-concreto' → pasa tal cual (retrocompatible)
+}
 
 /**
  * Chat de OpenAI (para el Director Creativo de v2). Devuelve el texto + tokens.

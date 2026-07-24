@@ -114,8 +114,8 @@ try {
             if ($cap === '') $cap = 'Donas artesanales recién hechas — por docena o para tus eventos. Ven a Rica Dona Express.';
             echo "marca #{$mid}\ncopy: " . mb_substr($cap, 0, 130) . "…\n";
             foreach ([['v1', ['pipeline'=>'v1']],
-                      ['v2-openai', ['pipeline'=>'v2','creative_model'=>'openai:gpt-4o']],
-                      ['v2-gemini', ['pipeline'=>'v2','creative_model'=>'gemini']]] as $par) {
+                      ['v2-openai', ['pipeline'=>'v2','creative_model'=>'openai:creative']],
+                      ['v2-gemini', ['pipeline'=>'v2','creative_model'=>'gemini:creative']]] as $par) {
                 $lbl = $par[0]; $o = $par[1];
                 try {
                     $t0 = microtime(true);

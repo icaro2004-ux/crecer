@@ -16,6 +16,8 @@
  * Loguea en crecer_ia_log (evidencia del cerebro creativo). Devuelve el texto.
  */
 function director_creativo_llm(PDO $pdo, int $marca_id, string $sistema, string $mensaje, string $modelo_cfg): array {
+    // Perfil lógico ('openai:creative') → modelo concreto de hoy ('openai:gpt-4o').
+    if (function_exists('resolver_modelo_ia')) $modelo_cfg = resolver_modelo_ia($modelo_cfg);
     $prov = 'openai'; $mdl = 'gpt-4o';
     if (strpos($modelo_cfg, ':') !== false) { $p = explode(':', $modelo_cfg, 2); $prov = $p[0]; $mdl = $p[1]; }
     else { $prov = $modelo_cfg; }
