@@ -405,8 +405,8 @@ if (!defined('IMAGE_CREATIVE_MODEL')) define('IMAGE_CREATIVE_MODEL', 'openai:cre
 function resolver_modelo_ia(string $cfg): string {
     $cfg = trim($cfg);
     $map = [
-        'openai:creative' => 'gpt-4o',            // el mejor creativo disponible hoy (futuro: gpt-5.5/6)
-        'openai:fast'     => 'gpt-4o-mini',
+        'openai:creative' => 'gpt-5.5',           // el mejor creativo de OpenAI (cambiar aquí cuando salga gpt-6)
+        'openai:fast'     => 'gpt-5-mini',
         'gemini:creative' => 'gemini-2.5-pro',
         'gemini:fast'     => 'gemini-2.5-flash',
     ];
