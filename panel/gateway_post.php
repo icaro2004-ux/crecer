@@ -99,6 +99,24 @@ $plan_venta = null;
 try { $plan_venta = $pdo->query("SELECT nombre, slug, precio_mensual FROM crecer_planes WHERE slug='crecer' AND activo=1 LIMIT 1")->fetch(PDO::FETCH_ASSOC); } catch (Throwable $e) {}
 if (!$plan_venta) $plan_venta = ['nombre'=>'Crecer', 'slug'=>'crecer', 'precio_mensual'=>39];
 
+// "Ver mi publicación" → al ENLACE REAL del post; si no, al perfil de la red que SÍ
+// tenga (nada de mandar siempre a IG cuando solo tiene FB).
+$ver_url = '';
+try {
+    $pk = $pdo->prepare("SELECT permalink FROM crecer_publicaciones WHERE contenido_id=? AND permalink IS NOT NULL AND permalink<>'' ORDER BY id DESC LIMIT 1");
+    $pk->execute([$post_id]);
+    $ver_url = (string)($pk->fetchColumn() ?: '');
+} catch (Throwable $e) {}
+if ($ver_url === '') {
+    try {
+        $cx2 = $pdo->query("SELECT ig_username, fb_page_id FROM crecer_conexiones WHERE marca_id={$marca_id} AND estado='activa' LIMIT 1")->fetch();
+        if ($cx2) {
+            if (!empty($cx2['ig_username']))     $ver_url = 'https://instagram.com/' . rawurlencode((string)$cx2['ig_username']);
+            elseif (!empty($cx2['fb_page_id']))  $ver_url = 'https://facebook.com/' . rawurlencode((string)$cx2['fb_page_id']);
+        }
+    } catch (Throwable $e) {}
+}
+
 $nombre  = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
 $caption = (string)($post['caption'] ?? '');
 $grafica = (string)($post['grafica_path'] ?? '');
@@ -192,7 +210,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <div class="big">¡Tu post está publicado!</div>
     <p class="gw-sub" style="margin-bottom:0">Eso lo hizo el corillo por ti, en tu voz. Ahora imagínate esto <b>todos los días</b>.</p>
   </div>
-  <?php if ($redes_ok): ?><a class="btn gho" style="margin-top:14px" href="https://instagram.com" target="_blank" rel="noopener">Ver mi post en vivo →</a><?php endif; ?>
+  <?php if ($ver_url !== ''): ?><a class="btn gho" style="margin-top:14px" href="<?= $h($ver_url) ?>" target="_blank" rel="noopener">Ver mi post en vivo →</a><?php endif; ?>
 
   <div class="sell">
     <div class="sell-track" id="sellTrack">
