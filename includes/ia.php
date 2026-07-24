@@ -663,9 +663,21 @@ function openai_responses_crear_bg(string $brief, array $opts = []): array {
     $modelo = _openai_responses_modelo($opts);
     $aspect = $opts['aspect'] ?? '1:1';
     $size = ['1:1'=>'1024x1024','4:5'=>'1024x1536','9:16'=>'1024x1536','16:9'=>'1536x1024','4:3'=>'1536x1024'][$aspect] ?? '1024x1024';
+    // Si viene el LOGO real del negocio, se manda como imagen de referencia (input multimodal)
+    // para que el modelo USE ese logo y NO invente uno. Sin logo → input de texto normal.
+    $input = $brief;
+    if (!empty($opts['logo']['data'])) {
+        $input = [[
+            'role'    => 'user',
+            'content' => [
+                ['type'=>'input_text',  'text'=>$brief],
+                ['type'=>'input_image', 'image_url'=>'data:' . ($opts['logo']['mime'] ?? 'image/png') . ';base64,' . $opts['logo']['data']],
+            ],
+        ]];
+    }
     $body = [
         'model'      => $modelo,
-        'input'      => $brief,
+        'input'      => $input,
         'background' => true,
         'tools'      => [[ 'type'=>'image_generation', 'quality'=>'high', 'size'=>$size, 'background'=>'opaque' ]],
     ];

@@ -16,8 +16,12 @@ function img_resp_activo(): bool {
     return (defined('IMAGE_ENGINE') ? IMAGE_ENGINE : 'actual') === 'responses';
 }
 
-/** Brief natural (mismo que ganó en el laboratorio) a partir del negocio + copy. */
-function img_resp_brief(array $m, string $copy): string {
+/**
+ * Brief natural (el que ganó en el lab) + reglas de marca.
+ * @param $con_texto  true = anuncio con texto · false = foto SIN texto · null = el modelo decide (variedad)
+ * @param $tiene_logo true = se adjunta el logo REAL del negocio (úsalo, no inventes)
+ */
+function img_resp_brief(array $m, string $copy, ?bool $con_texto = null, bool $tiene_logo = false): string {
     $nombre  = trim((string)($m['nombre_negocio'] ?? ''));
     $desc    = trim((string)($m['descripcion'] ?? ''));
     $publico = trim((string)($m['publico_objetivo'] ?? ''));
@@ -26,11 +30,23 @@ function img_resp_brief(array $m, string $copy): string {
     $plist = [];
     foreach ((array)$prods_raw as $p) { $n = is_array($p) ? trim((string)($p['nombre'] ?? '')) : trim((string)$p); if ($n !== '') $plist[] = $n; }
     $prods = implode(', ', $plist);
+
+    // Regla de TEXTO (que no SIEMPRE meta letras).
+    if ($con_texto === true)       $regla_texto = "Esta pieza SÍ lleva texto de anuncio: titular corto y potente, y un CTA breve. Poco texto, bien jerarquizado y sin errores de ortografía en español.";
+    elseif ($con_texto === false)  $regla_texto = "NO pongas texto ni letras dentro de la imagen: una fotografía publicitaria potente y limpia que hable por sí sola.";
+    else                           $regla_texto = "Tú decides si la pieza lleva algo de texto de anuncio o si es una foto limpia sin texto — elige lo que MEJOR detenga el scroll para este negocio; no metas texto por meterlo.";
+
+    // Regla de LOGO/MARCA (que no invente).
+    if ($tiene_logo) $regla_logo = "Se adjunta el LOGO REAL del negocio: úsalo EXACTAMENTE ese (intégralo con buen gusto, en una esquina o como marca discreta). NO inventes ni dibujes otro logo.";
+    else             $regla_logo = "NO inventes un logotipo ni una marca gráfica falsa. Si muestras el nombre del negocio, escríbelo como texto limpio y correcto: \"{$nombre}\" — nunca un logo ficticio.";
+
     return "Crea una imagen publicitaria profesional para redes sociales (Facebook e Instagram) para este negocio puertorriqueño.\n\n"
-         . "Negocio: {$nombre}\nQué hace: {$desc}\n"
+         . "Negocio (nombre EXACTO, escríbelo sin errores): {$nombre}\nQué hace: {$desc}\n"
          . ($prods !== '' ? "Productos: {$prods}\n" : '')
          . ($publico !== '' ? "Público: {$publico}\n" : '')
          . "\nTexto del post que la imagen va a acompañar:\n\"{$copy}\"\n\n"
+         . "{$regla_texto}\n{$regla_logo}\n"
+         . "No inventes datos, precios ni promociones que no estén aquí.\n\n"
          . "La imagen debe detener el scroll y dar ganas de comprar. Genera la mejor imagen publicitaria posible.";
 }
 
@@ -39,13 +55,22 @@ function img_resp_brief(array $m, string $copy): string {
  * en crecer_contenido.img_job (estado 'queued'). Devuelve el id, o '' si falla
  * (el llamador cae al motor viejo). Loguea en crecer_ia_log (evidencia XPRIZE #2).
  */
-function img_resp_encolar(PDO $pdo, int $marca_id, int $post_id, string $copy): string {
+function img_resp_encolar(PDO $pdo, int $marca_id, int $post_id, string $copy, ?bool $con_texto = null): string {
     try {
         $m = function_exists('leer_marca') ? leer_marca($pdo, $marca_id)
            : $pdo->query("SELECT * FROM crecer_marca WHERE id=" . (int)$marca_id)->fetch(PDO::FETCH_ASSOC);
         if (!$m) return '';
-        $brief = img_resp_brief($m, $copy);
-        $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1']);
+        // LOGO REAL del negocio (si subió/tiene uno) → se pasa como referencia para NO inventar.
+        $logo = null;
+        if (!empty($m['logo_path'])) {
+            $labs = rtrim(UPLOADS_PATH, '/\\') . '/' . ltrim(str_replace(rtrim(UPLOADS_URL, '/'), '', (string)$m['logo_path']), '/');
+            if (is_file($labs)) {
+                $mime = (function_exists('mime_content_type') ? mime_content_type($labs) : '') ?: 'image/png';
+                $logo = ['data' => base64_encode((string)file_get_contents($labs)), 'mime' => $mime];
+            }
+        }
+        $brief = img_resp_brief($m, $copy, $con_texto, $logo !== null);
+        $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1'] + ($logo ? ['logo' => $logo] : []));
         $pdo->prepare("UPDATE crecer_contenido SET img_job=?, img_estado='queued' WHERE id=? AND marca_id=?")
             ->execute([$bg['id'], $post_id, $marca_id]);
         try {

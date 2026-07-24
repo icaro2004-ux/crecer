@@ -103,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../includes/img_responses.php';
         $con_txt = ($_POST['con_texto'] ?? '') === '1';
         $cap = (string)$pdo->query("SELECT caption FROM crecer_contenido WHERE id={$post_id}")->fetchColumn();
-        if (img_resp_activo() && img_resp_encolar($pdo, $marca_id, $post_id, $cap) !== '') {
+        if (img_resp_activo() && img_resp_encolar($pdo, $marca_id, $post_id, $cap, $con_txt) !== '') {
             echo json_encode(['ok'=>true, 'job'=>1]); exit;   // → el frontend consulta con poll_imagen
         }
         try {
