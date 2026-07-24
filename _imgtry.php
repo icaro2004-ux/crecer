@@ -25,9 +25,9 @@ function lab_abs(string $url): string {
     return rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
 }
 /** Fire-and-forget: arranca el worker por auto-HTTP (responde al instante). */
-function lab_fire(int $id, string $aspect): void {
+function lab_fire(int $id, string $aspect, string $motor = 'img'): void {
     $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
-    $url  = 'https://' . $host . '/crecer/_imgtry.php?k=crecer&work=' . $id . '&a=' . rawurlencode($aspect);
+    $url  = 'https://' . $host . '/crecer/_imgtry.php?k=crecer&work=' . $id . '&a=' . rawurlencode($aspect) . '&motor=' . $motor;
     $ch = curl_init($url);
     curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_CONNECTTIMEOUT_MS=>1500,
         CURLOPT_TIMEOUT_MS=>2500, CURLOPT_NOSIGNAL=>1, CURLOPT_SSL_VERIFYPEER=>false]);
@@ -36,22 +36,38 @@ function lab_fire(int $id, string $aspect): void {
 
 // ===== WORKER: genera por detrás (inmune al 504 de nginx) =====
 if (isset($_GET['work'])) {
-    $wid = (int)$_GET['work']; $wa = (string)($_GET['a'] ?? '1:1');
+    $wid = (int)$_GET['work']; $wa = (string)($_GET['a'] ?? '1:1'); $wmotor = (string)($_GET['motor'] ?? 'img');
     if (function_exists('fastcgi_finish_request')) { echo 'ok'; @fastcgi_finish_request(); }
     @set_time_limit(0); @ignore_user_abort(true);
     $e = lab_exp($pdo, $wid);
     if ($e && $e['estado'] === 'queued') {
         try {
             $t0 = microtime(true);
-            $r  = openai_imagen((string)$e['prompt'], ['aspect' => $wa]);
-            $seg = round(microtime(true) - $t0, 1);
-            $rel = 'pruebas/lab_' . substr(md5((string)microtime(true)), 0, 8) . '.png';
-            $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
-            @mkdir(dirname($abs), 0775, true);
-            @file_put_contents($abs, $r['data']);
-            $url = rtrim(UPLOADS_URL, '/') . '/' . $rel;
-            $pdo->prepare("UPDATE crecer_lab_experimentos SET estado='ok', imagen=?, bytes=?, modelo=?, segundos=? WHERE id=?")
-                ->execute([$url, strlen($r['data']), $r['modelo'] ?? null, $seg, $wid]);
+            if ($wmotor === 'responses') {
+                // MODO ChatGPT: el modelo se dirige solo (Responses API). El 'prompt' = el brief.
+                $r = openai_responses_imagen((string)$e['prompt'], ['aspect' => $wa]);
+                $seg = round(microtime(true) - $t0, 1);
+                $rel = 'pruebas/lab_' . substr(md5((string)microtime(true)), 0, 8) . '.png';
+                $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+                @mkdir(dirname($abs), 0775, true);
+                @file_put_contents($abs, $r['data']);
+                $url = rtrim(UPLOADS_URL, '/') . '/' . $rel;
+                $rev = trim((string)($r['revised'] ?? ''));
+                // 'prompt' pasa a ser el prompt REAL que el modelo escribió (para comparar).
+                $pdo->prepare("UPDATE crecer_lab_experimentos SET estado='ok', imagen=?, bytes=?, modelo=?, segundos=?, prompt=? WHERE id=?")
+                    ->execute([$url, strlen($r['data']), $r['modelo'], $seg, ($rev !== '' ? $rev : (string)$e['prompt']), $wid]);
+            } else {
+                // Modo directo: gpt-image-1 con el prompt tal cual.
+                $r  = openai_imagen((string)$e['prompt'], ['aspect' => $wa]);
+                $seg = round(microtime(true) - $t0, 1);
+                $rel = 'pruebas/lab_' . substr(md5((string)microtime(true)), 0, 8) . '.png';
+                $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+                @mkdir(dirname($abs), 0775, true);
+                @file_put_contents($abs, $r['data']);
+                $url = rtrim(UPLOADS_URL, '/') . '/' . $rel;
+                $pdo->prepare("UPDATE crecer_lab_experimentos SET estado='ok', imagen=?, bytes=?, modelo=?, segundos=? WHERE id=?")
+                    ->execute([$url, strlen($r['data']), $r['modelo'] ?? null, $seg, $wid]);
+            }
         } catch (Throwable $ex) {
             $pdo->prepare("UPDATE crecer_lab_experimentos SET estado='error', observaciones=CONCAT('[error] ', ?) WHERE id=?")
                 ->execute([substr($ex->getMessage(), 0, 400), $wid]);
@@ -126,6 +142,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $save_warn = 'Generado en modo directo (sin historial). Corre la migración para el historial + async.';
             } catch (Throwable $e2) { $img_err = $e2->getMessage(); }
         }
+    }
+
+    // ---- MODO 3 — MODO ChatGPT: el modelo se dirige solo (Responses API) ----
+    if ($modo === 'chatgpt' && $marca_id && $copy_in !== '') {
+        try {
+            $m = leer_marca($pdo, $marca_id);
+            $nombre = trim((string)($m['nombre_negocio'] ?? ''));
+            $desc   = trim((string)($m['descripcion'] ?? ''));
+            $publico = trim((string)($m['publico_objetivo'] ?? ''));
+            $prods_raw = $m['productos'] ?? []; if (is_string($prods_raw)) $prods_raw = json_decode($prods_raw, true) ?: [];
+            $plist = []; foreach ((array)$prods_raw as $p) { $n = is_array($p) ? trim((string)($p['nombre'] ?? '')) : trim((string)$p); if ($n !== '') $plist[] = $n; }
+            $prods = implode(', ', $plist);
+            // Brief NATURAL y ligero (como se lo pedirías a ChatGPT) — sin nuestro prompt de director.
+            $brief = "Crea una imagen publicitaria profesional para redes sociales (Facebook e Instagram) para este negocio puertorriqueño.\n\n"
+                   . "Negocio: {$nombre}\nQué hace: {$desc}\n"
+                   . ($prods !== '' ? "Productos: {$prods}\n" : '')
+                   . ($publico !== '' ? "Público: {$publico}\n" : '')
+                   . "\nTexto del post que la imagen va a acompañar:\n\"{$copy_in}\"\n\n"
+                   . "La imagen debe detener el scroll y dar ganas de comprar. Genera la mejor imagen publicitaria posible.";
+            $ins = $pdo->prepare("INSERT INTO crecer_lab_experimentos
+                (marca_id,negocio,hipotesis,copy_txt,escena,prompt,estado) VALUES (?,?,?,?,?,?, 'queued')");
+            $ins->execute([$marca_id, $nombre ?: null, $hipotesis ?: null, $copy_in, $brief, $brief]);
+            $qid = (int)$pdo->lastInsertId();
+            lab_fire($qid, $aspect, 'responses');
+            $exp = lab_exp($pdo, $qid);
+        } catch (Throwable $e) { $img_err = $e->getMessage(); }
     }
 
     // ---- (AÑADIDO) calificar / observaciones ----
@@ -287,6 +329,30 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   <?php if ($save_warn): ?><div class="warn">⚠️ <?= $h($save_warn) ?></div><?php endif; ?>
   <?php // Fallback: si generó pero no se pudo guardar (sin migración), muestra la imagen igual.
   if (!$exp && $img_url): ?><div class="info"><?= $h($img_info) ?></div><img class="res" src="<?= $h($img_url) ?>" alt=""><?php endif; ?>
+</div>
+
+<h2>3 · Modo ChatGPT — el modelo se dirige solo</h2>
+<div class="box">
+  <p class="sub" style="margin:0 0 12px">Recibe el negocio + copy, <b>escribe su propio prompt y genera</b> en una sola llamada (Responses API — el mecanismo de ChatGPT). Úsalo con el <b>mismo negocio y copy</b> de arriba para comparar contra nuestro director.</p>
+  <form method="post" onsubmit="document.getElementById('l4').style.display='block'">
+    <input type="hidden" name="modo" value="chatgpt">
+    <label class="f">Negocio</label>
+    <select name="marca" required>
+      <option value="">— Elige el negocio —</option>
+      <?php foreach ($marcas as $mm): ?><option value="<?= (int)$mm['id'] ?>" <?= $marca_id===(int)$mm['id']?'selected':'' ?>>#<?= (int)$mm['id'] ?> · <?= $h($mm['nombre_negocio']) ?></option><?php endforeach; ?>
+    </select>
+    <label class="f">Copy del post</label>
+    <textarea name="copy" placeholder="Pega el copy del post…"><?= $h($copy_in) ?></textarea>
+    <label class="f">Hipótesis <small>(opcional)</small></label>
+    <input type="text" name="hipotesis" placeholder="Qué quieres comprobar…">
+    <div class="row">
+      <select name="aspect" style="width:auto;margin:0">
+        <option value="1:1">Cuadrado 1:1</option><option value="4:5">Vertical 4:5</option><option value="16:9">Horizontal 16:9</option>
+      </select>
+      <button type="submit" class="teal">🤖 Generar en Modo ChatGPT</button> <small>~40-70s</small>
+    </div>
+    <div class="load" id="l4">🤖 ChatGPT se está dirigiendo solo…</div>
+  </form>
 </div>
 
 <?php if ($exp): $est = (string)$exp['estado']; ?>

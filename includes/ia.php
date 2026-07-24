@@ -589,6 +589,54 @@ function openai_imagen(string $prompt, array $opts = []): array {
     return openai_extraer_img($resp, $modelo);
 }
 
+/**
+ * MODO ChatGPT — Responses API con la herramienta image_generation. El MODELO actúa de
+ * DIRECTOR: recibe un brief, escribe su propio prompt y genera la imagen en UNA sola
+ * llamada (el mismo mecanismo que usa ChatGPT). Timeout propio y largo (corre en el worker).
+ * Devuelve ['data','mime','modelo','revised'] (revised = el prompt que el modelo escribió).
+ */
+function openai_responses_imagen(string $brief, array $opts = []): array {
+    if (!openai_configurado()) throw new IaSinCredenciales('Falta OPENAI_API_KEY.');
+    $modelo = trim((string)($opts['modelo'] ?? ''));
+    if ($modelo === '') {
+        $cfg = resolver_modelo_ia(defined('IMAGE_CREATIVE_MODEL') ? IMAGE_CREATIVE_MODEL : 'openai:creative');
+        $modelo = strpos($cfg, ':') !== false ? explode(':', $cfg, 2)[1] : $cfg;
+    }
+    $aspect = $opts['aspect'] ?? '1:1';
+    $size = ['1:1'=>'1024x1024','4:5'=>'1024x1536','9:16'=>'1024x1536','16:9'=>'1536x1024','4:3'=>'1536x1024'][$aspect] ?? '1024x1024';
+    $body = [
+        'model' => $modelo,
+        'input' => $brief,
+        'tools' => [[ 'type'=>'image_generation', 'quality'=>'high', 'size'=>$size, 'background'=>'opaque' ]],
+    ];
+    $ch = curl_init('https://api.openai.com/v1/responses');
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($body, JSON_UNESCAPED_UNICODE),
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'Authorization: Bearer ' . OPENAI_API_KEY],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 200,
+        CURLOPT_CONNECTTIMEOUT => 10,
+    ]);
+    $resp = curl_exec($ch);
+    if ($resp === false) { $e = curl_error($ch); curl_close($ch); throw new IaError('cURL Responses: ' . $e); }
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+    if ($code < 200 || $code >= 300) throw new IaError("Responses HTTP $code: " . substr($resp, 0, 500));
+    $d = json_decode($resp, true);
+    if (!is_array($d))       throw new IaError('Responses no-JSON: ' . substr($resp, 0, 300));
+    if (isset($d['error']))  throw new IaError('Responses: ' . ($d['error']['message'] ?? 'error'));
+    $b64 = ''; $revised = '';
+    foreach (($d['output'] ?? []) as $o) {
+        if (($o['type'] ?? '') === 'image_generation_call') {
+            $b64 = (string)($o['result'] ?? '');
+            $revised = (string)($o['revised_prompt'] ?? '');
+            break;
+        }
+    }
+    if ($b64 === '') throw new IaError('Responses no devolvió imagen: ' . substr($resp, 0, 400));
+    return ['data' => base64_decode($b64), 'mime' => 'image/png', 'modelo' => 'responses:' . $modelo, 'revised' => $revised];
+}
+
 /** gpt-image-1 /images/edits — incorpora UNA imagen (el logo) al arte, a calidad ALTA. */
 function openai_imagen_edit(string $prompt, array $entrada, string $modelo, string $size, string $quality, array $opts): array {
     $mime = $entrada['mime'] ?: 'image/png';
