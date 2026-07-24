@@ -126,6 +126,22 @@ try {
             echo "RESULTADO: ✅ generó arte en {$seg}s\n";
             echo "  archivo (url) : " . ($r['archivo'] ?? '(?)') . "\n";
             echo "  modelo        : " . ($r['modelo'] ?? '(?)') . "\n";
+            // VEREDICTO que zanja el misterio "no cambia nada":
+            $mdl = (string)($r['modelo'] ?? '');
+            if (stripos($mdl, 'gemini') !== false) {
+                echo "\n  ⚠️⚠️ LA IMAGEN LA HIZO GEMINI (Nano Banana), NO gpt-image-1.\n";
+                echo "     Por eso NADA cambia con el prompt: la genera OTRO modelo. gpt-image-1\n";
+                echo "     está fallando y cae al respaldo. Probando el ERROR EXACTO de OpenAI…\n";
+                try {
+                    $rr = openai_imagen('Un cafe boricua humeante sobre madera, luz calida, foto premium', ['aspect'=>'1:1']);
+                    echo "     OpenAI directo: ✅ funciono (" . strlen($rr['data']) . " bytes). Raro — revisar el ruteo.\n";
+                } catch (Throwable $e2) {
+                    echo "     OpenAI ERROR EXACTO: " . $e2->getMessage() . "\n";
+                    echo "     → ESE es el bug raiz (org sin verificar / sin creditos / key). Arreglalo y las imagenes cambian.\n";
+                }
+            } else {
+                echo "\n  ✅ La imagen SI la hizo gpt-image-1. Si aun no te gusta, es el PROMPT/composicion (se ajusta).\n";
+            }
             $url = (string)($r['archivo'] ?? '');
             $rel = ltrim(str_replace(rtrim(UPLOADS_URL, '/'), '', $url), '/');
             $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
