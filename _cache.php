@@ -62,8 +62,8 @@ try {
     $__tok  = defined('CRON_TOKEN') ? CRON_TOKEN : '';
     // La prueba de SMS NO depende del CRON_TOKEN (que en prod puede estar en otro valor):
     // usa su propia llave fija de abajo. Solo img/arte pasan por este candado de dinero.
-    if (in_array($__test, ['img','arte','imgmanual'], true) && ($__tok === '' || !hash_equals($__tok, (string)($_GET['t'] ?? '')))) {
-        echo "\n(Para las pruebas en vivo &test=img/arte/imgmanual añade  &t=TU_CRON_TOKEN  — gastan dinero, por eso van protegidas.)\n";
+    if (in_array($__test, ['img','arte','imgmanual','compare'], true) && ($__tok === '' || !hash_equals($__tok, (string)($_GET['t'] ?? '')))) {
+        echo "\n(Para las pruebas en vivo &test=img/arte/imgmanual/compare añade  &t=TU_CRON_TOKEN  — gastan dinero, por eso van protegidas.)\n";
         $__test = '';
     }
     if ($__test === 'img') {
@@ -102,6 +102,30 @@ try {
         } catch (Throwable $e) {
             echo "RESULTADO: ❌ " . $e->getMessage() . "\n";
         }
+    }
+
+    // COMPARE: v1 (agentes) vs v2-openai vs v2-gemini — mismo negocio y copy, 3 imágenes.
+    if ($__test === 'compare') {
+        echo "\n--- COMPARE: v1 vs v2-openai vs v2-gemini (mismo negocio + copy) ---\n";
+        try {
+            require_once __DIR__ . '/includes/agentes.php';
+            $mid = (int)$pdo->query("SELECT id FROM crecer_marca ORDER BY id DESC LIMIT 1")->fetchColumn();
+            $cap = (string)$pdo->query("SELECT caption FROM crecer_contenido WHERE marca_id={$mid} AND caption<>'' ORDER BY id DESC LIMIT 1")->fetchColumn();
+            if ($cap === '') $cap = 'Donas artesanales recién hechas — por docena o para tus eventos. Ven a Rica Dona Express.';
+            echo "marca #{$mid}\ncopy: " . mb_substr($cap, 0, 130) . "…\n";
+            foreach ([['v1', ['pipeline'=>'v1']],
+                      ['v2-openai', ['pipeline'=>'v2','creative_model'=>'openai:gpt-4o']],
+                      ['v2-gemini', ['pipeline'=>'v2','creative_model'=>'gemini']]] as $par) {
+                $lbl = $par[0]; $o = $par[1];
+                try {
+                    $t0 = microtime(true);
+                    $r = generar_grafica($pdo, $mid, null, array_merge(['copy'=>$cap,'con_texto'=>false,'con_logo'=>false], $o));
+                    $seg = round(microtime(true) - $t0, 1);
+                    echo "\n{$lbl}: ✅ motor=" . ($r['modelo'] ?? '?') . " ({$seg}s)\n  VER: " . ($r['archivo'] ?? '(sin archivo)') . "\n";
+                } catch (Throwable $e) { echo "\n{$lbl}: ❌ " . $e->getMessage() . "\n"; }
+            }
+            echo "\n→ Abre las 3 URLs y compara. v1=agentes · v2=un solo cerebro creativo.\n";
+        } catch (Throwable $e) { echo "COMPARE falló: " . $e->getMessage() . "\n"; }
     }
 
     // Prueba REAL del SMS: manda un código de verdad y muestra el ERROR CRUDO de Twilio.

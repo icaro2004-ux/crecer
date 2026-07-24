@@ -387,6 +387,41 @@ if (!defined('OPENAI_IMG_MODEL')) define('OPENAI_IMG_MODEL', 'gpt-image-1');   /
 // Calidad de gpt-image-1: low|medium|high|auto. 'high' = la buena ("otro nivel"),
 // ~$0.17 por imagen 1:1. Reversible a 'medium' (~$0.04) si hay que bajar costo.
 if (!defined('OPENAI_IMG_QUALITY')) define('OPENAI_IMG_QUALITY', 'high');
+// Arquitectura del prompt de imagen: v1 = pipeline de agentes (direccion_arte.php);
+// v2 = un SOLO cerebro creativo (image_messenger.php → IMAGE_CREATIVE_MODEL dirige).
+if (!defined('IMAGE_PIPELINE'))       define('IMAGE_PIPELINE', 'v1');
+// Qué modelo hace TODA la dirección creativa en v2. 'proveedor:modelo' o solo 'proveedor'.
+if (!defined('IMAGE_CREATIVE_MODEL')) define('IMAGE_CREATIVE_MODEL', 'openai:gpt-4o');
+
+/**
+ * Chat de OpenAI (para el Director Creativo de v2). Devuelve el texto + tokens.
+ * Reusa OPENAI_API_KEY + el transporte con reintentos.
+ */
+function openai_chat(string $sistema, string $mensaje, string $modelo = 'gpt-4o', array $opts = []): array {
+    if (!openai_configurado()) throw new IaSinCredenciales('Falta OPENAI_API_KEY.');
+    $body = [
+        'model'    => $modelo,
+        'messages' => [
+            ['role' => 'system', 'content' => $sistema],
+            ['role' => 'user',   'content' => $mensaje],
+        ],
+        'temperature' => $opts['temperatura'] ?? 0.85,
+        'max_tokens'  => $opts['max_tokens'] ?? 900,
+    ];
+    $resp = ia_http_post_retry('https://api.openai.com/v1/chat/completions',
+        ['Content-Type: application/json', 'Authorization: Bearer ' . OPENAI_API_KEY],
+        json_encode($body, JSON_UNESCAPED_UNICODE), $opts['max_reintentos'] ?? 2);
+    $d = json_decode($resp, true);
+    if (!is_array($d)) throw new IaError('Respuesta no-JSON de OpenAI chat: ' . substr($resp, 0, 300));
+    if (isset($d['error'])) throw new IaError('OpenAI chat: ' . ($d['error']['message'] ?? 'error'));
+    $usage = $d['usage'] ?? [];
+    return [
+        'texto'      => trim((string)($d['choices'][0]['message']['content'] ?? '')),
+        'tokens_in'  => (int)($usage['prompt_tokens'] ?? 0),
+        'tokens_out' => (int)($usage['completion_tokens'] ?? 0),
+        'modelo'     => $modelo,
+    ];
+}
 
 function openai_configurado(): bool { return OPENAI_API_KEY !== ''; }
 

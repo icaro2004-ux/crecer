@@ -815,11 +815,20 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
     // no lo ilustra literal. Solo para arte DESDE CERO (la foto real va a Gemini fiel).
     // Degrada solo: pipeline → dirigir_arte → este prompt de respaldo. Ver includes/direccion_arte.php.
     if (!$tiene_foto) {
+        // FLAG: v1 = pipeline de agentes (direccion_arte); v2 = un solo cerebro creativo
+        // (image_messenger). El compare pasa 'pipeline'/'creative_model' por $opts.
+        $pipeline = $opts['pipeline'] ?? (defined('IMAGE_PIPELINE') ? IMAGE_PIPELINE : 'v1');
         try {
-            require_once __DIR__ . '/direccion_arte.php';
-            $camp = campana_visual($pdo, $marca_id, $m, $copy, ['con_texto'=>$con_texto, 'instrucciones'=>$instr]);
-            if (!empty($camp['prompt'])) $prompt = $camp['prompt'];
-        } catch (Throwable $e) { error_log('campana_visual: ' . $e->getMessage()); }
+            if ($pipeline === 'v2') {
+                require_once __DIR__ . '/image_messenger.php';
+                $p2 = image_messenger_prompt($pdo, $marca_id, $m, $copy, ['con_texto'=>$con_texto, 'instrucciones'=>$instr, 'modelo'=>$opts['creative_model'] ?? '']);
+                if (trim($p2) !== '') $prompt = $p2;
+            } else {
+                require_once __DIR__ . '/direccion_arte.php';
+                $camp = campana_visual($pdo, $marca_id, $m, $copy, ['con_texto'=>$con_texto, 'instrucciones'=>$instr]);
+                if (!empty($camp['prompt'])) $prompt = $camp['prompt'];
+            }
+        } catch (Throwable $e) { error_log("pipeline {$pipeline}: " . $e->getMessage()); }
     }
 
     // Calidad make-or-break: SIEMPRE el Pro (Nano Banana Pro). Antes el "sin texto"
