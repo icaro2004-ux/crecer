@@ -24,9 +24,9 @@ function biblioteca_estilos(): array {
     return [
         'food_luxury' => [
             'nombre'=>'Food Luxury','lighting'=>'soft directional window light, warm golden-hour glow, gentle rim light',
-            'composition'=>'editorial food photography, rule of thirds, generous negative space','palette'=>'warm ambers, toasted browns, cream, deep espresso',
-            'photography'=>'premium macro food photography, 100mm','atmosphere'=>'appetizing, cozy, artisanal, freshly made','contrast'=>'medium-high with rich shadows',
-            'dof'=>'very shallow (f/2.8), creamy bokeh','treatment'=>'natural warm grade, glossy highlights on the food, mouth-watering'],
+            'composition'=>'full commercial food scene, editorial styling, an assortment/variety when the business offers it, real buying context (table, counter, packaging), balanced layout with clear hierarchy','palette'=>'warm ambers, toasted browns, cream, deep espresso',
+            'photography'=>'premium commercial food photography, 50mm, full plated/table scene','atmosphere'=>'appetizing, abundant, artisanal, freshly made','contrast'=>'medium-high with rich shadows',
+            'dof'=>'controlled depth, the whole scene readable (NOT a shallow single-subject blur)','treatment'=>'natural warm grade, glossy highlights on the food, mouth-watering'],
         'luxury_wellness' => [
             'nombre'=>'Luxury Wellness','lighting'=>'soft diffused daylight, airy highlights, serene','composition'=>'minimal spa editorial, lots of breathing room, calm symmetry',
             'palette'=>'soft whites, sage, warm beige, muted greens','photography'=>'clean lifestyle photography, 50mm','atmosphere'=>'calm, pure, luxurious, restorative',
@@ -118,6 +118,9 @@ function director_creativo_visual(PDO $pdo, int $marca_id, string $que_vende, st
          . "guía de estilo. Diseñas la dirección artística de UNA imagen publicitaria de calidad de campaña. La imagen "
          . "COMPLEMENTA la emoción — NUNCA ilustra el copy literalmente (si el copy menciona 'la abuela', NO pongas una abuela; "
          . "transmite calidez/nostalgia). Debe parecer una FOTOGRAFÍA real de un fotógrafo comercial, nunca stock ni IA obvia. "
+         . "COMPOSICIÓN por defecto: una ESCENA COMERCIAL COMPLETA con contexto de compra y profundidad — NUNCA un extreme "
+         . "close-up, macro, ni un solo producto aislado y centrado sobre fondo vacío borroso (salvo justificación estratégica "
+         . "clara). Si el negocio vende variedad o por docenas, muestra un SURTIDO generoso. "
          . "Respeta la guía de estilo. Devuelve SOLO JSON con: emotion, visual_story, primary_subject, secondary_elements (array), "
          . "background, lighting, camera, lens, composition, focus, color_palette (array), textures (array), mood, visual_style, "
          . "quality, negative (array). {$extra_txt}";
@@ -145,7 +148,9 @@ function ingeniero_prompt_visual(PDO $pdo, int $marca_id, array $brief, bool $co
          . "produzca una FOTOGRAFÍA COMERCIAL hiperrealista con calidad de campaña publicitaria — no ilustración, no render, "
          . "no clipart, no stock, nada que se vea 'de IA'. Incluye de forma fluida: sujeto, historia visual, mood, dirección de "
          . "arte, composición, color grading, tipo de fotografía, lente, iluminación, profundidad de campo, jerarquía visual, "
-         . "texturas realistas, y al final los negative prompts. Punto focal clarísimo, espacio negativo, producto perfecto. "
+         . "texturas realistas, y al final los negative prompts. Por defecto una ESCENA COMERCIAL EDITORIAL COMPLETA con "
+         . "profundidad y contexto — NUNCA extreme close-up, macro shot, ni un solo producto aislado y centrado sobre un fondo "
+         . "vacío borroso. En los negative prompts incluye: macro, extreme close-up, single isolated product, empty blurred background. "
          . ($con_texto
              ? "Si el brief trae headline/brand_text/cta, es un GRÁFICO PROMOCIONAL: intégralos con tipografía profesional, "
                . "bien escritos en español, jerarquía clara y diseño de anuncio real."
@@ -198,5 +203,16 @@ function campana_visual(PDO $pdo, int $marca_id, array $m, string $copy, array $
         } catch (Throwable $e) { error_log('campana_visual fallback: '.$e->getMessage()); }
     }
 
-    return ['prompt'=>trim($prompt), 'brief'=>$brief, 'estrategia'=>$estrategia, 'estilo'=>$estilo_key];
+    // GUARDA-RAÍL de composición (validación D): mata el sesgo a macro/close-up/producto
+    // único aislado — el bug de la "dona gigante". Mandato duro al final del prompt.
+    $prompt = trim($prompt);
+    if ($prompt !== '') {
+        $u = mb_strtolower($copy, 'UTF-8');
+        $variedad = (bool)preg_match('/docena|variedad|surtid|todos los sabores|sabores|assortment|evento|catering|caja|selecci/u', $u);
+        $prompt .= ' Composition mandate: a full commercial editorial scene with real depth, professional food styling and'
+                 . ' buying context — NOT an extreme close-up, macro, or a single isolated centered product on an empty blurred'
+                 . ' background. Negative prompts: macro, extreme close-up, single isolated product, empty blurred background, catalog cutout.';
+        if ($variedad) $prompt .= ' Show a generous assortment / open box with several different items, abundant and appetizing.';
+    }
+    return ['prompt'=>$prompt, 'brief'=>$brief, 'estrategia'=>$estrategia, 'estilo'=>$estilo_key];
 }

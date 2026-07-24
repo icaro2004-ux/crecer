@@ -62,8 +62,8 @@ try {
     $__tok  = defined('CRON_TOKEN') ? CRON_TOKEN : '';
     // La prueba de SMS NO depende del CRON_TOKEN (que en prod puede estar en otro valor):
     // usa su propia llave fija de abajo. Solo img/arte pasan por este candado de dinero.
-    if (in_array($__test, ['img','arte'], true) && ($__tok === '' || !hash_equals($__tok, (string)($_GET['t'] ?? '')))) {
-        echo "\n(Para las pruebas en vivo &test=img/arte añade  &t=TU_CRON_TOKEN  — gastan dinero, por eso van protegidas.)\n";
+    if (in_array($__test, ['img','arte','imgmanual'], true) && ($__tok === '' || !hash_equals($__tok, (string)($_GET['t'] ?? '')))) {
+        echo "\n(Para las pruebas en vivo &test=img/arte/imgmanual añade  &t=TU_CRON_TOKEN  — gastan dinero, por eso van protegidas.)\n";
         $__test = '';
     }
     if ($__test === 'img') {
@@ -80,6 +80,28 @@ try {
         }
     } else {
         echo "\n(Para probar OpenAI, abre esta URL con  &test=img  al final.)\n";
+    }
+
+    // Prueba CONTROLADA (paso E): el prompt manual EXACTO, sin pipeline ni director.
+    if ($__test === 'imgmanual') {
+        echo "\n--- Prueba CONTROLADA: prompt manual (SIN pipeline) a gpt-image-1 ---\n";
+        $pm = 'Premium commercial bakery campaign for social media. An open bakery box filled with a generous assortment of '
+            . 'freshly made artisan donuts with different glazes and toppings, accompanied by a steaming cup of Puerto Rican '
+            . 'coffee. Warm morning bakery atmosphere, professional food styling, balanced editorial composition, realistic '
+            . 'textures, inviting depth, subtle nostalgia, modern brand presentation, photorealistic commercial photography. '
+            . 'No people, no hands, no text, no watermark, no macro shot, no isolated single donut.';
+        echo "LEN prompt: " . mb_strlen($pm) . "\n";
+        try {
+            $r = openai_imagen($pm, ['aspect' => '1:1']);
+            $fn  = 'gpt_manual_' . substr(md5((string)microtime(true)), 0, 8) . '.png';
+            $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . $fn;
+            @file_put_contents($abs, $r['data']);
+            echo "RESULTADO: ✅ modelo " . $r['modelo'] . " (" . strlen($r['data']) . " bytes)\n";
+            echo "  VER LA IMAGEN: " . rtrim(UPLOADS_URL, '/') . '/' . $fn . "\n";
+            echo "→ Compara ESTA con la del pipeline. Si esta sale brutal y el pipeline no, era el prompt/estilo (ya arreglado).\n";
+        } catch (Throwable $e) {
+            echo "RESULTADO: ❌ " . $e->getMessage() . "\n";
+        }
     }
 
     // Prueba REAL del SMS: manda un código de verdad y muestra el ERROR CRUDO de Twilio.

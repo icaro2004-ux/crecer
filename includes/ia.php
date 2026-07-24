@@ -444,6 +444,14 @@ function openai_imagen(string $prompt, array $opts = []): array {
     // Es LA causa del "fondo blanco" — gpt-image-1 por defecto (auto) puede devolver
     // PNG transparente; opaque lo obliga a llenar todo el lienzo con la escena.
     $body = ['model'=>$modelo, 'prompt'=>$prompt, 'n'=>1, 'size'=>$size, 'quality'=>$quality, 'background'=>'opaque'];
+    // ── DEBUG TEMPORAL: traza el prompt y el payload EXACTOS enviados a gpt-image-1 ──
+    $__dbg = 'GPT IMAGE LEN=' . mb_strlen($prompt) . " | model={$modelo} size={$size} quality={$quality} background=opaque\n"
+           . 'GPT IMAGE PROMPT: ' . $prompt . "\n"
+           . 'GPT IMAGE PAYLOAD: ' . json_encode(['model'=>$modelo,'n'=>1,'size'=>$size,'quality'=>$quality,'background'=>'opaque'], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) . "\n";
+    error_log('[gpt_image] LEN=' . mb_strlen($prompt) . " size={$size} q={$quality}");
+    $__dbgdir = __DIR__ . '/../storage/logs'; @mkdir($__dbgdir, 0775, true);
+    @file_put_contents($__dbgdir . '/gpt_image_debug.log', date('c') . ' ' . $__dbg . "-----------------------------------\n", FILE_APPEND);
+
     $resp = ia_http_post_retry('https://api.openai.com/v1/images/generations',
         ['Content-Type: application/json', 'Authorization: Bearer ' . OPENAI_API_KEY],
         json_encode($body, JSON_UNESCAPED_UNICODE), $opts['max_reintentos'] ?? 2);
