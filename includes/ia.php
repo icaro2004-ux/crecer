@@ -150,14 +150,14 @@ function gemini_generar(string $prompt, array $opts = []): array {
 /**
  * POST HTTP con cURL. Devuelve el body; lanza IaError en fallo.
  */
-function ia_http_post(string $url, array $headers, string $body): string {
+function ia_http_post(string $url, array $headers, string $body, int $timeout = 60): string {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => $body,
         CURLOPT_HTTPHEADER     => $headers,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 60,
+        CURLOPT_TIMEOUT        => $timeout,
         CURLOPT_CONNECTTIMEOUT => 10,
     ]);
     $resp = curl_exec($ch);
@@ -179,11 +179,11 @@ function ia_http_post(string $url, array $headers, string $body): string {
  * que sugiere Google si viene; si no, usa backoff exponencial.
  * Así el sistema agéntico tolera el límite de velocidad por sí solo.
  */
-function ia_http_post_retry(string $url, array $headers, string $body, int $max_reintentos = 4): string {
+function ia_http_post_retry(string $url, array $headers, string $body, int $max_reintentos = 4, int $timeout = 60): string {
     $intento = 0;
     while (true) {
         try {
-            return ia_http_post($url, $headers, $body);
+            return ia_http_post($url, $headers, $body, $timeout);
         } catch (IaError $e) {
             $msg = $e->getMessage();
             $es_429 = strpos($msg, 'HTTP 429') !== false;
@@ -583,9 +583,10 @@ function openai_imagen(string $prompt, array $opts = []): array {
     $__dbgdir = __DIR__ . '/../storage/logs'; @mkdir($__dbgdir, 0775, true);
     @file_put_contents($__dbgdir . '/gpt_image_debug.log', date('c') . ' ' . $__dbg . "-----------------------------------\n", FILE_APPEND);
 
+    // timeout 200s: gpt-image-2 tarda >60s (mata el default). Corre en worker async → OK.
     $resp = ia_http_post_retry('https://api.openai.com/v1/images/generations',
         ['Content-Type: application/json', 'Authorization: Bearer ' . OPENAI_API_KEY],
-        json_encode($body, JSON_UNESCAPED_UNICODE), $opts['max_reintentos'] ?? 2);
+        json_encode($body, JSON_UNESCAPED_UNICODE), $opts['max_reintentos'] ?? 2, 200);
     return openai_extraer_img($resp, $modelo);
 }
 
