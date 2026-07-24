@@ -809,6 +809,18 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
              . "  · EVITA a toda costa: objetos deformes o flotando, texto inventado, watermarks falsos, ruido, y el cliché de pantallas de celular/tablet/laptop con redes sociales o notificaciones flotantes (a menos que el post sea literalmente sobre eso).\n"
              . "  · Meta: una imagen sobre EL TEMA del post — nítida, con alma, lista para publicar.";
 
+    // 🎨 DIRECTOR DE ARTE — el secreto de por qué ChatGPT saca imágenes más cabronas
+    // con el MISMO modelo (gpt-image-1): reescribe el brief en UN prompt vívido y
+    // cinematográfico antes de generar. Los modelos rinden MUCHÍSIMO mejor con una
+    // escena concreta y positiva que con nuestro rulebook lleno de negaciones. Solo
+    // para arte DESDE CERO (la foto real va a Gemini fiel). Si falla, usa el prompt de arriba.
+    if (!$tiene_foto) {
+        try {
+            $mejor = dirigir_arte($pdo, $marca_id, $que_vende, $copy, $instr, $est_arte, $con_texto);
+            if (trim($mejor) !== '') $prompt = $mejor;
+        } catch (Throwable $e) { error_log('dirigir_arte: ' . $e->getMessage()); }
+    }
+
     // Calidad make-or-break: SIEMPRE el Pro (Nano Banana Pro). Antes el "sin texto"
     // caía al flash barato y se notaba la baja calidad. El Pro (~$0.13) vale la pena
     // frente a un plan de $39/mes. (Reversible: volver a flash para bajar costo.)
@@ -824,6 +836,41 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
     $pdo->prepare("INSERT INTO crecer_graficas (marca_id, archivo, copy_text) VALUES (?,?,?)")
         ->execute([$marca_id, $r['archivo'], $copy]);
     return $r;
+}
+
+/**
+ * EL DIRECTOR DE ARTE — convierte el brief del negocio en UN prompt de imagen vívido
+ * y cinematográfico, como hace ChatGPT por dentro antes de generar. Es el secreto de
+ * por qué el MISMO modelo (gpt-image-1) saca imágenes mucho mejores: una escena
+ * concreta y POSITIVA rinde infinitamente más que un rulebook lleno de "NO/EVITA".
+ * Además, al ser corto y limpio, gpt-image-1 NO lo rechaza → deja de caer a Gemini.
+ * @return string prompt EN INGLÉS listo para el modelo (o '' si falla → usa el de respaldo).
+ */
+function dirigir_arte(PDO $pdo, int $marca_id, string $que_vende, string $copy, string $instr, array $est_arte, bool $con_texto = false): string {
+    $sys = "Eres un DIRECTOR DE ARTE de élite y prompt-engineer para un modelo de imagen profesional (gpt-image-1). "
+         . "Devuelves UN SOLO prompt EN INGLÉS, listo para generar, con calidad de foto editorial/publicitaria de revista. "
+         . "El prompt describe UNA escena concreta y vívida: sujeto principal, entorno, acción, luz, lente y ángulo de cámara, "
+         . "materiales y texturas, paleta de color y mood. Lenguaje POSITIVO y sensorial — JAMÁS uses 'avoid/no/without/not'. "
+         . "Cinematográfico, premium, fotorrealista (salvo que se pida otro estilo). Fiel al mundo del negocio (nunca otra "
+         . "industria); ilustra el MENSAJE del post, no el nombre. Composición full-bleed que llena todo el cuadro, sin fondos "
+         . "vacíos. " . ($con_texto
+             ? "Integra un texto corto, bien tipografiado y legible sacado del mensaje. "
+             : "Sin ninguna letra ni texto dentro de la imagen. ")
+         . "Un solo párrafo denso de 60-110 palabras. Devuelve SOLO el prompt, sin comillas ni explicaciones.";
+    $brief = "Negocio (lo que vende): " . ($que_vende !== '' ? $que_vende : 'un negocio boricua') . "\n"
+           . "Mensaje del post a ilustrar: " . ($copy !== '' ? $copy : 'presentación cálida del negocio a su gente') . "\n"
+           . "Estilo visual deseado: " . (trim((string)($est_arte['generar'] ?? '')) ?: 'realista, premium, cálido') . "\n"
+           . ($instr !== '' ? "Pedido específico del dueño (prioriza esto): {$instr}\n" : '')
+           . "Escribe el mejor prompt de imagen posible.";
+    $r = ia_ejecutar($pdo, 'creador', 'Director de arte (prompt de imagen)', $brief, [
+        'marca_id'    => $marca_id,
+        'sistema'     => $sys,
+        'temperatura' => 0.85,
+        'max_tokens'  => 340,
+        'thinking_budget' => 0,
+        'mock_texto'  => '',
+    ]);
+    return trim((string)($r['texto'] ?? ''));
 }
 
 /** Lee una marca como array asociativo (productos decodificado). */
