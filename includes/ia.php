@@ -438,7 +438,7 @@ function ia_http_get(string $url, array $headers): string {
  */
 function openai_modelo_ultimo(string $perfil = 'creative'): string {
     $fallback  = $perfil === 'fast' ? 'gpt-5-mini' : 'gpt-5.5';
-    $cacheFile = __DIR__ . '/../storage/cache/openai_models.json';
+    $cacheFile = __DIR__ . '/../storage/cache/openai_models_v2.json';   // v2: busta el cache del picker viejo (que agarró gpt-5.6-sol)
     $cache = @json_decode((string)@file_get_contents($cacheFile), true);
     if (is_array($cache) && isset($cache['ts'], $cache[$perfil]) && (time() - (int)$cache['ts'] < 86400) && $cache[$perfil] !== '') {
         return $cache[$perfil];
@@ -466,7 +466,9 @@ function _openai_pick_modelo(array $ids, bool $mini): string {
     $best = ''; $bestv = -1.0;
     foreach ($ids as $id) {
         $id = strtolower(trim($id));
-        if (!preg_match('/^gpt-(\d+)(?:\.(\d+))?/', $id, $mm)) continue;       // solo gpt-N chat
+        // Solo ids LIMPIOS de chat: gpt-5.5 · gpt-4o · gpt-5 · gpt-4o-mini · gpt-4o-2024-08-06.
+        // Rechaza variantes raras (gpt-5.6-sol, gpt-4o-audio, etc.) que rompen chat/completions.
+        if (!preg_match('/^gpt-(\d+)(?:\.(\d+))?o?(?:-(?:mini|nano))?(?:-\d{4}-\d{2}-\d{2})?$/', $id, $mm)) continue;
         $esMini = (strpos($id, 'mini') !== false || strpos($id, 'nano') !== false);
         if ($mini !== $esMini) continue;
         foreach ($excluir as $b) { if (strpos($id, $b) !== false) continue 2; }
@@ -489,8 +491,9 @@ function openai_chat(string $sistema, string $mensaje, string $modelo = 'gpt-4o'
             ['role' => 'system', 'content' => $sistema],
             ['role' => 'user',   'content' => $mensaje],
         ],
-        'temperature' => $opts['temperatura'] ?? 0.85,
-        'max_tokens'  => $opts['max_tokens'] ?? 900,
+        // max_completion_tokens (NO 'max_tokens') → compatible con gpt-5.x / o-series.
+        // 'temperature' se OMITE: los modelos nuevos rechazan valores != 1 (HTTP 400).
+        'max_completion_tokens' => (int)($opts['max_tokens'] ?? 1200),
     ];
     $resp = ia_http_post_retry('https://api.openai.com/v1/chat/completions',
         ['Content-Type: application/json', 'Authorization: Bearer ' . OPENAI_API_KEY],

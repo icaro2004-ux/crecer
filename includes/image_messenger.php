@@ -26,8 +26,17 @@ function director_creativo_llm(PDO $pdo, int $marca_id, string $sistema, string 
     $t0 = microtime(true); $texto = ''; $ti = 0; $to = 0; $usado = $modelo_cfg; $estado = 'ok'; $err = null;
     try {
         if ($prov === 'openai') {
-            $r = openai_chat($sistema, $mensaje, $mdl !== '' ? $mdl : 'gpt-4o', ['temperatura' => 0.9, 'max_tokens' => 900]);
-            $texto = $r['texto']; $ti = $r['tokens_in']; $to = $r['tokens_out']; $usado = 'openai:' . $r['modelo'];
+            $mdl = $mdl !== '' ? $mdl : 'gpt-4o';
+            try {
+                $r = openai_chat($sistema, $mensaje, $mdl, ['max_tokens' => 1200]);
+            } catch (Throwable $e1) {
+                // El modelo elegido rechazó la petición (raro/incompatible) → respaldo conocido-bueno.
+                error_log('openai_chat falló con ' . $mdl . ': ' . $e1->getMessage() . ' → respaldo gpt-4o');
+                if ($mdl === 'gpt-4o') throw $e1;
+                $r = openai_chat($sistema, $mensaje, 'gpt-4o', ['max_tokens' => 1200]);
+                $mdl = 'gpt-4o(respaldo)';
+            }
+            $texto = $r['texto']; $ti = $r['tokens_in']; $to = $r['tokens_out']; $usado = 'openai:' . $mdl;
         } else {
             // Gemini reusa el transporte actual (system prepend, ya que gemini_generar no separa system).
             $r = gemini_generar($sistema . "\n\n" . $mensaje, ['temperatura' => 0.9, 'max_tokens' => 900]);
