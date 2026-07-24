@@ -24,6 +24,22 @@ function lab_abs(string $url): string {
     $rel = ltrim(str_replace(rtrim(UPLOADS_URL, '/'), '', $url), '/');
     return rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
 }
+/** Brief natural compartido por el Modo ChatGPT y por la variante directa del comparador. */
+function lab_brief_natural(array $m, string $copy): string {
+    $nombre  = trim((string)($m['nombre_negocio'] ?? ''));
+    $desc    = trim((string)($m['descripcion'] ?? ''));
+    $publico = trim((string)($m['publico_objetivo'] ?? ''));
+    $prods_raw = $m['productos'] ?? []; if (is_string($prods_raw)) $prods_raw = json_decode($prods_raw, true) ?: [];
+    $plist = []; foreach ((array)$prods_raw as $p) { $n = is_array($p) ? trim((string)($p['nombre'] ?? '')) : trim((string)$p); if ($n !== '') $plist[] = $n; }
+    $prods = implode(', ', $plist);
+    return "Crea una imagen publicitaria profesional para redes sociales (Facebook e Instagram) para este negocio puertorriqueño.\n\n"
+         . "Negocio: {$nombre}\nQué hace: {$desc}\n"
+         . ($prods !== '' ? "Productos: {$prods}\n" : '')
+         . ($publico !== '' ? "Público: {$publico}\n" : '')
+         . "\nTexto del post que la imagen va a acompañar:\n\"{$copy}\"\n\n"
+         . "La imagen debe detener el scroll y dar ganas de comprar. Genera la mejor imagen publicitaria posible.";
+}
+
 /** Log del worker (para diagnosticar arranque/duración/errores). */
 function lab_log(string $m): void {
     $d = __DIR__ . '/storage/logs'; @mkdir($d, 0775, true);
@@ -113,6 +129,113 @@ if (isset($_GET['cfg'])) {
     echo "OPENAI_IMG_QUALITY:   " . (defined('OPENAI_IMG_QUALITY') ? OPENAI_IMG_QUALITY : '(no def)') . "\n";
     echo "Director (image_messenger) tope de salida: 700 tokens (max_completion_tokens; en gpt-5.x INCLUYE tokens de razonamiento)\n";
     echo "OpenAI configurado:   " . (openai_configurado() ? 'sí' : 'NO') . "\n";
+    exit;
+}
+
+// ===== EXPORTAR el paquete técnico completo de una comparación (JSON indivisible) =====
+if (isset($_GET['cmpjson'])) {
+    header('Content-Type: application/json; charset=utf-8');
+    $cid = (string)$_GET['cmpjson'];
+    $rs = $pdo->prepare("SELECT * FROM crecer_lab_experimentos WHERE comparison_id=? ORDER BY variante");
+    $rs->execute([$cid]);
+    $out = ['comparison_id' => $cid, 'variantes' => []];
+    foreach ($rs->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $rf = __DIR__ . '/storage/logs/responses/exp_' . (int)$r['id'] . '.json';
+        $out['variantes'][] = [
+            'exp_id'        => (int)$r['id'],
+            'variante'      => $r['variante'],
+            'modo'          => json_decode((string)$r['meta_json'], true)['modo'] ?? null,
+            'estado'        => $r['estado'],
+            'negocio'       => $r['negocio'],
+            'copy'          => $r['copy_txt'],
+            'brief_o_escena'=> $r['escena'],
+            'prompt_final'  => $r['prompt'],
+            'modelo'        => $r['modelo'],
+            'bytes'         => (int)$r['bytes'],
+            'segundos'      => $r['segundos'],
+            'imagen'        => $r['imagen'],
+            'meta'          => json_decode((string)$r['meta_json'], true),
+            'image_generation_call_raw' => is_file($rf) ? json_decode((string)file_get_contents($rf), true) : null,
+            'evaluacion'    => json_decode((string)$r['eval_json'], true),
+        ];
+    }
+    echo json_encode($out, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+// ===== VISTA COMPARATIVA — 3 modos lado a lado, ciego (A/B/C barajadas) =====
+if (isset($_GET['cmp'])) {
+    $cid = (string)$_GET['cmp'];
+    $rs = $pdo->prepare("SELECT * FROM crecer_lab_experimentos WHERE comparison_id=? ORDER BY variante");
+    $rs->execute([$cid]);
+    $rows = $rs->fetchAll(PDO::FETCH_ASSOC);
+    $H = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+    $pend = [];
+    foreach ($rows as $r) if (!in_array($r['estado'], ['ok','error'], true)) $pend[] = (int)$r['id'];
+    $sel = fn($n,$v) => (string)$v === (string)$n ? 'selected' : '';
+    ?><!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Comparación · Laboratorio Crecer</title><style>
+      *{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;max-width:1150px;margin:0 auto;padding:20px 16px 70px;background:#faf9f8;color:#231F20}
+      h1{font-size:21px;margin:0 0 4px}a{color:#EF4375}.top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+      .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}@media(max-width:820px){.grid{grid-template-columns:1fr}}
+      .card{background:#fff;border:1px solid #E9E7E4;border-radius:14px;overflow:hidden}
+      .card h2{margin:0;padding:12px 14px;font-size:20px;background:#231F20;color:#fff;text-align:center;letter-spacing:.05em}
+      .card img{width:100%;display:block;background:#eee;aspect-ratio:1;object-fit:cover}
+      .wait{aspect-ratio:1;display:flex;align-items:center;justify-content:center;color:#8a8a8a;font-weight:600;text-align:center;padding:16px;background:#f3f2f1}
+      .modo{display:none;font-size:12px;font-weight:800;color:#00827e;text-align:center;padding:6px;background:#e9f8f6}
+      .modo.err{color:#b42318;background:#fdeaea}
+      .ev{padding:12px 13px}.ev label{display:block;font-size:11.5px;font-weight:700;color:#6E6A67;margin:8px 0 3px}
+      .ev select,.ev textarea{width:100%;padding:7px 8px;border:1.5px solid #E9E7E4;border-radius:8px;font:13px system-ui}
+      .ev .two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+      button{background:#EF4375;color:#fff;border:0;padding:9px 15px;border-radius:9px;font-weight:700;font-size:13px;cursor:pointer;margin-top:10px}
+      button.gho{background:#fff;border:1.5px solid #E9E7E4;color:#333}
+      .err{background:#fdeaea;color:#b42318;padding:8px 11px;border-radius:8px;font-size:12.5px;margin:8px 13px}
+    </style></head><body>
+    <div class="top">
+      <h1>🆚 Comparación ciega — <?= $H($rows[0]['negocio'] ?? '') ?></h1>
+      <div><button class="gho" onclick="document.querySelectorAll('.modo').forEach(function(e){e.style.display='block'})">Revelar modos</button>
+        <a href="?k=crecer&cmpjson=<?= $H($cid) ?>" target="_blank" style="margin-left:10px">Ver JSON técnico ↗</a>
+        <a href="?k=crecer" style="margin-left:10px">← Lab</a></div>
+    </div>
+    <?php if (!$rows): ?><p>No existe esa comparación.</p><?php else: ?>
+    <p style="color:#6E6A67;font-size:13.5px;margin:0 0 14px">Copy: <em><?= $H(mb_strimwidth((string)$rows[0]['copy_txt'],0,160,'…')) ?></em> · Califica cada una SIN saber qué modo es; después revela.</p>
+    <div class="grid">
+      <?php foreach ($rows as $r): $est=$r['estado']; $ev=json_decode((string)$r['eval_json'],true)?:[]; $modo=json_decode((string)$r['meta_json'],true)['modo']??'?'; ?>
+      <div class="card">
+        <h2><?= $H($r['variante']) ?></h2>
+        <?php if ($est==='ok' && $r['imagen']): ?><img src="<?= $H($r['imagen']) ?>" alt="">
+        <?php elseif ($est==='error'): ?><div class="wait" style="color:#b42318">❌ Falló<br><small><?= $H(mb_strimwidth((string)$r['observaciones'],0,120,'…')) ?></small></div>
+        <?php else: ?><div class="wait">⏳ generando…</div><?php endif; ?>
+        <div class="modo <?= $est==='error'?'err':'' ?>"><?= $H($modo) ?> · <?= $H($r['modelo'] ?: '—') ?> · <?= $H($r['segundos']?:'?') ?>s</div>
+        <?php if ($est==='ok'): ?>
+        <form method="post" class="ev">
+          <input type="hidden" name="accion" value="evaluar"><input type="hidden" name="exp_id" value="<?= (int)$r['id'] ?>"><input type="hidden" name="cid" value="<?= $H($cid) ?>">
+          <div class="two">
+            <div><label>¿Publicable?</label><select name="publicable"><option value="">—</option><option value="si" <?= $sel($ev['publicable']??'','si') ?>>Sí</option><option value="no" <?= $sel($ev['publicable']??'','no') ?>>No</option></select></div>
+            <div><label>¿Stock/catálogo?</label><select name="stock"><option value="">—</option><option value="si" <?= $sel($ev['stock']??'','si') ?>>Sí</option><option value="no" <?= $sel($ev['stock']??'','no') ?>>No</option></select></div>
+          </div>
+          <div class="two">
+            <div><label>Detiene scroll (1-10)</label><select name="scroll"><option value="0">—</option><?php for($i=10;$i>=1;$i--)echo '<option '.$sel($ev['scroll']??0,$i).'>'.$i.'</option>';?></select></div>
+            <div><label>Fuerza de idea</label><select name="idea"><option value="0">—</option><?php for($i=10;$i>=1;$i--)echo '<option '.$sel($ev['idea']??0,$i).'>'.$i.'</option>';?></select></div>
+          </div>
+          <div class="two">
+            <div><label>Especificidad</label><select name="especificidad"><option value="0">—</option><?php for($i=10;$i>=1;$i--)echo '<option '.$sel($ev['especificidad']??0,$i).'>'.$i.'</option>';?></select></div>
+            <div><label>Fidelidad al copy</label><select name="fidelidad"><option value="0">—</option><?php for($i=10;$i>=1;$i--)echo '<option '.$sel($ev['fidelidad']??0,$i).'>'.$i.'</option>';?></select></div>
+          </div>
+          <label>Observaciones</label><textarea name="obs" rows="2"><?= $H($ev['obs']??'') ?></textarea>
+          <button type="submit">Guardar evaluación</button>
+        </form>
+        <?php endif; ?>
+      </div>
+      <?php endforeach; ?>
+    </div>
+    <?php if ($pend): ?><script>
+      var pend=<?= json_encode($pend) ?>;
+      var t=setInterval(function(){Promise.all(pend.map(function(id){return fetch('?k=crecer&poll='+id,{cache:'no-store'}).then(function(r){return r.json()}).then(function(d){return d.estado}).catch(function(){return'?'})}))
+        .then(function(s){if(s.every(function(x){return x==='ok'||x==='error'})){clearInterval(t);location.reload();}});},4000);
+    </script><p style="color:#8a8a8a;margin-top:16px">⏳ Esperando <?= count($pend) ?> variante(s)… la página se recarga sola.</p><?php endif; ?>
+    <?php endif; ?>
+    </body></html><?php
     exit;
 }
 
@@ -263,18 +386,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $m = leer_marca($pdo, $marca_id);
             $nombre = trim((string)($m['nombre_negocio'] ?? ''));
-            $desc   = trim((string)($m['descripcion'] ?? ''));
-            $publico = trim((string)($m['publico_objetivo'] ?? ''));
-            $prods_raw = $m['productos'] ?? []; if (is_string($prods_raw)) $prods_raw = json_decode($prods_raw, true) ?: [];
-            $plist = []; foreach ((array)$prods_raw as $p) { $n = is_array($p) ? trim((string)($p['nombre'] ?? '')) : trim((string)$p); if ($n !== '') $plist[] = $n; }
-            $prods = implode(', ', $plist);
-            // Brief NATURAL y ligero (como se lo pedirías a ChatGPT) — sin nuestro prompt de director.
-            $brief = "Crea una imagen publicitaria profesional para redes sociales (Facebook e Instagram) para este negocio puertorriqueño.\n\n"
-                   . "Negocio: {$nombre}\nQué hace: {$desc}\n"
-                   . ($prods !== '' ? "Productos: {$prods}\n" : '')
-                   . ($publico !== '' ? "Público: {$publico}\n" : '')
-                   . "\nTexto del post que la imagen va a acompañar:\n\"{$copy_in}\"\n\n"
-                   . "La imagen debe detener el scroll y dar ganas de comprar. Genera la mejor imagen publicitaria posible.";
+            $brief = lab_brief_natural($m, $copy_in);   // brief natural (como se lo pedirías a ChatGPT)
             // BACKGROUND: OpenAI corre el trabajo; nos devuelve un id al instante (sin 504).
             $bg = openai_responses_crear_bg($brief, ['aspect' => $aspect]);
             $ins = $pdo->prepare("INSERT INTO crecer_lab_experimentos
@@ -282,6 +394,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ins->execute([$marca_id, $nombre ?: null, $hipotesis ?: null, $copy_in, $brief, $brief, 'pending:' . $bg['id']]);
             $exp = lab_exp($pdo, (int)$pdo->lastInsertId());   // el poll del frontend lo completa
         } catch (Throwable $e) { $img_err = $e->getMessage(); }
+    }
+
+    // ---- COMPARADOR — crea 3 variantes con el MISMO snapshot del brief ----
+    if ($modo === 'comparar' && $marca_id && $copy_in !== '') {
+        try {
+            $m = leer_marca($pdo, $marca_id);
+            $nombre = trim((string)($m['nombre_negocio'] ?? ''));
+            $brief  = lab_brief_natural($m, $copy_in);
+            $cid    = 'cmp_' . substr(md5(uniqid('', true)), 0, 12);
+            $cfg    = defined('IMAGE_CREATIVE_MODEL') ? IMAGE_CREATIVE_MODEL : 'openai:creative';
+
+            // VARIANTE · Director de dos pasos (v2 image_messenger). Director INLINE (~10s), imagen async.
+            $bA = image_messenger_build($pdo, $marca_id, $m, $copy_in);
+            $escenaA = ''; $metaA = ['modo'=>'director', 'endpoint_texto'=>'/v1/chat/completions',
+                'endpoint_imagen'=>'/v1/images/generations', 'modelo_solicitado'=>resolver_modelo_ia($cfg),
+                'renderizador'=>'gpt-image-1', 'quality'=>'high', 'size'=>$aspect, 'background'=>'opaque',
+                'action'=>'generate', 'system'=>$bA['sistema'], 'user'=>$bA['mensaje']];
+            try { $dA = director_creativo_llm($pdo, $marca_id, $bA['sistema'], $bA['mensaje'], $cfg, ['strict'=>true]);
+                  $escenaA = trim((string)($dA['texto'] ?? '')); $metaA['director_modelo'] = $dA['modelo'] ?? ''; }
+            catch (Throwable $ex) { $metaA['director_error'] = $ex->getMessage(); }
+
+            // VARIANTE · Prompt directo (el MISMO brief natural va directo a gpt-image-1, sin director).
+            $metaB = ['modo'=>'directo', 'endpoint_imagen'=>'/v1/images/generations', 'renderizador'=>'gpt-image-1',
+                'quality'=>'high', 'size'=>$aspect, 'background'=>'opaque', 'action'=>'generate', 'prompt'=>$brief];
+
+            // VARIANTE · Responses auto-dirigido (background:true).
+            $metaC = ['modo'=>'responses', 'endpoint'=>'/v1/responses', 'tool'=>'image_generation',
+                'background_api'=>true, 'quality'=>'high', 'size'=>$aspect, 'background'=>'opaque', 'brief'=>$brief];
+            $okC = true; $modeloC = null;
+            try { $bg = openai_responses_crear_bg($brief, ['aspect'=>$aspect]);
+                  $modeloC = 'pending:' . $bg['id']; $metaC['response_id'] = $bg['id']; $metaC['model_orquestador'] = $bg['modelo']; }
+            catch (Throwable $ex) { $okC = false; $metaC['error'] = $ex->getMessage(); }
+
+            $variantes = [
+                ['escena'=>$escenaA, 'prompt'=>$escenaA, 'modelo'=>null,     'meta'=>$metaA, 'fire'=>'img',  'ok'=>($escenaA !== '')],
+                ['escena'=>'',       'prompt'=>$brief,   'modelo'=>null,     'meta'=>$metaB, 'fire'=>'img',  'ok'=>true],
+                ['escena'=>$brief,   'prompt'=>$brief,   'modelo'=>$modeloC, 'meta'=>$metaC, 'fire'=>'none', 'ok'=>$okC],
+            ];
+            // Letras A/B/C BARAJADAS → ciego (la etiqueta no revela el modo).
+            $letras = ['A','B','C']; shuffle($letras);
+            $ins = $pdo->prepare("INSERT INTO crecer_lab_experimentos
+                (comparison_id,variante,marca_id,negocio,hipotesis,copy_txt,escena,prompt,modelo,estado,meta_json)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)");
+            $disparar = [];
+            foreach ($variantes as $i => $v) {
+                $estado = $v['ok'] ? 'queued' : 'error';
+                $ins->execute([$cid, $letras[$i], $marca_id, $nombre ?: null, $hipotesis ?: null, $copy_in,
+                    $v['escena'] ?: null, $v['prompt'], $v['modelo'], $estado, json_encode($v['meta'], JSON_UNESCAPED_UNICODE)]);
+                $eid = (int)$pdo->lastInsertId();
+                if (!$v['ok']) {
+                    $err = $v['meta']['director_error'] ?? $v['meta']['error'] ?? 'no arrancó';
+                    $pdo->prepare("UPDATE crecer_lab_experimentos SET observaciones=? WHERE id=?")->execute(['[error] ' . $err, $eid]);
+                } elseif ($v['fire'] === 'img') { $disparar[] = $eid; }
+            }
+            foreach ($disparar as $eid) lab_fire($eid, $aspect, 'img');   // A y B por el worker de imagen
+            header('Location: ?k=crecer&cmp=' . $cid); exit;
+        } catch (Throwable $e) { $img_err = 'Comparador: ' . $e->getMessage(); }
+    }
+
+    // ---- Evaluación de una variante del comparador ----
+    if ($accion === 'evaluar') {
+        $id = (int)($_POST['exp_id'] ?? 0);
+        $ev = [
+            'publicable'    => $_POST['publicable'] ?? '',
+            'scroll'        => (int)($_POST['scroll'] ?? 0),
+            'idea'          => (int)($_POST['idea'] ?? 0),
+            'especificidad' => (int)($_POST['especificidad'] ?? 0),
+            'stock'         => $_POST['stock'] ?? '',
+            'fidelidad'     => (int)($_POST['fidelidad'] ?? 0),
+            'obs'           => trim((string)($_POST['obs'] ?? '')),
+        ];
+        try { $pdo->prepare("UPDATE crecer_lab_experimentos SET eval_json=? WHERE id=?")->execute([json_encode($ev, JSON_UNESCAPED_UNICODE), $id]); } catch (Throwable $e) {}
+        header('Location: ?k=crecer&cmp=' . urlencode((string)($_POST['cid'] ?? ''))); exit;
     }
 
     // ---- (AÑADIDO) calificar / observaciones ----
@@ -466,6 +651,30 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       <button type="submit" class="teal">🤖 Generar en Modo ChatGPT</button> <small>~40-70s</small>
     </div>
     <div class="load" id="l4">🤖 ChatGPT se está dirigiendo solo…</div>
+  </form>
+</div>
+
+<h2>4 · Comparar los 3 modos (automático, ciego)</h2>
+<div class="box">
+  <p class="sub" style="margin:0 0 12px">Un solo botón: genera las 3 variantes con el <b>mismo brief</b> (Director · Prompt directo · Responses), las muestra lado a lado como <b>A/B/C barajadas</b> para calificar sin sesgo, y arma el paquete técnico completo. Cero copiar/pegar.</p>
+  <form method="post" onsubmit="document.getElementById('l5').style.display='block'">
+    <input type="hidden" name="modo" value="comparar">
+    <label class="f">Negocio</label>
+    <select name="marca" required>
+      <option value="">— Elige el negocio —</option>
+      <?php foreach ($marcas as $mm): ?><option value="<?= (int)$mm['id'] ?>" <?= $marca_id===(int)$mm['id']?'selected':'' ?>>#<?= (int)$mm['id'] ?> · <?= $h($mm['nombre_negocio']) ?></option><?php endforeach; ?>
+    </select>
+    <label class="f">Copy del post</label>
+    <textarea name="copy" placeholder="Pega el copy del post…"><?= $h($copy_in) ?></textarea>
+    <label class="f">Hipótesis <small>(opcional)</small></label>
+    <input type="text" name="hipotesis" placeholder="Qué quieres comprobar…">
+    <div class="row">
+      <select name="aspect" style="width:auto;margin:0">
+        <option value="1:1">Cuadrado 1:1</option><option value="4:5">Vertical 4:5</option><option value="16:9">Horizontal 16:9</option>
+      </select>
+      <button type="submit">🆚 Comparar los 3 modos</button> <small>~15s en crear, luego se generan solas</small>
+    </div>
+    <div class="load" id="l5">🧠 Creando las 3 variantes (director + directo + Responses)…</div>
   </form>
 </div>
 
