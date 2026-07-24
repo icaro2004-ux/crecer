@@ -403,24 +403,78 @@ if (!defined('IMAGE_CREATIVE_MODEL')) define('IMAGE_CREATIVE_MODEL', 'openai:cre
  * todo el sistema sigue igual. Si ya viene un modelo concreto, se pasa tal cual.
  */
 function resolver_modelo_ia(string $cfg): string {
-    $cfg = trim($cfg);
-    $map = [
-        'openai:creative' => 'gpt-5.5',           // el mejor creativo de OpenAI (cambiar aquí cuando salga gpt-6)
-        'openai:fast'     => 'gpt-5-mini',
-        'gemini:creative' => 'gemini-2.5-pro',
-        'gemini:fast'     => 'gemini-2.5-flash',
-    ];
-    // Override opcional desde config (JSON): define('IMAGE_MODEL_MAP', '{"openai:creative":"gpt-5.5"}');
+    $cfg = trim($cfg); $key = strtolower($cfg);
+    // PIN manual opcional (si quieres fijar un modelo exacto y NO auto-actualizar):
+    //   define('IMAGE_MODEL_MAP', '{"openai:creative":"gpt-6"}');
     if (defined('IMAGE_MODEL_MAP') && IMAGE_MODEL_MAP !== '') {
         $j = json_decode(IMAGE_MODEL_MAP, true);
-        if (is_array($j)) $map = array_merge($map, $j);
+        if (is_array($j) && isset($j[$key]) && $j[$key] !== '') {
+            return explode(':', $cfg, 2)[0] . ':' . $j[$key];
+        }
     }
-    $key = strtolower($cfg);
-    if (isset($map[$key])) {
-        $prov = explode(':', $cfg, 2)[0];
-        return $prov . ':' . $map[$key];
+    // Perfiles OpenAI → SIEMPRE la última versión disponible (auto, cache 24h).
+    if ($key === 'openai:creative') return 'openai:' . openai_modelo_ultimo('creative');
+    if ($key === 'openai:fast')     return 'openai:' . openai_modelo_ultimo('fast');
+    // Perfiles Gemini → mapping estático (ajustable).
+    $gem = ['gemini:creative' => 'gemini-2.5-pro', 'gemini:fast' => 'gemini-2.5-flash'];
+    if (isset($gem[$key])) return 'gemini:' . $gem[$key];
+    return $cfg;   // ya es 'proveedor:modelo-concreto' → tal cual (retrocompatible / pin directo)
+}
+
+/** GET HTTP simple (para consultar /v1/models). */
+function ia_http_get(string $url, array $headers): string {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [CURLOPT_HTTPHEADER => $headers, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20]);
+    $r = curl_exec($ch);
+    if ($r === false) { $e = curl_error($ch); curl_close($ch); throw new IaError('HTTP GET: ' . $e); }
+    curl_close($ch);
+    return (string)$r;
+}
+
+/**
+ * Devuelve el ÚLTIMO modelo de chat de OpenAI disponible — auto-actualiza: siempre la
+ * versión más nueva. Consulta /v1/models 1 vez al día (cache) y elige el gpt-N más alto.
+ * 'creative' = el tope; 'fast' = el mini más nuevo. Si la API falla, cae a un default.
+ */
+function openai_modelo_ultimo(string $perfil = 'creative'): string {
+    $fallback  = $perfil === 'fast' ? 'gpt-5-mini' : 'gpt-5.5';
+    $cacheFile = __DIR__ . '/../storage/cache/openai_models.json';
+    $cache = @json_decode((string)@file_get_contents($cacheFile), true);
+    if (is_array($cache) && isset($cache['ts'], $cache[$perfil]) && (time() - (int)$cache['ts'] < 86400) && $cache[$perfil] !== '') {
+        return $cache[$perfil];
     }
-    return $cfg;   // ya es 'proveedor:modelo-concreto' → pasa tal cual (retrocompatible)
+    if (!openai_configurado()) return $fallback;
+    try {
+        $resp = ia_http_get('https://api.openai.com/v1/models', ['Authorization: Bearer ' . OPENAI_API_KEY]);
+        $d = json_decode($resp, true);
+        if (!is_array($d) || empty($d['data'])) return $fallback;
+        $ids = array_map(fn($x) => (string)($x['id'] ?? ''), (array)$d['data']);
+        $out = [
+            'ts'       => time(),
+            'creative' => _openai_pick_modelo($ids, false) ?: $fallback,
+            'fast'     => _openai_pick_modelo($ids, true)  ?: 'gpt-5-mini',
+        ];
+        @mkdir(dirname($cacheFile), 0775, true);
+        @file_put_contents($cacheFile, json_encode($out));
+        return $out[$perfil] ?? $fallback;
+    } catch (Throwable $e) { error_log('openai_modelo_ultimo: ' . $e->getMessage()); return $fallback; }
+}
+
+/** Elige el gpt-N de CHAT más nuevo de una lista de ids ($mini=true → el mini más nuevo). */
+function _openai_pick_modelo(array $ids, bool $mini): string {
+    $excluir = ['preview','audio','realtime','search','instruct','transcribe','tts','embedding','moderation','image','vision'];
+    $best = ''; $bestv = -1.0;
+    foreach ($ids as $id) {
+        $id = strtolower(trim($id));
+        if (!preg_match('/^gpt-(\d+)(?:\.(\d+))?/', $id, $mm)) continue;       // solo gpt-N chat
+        $esMini = (strpos($id, 'mini') !== false || strpos($id, 'nano') !== false);
+        if ($mini !== $esMini) continue;
+        foreach ($excluir as $b) { if (strpos($id, $b) !== false) continue 2; }
+        $v = (float)$mm[1] + (isset($mm[2]) ? ((float)$mm[2]) / 10.0 : 0.0);   // major.minor
+        // A igual versión, prefiere el id más corto (el alias que auto-actualiza, no el fechado).
+        if ($v > $bestv || ($v === $bestv && ($best === '' || strlen($id) < strlen($best)))) { $bestv = $v; $best = $id; }
+    }
+    return $best;
 }
 
 /**
