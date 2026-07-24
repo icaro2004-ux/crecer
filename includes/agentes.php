@@ -809,16 +809,17 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
              . "  · EVITA a toda costa: objetos deformes o flotando, texto inventado, watermarks falsos, ruido, y el cliché de pantallas de celular/tablet/laptop con redes sociales o notificaciones flotantes (a menos que el post sea literalmente sobre eso).\n"
              . "  · Meta: una imagen sobre EL TEMA del post — nítida, con alma, lista para publicar.";
 
-    // 🎨 DIRECTOR DE ARTE — el secreto de por qué ChatGPT saca imágenes más cabronas
-    // con el MISMO modelo (gpt-image-1): reescribe el brief en UN prompt vívido y
-    // cinematográfico antes de generar. Los modelos rinden MUCHÍSIMO mejor con una
-    // escena concreta y positiva que con nuestro rulebook lleno de negaciones. Solo
-    // para arte DESDE CERO (la foto real va a Gemini fiel). Si falla, usa el prompt de arriba.
+    // 🎨 DIRECTOR DE ARTE CON IA — no "generamos una imagen": diseñamos una CAMPAÑA.
+    // Pipeline de 3 agentes (Estratega de Campaña → Director de Arte → Prompt Engineer)
+    // + biblioteca de estilos por industria. La imagen COMPLEMENTA la emoción del copy,
+    // no lo ilustra literal. Solo para arte DESDE CERO (la foto real va a Gemini fiel).
+    // Degrada solo: pipeline → dirigir_arte → este prompt de respaldo. Ver includes/direccion_arte.php.
     if (!$tiene_foto) {
         try {
-            $mejor = dirigir_arte($pdo, $marca_id, $que_vende, $copy, $instr, $est_arte, $con_texto);
-            if (trim($mejor) !== '') $prompt = $mejor;
-        } catch (Throwable $e) { error_log('dirigir_arte: ' . $e->getMessage()); }
+            require_once __DIR__ . '/direccion_arte.php';
+            $camp = campana_visual($pdo, $marca_id, $m, $copy, ['con_texto'=>$con_texto, 'instrucciones'=>$instr]);
+            if (!empty($camp['prompt'])) $prompt = $camp['prompt'];
+        } catch (Throwable $e) { error_log('campana_visual: ' . $e->getMessage()); }
     }
 
     // Calidad make-or-break: SIEMPRE el Pro (Nano Banana Pro). Antes el "sin texto"
@@ -846,29 +847,45 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
  * Además, al ser corto y limpio, gpt-image-1 NO lo rechaza → deja de caer a Gemini.
  * @return string prompt EN INGLÉS listo para el modelo (o '' si falla → usa el de respaldo).
  */
-function dirigir_arte(PDO $pdo, int $marca_id, string $que_vende, string $copy, string $instr, array $est_arte, bool $con_texto = false): string {
-    // Filosofía (que Manuel comprobó en ChatGPT): SIMPLE y SIN RESTRICCIONES. Le das el
-    // copy + el contexto y el modelo cocina la imagen más cabrona. Nada de rulebooks.
-    $sys = "Eres un director creativo de clase mundial. Escribes UN prompt de imagen EN INGLÉS para un modelo "
-         . "profesional (gpt-image-1). Te doy el copy de un post de redes y lo que vende el negocio; imagina la foto MÁS "
-         . "impactante, premium y scroll-stopping que combine perfecto con ese mensaje para publicarlo en Instagram, Facebook "
-         . "y WhatsApp. Descríbela vívida y concreta (escena, sujeto, luz, cámara/lente, mood, color, textura), con total "
-         . "libertad creativa. " . ($con_texto
-             ? "Puede llevar un texto corto muy bien diseñado sacado del mensaje. "
-             : "Sin texto ni letras dentro de la imagen. ")
-         . "Quédate en el mundo real de lo que vende el negocio. Devuelve SOLO el prompt: un párrafo, sin comillas ni notas.";
+function dirigir_arte(PDO $pdo, int $marca_id, string $que_vende, string $copy, string $instr, array $est_arte, bool $con_texto = false, string $nombre = ''): string {
     $estilo_hint = trim((string)($est_arte['generar'] ?? ''));
-    $brief = "Es para un post AUTOMÁTICO de redes de un negocio boricua.\n"
-           . "El negocio vende: " . ($que_vende !== '' ? $que_vende : 'sus productos/servicios') . "\n"
-           . "Copy del post: \"" . ($copy !== '' ? $copy : 'presentación cálida del negocio a su gente') . "\"\n"
-           . ($instr !== '' ? "Lo que pide el dueño: {$instr}\n" : '')
-           . ($estilo_hint !== '' ? "Estilo que prefiere: {$estilo_hint}\n" : '')
-           . "Hazme el mejor prompt de imagen que combine con este copy.";
+    if ($con_texto) {
+        // MODO PÓSTER PROMOCIONAL (como hace ChatGPT): un GRÁFICO terminado con titular,
+        // marca y CTA metidos en la imagen — no una foto pelada. Es el "anuncio de verdad".
+        $sys = "Eres un DIRECTOR CREATIVO y diseñador gráfico de clase mundial. Escribes UN prompt EN INGLÉS para gpt-image-1 "
+             . "que produzca un GRÁFICO PROMOCIONAL DE REDES terminado y profesional (calidad de agencia), cuadrado, listo para "
+             . "publicar en Instagram/Facebook/WhatsApp. El diseño DEBE incluir: un TITULAR corto y llamativo sacado del mensaje "
+             . "(tipografía con jerarquía clara), el NOMBRE del negocio integrado como marca/logo, el producto o servicio mostrado "
+             . "apetitoso y premium, y un CTA corto. Composición balanceada, paleta cálida y coherente, tipografías legibles y bien "
+             . "espaciadas, todo el TEXTO perfectamente escrito EN ESPAÑOL y sin faltas. Descríbelo vívido y concreto. "
+             . "Devuelve SOLO el prompt: un párrafo, sin comillas ni notas.";
+        $brief = "Gráfico promocional cuadrado para redes de un negocio boricua.\n"
+               . ($nombre !== '' ? "Nombre del negocio (ponlo como marca dentro del diseño): {$nombre}\n" : '')
+               . "Lo que vende: " . ($que_vende !== '' ? $que_vende : 'sus productos') . "\n"
+               . "Mensaje/copy del post (saca de aquí el TITULAR y el CTA): \"" . ($copy !== '' ? $copy : 'promoción del negocio') . "\"\n"
+               . ($instr !== '' ? "Pedido específico del dueño: {$instr}\n" : '')
+               . ($estilo_hint !== '' ? "Estilo visual: {$estilo_hint}\n" : '')
+               . "Diseña el mejor gráfico promocional posible.";
+    } else {
+        // MODO FOTO limpia: el copy va como caption aparte. Escena premium, sin texto.
+        $sys = "Eres un director creativo de clase mundial. Escribes UN prompt de imagen EN INGLÉS para un modelo "
+             . "profesional (gpt-image-1). Te doy el copy de un post de redes y lo que vende el negocio; imagina la foto MÁS "
+             . "impactante, premium y scroll-stopping que combine perfecto con ese mensaje para Instagram, Facebook y WhatsApp. "
+             . "Descríbela vívida y concreta (escena, sujeto, luz, cámara/lente, mood, color, textura), con total libertad "
+             . "creativa. Sin texto ni letras dentro de la imagen. Quédate en el mundo real de lo que vende el negocio. "
+             . "Devuelve SOLO el prompt: un párrafo, sin comillas ni notas.";
+        $brief = "Es para un post AUTOMÁTICO de redes de un negocio boricua.\n"
+               . "El negocio vende: " . ($que_vende !== '' ? $que_vende : 'sus productos/servicios') . "\n"
+               . "Copy del post: \"" . ($copy !== '' ? $copy : 'presentación cálida del negocio a su gente') . "\"\n"
+               . ($instr !== '' ? "Lo que pide el dueño: {$instr}\n" : '')
+               . ($estilo_hint !== '' ? "Estilo que prefiere: {$estilo_hint}\n" : '')
+               . "Hazme el mejor prompt de imagen que combine con este copy.";
+    }
     $r = ia_ejecutar($pdo, 'creador', 'Director de arte (prompt de imagen)', $brief, [
         'marca_id'    => $marca_id,
         'sistema'     => $sys,
         'temperatura' => 0.9,
-        'max_tokens'  => 320,
+        'max_tokens'  => 360,
         'thinking_budget' => 0,
         'mock_texto'  => '',
     ]);
