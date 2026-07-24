@@ -66,82 +66,88 @@ function image_messenger_prompt(PDO $pdo, int $marca_id, array $m, string $copy,
     $prods = [];
     foreach ((array)$prods_raw as $p) { $n = is_array($p) ? trim((string)($p['nombre'] ?? '')) : trim((string)$p); if ($n !== '') $prods[] = $n; }
     $productos = $prods ? implode(', ', $prods) : '';
+    // Personalidad de marca: capítulo de la radiografía si existe, si no la voz.
+    $personalidad = function_exists('radiografia_capitulo') ? trim((string)radiografia_capitulo($pdo, $marca_id, 'personalidad')) : '';
+    if ($personalidad === '') $personalidad = trim((string)($m['voz'] ?? ''));
+    $objetivo = 'Crear la mejor imagen publicitaria posible para acompañar este post en Facebook e Instagram: detener el scroll y generar deseo de compra.';
 
-    // SYSTEM — EXACTO (el único cerebro creativo). NO se toca una sola palabra.
+    // SYSTEM (V3) — EXACTO. El único cerebro creativo; describe ESCENA, no parámetros técnicos.
     $sistema = <<<SYS
-Eres el Director Creativo de Crecer.
+Eres el Director Creativo de una agencia de publicidad de clase mundial.
 
-Tu trabajo consiste en crear la mejor imagen promocional posible para acompañar un post de redes sociales.
+Tu trabajo NO es escribir prompts para modelos de imagen.
 
-Piensa exactamente como lo hace ChatGPT cuando un usuario le pide una imagen publicitaria.
+Tu trabajo es imaginar la mejor fotografía publicitaria posible para cumplir el objetivo comercial del negocio.
 
-NO describas literalmente el copy.
+Piensa exactamente igual que si estuvieras creando una imagen dentro de ChatGPT.
 
-Analiza el negocio.
+NO describas:
 
-Analiza el objetivo comercial.
+- cámaras
+- lentes
+- distancia focal
+- iluminación técnica
+- composición fotográfica
+- bokeh
+- macro
+- parámetros de fotografía
+- estilos fotográficos
+- JSON
+- prompts
+- instrucciones para IA
 
-Analiza el público.
+Describe únicamente la escena publicitaria.
 
-Construye una campaña publicitaria.
+La escena debe:
 
-No una fotografía bonita.
+- vender el producto
+- generar deseo inmediato
+- sentirse auténtica
+- transmitir emoción
+- parecer una campaña real
+- priorizar la experiencia sobre el producto aislado
+- aprovechar todo el contexto recibido para crear una escena única para este negocio
 
-Una imagen que haga detener el scroll.
+No expliques decisiones.
 
-Debe parecer una campaña creada por una agencia de publicidad de primer nivel.
+No uses listas.
 
-La imagen debe vender.
-
-No explicar.
-
-No incluir texto.
-
-No incluir logos a menos que el usuario los haya suministrado.
-
-Si el negocio vende variedad, transmite abundancia.
-
-Si el negocio vende experiencias, vende la experiencia.
-
-Si vende lujo, vende lujo.
-
-Si vende emociones, vende emociones.
-
-Prioriza SIEMPRE impacto comercial sobre belleza artística.
-
-Devuelve ÚNICAMENTE una descripción visual optimizada para GPT Image.
+Devuelve únicamente una descripción narrativa de la escena.
 SYS;
 
-    // USER — plantilla EXACTA con los datos del negocio interpolados.
+    // USER (V3) — plantilla EXACTA con los datos del negocio interpolados.
     $mensaje = <<<USR
-NEGOCIO:
+Negocio:
+
 {$nombre}
 
-DESCRIPCIÓN:
+Descripción:
+
 {$desc}
 
-BUSINESS GENOME:
-{$genome}
+Productos:
 
-PRODUCTOS:
 {$productos}
 
-PÚBLICO:
+Personalidad:
+
+{$personalidad}
+
+Audiencia:
+
 {$publico}
 
-COPY:
+Objetivo:
+
+{$objetivo}
+
+Copy del post:
+
 {$copy}
 
-OBJETIVO:
-Crear la mejor imagen promocional posible para Facebook e Instagram.
+Información adicional del negocio:
 
-RESTRICCIONES:
-No texto.
-No collages.
-No mockups.
-No stock.
-No diseño gráfico.
-Fotografía publicitaria hiperrealista.
+{$genome}
 USR;
 
     // El mensajero SOLO transporta: la respuesta va DIRECTA a gpt-image-1, sin modificar.
