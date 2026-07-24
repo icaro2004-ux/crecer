@@ -143,21 +143,21 @@ function director_creativo_visual(PDO $pdo, int $marca_id, string $que_vende, st
  * optimizado para gpt-image-1. No conoce el negocio ni el copy: solo el brief.
  */
 function ingeniero_prompt_visual(PDO $pdo, int $marca_id, array $brief, bool $con_texto): string {
-    $sys = "Eres un PROMPT ENGINEER experto en imágenes comerciales para gpt-image-1, con años haciendo publicidad. Recibes "
-         . "SOLO un Visual Brief estructurado (JSON) y lo traduces a UN prompt EN INGLÉS, extremadamente optimizado, que "
-         . "produzca una FOTOGRAFÍA COMERCIAL hiperrealista con calidad de campaña publicitaria — no ilustración, no render, "
-         . "no clipart, no stock, nada que se vea 'de IA'. Incluye de forma fluida: sujeto, historia visual, mood, dirección de "
-         . "arte, composición, color grading, tipo de fotografía, lente, iluminación, profundidad de campo, jerarquía visual, "
-         . "texturas realistas, y al final los negative prompts. Por defecto una ESCENA COMERCIAL EDITORIAL COMPLETA con "
-         . "profundidad y contexto — NUNCA extreme close-up, macro shot, ni un solo producto aislado y centrado sobre un fondo "
-         . "vacío borroso. En los negative prompts incluye: macro, extreme close-up, single isolated product, empty blurred background. "
+    // TRADUCTOR FIEL: NO reinterpreta las decisiones del Director — solo rinde el brief.
+    // temperatura baja (0.4) = determinístico. El anti-macro vive en el Director + el
+    // guarda-raíl de campana_visual, NO aquí (para no introducir criterio propio).
+    $sys = "Eres un PROMPT ENGINEER TÉCNICO para gpt-image-1. Tu ÚNICO trabajo: TRADUCIR con FIDELIDAD un Visual Brief (JSON) "
+         . "a UN prompt EN INGLÉS. NO reinterpretas ni cambias NINGUNA decisión del Director de Arte: no añades ideas propias, "
+         . "no 'mejoras' la composición, no cambias el sujeto, el encuadre, la luz ni el estilo. RINDE TODOS los campos del brief "
+         . "(primary_subject, secondary_elements, background, lighting, camera, lens, composition, focus, color_palette, textures, "
+         . "mood, visual_story, visual_style, quality) en prosa densa y fluida optimizada para el modelo, y al FINAL los 'negative' "
+         . "del brief tal cual. Fotografía comercial fotorrealista, sin look de IA ni de stock. "
          . ($con_texto
-             ? "Si el brief trae headline/brand_text/cta, es un GRÁFICO PROMOCIONAL: intégralos con tipografía profesional, "
-               . "bien escritos en español, jerarquía clara y diseño de anuncio real."
+             ? "Si el brief trae headline/brand_text/cta, intégralos con tipografía profesional, bien escritos en español, jerarquía clara."
              : "SIN ningún texto ni letra dentro de la imagen.")
-         . " NUNCA empieces con 'Create an image of'. Escribe como un Director de Arte senior describiendo la toma. Devuelve SOLO el prompt.";
+         . " NUNCA empieces con 'Create an image of'. Devuelve SOLO el prompt, sin comillas ni notas.";
     $r = ia_ejecutar($pdo, 'creador', 'Prompt engineer visual', "Visual Brief:\n" . json_encode($brief, JSON_UNESCAPED_UNICODE), [
-        'marca_id'=>$marca_id, 'sistema'=>$sys, 'temperatura'=>0.85, 'max_tokens'=>420, 'thinking_budget'=>0, 'mock_texto'=>'',
+        'marca_id'=>$marca_id, 'sistema'=>$sys, 'temperatura'=>0.4, 'max_tokens'=>900, 'thinking_budget'=>0, 'mock_texto'=>'',
     ]);
     return trim((string)($r['texto'] ?? ''));
 }
