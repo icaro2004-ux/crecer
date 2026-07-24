@@ -94,6 +94,19 @@ if (isset($_GET['wlog'])) {
     exit;
 }
 
+// ===== DIAGNÓSTICO de configuración efectiva (qué corre PRODUCCIÓN) =====
+if (isset($_GET['cfg'])) {
+    header('Content-Type: text/plain; charset=utf-8');
+    echo "IMAGE_PIPELINE:       " . (defined('IMAGE_PIPELINE') ? IMAGE_PIPELINE : '(no def)') . "   <- v1 = rulebook VIEJO (direccion_arte) · v2 = cerebro único V3 (image_messenger)\n";
+    echo "IMAGE_CREATIVE_MODEL: " . (defined('IMAGE_CREATIVE_MODEL') ? IMAGE_CREATIVE_MODEL : '(no def)') . "\n";
+    echo "  -> resuelve a:      " . resolver_modelo_ia(defined('IMAGE_CREATIVE_MODEL') ? IMAGE_CREATIVE_MODEL : 'openai:creative') . "\n";
+    echo "OPENAI_IMG_MODEL:     " . (defined('OPENAI_IMG_MODEL') ? OPENAI_IMG_MODEL : '(no def)') . "   (renderizador del camino DIRECTO)\n";
+    echo "OPENAI_IMG_QUALITY:   " . (defined('OPENAI_IMG_QUALITY') ? OPENAI_IMG_QUALITY : '(no def)') . "\n";
+    echo "Director (image_messenger) tope de salida: 700 tokens (max_completion_tokens; en gpt-5.x INCLUYE tokens de razonamiento)\n";
+    echo "OpenAI configurado:   " . (openai_configurado() ? 'sí' : 'NO') . "\n";
+    exit;
+}
+
 // ===== DIAGNÓSTICO del Modo ChatGPT en background (pregunta directo a OpenAI) =====
 if (isset($_GET['bgstat'])) {
     header('Content-Type: text/plain; charset=utf-8');
