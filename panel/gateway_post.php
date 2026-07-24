@@ -22,8 +22,11 @@ if (!$usuario) { logout_usuario(); header('Location: /crecer/login.php?expirado=
 $USUARIO_ID = (int)$usuario['id'];
 $marca = marca_del_usuario($pdo, $USUARIO_ID, isset($_GET['marca']) ? (int)$_GET['marca'] : null);
 
-// ?gw=1 = modo PRUEBA: camina el gateway aunque la cuenta ya tenga acceso (fundador).
-$forzar = ($_GET['gw'] ?? '') === '1';
+// ?gw=1 = modo PRUEBA: camina el gateway aunque la cuenta ya tenga acceso. PEGAJOSO
+// en sesión para sobrevivir el rebote de conectar/OAuth (?gw=0 lo apaga).
+if (($_GET['gw'] ?? '') === '1') $_SESSION['gw_test'] = 1;
+elseif (($_GET['gw'] ?? '') === '0') unset($_SESSION['gw_test']);
+$forzar = !empty($_SESSION['gw_test']);
 $gwq = $forzar ? '&gw=1' : '';
 // El router manda: si su estado NO es del escenario (sin marca, ya pagó, etc.),
 // lo mando a donde de verdad le toca. Así nadie aterriza aquí fuera de lugar.
@@ -91,6 +94,11 @@ try {
     }
 } catch (Throwable $e) {}
 
+// Plan para la VENTA (precio real desde crecer_planes; el CTA suscribe de verdad).
+$plan_venta = null;
+try { $plan_venta = $pdo->query("SELECT nombre, slug, precio_mensual FROM crecer_planes WHERE slug='crecer' AND activo=1 LIMIT 1")->fetch(PDO::FETCH_ASSOC); } catch (Throwable $e) {}
+if (!$plan_venta) $plan_venta = ['nombre'=>'Crecer', 'slug'=>'crecer', 'precio_mensual'=>39];
+
 $nombre  = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
 $caption = (string)($post['caption'] ?? '');
 $grafica = (string)($post['grafica_path'] ?? '');
@@ -151,6 +159,24 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .pitch{margin-top:22px;background:linear-gradient(135deg,color-mix(in srgb,var(--magenta) 8%,#fff),color-mix(in srgb,var(--palma) 8%,#fff));border:1px solid var(--line);border-radius:18px;padding:20px 18px;text-align:center}
   .pitch h3{font-family:var(--font-display,'Poppins');font-weight:700;font-size:18px;color:var(--tinta);margin:0 0 6px}
   .pitch p{font-size:14px;color:var(--muted);line-height:1.55;margin:0 0 14px}
+  /* Carrusel de venta — móvil: swipe con el dedo · desktop: flechas */
+  .sell{margin-top:22px}
+  .sell-track{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:2px}
+  .sell-track::-webkit-scrollbar{display:none}
+  .slide{flex:0 0 100%;scroll-snap-align:center;box-sizing:border-box;background:var(--card,#fff);border:1px solid var(--line);border-radius:20px;padding:34px 24px;text-align:center;box-shadow:var(--shadow-sm)}
+  .slide .ico{font-size:46px;margin-bottom:14px;line-height:1}
+  .slide h3{font-family:var(--font-display,'Poppins');font-weight:700;font-size:21px;color:var(--tinta);margin:0 0 8px;letter-spacing:-.01em}
+  .slide p{font-size:14.5px;color:var(--muted);line-height:1.55;margin:0 auto;max-width:32ch}
+  .sell-nav{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:16px}
+  .sell-dots{display:flex;gap:7px}
+  .sell-dots i{width:8px;height:8px;border-radius:50%;background:var(--line);transition:.25s;cursor:pointer}
+  .sell-dots i.on{background:var(--magenta,#EF4375);width:22px;border-radius:4px}
+  .sell-arrow{width:40px;height:40px;border-radius:50%;border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-size:22px;line-height:1;cursor:pointer;display:grid;place-items:center;transition:.15s;flex:none}
+  .sell-arrow:hover{border-color:var(--magenta,#EF4375);color:var(--magenta,#EF4375)}
+  .sell-cta{margin-top:20px;text-align:center;position:sticky;bottom:0;background:linear-gradient(to top,var(--crema,#F7F5F1) 72%,transparent);padding:14px 0 8px}
+  .price{font-family:var(--font-display,'Poppins');font-weight:800;font-size:40px;color:var(--tinta);line-height:1}
+  .price span{font-size:16px;font-weight:600;color:var(--muted)}
+  .price-sub{font-size:13px;color:var(--muted);margin:5px 0 13px}
 </style>
 </head>
 <body>
@@ -160,24 +186,38 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <span class="step"><?= $publicado ? '¡Listo!' : ($aprobado ? 'Paso 3 de 3' : 'Paso 2 de 3') ?></span>
   </div>
 
-<?php if ($publicado): /* ── ESTADO VENTA ── */ ?>
+<?php if ($publicado): /* ── VENTA: celebración → carrusel de bondades → precio → suscribir ── */ ?>
   <div class="cel">
     <div style="font-size:46px">🎉</div>
     <div class="big">¡Tu post está publicado!</div>
-    <p class="gw-sub" style="margin-bottom:0">Acabas de publicar tu primer post — el corillo lo hizo por ti, en tu voz.</p>
+    <p class="gw-sub" style="margin-bottom:0">Eso lo hizo el corillo por ti, en tu voz. Ahora imagínate esto <b>todos los días</b>.</p>
   </div>
-  <div class="card" style="margin-top:16px">
-    <?php if ($grafica): ?><img class="img" src="<?= $h($grafica) ?>" alt=""><?php else: ?><div class="noimg">Tu post</div><?php endif; ?>
-    <?php if ($caption !== ''): ?><div class="cap"><?= $h($caption) ?></div><?php endif; ?>
+  <?php if ($redes_ok): ?><a class="btn gho" style="margin-top:14px" href="https://instagram.com" target="_blank" rel="noopener">Ver mi post en vivo →</a><?php endif; ?>
+
+  <div class="sell">
+    <div class="sell-track" id="sellTrack">
+      <div class="slide"><div class="ico">🎨</div><h3>Tu marketing, hecho</h3><p>El corillo crea los posts, el arte y los captions en tu voz. Tú solo apruebas.</p></div>
+      <div class="slide"><div class="ico">📅</div><h3>Contenido todo el mes</h3><p>Nunca más quedarte en blanco. Un calendario listo, mes tras mes.</p></div>
+      <div class="slide"><div class="ico">🇵🇷</div><h3>Suena a ti, no a robot</h3><p>Boricua de verdad, con tu sabor. Cero "AI slop".</p></div>
+      <div class="slide"><div class="ico">📲</div><h3>Apruebas desde el celular</h3><p>En segundos, donde estés. El corillo hace el resto.</p></div>
+      <div class="slide"><div class="ico">🚀</div><h3>Publica y responde solo</h3><p>Auto-publica a tus redes y contesta los DMs por ti.</p></div>
+    </div>
+    <div class="sell-nav">
+      <button class="sell-arrow" id="sellPrev" aria-label="Anterior">‹</button>
+      <div class="sell-dots" id="sellDots"></div>
+      <button class="sell-arrow" id="sellNext" aria-label="Siguiente">›</button>
+    </div>
   </div>
-  <div class="acts">
-    <?php if ($redes_ok): ?><a class="btn gho" href="https://instagram.com" target="_blank" rel="noopener">Verlo en vivo en mis redes →</a><?php endif; ?>
-  </div>
-  <div class="pitch">
-    <h3>Esto puede pasar todos los días</h3>
-    <p>Tu corillo puede montarte el marketing del mes entero — posts, arte, respuestas — y tú solo apruebas desde el celular.</p>
-    <a class="btn pri" href="/crecer/registro.php?plan=crecer" style="max-width:280px;margin:0 auto">Quiero mi corillo full →</a>
-    <div class="hint" style="margin-top:10px">Carrusel de venta completo — Fase 4</div>
+
+  <div class="sell-cta">
+    <div class="price">$<?= number_format((float)$plan_venta['precio_mensual'], 0) ?><span>/mes</span></div>
+    <div class="price-sub">Cancela cuando quieras · tu primer post ya es tuyo</div>
+    <form method="post" action="/crecer/panel/crear_checkout.php">
+      <?= csrf_field() ?>
+      <input type="hidden" name="marca" value="<?= (int)$marca_id ?>">
+      <input type="hidden" name="plan" value="<?= $h($plan_venta['slug']) ?>">
+      <button class="btn pri" type="submit">Activar mi corillo →</button>
+    </form>
   </div>
 
 <?php else: /* ── ESTADO POST (borrador/aprobado) ── */ ?>
@@ -322,6 +362,19 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       location.href='/crecer/panel/gateway_post.php?marca='+MARCA+'&venta=1'+GW;
     }).catch(function(){ location.href='/crecer/panel/gateway_post.php?marca='+MARCA+'&venta=1'+GW; });
   });
+<?php endif; ?>
+<?php if ($publicado): /* carrusel de venta: swipe (móvil) + flechas + dots */ ?>
+  var track=document.getElementById('sellTrack');
+  if(track){
+    var slides=track.querySelectorAll('.slide'), dotsBox=document.getElementById('sellDots');
+    slides.forEach(function(_,i){ var d=document.createElement('i'); if(i===0)d.className='on'; d.addEventListener('click',function(){ track.scrollTo({left:i*track.clientWidth,behavior:'smooth'}); }); dotsBox.appendChild(d); });
+    var dots=dotsBox.querySelectorAll('i');
+    function upd(){ var idx=Math.round(track.scrollLeft/track.clientWidth); dots.forEach(function(d,i){ d.classList.toggle('on',i===idx); }); }
+    track.addEventListener('scroll',function(){ window.requestAnimationFrame(upd); });
+    function go(dir){ var idx=Math.max(0,Math.min(slides.length-1, Math.round(track.scrollLeft/track.clientWidth)+dir)); track.scrollTo({left:idx*track.clientWidth,behavior:'smooth'}); }
+    var p=document.getElementById('sellPrev'), n=document.getElementById('sellNext');
+    if(p)p.addEventListener('click',function(){go(-1);}); if(n)n.addEventListener('click',function(){go(1);});
+  }
 <?php endif; ?>
 })();
 </script>

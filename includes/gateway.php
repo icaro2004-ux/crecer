@@ -29,13 +29,13 @@ function gateway_estado(PDO $pdo, array $usuario, ?array $marca = null, bool $fo
 
     if ($marca === null) $marca = marca_del_usuario($pdo, (int)$usuario['id']);
 
-    // 2) Acceso pleno = suscrito / admin / cuenta de prueba → APP real (salta el gateway).
-    //    $forzar (?gw=1, solo para PROBAR) camina el gateway aunque la cuenta ya tenga acceso.
+    // 2) REGLA DE ORO: al APP real SOLO se cruza PAGANDO (o admin). Las cuentas de
+    //    prueba NO saltan el gateway — caminan la experiencia como un cliente real.
+    //    NADIE entra al app sin pagar. Publicar el post gratis NO da acceso al app.
     if (!$forzar) {
-        $es_admin  = ($usuario['rol'] ?? '') === 'admin';
-        $es_prueba = function_exists('activacion_de_prueba') && activacion_de_prueba($usuario['email'] ?? null);
-        $pagado    = $marca && marca_es_pagada($pdo, (int)$marca['id']);
-        if ($pagado || $es_admin || $es_prueba) return GW_APP;
+        $es_admin = ($usuario['rol'] ?? '') === 'admin';
+        $pagado   = $marca && marca_es_pagada($pdo, (int)$marca['id']);
+        if ($pagado || $es_admin) return GW_APP;
     }
 
     // 3) Sin negocio todavía → la entrevista (crea la marca al vuelo desde el nombre del landing).
