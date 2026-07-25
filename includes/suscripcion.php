@@ -73,6 +73,18 @@ function marca_es_pagada(PDO $pdo, int $marca_id): bool {
     return es_pagado(suscripcion_de_marca($pdo, $marca_id));
 }
 
+/**
+ * Firma del post GRATIS. Las marcas NO pagadas llevan una firma de Crecer al pie
+ * del caption (reconoce de dónde salió el trabajo + trae referidos); las marcas
+ * PAGADAS salen 100% limpias, sin firma. Cambia el texto en CRECER_FIRMA (una línea)
+ * o en config.local.php.
+ */
+if (!defined('CRECER_FIRMA')) define('CRECER_FIRMA', '— Hecho con Crecer 🌱 encuentraloahora.com');
+function firma_publicar(PDO $pdo, int $marca_id, string $caption): string {
+    if (CRECER_FIRMA === '' || marca_es_pagada($pdo, $marca_id)) return $caption;
+    return rtrim($caption) . "\n\n" . CRECER_FIRMA;
+}
+
 /** ¿Puede GENERAR con la IA? (trial o pagado, con acceso vigente). El tope
  *  del trial se chequea aparte en cada endpoint. */
 function puede_generar(?array $su): bool { return suscripcion_activa($su); }

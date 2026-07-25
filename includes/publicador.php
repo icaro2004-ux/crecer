@@ -187,6 +187,9 @@ function publicar_pieza(PDO $pdo, int $contenido_id, array $override_plataformas
     }
 
     $caption   = (string)($pieza['caption'] ?? '');
+    // Post GRATIS (marca no pagada) → firma de Crecer al pie; los pagados salen limpios.
+    require_once __DIR__ . '/suscripcion.php';
+    if (function_exists('firma_publicar')) $caption = firma_publicar($pdo, $marca_id, $caption);
     // Si el post tiene gráfica pero el ARCHIVO no está en el servidor, avisar claro
     // (evita quemar intentos con el error críptico de Meta "Missing/invalid image").
     $es_video = es_video_path($pieza['grafica_path'] ?? null);

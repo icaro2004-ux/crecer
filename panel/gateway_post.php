@@ -160,6 +160,8 @@ if ($ver_url === '') {
 
 $nombre  = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
 $caption = (string)($post['caption'] ?? '');
+// Texto para COPIAR/publicar manual: el post gratis lleva la firma de Crecer (los pagados, limpios).
+$caption_copiar = function_exists('firma_publicar') ? firma_publicar($pdo, $marca_id, $caption) : $caption;
 $grafica = (string)($post['grafica_path'] ?? '');
 $img_pending = (empty($grafica) && (($post['img_estado'] ?? '') === 'queued'));   // Responses generando en background
 $aprobado = in_array(($post['estado'] ?? ''), ['aprobado','fallido','publicando'], true);   // ya pasó del borrador → listo para (re)publicar
@@ -378,6 +380,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <a class="btn ok" id="btnBajar" href="<?= $h($grafica) ?>" download>⬇ Bajar la imagen</a>
     <button class="btn gho" id="btnCopiar">Copiar el texto</button>
     <div class="hint">Baja la imagen, copia el texto, y súbelo a tu Instagram, Facebook o WhatsApp. Cuando lo publiques, dale al botón de abajo.</div>
+    <div class="hint" style="opacity:.85">🌱 Tu post gratis lleva una pequeña firma de Crecer. Al suscribirte, tus posts salen <b>100% tuyos</b>, sin firma.</div>
     <button class="btn pri" id="btnYaPubli">Ya lo publiqué →</button>
   </div>
 <?php endif; ?>
@@ -532,7 +535,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   var btnManual=document.getElementById('btnManual');
   if(btnManual) btnManual.addEventListener('click',function(){ actsP.style.display='none'; actsM.style.display=''; window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'}); });
   var btnCopiar=document.getElementById('btnCopiar');
-  if(btnCopiar) btnCopiar.addEventListener('click',function(){ var t=<?= json_encode($caption) ?>; if(navigator.clipboard){ navigator.clipboard.writeText(t).then(function(){T('Texto copiado ✓');},function(){T('Copia el texto a mano');}); } else T('Copia el texto a mano'); });
+  if(btnCopiar) btnCopiar.addEventListener('click',function(){ var t=<?= json_encode($caption_copiar) ?>; if(navigator.clipboard){ navigator.clipboard.writeText(t).then(function(){T('Texto copiado ✓');},function(){T('Copia el texto a mano');}); } else T('Copia el texto a mano'); });
   // "Ya lo publiqué" (manual) → marca publicado con el gate SMS y pasa a venta.
   var btnYa=document.getElementById('btnYaPubli');
   if(btnYa) btnYa.addEventListener('click',function(){
