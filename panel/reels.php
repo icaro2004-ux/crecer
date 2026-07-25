@@ -232,8 +232,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$destinos) $destinos = ['instagram','facebook'];
 
         // Crear la pieza (tipo reel) que apunta al mp4 y publicar con el motor existente.
+        // OJO: guardamos la URL PÚBLICA COMPLETA (no la ruta pelada). Con la ruta
+        // relativa sin '/uploads/', imagen_url_publica() armaba .../crecer/marca_1/...
+        // (sin 'uploads') → Meta daba 404 "unable to fetch video file from URL".
+        $video_pub = reels_public_url($rel);
         $pdo->prepare("INSERT INTO crecer_contenido (marca_id, plataforma, tipo, caption, grafica_path, estado) VALUES (?, 'instagram','reel',?,?, 'aprobado')")
-            ->execute([$marca_id, $caption, $rel]);
+            ->execute([$marca_id, $caption, $video_pub]);
         $cid = (int)$pdo->lastInsertId();
 
         require_once __DIR__ . '/../includes/publicador.php';
