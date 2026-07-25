@@ -293,8 +293,9 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       <div class="slide"><div class="ico">🎨</div><h3>Tu marketing, hecho</h3><p>El corillo crea los posts, el arte y los captions en tu voz. Tú solo apruebas.</p></div>
       <div class="slide"><div class="ico">📅</div><h3>Contenido todo el mes</h3><p>Nunca más quedarte en blanco. Un calendario listo, mes tras mes.</p></div>
       <div class="slide"><div class="ico">🇵🇷</div><h3>Suena a ti, no a robot</h3><p>Boricua de verdad, con tu sabor. Cero "AI slop".</p></div>
-      <div class="slide"><div class="ico">📲</div><h3>Apruebas desde el celular</h3><p>En segundos, donde estés. El corillo hace el resto.</p></div>
+      <div class="slide"><div class="ico">📲</div><h3>Apruebas desde el celular</h3><p>En segundos, donde estés. Tu equipo hace el resto.</p></div>
       <div class="slide"><div class="ico">🚀</div><h3>Publica y responde solo</h3><p>Auto-publica a tus redes y contesta los DMs por ti.</p></div>
+      <div class="slide"><div class="ico">🏷️</div><h3>Tus posts, 100% tuyos</h3><p>La firma de Crecer desaparece. Tu marca y tu crédito, nada de firmas ajenas.</p></div>
     </div>
     <div class="sell-nav">
       <button class="sell-arrow" id="sellPrev" aria-label="Anterior">‹</button>
@@ -305,7 +306,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
   <div class="sell-cta">
     <div class="price">$<?= number_format((float)$plan_venta['precio_mensual'], 0) ?><span>/mes</span></div>
-    <div class="price-sub">Cancela cuando quieras · tu primer post ya es tuyo</div>
+    <div class="price-sub">Cancela cuando quieras · tus posts salen 100% tuyos, sin firma</div>
     <form method="post" action="/crecer/panel/crear_checkout.php">
       <?= csrf_field() ?>
       <input type="hidden" name="marca" value="<?= (int)$marca_id ?>">
