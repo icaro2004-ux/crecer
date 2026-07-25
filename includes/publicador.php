@@ -238,9 +238,16 @@ function publicar_pieza(PDO $pdo, int $contenido_id, array $override_plataformas
         if (!empty($conx['ig_user_id'])) $destinos[] = 'instagram';
         if (!empty($conx['fb_page_id'])) $destinos[] = 'facebook';
     }
+    // Solo intentar plataformas REALMENTE conectadas (IG necesita ig_user_id; FB, fb_page_id).
+    // Sin esto, pedir "ambas" con IG a medio activar tumbaba TODO a 'fallido' aunque FB publicara.
+    $destinos = array_values(array_filter($destinos, function ($pl) use ($conx) {
+        if ($pl === 'instagram') return !empty($conx['ig_user_id']);
+        if ($pl === 'facebook')  return !empty($conx['fb_page_id']);
+        return false;
+    }));
     if (!$destinos) {
         return finalizar_pieza($pdo, $contenido_id, $tok, false,
-            ['_plataforma' => 'La pieza no tiene plataforma válida (IG/FB). Usa «Ver en redes» para elegir dónde publicar.'], []);
+            ['_plataforma' => 'Conecta Instagram o Facebook para publicar tu post.'], []);
     }
 
     // 4) Publicar a cada plataforma (skip lo ya publicado OK).
@@ -285,7 +292,11 @@ function publicar_pieza(PDO $pdo, int $contenido_id, array $override_plataformas
         }
     }
 
-    $ok = empty($errores);
+    // Éxito si AL MENOS UNA plataforma publicó (o ya estaba publicada). Un fallo parcial
+    // (ej. IG falla pero FB sale) NO debe tumbar todo a 'fallido': el post SÍ salió a la calle.
+    // Los errores igual quedan logueados en crecer_publicaciones.
+    $exitos = array_filter($resultados, fn($v) => $v !== '' && $v !== null);
+    $ok = !empty($exitos);
     return finalizar_pieza($pdo, $contenido_id, $tok, $ok, $errores, $resultados);
 }
 
