@@ -162,6 +162,8 @@ $nombre  = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
 $caption = (string)($post['caption'] ?? '');
 // Texto para COPIAR/publicar manual: el post gratis lleva la firma de Crecer (los pagados, limpios).
 $caption_copiar = function_exists('firma_publicar') ? firma_publicar($pdo, $marca_id, $caption) : $caption;
+// La firma visible en el preview (solo si aplica = marca no pagada).
+$firma_txt = (defined('CRECER_FIRMA') && CRECER_FIRMA !== '' && function_exists('marca_es_pagada') && !marca_es_pagada($pdo, $marca_id)) ? CRECER_FIRMA : '';
 $grafica = (string)($post['grafica_path'] ?? '');
 $img_pending = (empty($grafica) && (($post['img_estado'] ?? '') === 'queued'));   // Responses generando en background
 $aprobado = in_array(($post['estado'] ?? ''), ['aprobado','fallido','publicando'], true);   // ya pasó del borrador → listo para (re)publicar
@@ -282,6 +284,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   <div class="card" style="margin-top:16px">
     <?php if ($grafica): ?><img class="img" src="<?= $h($grafica) ?>" alt=""><?php endif; ?>
     <?php if ($caption !== ''): ?><div class="cap"><?= $h($caption) ?></div><?php endif; ?>
+    <?php if ($firma_txt !== ''): ?><div class="cap" style="opacity:.6;font-size:13px;padding-top:0"><?= $h($firma_txt) ?></div><?php endif; ?>
   </div>
   <?php if ($ver_url !== ''): ?><a class="btn gho" style="margin-top:14px" href="<?= $h($ver_url) ?>" target="_blank" rel="noopener">Ver mi post en vivo →</a><?php endif; ?>
 
@@ -338,6 +341,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       <div class="noimg">Preparando tu arte…</div>
     <?php endif; ?>
     <div class="cap" id="capBox"><?= $caption !== '' ? $h($caption) : '<span style="color:var(--muted)">Sin texto todavía.</span>' ?></div>
+    <?php if ($firma_txt !== ''): ?><div class="cap" style="opacity:.55;font-size:13px;padding-top:0"><?= $h($firma_txt) ?></div><?php endif; ?>
     <textarea class="cap-edit" id="capEdit" style="display:none;margin:0 15px 15px"><?= $h($caption) ?></textarea>
   </div>
 
@@ -421,18 +425,45 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     var wait=document.getElementById('wait'); if(!wait) return;
     var STATUS=['Preparando el concepto…','Escribiendo tu titular…','Eligiendo los colores…','Buscando la idea que detiene el scroll…','Dándole el toque boricua…','Componiendo la escena…','Puliendo los detalles…'];
     var DECK=[
-      {e:'🇵🇷',k:'¿SABÍAS QUE…',t:'El coquí solo canta de noche — el macho pone el "co" para marcar territorio y el "quí" para enamorar. Puro marketing de la naturaleza.'},
-      {e:'📱',k:'DATO BORICUA',t:'La mayoría de la gente en PR descubre negocios nuevos por Instagram y Facebook. Ahí es donde tu corillo te pone a brillar.'},
-      {e:'🔥',k:'TIP DEL CORILLO',t:'Un post con imagen detiene el scroll muchísimo más que uno de solo texto. Por eso cuidamos tanto tu arte.'},
-      {e:'📸',k:'NOVEDAD',t:'¿Tienes fotos reales de tu producto? Súbelas y el corillo las realza. Lo real siempre gana.'},
-      {e:'🍢',k:'TRIVIA',t:'El pastelillo y la empanadilla son primos, no gemelos: la empanadilla es más grande y jugosa. Guerra eterna.'},
-      {e:'🔗',k:'TIP',t:'Conecta tu Instagram y Facebook una sola vez y el corillo publica por ti.'},
-      {e:'⏰',k:'DATO',t:'Las mejores horas para postear comida en PR: 11am (antojo de almuerzo) y 6pm (¿qué como hoy?).'},
-      {e:'🗣️',k:'POR QUÉ FUNCIONA',t:'Hablarle a la gente en boricua de verdad vende más que el español "de comercial". Autenticidad = confianza.'},
-      {e:'💬',k:'PRÓXIMAMENTE',t:'El corillo va a contestar los DMs de tus clientes por ti, en tu voz.'},
-      {e:'🎨',k:'NOVEDAD',t:'Tu arte ahora lo diseña un motor de última generación — más nítido y con tu nombre bien escrito.'},
+      // 🇵🇷 Orgullo / datos de Puerto Rico
+      {e:'🌊',k:'ORGULLO PR',t:'La Bahía Bioluminiscente de Vieques es la más brillante del mundo — récord Guinness. Aquí hasta el mar brilla.'},
+      {e:'🌴',k:'¿SABÍAS QUE…',t:'El Yunque es el único bosque tropical lluvioso del sistema forestal de Estados Unidos. Y está aquí, en la isla.'},
       {e:'☕',k:'ORGULLO PR',t:'Puerto Rico produce café de altura premiado a nivel mundial. Si vendes café, presúmelo sin pena.'},
-      {e:'🧠',k:'TIP',t:'Mientras más le cuentes a tu corillo sobre tu negocio, mejores te salen los posts.'}
+      {e:'🎶',k:'PA’L MUNDO',t:'La música boricua está sonando en todo el planeta. Lo de aquí llega lejos — tu negocio también puede.'},
+      {e:'🏅',k:'CAMPEONES',t:'Mónica Puig (2016) y Jasmine Camacho-Quinn (2020) trajeron oro olímpico a la isla. Aquí se echa pa’lante.'},
+      {e:'🗺️',k:'DATO BORICUA',t:'Puerto Rico tiene 78 municipios, cada uno con su sabor. Tu negocio es parte de esa historia.'},
+      {e:'🍢',k:'TRIVIA',t:'El pastelillo y la empanadilla son primos, no gemelos: la empanadilla es más grande y jugosa. Guerra eterna.'},
+      {e:'🐸',k:'¿SABÍAS QUE…',t:'El coquí solo canta de noche — el macho pone el "co" para marcar territorio y el "quí" para enamorar.'},
+      {e:'🥁',k:'CULTURA',t:'La bomba y la plena nacieron aquí. Ese ritmo de resistencia y celebración es el mismo con el que se levanta un negocio.'},
+
+      // 💪 Negocios que echan pa’lante (historias que inspiran)
+      {e:'💪',k:'ECHA PA’LANTE',t:'Muchas marcas boricuas grandes empezaron en una cocina, un garaje o un kiosco. El tuyo también puede.'},
+      {e:'🏪',k:'DATO REAL',t:'Los pequeños negocios son la columna de la economía boricua: la mayoría de los empleos salen de ellos. Tú mueves la isla.'},
+      {e:'🚀',k:'HISTORIA',t:'La repostera que empezó vendiendo por WhatsApp los domingos… hoy tiene fila. Todo empieza con un buen post.'},
+      {e:'🔁',k:'LA CLAVE',t:'Consistencia le gana a perfección: quien postea todas las semanas crece más que quien postea "cuando puede".'},
+      {e:'🌱',k:'ECHA PA’LANTE',t:'No necesitas ser experto en redes. Necesitas aparecer. De eso nos encargamos nosotros.'},
+
+      // 🌱 Crecer + XPRIZE
+      {e:'🏆',k:'CRECER VA AL XPRIZE',t:'Crecer compite en el Build with Gemini XPRIZE: IA que levanta al micronegocio boricua. Tú eres parte de esa historia.'},
+      {e:'🌱',k:'QUÉ ES CRECER',t:'Un departamento de marketing con IA para el negocio boricua — sin pagar una agencia cara. Tú apruebas, la IA hace el resto.'},
+      {e:'🤖',k:'TU VENTAJA',t:'Tu contenido lo crea IA de última generación — la misma tecnología de las grandes marcas, ahora de tu lado.'},
+      {e:'🇵🇷',k:'DE AQUÍ',t:'Crecer es hecho en Puerto Rico, para Puerto Rico. Entendemos tu mercado porque es el nuestro.'},
+      {e:'📲',k:'LA META',t:'Que tú solo apruebes desde el celular y tu equipo de IA corra el marketing del mes. Así de fácil.'},
+
+      // 🔥 Tips de marketing / redes
+      {e:'🔥',k:'TIP',t:'Un post con imagen detiene el scroll muchísimo más que uno de solo texto. Por eso cuidamos tanto tu arte.'},
+      {e:'📸',k:'TIP',t:'¿Tienes fotos reales de tu producto? Súbelas y tu equipo las realza. Lo real siempre gana.'},
+      {e:'⏰',k:'DATO',t:'Las mejores horas para postear comida en PR: 11am (antojo de almuerzo) y 6pm (¿qué como hoy?).'},
+      {e:'🗣️',k:'POR QUÉ FUNCIONA',t:'Mostrar a las personas detrás del negocio vende: la gente compra de gente, no de logos.'},
+      {e:'🎯',k:'TIP',t:'Un solo mensaje claro por post gana. No metas cinco ideas en uno.'},
+      {e:'📍',k:'NO FALLES',t:'Pon SIEMPRE cómo comprar: WhatsApp, link o dirección. Que nadie tenga que adivinar.'},
+      {e:'💬',k:'TIP',t:'Contesta los comentarios y DMs rápido: el algoritmo premia la conversación.'},
+      {e:'🎬',k:'TIP',t:'Los videos cortos (Reels) llegan a más gente nueva que las fotos. Prueba uno esta semana.'},
+      {e:'🔗',k:'TIP',t:'Conecta tu Instagram y Facebook una sola vez y tu equipo publica por ti.'},
+      {e:'📅',k:'NOVEDAD',t:'Con tu plan, tu equipo te arma el calendario del mes completo. Nunca más quedarte en blanco.'},
+      {e:'🧠',k:'TIP',t:'Mientras más le cuentes a tu equipo sobre tu negocio, mejores te salen los posts.'},
+      {e:'💡',k:'IDEA',t:'Cuenta el "por qué" de tu negocio de vez en cuando. La historia conecta más que el precio.'},
+      {e:'⭐',k:'TIP',t:'Comparte reseñas y fotos de clientes felices. La prueba social vende sola.'}
     ];
     for(var i=DECK.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var tmp=DECK[i]; DECK[i]=DECK[j]; DECK[j]=tmp; }
     var si=0, ci=0, st=document.getElementById('waitStatus');
