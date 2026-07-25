@@ -267,6 +267,11 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .price{font-family:var(--font-display,'Poppins');font-weight:800;font-size:40px;color:var(--tinta);line-height:1}
   .price span{font-size:16px;font-weight:600;color:var(--muted)}
   .price-sub{font-size:13px;color:var(--muted);margin:5px 0 13px}
+  .price-hook{font-size:14.5px;font-weight:800;color:var(--magenta,#EF4375);margin:3px 0 1px}
+  .vsell{margin:8px 0 2px}
+  .vsell-card{background:#fff;border:1px solid rgba(0,0,0,.06);border-radius:14px;padding:14px 15px;box-shadow:0 6px 20px rgba(35,31,32,.07);text-align:center}
+  .vs-emoji{font-size:24px;margin-bottom:5px}
+  .vs-text{font-size:14px;line-height:1.5;color:#3a3436;font-weight:600;transition:opacity .28s}
   /* Selector segmentado: la imagen con o sin texto (lo decide el dueño) */
   .imgmode{margin-top:14px}
   .imgmode .lbl{font-size:12.5px;font-weight:700;color:var(--muted);margin:0 2px 7px}
@@ -322,9 +327,13 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     </div>
   </div>
 
+  <!-- Deck rotativo de persuasión (lo económico + las bondades) -->
+  <div class="vsell"><div class="vsell-card"><div class="vs-emoji" id="vsEmoji">☕</div><div class="vs-text" id="vsText">…</div></div></div>
+
   <div class="sell-cta">
     <div class="price">$<?= number_format((float)$plan_venta['precio_mensual'], 0) ?><span>/mes</span></div>
-    <div class="price-sub">Cancela cuando quieras · tus posts salen 100% tuyos, sin firma</div>
+    <div class="price-hook">☕ Menos de $<?= number_format((float)$plan_venta['precio_mensual']/30, 2) ?> al día — más barato que tu cafecito.</div>
+    <div class="price-sub">Una agencia cobra cientos al mes por esto · Cancela cuando quieras · 100% tuyos</div>
     <form method="post" action="/crecer/panel/crear_checkout.php">
       <?= csrf_field() ?>
       <input type="hidden" name="marca" value="<?= (int)$marca_id ?>">
@@ -611,6 +620,26 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     var p=document.getElementById('sellPrev'), n=document.getElementById('sellNext');
     if(p)p.addEventListener('click',function(){go(-1);}); if(n)n.addEventListener('click',function(){go(1);});
   }
+  // Deck rotativo de persuasión (lo económico + las bondades).
+  (function(){
+    var el=document.getElementById('vsText'), em=document.getElementById('vsEmoji'); if(!el) return;
+    var V=[
+      {e:'☕',t:'Menos que un cafecito al día por tu marketing completo. Hazte la cuenta.'},
+      {e:'💸',t:'Una agencia de marketing cobra cientos de dólares al mes. Crecer hace el trabajo por una fracción.'},
+      {e:'🕒',t:'Deja de perder horas pensando qué postear. Tu equipo lo hace por ti, cada semana.'},
+      {e:'🌱',t:'Crecer es la herramienta del que echa pa\'lante desde abajo — hecha para el negocio pequeño, no para la corporación.'},
+      {e:'✅',t:'Cancela cuando quieras. Sin contratos, sin amarres, sin letra chiquita.'},
+      {e:'🎨',t:'Diseñador, redactor y estratega — todo en uno, por menos de lo que pagas por el internet del negocio.'},
+      {e:'📈',t:'Postear consistente hace crecer las ventas. Crecer te lo mantiene sin que tengas que acordarte.'},
+      {e:'📲',t:'Tú apruebas desde el celular en segundos. La IA corre el resto, día y noche.'},
+      {e:'💪',t:'Tu competencia ya está en redes. Con Crecer apareces mejor y más seguido, sin sudar.'},
+      {e:'🏷️',t:'Al suscribirte, tus posts salen 100% tuyos — sin firma de nadie.'},
+      {e:'🇵🇷',t:'Hecho en Puerto Rico para el negocio boricua. Entendemos tu mercado porque es el nuestro.'}
+    ];
+    for(var i=V.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=V[i]; V[i]=V[j]; V[j]=t; }
+    var k=0; function show(){ var c=V[k%V.length]; el.style.opacity=0; em.style.opacity=0; setTimeout(function(){ el.textContent=c.t; em.textContent=c.e; el.style.opacity=1; em.style.opacity=1; },280); }
+    show(); setInterval(function(){ k++; show(); },5000);
+  })();
 <?php endif; ?>
 })();
 </script>
