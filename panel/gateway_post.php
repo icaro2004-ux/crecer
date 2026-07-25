@@ -191,6 +191,15 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   /* La tarjeta del post — CLAVADA, es la protagonista */
   .card{background:var(--card,#fff);border:1px solid var(--line);border-radius:20px;overflow:hidden;box-shadow:var(--shadow-sm)}
   .card .img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:var(--crema-2,#efece7)}
+  /* Mockup estilo post de Instagram — que se vea REAL y den ganas de publicar */
+  .ig-top{display:flex;align-items:center;gap:9px;padding:11px 13px}
+  .ig-av{width:34px;height:34px;border-radius:50%;overflow:hidden;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#fff;background:linear-gradient(135deg,#FF6B3D,#EF4375)}
+  .ig-av img{width:100%;height:100%;object-fit:cover}
+  .ig-name{font-weight:700;font-size:14px;color:var(--tinta);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ig-more{color:var(--muted);font-weight:800;letter-spacing:1px}
+  .ig-actions{display:flex;gap:16px;align-items:center;padding:11px 14px 4px;font-size:22px;line-height:1}
+  .ig-actions .sp{flex:1}
+  .ig-actions span{cursor:default}
   .card .noimg{width:100%;aspect-ratio:1/1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:24px;color:var(--muted);font-size:14px;font-weight:600;background:var(--crema-2,#efece7)}
   .card .noimg .spin{width:38px;height:38px;border-radius:50%;border:4px solid rgba(0,0,0,.12);border-top-color:var(--magenta,#EF4375);animation:gspin .8s linear infinite}
   /* Pantalla de espera viva — el corillo trabajando */
@@ -281,8 +290,15 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   </div>
 
   <!-- SU POST (preview read-only — ya publicado, nada que ajustar) -->
+  <?php $av_logo_v = trim((string)($marca['logo_path'] ?? '')); ?>
   <div class="card" style="margin-top:16px">
-    <?php if ($grafica): ?><img class="img" src="<?= $h($grafica) ?>" alt=""><?php endif; ?>
+    <div class="ig-top">
+      <span class="ig-av"><?php if ($av_logo_v): ?><img src="<?= $h($av_logo_v) ?>" alt=""><?php else: ?><?= $h(mb_strtoupper(mb_substr($nombre, 0, 1))) ?><?php endif; ?></span>
+      <span class="ig-name"><?= $h($nombre) ?></span>
+      <span class="ig-more">•••</span>
+    </div>
+    <?php if ($grafica): ?><img class="img" src="<?= $h($grafica) ?>" alt="">
+    <div class="ig-actions"><span>♡</span><span>💬</span><span>➤</span><span class="sp"></span><span>🔖</span></div><?php endif; ?>
     <?php if ($caption !== ''): ?><div class="cap"><?= $h($caption) ?></div><?php endif; ?>
     <?php if ($firma_txt !== ''): ?><div class="cap" style="opacity:.6;font-size:13px;padding-top:0"><?= $h($firma_txt) ?></div><?php endif; ?>
   </div>
@@ -325,6 +341,12 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   <?php endif; ?>
 
   <div class="card">
+    <?php $av_logo = trim((string)($marca['logo_path'] ?? '')); ?>
+    <div class="ig-top">
+      <span class="ig-av"><?php if ($av_logo): ?><img src="<?= $h($av_logo) ?>" alt=""><?php else: ?><?= $h(mb_strtoupper(mb_substr($nombre, 0, 1))) ?><?php endif; ?></span>
+      <span class="ig-name"><?= $h($nombre) ?></span>
+      <span class="ig-more">•••</span>
+    </div>
     <?php if ($grafica): ?>
       <img class="img" src="<?= $h($grafica) ?>" alt="">
     <?php elseif ($img_pending): ?>
@@ -341,6 +363,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <?php else: ?>
       <div class="noimg">Preparando tu arte…</div>
     <?php endif; ?>
+    <?php if ($grafica): ?><div class="ig-actions"><span>♡</span><span>💬</span><span>➤</span><span class="sp"></span><span>🔖</span></div><?php endif; ?>
     <div class="cap" id="capBox"><?= $caption !== '' ? $h($caption) : '<span style="color:var(--muted)">Sin texto todavía.</span>' ?></div>
     <?php if ($firma_txt !== ''): ?><div class="cap" style="opacity:.55;font-size:13px;padding-top:0"><?= $h($firma_txt) ?></div><?php endif; ?>
     <textarea class="cap-edit" id="capEdit" style="display:none;margin:0 15px 15px"><?= $h($caption) ?></textarea>
