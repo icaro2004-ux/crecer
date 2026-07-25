@@ -132,16 +132,21 @@ function reels_analizar(PDO $pdo, array $reel, array $clips): array {
     $contexto = trim((string)($reel['contexto'] ?? ''));
 
     // Fotograma (1 por clip) → visión de Gemini. Duración → largo.
-    $imagenes = []; $lista = [];
+    // CLAVE: numeramos "Imagen #k" por el ORDEN REAL en que se envían las
+    // imágenes (no por el índice del clip), porque los clips sin fotograma no
+    // mandan imagen. Si no, un frame faltante desalinea todo y Gemini colapsa
+    // los segmentos al clip 0. Los clips sin frame igual se listan (por duración).
+    $imagenes = []; $lista = []; $imgno = 0;
     foreach ($clips as $i => $c) {
         $dur = $c['dur_orig'] !== null ? (float)$c['dur_orig'] : null;
-        $lista[] = "Clip {$i}: dura " . ($dur !== null ? number_format($dur, 1) . 's' : 'desconocida')
-                 . " — la Imagen #{$i} es un fotograma de este clip.";
+        $durtxt = $dur !== null ? number_format($dur, 1) . 's' : 'desconocida';
         $fabs = reels_frame_abs($marca_id, (int)$c['id']);
-        if (is_file($fabs)) {
+        if (is_file($fabs) && (@filesize($fabs) ?: 0) > 200) {
+            $imgno++;
             $imagenes[] = ['mime' => 'image/jpeg', 'data' => base64_encode((string)file_get_contents($fabs))];
+            $lista[] = "Clip {$i}: dura {$durtxt} — mira la Imagen #{$imgno} (su fotograma).";
         } else {
-            $imagenes[] = ['mime' => 'image/jpeg', 'data' => '']; // se ignora abajo; el índice se mantiene por claridad
+            $lista[] = "Clip {$i}: dura {$durtxt} — (sin fotograma, úsalo igual por su duración).";
         }
     }
 
@@ -157,28 +162,31 @@ function reels_analizar(PDO $pdo, array $reel, array $clips): array {
         . "enganchar en el primer segundo. Devuelve SOLO JSON válido."
         . reels_voz_sistema($marca);
 
-    $prompt = "Tengo " . count($clips) . " clips subidos por el dueño.\n"
+    $n = count($clips);
+    $prompt = "Tengo {$n} clips subidos por el dueño (clip 0 a clip " . ($n - 1) . "):\n"
         . implode("\n", $lista) . "\n\n"
         . ($contexto !== '' ? "Contexto que dio el dueño: \"{$contexto}\"\n\n" : "")
-        . "Arma el reel. Reglas de tiempo: cada segmento entre 1.2s y "
-        . number_format($preset['seg_max'], 1) . "s, dentro de la duración real del clip. "
-        . "Puedes repetir un clip si vale la pena, y puedes dejar clips fuera si no aportan.\n\n"
-        . "Devuelve EXACTAMENTE este JSON:\n"
+        . "Arma el reel MEZCLANDO los {$n} clips. REGLAS IMPORTANTES:\n"
+        . "- USA CADA UNO de los {$n} clips al menos UNA vez (es un montaje de todos, no un solo video).\n"
+        . "- ALTERNA entre clips distintos; NO pongas el mismo clip dos veces seguido.\n"
+        . "- Cada segmento entre 1.2s y " . number_format($preset['seg_max'], 1) . "s, dentro de la duración real del clip.\n"
+        . "- El campo \"clip\" es el número del clip (0 a " . ($n - 1) . ").\n\n"
+        . "Devuelve EXACTAMENTE este JSON (ejemplo con 3 clips distintos):\n"
         . "{\n"
-        . "  \"hook\": \"texto gancho MUY corto para el primer segundo (máx 5 palabras)\",\n"
+        . "  \"hook\": \"gancho MUY corto para el primer segundo (máx 5 palabras)\",\n"
         . "  \"musica_mood\": \"upbeat|energetico|elegante\",\n"
         . "  \"segmentos\": [\n"
-        . "    {\"clip\": 0, \"in\": 0.0, \"out\": 2.5, \"caption\": \"texto boricua corto\"}\n"
+        . "    {\"clip\": 0, \"in\": 0.0, \"out\": 2.2, \"caption\": \"texto corto\"},\n"
+        . "    {\"clip\": 1, \"in\": 0.5, \"out\": 2.6, \"caption\": \"texto corto\"},\n"
+        . "    {\"clip\": 2, \"in\": 0.0, \"out\": 2.4, \"caption\": \"texto corto\"}\n"
         . "  ],\n"
         . "  \"resumen\": \"1 línea: por qué este orden\"\n"
         . "}";
 
-    $imgs_validas = array_values(array_filter($imagenes, fn($im) => $im['data'] !== ''));
-
     $res = ia_ejecutar($pdo, 'reels', 'analizar_clips', $prompt, [
         'marca_id'       => $marca_id,
         'sistema'        => $sistema,
-        'imagenes'       => $imgs_validas,
+        'imagenes'       => $imagenes,
         'json'           => true,
         'max_tokens'     => 3000,
         'temperatura'    => 0.7,
@@ -191,7 +199,35 @@ function reels_analizar(PDO $pdo, array $reel, array $clips): array {
     if (!is_array($edl) || empty($edl['segmentos']) || !is_array($edl['segmentos'])) {
         throw new RuntimeException('El editor no devolvió un plan válido: ' . substr((string)$res['texto'], 0, 200));
     }
-    return reels_validar_edl($edl, $clips, $preset);
+    $edl = reels_validar_edl($edl, $clips, $preset);
+    // Red de seguridad: garantiza que TODOS los clips aparezcan (aunque Gemini
+    // colapse al primero). Es la promesa del producto: unir los videos que dio.
+    return reels_asegurar_cobertura($edl, $clips, $preset);
+}
+
+/** Si algún clip subido no quedó en el plan, lo intercala para que TODOS aparezcan. */
+function reels_asegurar_cobertura(array $edl, array $clips, array $preset): array {
+    $usados = [];
+    foreach ($edl['segmentos'] as $s) $usados[(int)$s['clip']] = true;
+    $faltan = [];
+    foreach ($clips as $i => $c) {
+        if (isset($usados[$i])) continue;
+        $dur = $c['dur_orig'] !== null ? (float)$c['dur_orig'] : 4.0;
+        $in  = $dur > 3 ? round($dur * 0.2, 2) : 0.0;
+        $out = min($dur, $in + min((float)$preset['seg_max'], 2.5));
+        if ($out <= $in) $out = $in + 1.2;
+        $faltan[] = ['clip' => $i, 'in' => round($in, 2), 'out' => round($out, 2), 'caption' => ''];
+    }
+    if (!$faltan) return $edl;
+    // Intercalar los faltantes entre los segmentos existentes (no todos al final).
+    $mezcla = []; $j = 0;
+    foreach ($edl['segmentos'] as $k => $s) {
+        $mezcla[] = $s;
+        if ($j < count($faltan) && $k % 1 === 0) { $mezcla[] = $faltan[$j++]; }
+    }
+    while ($j < count($faltan)) $mezcla[] = $faltan[$j++];
+    $edl['segmentos'] = $mezcla;
+    return $edl;
 }
 
 /** Sanea el EDL contra los clips reales (índices y tiempos válidos). */

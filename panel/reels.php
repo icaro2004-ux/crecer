@@ -207,6 +207,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    // ── Publicar el reel a IG/FB (reusa el publicador existente) ──
+    if ($accion === 'publicar') {
+        @set_time_limit(0);
+        $rid = (int)($_POST['reel_id'] ?? 0);
+        $r = $pdo->prepare("SELECT * FROM crecer_reels WHERE id=? AND marca_id=?");
+        $r->execute([$rid, $marca_id]); $reel = $r->fetch(PDO::FETCH_ASSOC);
+        if (!$reel) { echo json_encode(['ok'=>false,'err'=>'No encontrado.']); exit; }
+        if (!in_array($reel['estado'], ['listo','publicado'], true)) { echo json_encode(['ok'=>false,'err'=>'El reel todavía no está listo.']); exit; }
+
+        // Ruta LOCAL del mp4 (de la Biblioteca, o reconstruida).
+        $rel = null;
+        if (!empty($reel['activo_id'])) {
+            $a = $pdo->prepare("SELECT archivo FROM crecer_activos WHERE id=? AND marca_id=?");
+            $a->execute([(int)$reel['activo_id'], $marca_id]); $rel = $a->fetchColumn() ?: null;
+        }
+        if (!$rel) $rel = "marca_{$marca_id}/reels/final/{$rid}.mp4";
+        if (!is_file(reels_uploads_path() . '/' . $rel)) {
+            echo json_encode(['ok'=>false,'err'=>'El video aún no está guardado en el servidor. Espera unos segundos y reintenta.']); exit;
+        }
+
+        $caption = trim((string)($reel['copy_post'] ?? ''));
+        $destinos = array_values(array_intersect((array)($_POST['redes'] ?? ['instagram','facebook']), ['instagram','facebook']));
+        if (!$destinos) $destinos = ['instagram','facebook'];
+
+        // Crear la pieza (tipo reel) que apunta al mp4 y publicar con el motor existente.
+        $pdo->prepare("INSERT INTO crecer_contenido (marca_id, plataforma, tipo, caption, grafica_path, estado) VALUES (?, 'instagram','reel',?,?, 'aprobado')")
+            ->execute([$marca_id, $caption, $rel]);
+        $cid = (int)$pdo->lastInsertId();
+
+        require_once __DIR__ . '/../includes/publicador.php';
+        try { $res = publicar_pieza($pdo, $cid, $destinos); }
+        catch (Throwable $e) { echo json_encode(['ok'=>false,'err'=>'Publicar: ' . substr($e->getMessage(),0,200)]); exit; }
+
+        if (!empty($res['ok'])) {
+            $pdo->prepare("UPDATE crecer_reels SET estado='publicado' WHERE id=?")->execute([$rid]);
+            echo json_encode(['ok'=>true, 'resultados'=>$res['resultados'] ?? []], JSON_UNESCAPED_UNICODE); exit;
+        }
+        // Mensaje claro: primer texto explicativo del publicador (ej. "conecta tus redes").
+        $err = $res['motivo'] ?? 'No se pudo publicar.';
+        foreach (($res['resultados'] ?? []) as $k => $v) { if (is_string($v) && $v !== '' && $v !== 'ya publicada') { $err = $v; break; } }
+        echo json_encode(['ok'=>false, 'err'=>$err, 'conectar'=>(strpos($err,'conect')!==false||strpos($err,'redes')!==false)], JSON_UNESCAPED_UNICODE); exit;
+    }
+
     echo json_encode(['ok'=>false,'err'=>'Acción desconocida.']); exit;
 }
 
@@ -500,11 +543,13 @@ button{font-family:inherit;cursor:pointer}
           <button class="btn btn-ghost" id="ccopy" style="width:100%">📋 Copiar texto</button>
         </div>
         <div class="row" style="flex-wrap:wrap">
-          <a class="btn btn-go" id="rdl" download style="text-decoration:none;text-align:center">⬇️ Descargar</a>
-          <button class="btn btn-primary" id="redit" style="flex:1">✂️ Ajustar timing y textos</button>
+          <button class="btn btn-go" id="rpub" style="flex:1">📲 Publicar ahora</button>
         </div>
-        <div class="row" style="margin-top:10px">
-          <button class="btn btn-ghost" id="ragain" style="flex:1">Hacer otro reel</button>
+        <div id="pubmsg" style="display:none;margin-top:10px"></div>
+        <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:10px">
+          <a class="btn btn-ghost" id="rdl" download style="text-decoration:none;text-align:center;flex:1">⬇️ Descargar</a>
+          <button class="btn btn-ghost" id="redit" style="flex:1">✂️ Ajustar</button>
+          <button class="btn btn-ghost" id="ragain" style="flex:1">Hacer otro</button>
         </div>
       </div>
     </div>
@@ -553,6 +598,7 @@ button{font-family:inherit;cursor:pointer}
 
 <script>
 const CSRF = <?= json_encode($CSRF) ?>;
+const MARCA = <?= (int)$marca_id ?>;
 const HERE = location.pathname + '?marca=<?= $marca_id ?>';
 const $ = s => document.querySelector(s);
 let files = [];        // {file|url, activo_id, dur, frame}
@@ -627,7 +673,7 @@ function extractFrame(item){
   v.muted=true; v.playsInline=true; v.preload='auto'; v.crossOrigin='anonymous'; v.src=clipSrc(item);
   let done=false;
   const finish=()=>{ if(!done){done=true; renderClips();} };
-  const to=setTimeout(finish, 8000); // resiliente: si falla, seguimos con la duración
+  const to=setTimeout(finish, 14000); // resiliente: si falla, seguimos con la duración
   v.onloadedmetadata=()=>{
     item.dur = isFinite(v.duration)? v.duration : null;
     const t = item.dur? Math.min(item.dur/2, item.dur-0.1) : 0.1;
@@ -771,6 +817,22 @@ $('#cregen').onclick=async()=>{
 function showFail(msg){ go('fail'); $('#failmsg').textContent=msg; }
 $('#retry').onclick=()=>{ $('#crear').disabled=false; go(3); };
 $('#ragain').onclick=()=>{ files=[]; renderClips(); $('#contexto').value=''; go(1); };
+
+// ── Publicar a IG/FB (reusa el publicador del app) ──
+$('#rpub').onclick=async()=>{
+  if(!curReel) return;
+  const b=$('#rpub'), pm=$('#pubmsg'), old=b.textContent;
+  b.disabled=true; b.textContent='Publicando…'; pm.style.display='none';
+  const fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion','publicar'); fd.append('reel_id',curReel);
+  try{
+    const j=await (await fetch(HERE,{method:'POST',body:fd})).json();
+    pm.style.display='block';
+    if(j.ok){ b.textContent='✅ ¡Publicado!'; pm.innerHTML='<div class="savedchip">🎉 Tu reel se publicó en tus redes.</div>'; }
+    else{ b.disabled=false; b.textContent=old;
+      const link=j.conectar?(' <a href="/crecer/panel/conectar.php?marca='+MARCA+'" style="color:#9c2b2b;font-weight:800">Conectar mis redes →</a>'):'';
+      pm.innerHTML='<div class="err">'+(j.err||'No se pudo publicar.')+link+'</div>'; }
+  }catch(e){ b.disabled=false; b.textContent=old; pm.style.display='block'; pm.innerHTML='<div class="err">Se cayó la conexión. Reintenta.</div>'; }
+};
 
 // ── EDITOR de timing/captions ──
 $('#redit').onclick=async()=>{
