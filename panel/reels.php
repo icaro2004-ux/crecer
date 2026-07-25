@@ -848,10 +848,10 @@ async function pollPublish(){
     if(j.ok && j.error){ b.disabled=false; b.textContent='📲 Publicar ahora';
       const link=/conect|redes/i.test(j.error)?(' <a href="/crecer/panel/conectar.php?marca='+MARCA+'" style="color:#9c2b2b;font-weight:800">Conectar mis redes →</a>'):'';
       pm.innerHTML='<div class="err">'+j.error.replace(/^publicar:\s*/,'')+link+'</div>'; return; }
-    if(++pubTries>40){ b.disabled=false; b.textContent='📲 Publicar ahora';
-      pm.innerHTML='<div class="err">Está tardando más de lo normal. Revisa tus redes en un momento o reintenta.</div>'; return; }
+    if(++pubTries>90){ b.disabled=false; b.textContent='📲 Publicar ahora';
+      pm.innerHTML='<div class="savedchip" style="background:#fff5f8;color:var(--rosa)">📤 Sigue subiendo — te aviso en 🔔 Notificaciones cuando esté. Puedes seguir en lo tuyo.</div>'; return; }
     setTimeout(pollPublish, 3000);
-  }catch(e){ if(++pubTries>40){ pm.innerHTML='<div class="err">Se perdió el rastro. Revisa tus redes o reintenta.</div>'; return; } setTimeout(pollPublish, 4000); }
+  }catch(e){ if(++pubTries>90){ pm.innerHTML='<div class="savedchip" style="background:#fff5f8;color:var(--rosa)">📤 Sigue subiendo — te aviso en 🔔 Notificaciones.</div>'; return; } setTimeout(pollPublish, 4000); }
 }
 
 // ── EDITOR de timing/captions ──

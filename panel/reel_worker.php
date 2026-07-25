@@ -8,6 +8,7 @@
 // ============================================================
 require __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/reels.php';
+require_once __DIR__ . '/../includes/notif.php';
 
 $id  = (int)($_GET['id'] ?? 0);
 $key = (string)($_GET['key'] ?? '');
@@ -29,3 +30,13 @@ catch (Throwable $e) {
     error_log('reel_worker #' . $id . ': ' . $e->getMessage());
     try { reels_set($pdo, $id, ['estado' => 'failed', 'error_msg' => 'worker: ' . substr($e->getMessage(), 0, 300)]); } catch (Throwable $e2) {}
 }
+
+// Notificar el resultado del render (el usuario no se queda esperando).
+try {
+    $r = $pdo->query("SELECT marca_id, estado FROM crecer_reels WHERE id=" . (int)$id)->fetch(PDO::FETCH_ASSOC);
+    if ($r) {
+        $mid = (int)$r['marca_id']; $link = '/crecer/panel/reels.php?marca=' . $mid;
+        if ($r['estado'] === 'listo')       notif_crear($pdo, $mid, 'reel_listo', 'Tu reel está listo 🎬', 'El corillo lo montó. Míralo y publícalo cuando quieras.', $link, '🎬');
+        elseif ($r['estado'] === 'failed')  notif_crear($pdo, $mid, 'reel_error', 'No pude terminar tu reel', 'Algo se atravesó armando el reel. Intenta de nuevo.', $link, '⚠️');
+    }
+} catch (Throwable $e) {}

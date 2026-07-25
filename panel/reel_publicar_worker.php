@@ -9,6 +9,7 @@
 require __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/reels.php';
 require_once __DIR__ . '/../includes/publicador.php';
+require_once __DIR__ . '/../includes/notif.php';
 
 $rid   = (int)($_GET['id'] ?? 0);
 $cid   = (int)($_GET['cid'] ?? 0);
@@ -23,10 +24,13 @@ if (function_exists('fastcgi_finish_request')) { fastcgi_finish_request(); }
 @ignore_user_abort(true);
 @set_time_limit(0);
 
+$mid = (int)($pdo->query("SELECT marca_id FROM crecer_reels WHERE id=" . (int)$rid)->fetchColumn() ?: 0);
+$link = '/crecer/panel/reels.php?marca=' . $mid;
 try {
     $res = publicar_pieza($pdo, $cid, $redes);
     if (!empty($res['ok'])) {
         reels_set($pdo, $rid, ['estado' => 'publicado', 'error_msg' => null]);
+        if ($mid) notif_crear($pdo, $mid, 'reel_publicado', '¡Tu reel se publicó! 🎉', 'Ya está en tus redes (' . implode(' + ', $redes) . ').', $link, '🎬');
     } else {
         // Mensaje claro (primer texto explicativo del publicador).
         $err = $res['motivo'] ?? 'No se pudo publicar.';
@@ -34,8 +38,12 @@ try {
             if (is_string($v) && $v !== '' && $v !== 'ya publicada') { $err = $v; break; }
         }
         reels_set($pdo, $rid, ['error_msg' => 'publicar: ' . substr($err, 0, 300)]);  // estado sigue 'listo'
+        if ($mid) notif_crear($pdo, $mid, 'reel_error', 'No pude publicar tu reel', substr($err, 0, 200), $link, '⚠️');
     }
 } catch (Throwable $e) {
     error_log('reel_publicar_worker #' . $rid . ': ' . $e->getMessage());
-    try { reels_set($pdo, $rid, ['error_msg' => 'publicar: ' . substr($e->getMessage(), 0, 300)]); } catch (Throwable $e2) {}
+    try {
+        reels_set($pdo, $rid, ['error_msg' => 'publicar: ' . substr($e->getMessage(), 0, 300)]);
+        if ($mid) notif_crear($pdo, $mid, 'reel_error', 'No pude publicar tu reel', 'Hubo un problema técnico. Reintenta.', $link, '⚠️');
+    } catch (Throwable $e2) {}
 }
