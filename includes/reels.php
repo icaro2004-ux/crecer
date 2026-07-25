@@ -145,14 +145,17 @@ function reels_analizar(PDO $pdo, array $reel, array $clips): array {
         }
     }
 
+    $marca = reels_marca($pdo, $marca_id);
     $sistema = "Eres el editor de video del Corillo de Crecer, para un micronegocio "
-        . "boricua (repostería, comida, servicios). Montas un REEL vertical corto "
+        . "(repostería, comida, servicios). Montas un REEL vertical corto "
         . "(8–22s) para Instagram/Facebook. Estilo pedido: {$preset['nombre']} "
-        . "(ritmo {$preset['ritmo']}). Los captions van en español BORICUA auténtico, "
-        . "cortos (máx 6 palabras), con chispa, NUNCA traducidos ni 'AI slop'. "
+        . "(ritmo {$preset['ritmo']}). Los captions son cortos (máx 6 palabras), con "
+        . "gancho, y SIGUEN el tono/voz que el dueño configuró (abajo) — NO impongas "
+        . "jerga boricua si su voz no la pide. "
         . "NO inventes productos ni promesas que no se vean en el clip. "
         . "Escoge el mejor pedazo de cada clip (in/out) y el mejor ORDEN para "
-        . "enganchar en el primer segundo. Devuelve SOLO JSON válido.";
+        . "enganchar en el primer segundo. Devuelve SOLO JSON válido."
+        . reels_voz_sistema($marca);
 
     $prompt = "Tengo " . count($clips) . " clips subidos por el dueño.\n"
         . implode("\n", $lista) . "\n\n"
@@ -238,20 +241,40 @@ function reels_caption_asset(string $text, array $preset, bool $hook = false): a
     return ['type'=>'html', 'html'=>$html, 'css'=>$css, 'width'=>$bw, 'height'=>$bh, 'background'=>'transparent'];
 }
 
-/** Datos de la marca para el cierre + copy (nombre, WhatsApp, contacto, logo, voz). */
+/** Datos de la marca para el cierre + copy (incluye voz y los ejes tono_*). */
 function reels_marca(PDO $pdo, int $marca_id): ?array {
     try {
-        $st = $pdo->prepare("SELECT nombre_negocio, whatsapp, contacto_preferencia, logo_path, voz FROM crecer_marca WHERE id=?");
+        $st = $pdo->prepare("SELECT * FROM crecer_marca WHERE id=?");
         $st->execute([$marca_id]);
         return $st->fetch(PDO::FETCH_ASSOC) ?: null;
-    } catch (Throwable $e) {
-        // 'voz' podría no existir en algún esquema viejo → reintento sin ella.
-        try {
-            $st = $pdo->prepare("SELECT nombre_negocio, whatsapp, contacto_preferencia, logo_path FROM crecer_marca WHERE id=?");
-            $st->execute([$marca_id]);
-            return $st->fetch(PDO::FETCH_ASSOC) ?: null;
-        } catch (Throwable $e2) { return null; }
+    } catch (Throwable $e) { return null; }
+}
+
+/**
+ * Instrucción de VOZ/TONO del negocio para el SYS de los prompts del reel.
+ * REUSA el sistema de tono del app (tono_instruccion + reglas_idioma), que
+ * respeta los sliders que el dueño configuró. Si por lo que sea no cargan,
+ * cae a NEUTRO (NUNCA fuerza boricua). Así el reel suena como el negocio pidió.
+ */
+function reels_voz_sistema(?array $m): string {
+    if (!$m) return '';
+    if (!function_exists('tono_instruccion')) {
+        $p = __DIR__ . '/agentes.php';
+        if (is_file($p)) { try { require_once $p; } catch (Throwable $e) {} }
     }
+    $out = '';
+    if (function_exists('reglas_idioma'))   $out .= "\n\nIDIOMA:\n" . reglas_idioma($m);
+    if (function_exists('tono_instruccion')) $out .= tono_instruccion($m);
+    if ($out === '') {
+        // Fallback sin agentes.php: neutro, salvo que el negocio pida boricua alto.
+        $bor = (int)($m['tono_boricua'] ?? 0);
+        $pre = strtolower(trim((string)($m['tono_preset'] ?? '')));
+        $es_bor = $pre === 'boricua' || ($pre === '' && $bor >= 67);
+        $out = $es_bor
+            ? "\n\nVOZ: español puertorriqueño auténtico, cálido, nunca traducido ni 'AI slop'."
+            : "\n\nVOZ: español NEUTRO, claro y correcto, SIN jerga ni regionalismos boricuas. Nunca traducido ni 'AI slop'.";
+    }
+    return $out;
 }
 
 /**
@@ -613,10 +636,12 @@ function reels_generar_copy(PDO $pdo, array $reel, ?array $marca): ?string {
     $pref     = (string)($marca['contacto_preferencia'] ?? '');
     $cta_via  = ($wa !== '' && $pref !== 'dm') ? 'WhatsApp' : 'DM/mensaje directo';
 
-    $sistema = "Eres el community manager boricua de \"{$negocio}\". Escribes el copy "
-        . "de un Reel para Instagram/Facebook. Español BORICUA auténtico, cálido y "
-        . "vendedor, NUNCA traducido ni 'AI slop'. " . ($voz !== '' ? "Voz del negocio: {$voz}. " : "")
-        . "No inventes productos ni promesas que no estén en el contenido.";
+    $sistema = "Eres el community manager de \"{$negocio}\". Escribes el copy de un Reel "
+        . "para Instagram/Facebook. SIGUE EXACTAMENTE el tono/voz que el dueño configuró "
+        . "(abajo); NO impongas jerga boricua si su voz no la pide. Cálido y claro. "
+        . ($voz !== '' ? "Notas de cómo habla el negocio: {$voz}. " : "")
+        . "No inventes productos ni promesas que no estén en el contenido."
+        . reels_voz_sistema($marca);
     $prompt = "El reel muestra:\n"
         . ($hook !== '' ? "- Gancho: {$hook}\n" : "")
         . ($caps ? "- Momentos: " . implode(' · ', array_slice($caps, 0, 8)) . "\n" : "")
