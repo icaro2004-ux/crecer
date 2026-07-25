@@ -15,6 +15,8 @@ $plan_etq = suscripcion_etiqueta($susc);
 $u_actual = usuario_actual($pdo);
 $es_admin = (($u_actual['rol'] ?? '') === 'admin');
 $viendo_como_admin = ($es_admin && (int)$marca['usuario_id'] !== (int)($u_actual['id'] ?? 0));
+require_once __DIR__ . '/../includes/notif.php';
+$notif_nl = function_exists('notif_no_leidas') ? notif_no_leidas($pdo, $marca_id) : 0;
 // Navegación PRINCIPAL — solo el loop del producto (contenido para redes).
 // Gráficas, Órdenes, Clientela, Cuentas, Analítica y Evidencia salieron del
 // menú (siguen accesibles por URL / por el perfil; reversible).
@@ -22,6 +24,7 @@ $nav = [
   ['key'=>'inicio',    'ic'=>'home',    'lb'=>'Inicio',     'hr'=>"$BASE/index.php?marca=$marca_id"],
   ['key'=>'contenido', 'ic'=>'image','lb'=>'Propuestas',  'hr'=>"$BASE/propuestas.php?marca=$marca_id"],
   ['key'=>'sala',      'ic'=>'sparkles','lb'=>'La Sala',    'hr'=>"$BASE/sala.php?marca=$marca_id"],
+  ['key'=>'reels',     'ic'=>'camera',  'lb'=>'Reels',      'hr'=>"$BASE/reels.php?marca=$marca_id"],
   ['key'=>'equipo',    'ic'=>'users',   'lb'=>'Tu equipo',  'hr'=>"$BASE/equipo.php?marca=$marca_id"],
   ['key'=>'resultados','ic'=>'chart',   'lb'=>'Resultados', 'hr'=>"$BASE/resultados.php?marca=$marca_id"],
   ['key'=>'marca',     'ic'=>'palette', 'lb'=>'Mi marca',   'hr'=>"$BASE/marca.php?marca=$marca_id"],
@@ -57,6 +60,10 @@ $nav_perfil = [
           <?= ico($n['ic']) ?><?= $n['lb'] ?>
         </a>
       <?php endforeach; ?>
+      <a href="<?= $BASE ?>/notificaciones_centro.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='notif'?'on':'' ?>" style="position:relative">
+        <?= ico('inbox') ?>Notificaciones
+        <?php if ($notif_nl > 0): ?><span style="position:absolute;top:50%;right:12px;transform:translateY(-50%);background:var(--rosa);color:#fff;font-size:11px;font-weight:800;min-width:19px;height:19px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px"><?= $notif_nl > 9 ? '9+' : $notif_nl ?></span><?php endif; ?>
+      </a>
     </nav>
     <?php
       $mis_negocios = $pdo->prepare("SELECT id, nombre_negocio FROM crecer_marca WHERE usuario_id = ? ORDER BY id");
@@ -100,6 +107,7 @@ $nav_perfil = [
     <div class="ptop">
       <a href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit">
         <img src="/crecer/assets/brand/crecer-icon.png" alt="Inicio"><b>encuéntralo <span style="color:var(--teal)">crecer</span></b></a>
+      <a href="<?= $BASE ?>/notificaciones_centro.php?marca=<?= $marca_id ?>" aria-label="Notificaciones" style="position:relative;margin-left:auto;margin-right:6px;display:flex;align-items:center;text-decoration:none;font-size:21px;line-height:1">🔔<?php if ($notif_nl > 0): ?><span style="position:absolute;top:-5px;right:-7px;background:var(--rosa);color:#fff;font-size:10px;font-weight:800;min-width:16px;height:16px;border-radius:999px;display:flex;align-items:center;justify-content:center;padding:0 4px"><?= $notif_nl > 9 ? '9+' : $notif_nl ?></span><?php endif; ?></a>
       <button id="burger" class="ptop-menu" aria-label="Abrir menú">
         <span class="bars" aria-hidden="true"><span></span><span></span><span></span></span>
         <span class="av"><?= $h(mb_strtoupper(mb_substr($marca['nombre_negocio'],0,1))) ?></span>
