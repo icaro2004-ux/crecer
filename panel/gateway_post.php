@@ -400,6 +400,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 (function(){
   var CSRF=<?= json_encode(csrf_token()) ?>, MARCA=<?= (int)$marca_id ?>, PID=<?= (int)$post_id ?>, GW=<?= json_encode($gwq) ?>, PLATS=<?= json_encode(implode(',', $redes_conectadas)) ?>;
   var IMG_PENDING=<?= $img_pending ? 'true' : 'false' ?>;
+  var NEEDS_PHONE=<?= $necesita_telefono ? 'true' : 'false' ?>;   // aún no verificó su celular → gate para bajar/copiar/publicar
   var toast=document.getElementById('toast');
   function T(m){ toast.textContent=m; toast.classList.add('on'); setTimeout(function(){toast.classList.remove('on');},2200); }
   function self(accion, extra){ var fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion',accion); for(var k in (extra||{})) fd.append(k,extra[k]); return fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}); }
@@ -565,7 +566,12 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
   // Publicar manual (bajar + copiar)
   var btnManual=document.getElementById('btnManual');
-  if(btnManual) btnManual.addEventListener('click',function(){ actsP.style.display='none'; actsM.style.display=''; window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'}); });
+  if(btnManual) btnManual.addEventListener('click',function(){
+    function reveal(){ actsP.style.display='none'; actsM.style.display=''; window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'}); }
+    // GATE: bajar la imagen / copiar el texto exige verificar el celular primero.
+    if(NEEDS_PHONE){ window.crecerSmsGate.open(function(){ NEEDS_PHONE=false; reveal(); }); return; }
+    reveal();
+  });
   var btnCopiar=document.getElementById('btnCopiar');
   if(btnCopiar) btnCopiar.addEventListener('click',function(){ var t=<?= json_encode($caption_copiar) ?>; if(navigator.clipboard){ navigator.clipboard.writeText(t).then(function(){T('Texto copiado ✓');},function(){T('Copia el texto a mano');}); } else T('Copia el texto a mano'); });
   // "Ya lo publiqué" (manual) → marca publicado con el gate SMS y pasa a venta.
