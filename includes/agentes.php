@@ -956,22 +956,48 @@ function marca_contexto(array $m): string {
          . "Descripción: " . ($m['descripcion'] ?: 'n/d') . "\n"
          . "Productos: {$prod}\n"
          . "Público: " . ($m['publico_objetivo'] ?: 'n/d') . "\n"
-         . "Voz/tono: " . ($m['voz'] ?: 'boricua cercano') . "\n"
+         . "Voz/tono: " . ($m['voz'] ?: (voz_es_boricua($m) ? 'boricua cercano' : 'neutro profesional')) . "\n"
          . "Ofertas: " . ($m['ofertas'] ?: 'n/d');
+}
+
+/**
+ * ¿El dueño eligió la voz BORICUA? SOLO entonces se usa jerga / diccionario / sabor
+ * boricua en el contenido generado. Cualquier otra voz (profesional / creativo / cálido /
+ * vendedor) = español NEUTRO con su registro. Robusto ante tono_preset NULL (marcas
+ * creadas por el onboarding viejo): cae al umbral del nivel-2 de tono.
+ */
+function voz_es_boricua(array $m): bool {
+    $preset = strtolower(trim((string)($m['tono_preset'] ?? '')));
+    if ($preset !== '') return $preset === 'boricua';
+    return (int)($m['tono_boricua'] ?? 0) >= 67;
+}
+
+/** Reglas de IDIOMA para el SYS del escritor: boricua auténtico vs. español neutro. */
+function reglas_idioma(array $m): string {
+    if (voz_es_boricua($m)) {
+        return "- Español puertorriqueño AUTÉNTICO, nunca traducido ni \"AI slop\".\n"
+             . "- Vocabulario local (bizcocho, no \"tarta\"; chavos; nene/nena; etc.).";
+    }
+    return "- Español NEUTRO, claro y correcto — SIN regionalismos ni jerga boricua (nada de wepa, nene/nena, brutal, chévere, \"pa'\", \"mi gente\"). Nunca traducido ni \"AI slop\".\n"
+         . "- Vocabulario estándar del español; ortografía y gramática impecables.";
 }
 
 /**
  * Bloque de instrucción de TONO para el prompt del creador, a partir de los
  * 4 ejes (0-100) que el dueño definió en la pantalla de Marca. Degrada con
  * gracia: si la marca no tiene columnas de tono, devuelve "".
+ * El "Sabor" boricua SOLO aplica si la voz elegida es Boricua (voz_es_boricua).
  */
 function tono_instruccion(array $m): string {
     if (!isset($m['tono_boricua'])) return '';
+    $boricua = voz_es_boricua($m);
     $bk = fn($x) => $x < 34 ? 0 : ($x < 67 ? 1 : 2);
-    $b = $bk((int)$m['tono_boricua']); $f = $bk((int)$m['tono_formal']);
+    $b = $boricua ? $bk((int)$m['tono_boricua']) : 0;   // sin voz Boricua → sabor SIEMPRE neutro
+    $f = $bk((int)$m['tono_formal']);
     $v = $bk((int)$m['tono_venta']);   $g = $bk((int)$m['tono_ingenio']);
     $B = [
-        'Español neutral, sin regionalismos marcados.',
+        $boricua ? 'Español neutral, sin regionalismos marcados.'
+                 : 'Español NEUTRO y correcto: SIN jerga ni regionalismos boricuas (nada de wepa, nene/nena, brutal, chévere, "pa\'", "mi gente"). Suena natural y profesional, nunca traducido.',
         'Español con sabor boricua moderado.',
         'Bien boricua: usa expresiones de la isla (mi gente, brutal, chévere, "pa\'", nene/nena) con naturalidad — pero NO arranques todos los posts igual: EVITA empezar siempre con "wepa mi gente"; varía el saludo y el gancho.',
     ][$b];
@@ -988,9 +1014,10 @@ function tono_instruccion(array $m): string {
     $G = [
         'Sobrio y directo, sin chistes.',
         'Con una chispa ligera de gracia.',
-        'Jocoso: mete humor boricua y algún juego de palabras, sin perder el mensaje.',
+        $boricua ? 'Jocoso: mete humor boricua y algún juego de palabras, sin perder el mensaje.'
+                 : 'Jocoso: humor ingenioso y algún juego de palabras, sin perder el mensaje.',
     ][$g];
-    $emoji = ((int)$m['tono_boricua'] + (int)$m['tono_ingenio']) / 2;
+    $emoji = $boricua ? ((int)$m['tono_boricua'] + (int)$m['tono_ingenio']) / 2 : (int)$m['tono_ingenio'];
     $E = $emoji < 28 ? 'Casi sin emojis.' : ($emoji > 66 ? 'Emojis con libertad (2-4).' : '1-2 emojis.');
     return "\n\nTONO DE VOZ (el dueño lo definió con los controles — RESPÉTALO por encima de la regla genérica de tono):\n"
          . "- Sabor: {$B}\n- Formalidad: {$F}\n- Venta: {$V}\n- Humor: {$G}\n- Emojis: {$E}";
@@ -1550,8 +1577,8 @@ function criticar_y_afinar(PDO $pdo, int $marca_id, string $caption, string $bri
     if ($caption === '') return ['caption' => $caption, 'nota' => ''];
     try {
         $sysC = "Eres EL DIRECTOR CREATIVO de Crecer, exigente de verdad. Juzga este caption con vara ALTA: ¿frena el "
-            . "scroll?, ¿el gancho es fuerte y ESPECÍFICO (no genérico ni tibio)?, ¿suena a persona boricua real (no a "
-            . "IA)?, ¿cumple el brief?, ¿da ganas de comprar o compartir? Si YA está a la altura, responde EXACTO: OK. "
+            . "scroll?, ¿el gancho es fuerte y ESPECÍFICO (no genérico ni tibio)?, ¿suena a persona real (no a IA), "
+            . "en la voz del negocio?, ¿cumple el brief?, ¿da ganas de comprar o compartir? Si YA está a la altura, responde EXACTO: OK. "
             . "Si NO, responde en UNA sola frase la nota más importante para subirlo (qué cambiar para que pegue más). "
             . "No reescribas tú. No inventes datos del negocio.";
         $promC = ($brief !== '' ? "Brief del corillo: {$brief}\n\n" : '') . "Caption a juzgar:\n\"{$caption}\"\n\n¿OK, o cuál es la nota?";
@@ -1629,12 +1656,12 @@ function redactar_pieza(PDO $pdo, int $contenido_id, array $extra = []): array {
     $sistema = <<<SYS
 Eres el CREADOR de contenido de Crecer. Escribes captions para redes
 sociales de microempresas boricuas. Reglas:
-- Español puertorriqueño AUTÉNTICO, nunca traducido ni "AI slop".
-- Vocabulario local (bizcocho, no "tarta"; chavos; nene/nena; etc.).
+{IDIOMA}
 - Tono según la voz del negocio. 1-2 emojis máximo.
 - Cierra con un llamado a la acción (según la vía de contacto de abajo) y 3-4 hashtags locales.
 - Máximo 60 palabras. Devuelve SOLO el caption, sin comillas ni explicación.
 SYS;
+    $sistema = str_replace('{IDIOMA}', reglas_idioma($m), $sistema);   // boricua vs. neutro según la voz elegida
     $sistema .= "\n" . contacto_instruccion($m);
     if (!empty($m['glosario'])) {
         $sistema .= "\n\nVOCABULARIO DEL NEGOCIO (el dueño lo corrigió — RESPÉTALO SIEMPRE, no repitas los errores):\n" . $m['glosario'];
@@ -1692,12 +1719,12 @@ function redactar_sugerido(PDO $pdo, int $contenido_id, string $tema = '', strin
     $sistema = <<<SYS
 Eres el CREADOR de contenido de Crecer. Escribes captions para redes
 sociales de microempresas boricuas. Reglas:
-- Español puertorriqueño AUTÉNTICO, nunca traducido ni "AI slop".
-- Vocabulario local (bizcocho, no "tarta"; chavos; nene/nena; etc.).
+{IDIOMA}
 - Tono según la voz del negocio. 1-2 emojis máximo.
 - Cierra con un llamado a la acción (según la vía de contacto de abajo) y 3-4 hashtags locales.
 - Máximo 60 palabras. Devuelve SOLO el caption, sin comillas ni explicación.
 SYS;
+    $sistema = str_replace('{IDIOMA}', reglas_idioma($m), $sistema);   // boricua vs. neutro según la voz elegida
     $sistema .= "\n" . contacto_instruccion($m);
     if (!empty($m['glosario'])) {
         $sistema .= "\n\nVOCABULARIO DEL NEGOCIO (el dueño lo corrigió — RESPÉTALO SIEMPRE, no repitas los errores):\n" . $m['glosario'];
@@ -1713,7 +1740,7 @@ SYS;
     $debate = ['brief' => '', 'visual' => '', 'angulos' => [], 'elegido' => '', 'razon' => ''];
     if (trim($borrador) !== '') {
         $prompt .= "El DUEÑO escribió este BORRADOR del post. MEJÓRALO: corrige, pule y dale chispa "
-                 . "boricua, pero RESPETA su intención y sus datos (precios, fechas, productos). "
+                 . "y personalidad EN LA VOZ DEL NEGOCIO (según el tono de arriba), pero RESPETA su intención y sus datos (precios, fechas, productos). "
                  . "No lo cambies por completo ni inventes datos.\n\nBORRADOR DEL DUEÑO:\n\"{$borrador}\"\n";
         if (trim($tema) !== '') $prompt .= "Tema/contexto extra: {$tema}\n";
     } else {
@@ -1893,10 +1920,13 @@ function mensaje_retencion(PDO $pdo, int $marca_id, array $cli, string $segmento
     ];
     $guia = $guias[$segmento] ?? $guias['dormido'];
 
+    $idioma_ret = voz_es_boricua($m)
+        ? '- Español puertorriqueño AUTÉNTICO, cálido y personal. Nunca "AI slop".'
+        : '- Español NEUTRO, cálido y personal, SIN jerga boricua (nada de wepa/nene/brutal). Nunca "AI slop".';
     $sistema = <<<SYS
 Eres el agente de RETENCIÓN de Crecer. Escribes mensajes de WhatsApp para que
-un negocio boricua le hable a UN cliente suyo. Reglas:
-- Español puertorriqueño AUTÉNTICO, cálido y personal. Nunca "AI slop".
+un negocio le hable a UN cliente suyo. Reglas:
+{$idioma_ret}
 - CORTO: 2-4 frases, como un mensaje real de WhatsApp. 1 emoji máximo.
 - Tutea al cliente por su nombre. Suena a persona, no a campaña.
 - No inventes precios ni promesas que el negocio no dijo.

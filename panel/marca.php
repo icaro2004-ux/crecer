@@ -64,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             foreach (['boricua','formal','venta','ingenio'] as $k)
                 $m['tono_'.$k] = max(0, min(100, (int)($_POST['t_'.$k] ?? ($m['tono_'.$k] ?? 50))));
             $ctx = marca_contexto($m);
-            $sistema = "Eres el CREADOR de contenido de Crecer. Escribes captions cortos para redes sociales de microempresas boricuas. Español puertorriqueño AUTÉNTICO, nunca traducido ni \"AI slop\". Vocabulario local. Máximo 45 palabras por caption.\n" . contacto_instruccion($m) . tono_instruccion($m);
+            $sistema = "Eres el CREADOR de contenido de Crecer. Escribes captions cortos para redes sociales de microempresas boricuas.\n" . reglas_idioma($m) . "\nMáximo 45 palabras por caption.\n" . contacto_instruccion($m) . tono_instruccion($m);
             $prompt = "Perfil del negocio:\n{$ctx}\n\nEscribe TRES (3) captions DISTINTOS para un post que promociona el negocio o su producto principal, los tres en EXACTAMENTE el mismo tono indicado arriba. Sepáralos con una línea que diga solo: ===\nNo los numeres, no pongas títulos, no expliques nada.";
             $r = ia_ejecutar($pdo, 'creador', 'Vista previa de tono', $prompt, [
                 'marca_id' => $marca_id, 'sistema' => $sistema,
