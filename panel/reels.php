@@ -231,27 +231,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $destinos = array_values(array_intersect((array)($_POST['redes'] ?? ['instagram','facebook']), ['instagram','facebook']));
         if (!$destinos) $destinos = ['instagram','facebook'];
 
-        // Crear la pieza (tipo reel) que apunta al mp4 y publicar con el motor existente.
-        // OJO: guardamos la URL PÚBLICA COMPLETA (no la ruta pelada). Con la ruta
-        // relativa sin '/uploads/', imagen_url_publica() armaba .../crecer/marca_1/...
-        // (sin 'uploads') → Meta daba 404 "unable to fetch video file from URL".
+        // Crear la pieza (tipo reel) que apunta al mp4. Guardamos la URL PÚBLICA
+        // COMPLETA (no la ruta pelada): con la ruta relativa sin '/uploads/',
+        // imagen_url_publica() armaba .../crecer/marca_1/... (sin 'uploads') → Meta
+        // daba 404 "unable to fetch video file from URL".
         $video_pub = reels_public_url($rel);
         $pdo->prepare("INSERT INTO crecer_contenido (marca_id, plataforma, tipo, caption, grafica_path, estado) VALUES (?, 'instagram','reel',?,?, 'aprobado')")
             ->execute([$marca_id, $caption, $video_pub]);
         $cid = (int)$pdo->lastInsertId();
 
-        require_once __DIR__ . '/../includes/publicador.php';
-        try { $res = publicar_pieza($pdo, $cid, $destinos); }
-        catch (Throwable $e) { echo json_encode(['ok'=>false,'err'=>'Publicar: ' . substr($e->getMessage(),0,200)]); exit; }
+        // Publicar es LENTO (Meta procesa el video) → async, o el request se cae.
+        // Limpiamos el error, disparamos el worker y el frontend hace polling.
+        $pdo->prepare("UPDATE crecer_reels SET error_msg=NULL WHERE id=?")->execute([$rid]);
+        $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
+        $sch  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $wurl = $sch . '://' . $host . '/crecer/panel/reel_publicar_worker.php?id=' . $rid . '&cid=' . $cid
+              . '&redes=' . rawurlencode(implode(',', $destinos)) . '&key=' . REELS_WORKER_KEY;
+        $ch = curl_init($wurl);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_CONNECTTIMEOUT_MS=>1500, CURLOPT_TIMEOUT_MS=>3000, CURLOPT_NOSIGNAL=>1, CURLOPT_SSL_VERIFYPEER=>false]);
+        curl_exec($ch); curl_close($ch);
 
-        if (!empty($res['ok'])) {
-            $pdo->prepare("UPDATE crecer_reels SET estado='publicado' WHERE id=?")->execute([$rid]);
-            echo json_encode(['ok'=>true, 'resultados'=>$res['resultados'] ?? []], JSON_UNESCAPED_UNICODE); exit;
-        }
-        // Mensaje claro: primer texto explicativo del publicador (ej. "conecta tus redes").
-        $err = $res['motivo'] ?? 'No se pudo publicar.';
-        foreach (($res['resultados'] ?? []) as $k => $v) { if (is_string($v) && $v !== '' && $v !== 'ya publicada') { $err = $v; break; } }
-        echo json_encode(['ok'=>false, 'err'=>$err, 'conectar'=>(strpos($err,'conect')!==false||strpos($err,'redes')!==false)], JSON_UNESCAPED_UNICODE); exit;
+        echo json_encode(['ok'=>true, 'publishing'=>true], JSON_UNESCAPED_UNICODE); exit;
     }
 
     echo json_encode(['ok'=>false,'err'=>'Acción desconocida.']); exit;
@@ -823,6 +823,7 @@ $('#retry').onclick=()=>{ $('#crear').disabled=false; go(3); };
 $('#ragain').onclick=()=>{ files=[]; renderClips(); $('#contexto').value=''; go(1); };
 
 // ── Publicar a IG/FB (reusa el publicador del app) ──
+let pubTries=0;
 $('#rpub').onclick=async()=>{
   if(!curReel) return;
   const b=$('#rpub'), pm=$('#pubmsg'), old=b.textContent;
@@ -830,13 +831,28 @@ $('#rpub').onclick=async()=>{
   const fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion','publicar'); fd.append('reel_id',curReel);
   try{
     const j=await (await fetch(HERE,{method:'POST',body:fd})).json();
-    pm.style.display='block';
-    if(j.ok){ b.textContent='✅ ¡Publicado!'; pm.innerHTML='<div class="savedchip">🎉 Tu reel se publicó en tus redes.</div>'; }
-    else{ b.disabled=false; b.textContent=old;
+    if(!j.ok){ b.disabled=false; b.textContent=old; pm.style.display='block';
       const link=j.conectar?(' <a href="/crecer/panel/conectar.php?marca='+MARCA+'" style="color:#9c2b2b;font-weight:800">Conectar mis redes →</a>'):'';
-      pm.innerHTML='<div class="err">'+(j.err||'No se pudo publicar.')+link+'</div>'; }
-  }catch(e){ b.disabled=false; b.textContent=old; pm.style.display='block'; pm.innerHTML='<div class="err">Se cayó la conexión. Reintenta.</div>'; }
+      pm.innerHTML='<div class="err">'+(j.err||'No se pudo publicar.')+link+'</div>'; return; }
+    // Publicando por detrás → polling.
+    pm.style.display='block'; pm.innerHTML='<div class="pill" style="background:#fff5f8;color:var(--rosa)">📤 Subiendo a tus redes… (Meta procesa el video, aguanta ~1 min)</div>';
+    pubTries=0; pollPublish();
+  }catch(e){ b.disabled=false; b.textContent=old; pm.style.display='block'; pm.innerHTML='<div class="err">Se cayó la conexión al arrancar. Reintenta.</div>'; }
 };
+async function pollPublish(){
+  const b=$('#rpub'), pm=$('#pubmsg');
+  const fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion','estado'); fd.append('reel_id',curReel);
+  try{
+    const j=await (await fetch(HERE,{method:'POST',body:fd})).json();
+    if(j.ok && j.estado==='publicado'){ b.textContent='✅ ¡Publicado!'; pm.innerHTML='<div class="savedchip">🎉 Tu reel se publicó en tus redes.</div>'; return; }
+    if(j.ok && j.error){ b.disabled=false; b.textContent='📲 Publicar ahora';
+      const link=/conect|redes/i.test(j.error)?(' <a href="/crecer/panel/conectar.php?marca='+MARCA+'" style="color:#9c2b2b;font-weight:800">Conectar mis redes →</a>'):'';
+      pm.innerHTML='<div class="err">'+j.error.replace(/^publicar:\s*/,'')+link+'</div>'; return; }
+    if(++pubTries>40){ b.disabled=false; b.textContent='📲 Publicar ahora';
+      pm.innerHTML='<div class="err">Está tardando más de lo normal. Revisa tus redes en un momento o reintenta.</div>'; return; }
+    setTimeout(pollPublish, 3000);
+  }catch(e){ if(++pubTries>40){ pm.innerHTML='<div class="err">Se perdió el rastro. Revisa tus redes o reintenta.</div>'; return; } setTimeout(pollPublish, 4000); }
+}
 
 // ── EDITOR de timing/captions ──
 $('#redit').onclick=async()=>{
