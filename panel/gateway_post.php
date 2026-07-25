@@ -289,7 +289,31 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <span class="step"><?= $publicado ? '¡Listo!' : ($aprobado ? 'Paso 3 de 3' : 'Paso 2 de 3') ?></span>
   </div>
 
-<?php if ($publicado): /* ── VENTA: celebración → carrusel de bondades → precio → suscribir ── */ ?>
+<?php if ($publicado): /* ── VENTA: PROMO animada (se corre sola → X para cerrar) sobre el preview + precio ── */ ?>
+  <!-- PROMO: corre sola con fade-ins; al terminar sale la X para cerrar y quedarte en el post + precio -->
+  <div class="promo" id="promo">
+    <button class="promo-x" id="promoX" aria-label="Cerrar">×</button>
+    <div class="promo-stage" id="promoStage"></div>
+    <div class="promo-dots" id="promoDots"></div>
+  </div>
+  <style>
+  .promo{position:fixed;inset:0;z-index:600;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:34px 26px;text-align:center;background:linear-gradient(160deg,#231F20 0%,#3a2030 52%,#EF4375 155%);color:#fff}
+  .promo.hide{opacity:0;pointer-events:none;transition:opacity .5s}
+  .promo-x{position:absolute;top:16px;right:18px;width:42px;height:42px;border-radius:50%;border:0;background:rgba(255,255,255,.16);color:#fff;font-size:26px;line-height:1;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .45s}
+  .promo-x.show{opacity:1;pointer-events:auto}
+  .promo-stage{max-width:340px;transition:opacity .5s ease,transform .5s ease;opacity:0;transform:translateY(14px)}
+  .promo-stage .ps-emoji{font-size:56px;line-height:1;margin-bottom:14px}
+  .promo-stage .ps-title{font-family:var(--font-display,'Poppins');font-weight:800;font-size:27px;line-height:1.15;margin-bottom:10px}
+  .promo-stage .ps-sub{font-size:16px;line-height:1.5;opacity:.92}
+  .promo-stage .ps-img{width:208px;height:208px;object-fit:cover;border-radius:18px;box-shadow:0 16px 44px rgba(0,0,0,.45);margin-bottom:16px}
+  .promo-stage .ps-price{font-family:var(--font-display,'Poppins');font-weight:800;font-size:60px;line-height:1}
+  .promo-stage .ps-price span{font-size:22px;font-weight:600;opacity:.8}
+  .promo-stage .ps-cta{margin-top:20px;background:#fff;color:#EF4375;font-weight:800;font-size:17px;padding:14px 30px;border-radius:99px;border:0;cursor:pointer;box-shadow:0 12px 34px rgba(0,0,0,.35)}
+  .promo-dots{position:absolute;bottom:22px;display:flex;gap:6px}
+  .promo-dots i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.32);transition:all .3s}
+  .promo-dots i.on{background:#fff;width:18px;border-radius:3px}
+  </style>
+
   <div class="cel">
     <div style="font-size:46px">🎉</div>
     <div class="big">¡Tu post está publicado!</div>
@@ -334,7 +358,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <div class="price">$<?= number_format((float)$plan_venta['precio_mensual'], 0) ?><span>/mes</span></div>
     <div class="price-hook">☕ Menos de $<?= number_format((float)$plan_venta['precio_mensual']/30, 2) ?> al día — más barato que tu cafecito.</div>
     <div class="price-sub">Una agencia cobra cientos al mes por esto · Cancela cuando quieras · 100% tuyos</div>
-    <form method="post" action="/crecer/panel/crear_checkout.php">
+    <form method="post" action="/crecer/panel/crear_checkout.php" id="ventaForm">
       <?= csrf_field() ?>
       <input type="hidden" name="marca" value="<?= (int)$marca_id ?>">
       <input type="hidden" name="plan" value="<?= $h($plan_venta['slug']) ?>">
@@ -609,6 +633,38 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   });
 <?php endif; ?>
 <?php if ($publicado): /* carrusel de venta: swipe (móvil) + flechas + dots */ ?>
+  // PROMO animada: corre sola (fade-ins) → al terminar sale la X para cerrar y ver el post + precio.
+  (function(){
+    var promo=document.getElementById('promo'); if(!promo) return;
+    var seen=false; try{ seen=localStorage.getItem('crecer_promo_'+PID)==='1'; }catch(e){}
+    if(seen){ promo.style.display='none'; return; }
+    try{ localStorage.setItem('crecer_promo_'+PID,'1'); }catch(e){}
+    var stage=document.getElementById('promoStage'), x=document.getElementById('promoX'), dotsBox=document.getElementById('promoDots');
+    var IMG=<?= json_encode($grafica) ?>, PRICE=<?= json_encode(number_format((float)$plan_venta['precio_mensual'],0)) ?>, DIA=<?= json_encode(number_format((float)$plan_venta['precio_mensual']/30,2)) ?>;
+    var S=[
+      '<div class="ps-emoji">🎉</div><div class="ps-title">¡Tu post ya está en tus redes!</div>',
+      (IMG?'<img class="ps-img" src="'+IMG+'">':'<div class="ps-emoji">📲</div>')+'<div class="ps-sub">Y esto es apenas el comienzo…</div>',
+      '<div class="ps-emoji">🎨</div><div class="ps-title">Tu marketing, hecho</div><div class="ps-sub">Posts, arte y captions en tu voz. Tú solo apruebas.</div>',
+      '<div class="ps-emoji">📅</div><div class="ps-title">Contenido todo el mes</div><div class="ps-sub">Nunca más quedarte en blanco.</div>',
+      '<div class="ps-emoji">🚀</div><div class="ps-title">Publica y responde solo</div><div class="ps-sub">Auto-publica a tus redes y contesta los DMs por ti.</div>',
+      '<div class="ps-emoji">☕</div><div class="ps-title">¿El costo?</div><div class="ps-sub">Menos de $'+DIA+' al día. Más barato que tu cafecito. Una agencia cobra cientos.</div>',
+      '<div class="ps-price">$'+PRICE+'<span>/mes</span></div><div class="ps-sub">Cancela cuando quieras · tus posts 100% tuyos</div><button class="ps-cta" id="promoCta">Activar mi corillo →</button>'
+    ];
+    S.forEach(function(_,i){ var d=document.createElement('i'); if(i===0)d.className='on'; dotsBox.appendChild(d); });
+    var dots=dotsBox.querySelectorAll('i'), k=-1, timer;
+    function render(){
+      stage.style.opacity=0; stage.style.transform='translateY(14px)';
+      setTimeout(function(){
+        stage.innerHTML=S[k]; stage.style.opacity=1; stage.style.transform='none';
+        dots.forEach(function(d,i){ d.classList.toggle('on',i===k); });
+        var cta=document.getElementById('promoCta'); if(cta) cta.addEventListener('click',function(){ var f=document.getElementById('ventaForm'); if(f) f.submit(); });
+      },480);
+    }
+    function next(){ k++; if(k>=S.length) return; render(); if(k<S.length-1){ timer=setTimeout(next,3000); } else { setTimeout(function(){ x.classList.add('show'); },700); } }
+    setTimeout(next,350);
+    x.addEventListener('click',function(){ clearTimeout(timer); promo.classList.add('hide'); setTimeout(function(){ promo.style.display='none'; },520); });
+  })();
+
   var track=document.getElementById('sellTrack');
   if(track){
     var slides=track.querySelectorAll('.slide'), dotsBox=document.getElementById('sellDots');
