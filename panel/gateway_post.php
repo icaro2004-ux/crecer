@@ -273,7 +273,13 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   <div class="cel">
     <div style="font-size:46px">🎉</div>
     <div class="big">¡Tu post está publicado!</div>
-    <p class="gw-sub" style="margin-bottom:0">Eso lo hizo el corillo por ti, en tu voz. Ahora imagínate esto <b>todos los días</b>.</p>
+    <p class="gw-sub" style="margin-bottom:0">Lo hizo tu equipo por ti, en tu voz. Ahora imagínate esto <b>todos los días</b>.</p>
+  </div>
+
+  <!-- SU POST (preview read-only — ya publicado, nada que ajustar) -->
+  <div class="card" style="margin-top:16px">
+    <?php if ($grafica): ?><img class="img" src="<?= $h($grafica) ?>" alt=""><?php endif; ?>
+    <?php if ($caption !== ''): ?><div class="cap"><?= $h($caption) ?></div><?php endif; ?>
   </div>
   <?php if ($ver_url !== ''): ?><a class="btn gho" style="margin-top:14px" href="<?= $h($ver_url) ?>" target="_blank" rel="noopener">Ver mi post en vivo →</a><?php endif; ?>
 
