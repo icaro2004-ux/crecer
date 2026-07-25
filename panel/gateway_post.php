@@ -189,6 +189,20 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .card .img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:var(--crema-2,#efece7)}
   .card .noimg{width:100%;aspect-ratio:1/1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:24px;color:var(--muted);font-size:14px;font-weight:600;background:var(--crema-2,#efece7)}
   .card .noimg .spin{width:38px;height:38px;border-radius:50%;border:4px solid rgba(0,0,0,.12);border-top-color:var(--magenta,#EF4375);animation:gspin .8s linear infinite}
+  /* Pantalla de espera viva — el corillo trabajando */
+  .card .wait{width:100%;aspect-ratio:1/1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:22px 20px;text-align:center;
+    background:linear-gradient(160deg,#fff 0%,#ffeef4 55%,#e9faf8 100%)}
+  .card .wait .spin{width:20px;height:20px;border-radius:50%;border:3px solid rgba(0,0,0,.12);border-top-color:var(--magenta,#EF4375);animation:gspin .8s linear infinite;flex:0 0 auto}
+  .card .wait-top{display:flex;align-items:center;gap:9px;font-weight:800;font-size:13.5px;color:var(--tinta,#231F20)}
+  .card .wait-top #waitStatus{transition:opacity .3s}
+  .card .wait-card{background:#fff;border:1px solid rgba(0,0,0,.06);border-radius:16px;padding:18px 16px;max-width:320px;width:100%;box-shadow:0 8px 26px rgba(35,31,32,.10);animation:wcIn .35s ease}
+  @keyframes wcIn{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+  .card .wc-emoji{font-size:34px;line-height:1;margin-bottom:8px}
+  .card .wc-kind{font-size:10.5px;font-weight:900;letter-spacing:.09em;color:var(--magenta,#EF4375);margin-bottom:6px}
+  .card .wc-text{font-size:14px;line-height:1.5;color:#3a3436;font-weight:600}
+  .card .wait-next{background:#fff;border:1.5px solid rgba(0,0,0,.12);color:var(--tinta,#231F20);font-weight:800;font-size:13px;padding:8px 18px;border-radius:99px;cursor:pointer}
+  .card .wait-next:active{transform:scale(.96)}
+  .card .wait-foot{font-size:12px;color:var(--muted,#6E6A67);max-width:300px;line-height:1.45}
   .card .cap{padding:16px 17px;font-size:14.5px;line-height:1.6;color:var(--tinta);white-space:pre-wrap;word-wrap:break-word}
   .card .cap-edit{width:100%;font-family:inherit;font-size:14.5px;line-height:1.6;border:1.5px solid var(--magenta);border-radius:12px;padding:12px 13px;min-height:130px;resize:vertical}
   .cambio-in{width:100%;font-family:inherit;font-size:15px;border:1.5px solid var(--magenta);border-radius:13px;padding:13px 14px;box-sizing:border-box}
@@ -299,7 +313,22 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   <?php endif; ?>
 
   <div class="card">
-    <?php if ($grafica): ?><img class="img" src="<?= $h($grafica) ?>" alt=""><?php else: ?><div class="noimg" id="noimg"><span class="spin"></span>Tu equipo está diseñando tu anuncio…<br><small style="opacity:.7">Toma un par de minutos. Mientras, ajusta el texto abajo.</small></div><?php endif; ?>
+    <?php if ($grafica): ?>
+      <img class="img" src="<?= $h($grafica) ?>" alt="">
+    <?php elseif ($img_pending): ?>
+      <div class="wait" id="wait">
+        <div class="wait-top"><span class="spin"></span><span id="waitStatus">Preparando el concepto…</span></div>
+        <div class="wait-card" id="waitCard">
+          <div class="wc-emoji" id="wcEmoji">🎨</div>
+          <div class="wc-kind" id="wcKind">EL CORILLO</div>
+          <div class="wc-text" id="wcText">Tu anuncio se está cocinando…</div>
+        </div>
+        <button class="wait-next" id="waitNext" type="button">Otra ▸</button>
+        <div class="wait-foot">Toma un par de minutos — tu arte aparece solo. Mientras, ajusta el texto abajo. 👇</div>
+      </div>
+    <?php else: ?>
+      <div class="noimg">Preparando tu arte…</div>
+    <?php endif; ?>
     <div class="cap" id="capBox"><?= $caption !== '' ? $h($caption) : '<span style="color:var(--muted)">Sin texto todavía.</span>' ?></div>
     <textarea class="cap-edit" id="capEdit" style="display:none;margin:0 15px 15px"><?= $h($caption) ?></textarea>
   </div>
@@ -378,6 +407,34 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   }
   // Al cargar: si la imagen se está generando en background, espera y refresca solo.
   if(IMG_PENDING){ pollImg(function(url){ location.reload(); }); }
+  // Pantalla de espera VIVA — el corillo trabajando + deck de trivias/novedades.
+  (function(){
+    var wait=document.getElementById('wait'); if(!wait) return;
+    var STATUS=['Preparando el concepto…','Escribiendo tu titular…','Eligiendo los colores…','Buscando la idea que detiene el scroll…','Dándole el toque boricua…','Componiendo la escena…','Puliendo los detalles…'];
+    var DECK=[
+      {e:'🇵🇷',k:'¿SABÍAS QUE…',t:'El coquí solo canta de noche — el macho pone el "co" para marcar territorio y el "quí" para enamorar. Puro marketing de la naturaleza.'},
+      {e:'📱',k:'DATO BORICUA',t:'La mayoría de la gente en PR descubre negocios nuevos por Instagram y Facebook. Ahí es donde tu corillo te pone a brillar.'},
+      {e:'🔥',k:'TIP DEL CORILLO',t:'Un post con imagen detiene el scroll muchísimo más que uno de solo texto. Por eso cuidamos tanto tu arte.'},
+      {e:'📸',k:'NOVEDAD',t:'¿Tienes fotos reales de tu producto? Súbelas y el corillo las realza. Lo real siempre gana.'},
+      {e:'🍢',k:'TRIVIA',t:'El pastelillo y la empanadilla son primos, no gemelos: la empanadilla es más grande y jugosa. Guerra eterna.'},
+      {e:'🔗',k:'TIP',t:'Conecta tu Instagram y Facebook una sola vez y el corillo publica por ti.'},
+      {e:'⏰',k:'DATO',t:'Las mejores horas para postear comida en PR: 11am (antojo de almuerzo) y 6pm (¿qué como hoy?).'},
+      {e:'🗣️',k:'POR QUÉ FUNCIONA',t:'Hablarle a la gente en boricua de verdad vende más que el español "de comercial". Autenticidad = confianza.'},
+      {e:'💬',k:'PRÓXIMAMENTE',t:'El corillo va a contestar los DMs de tus clientes por ti, en tu voz.'},
+      {e:'🎨',k:'NOVEDAD',t:'Tu arte ahora lo diseña un motor de última generación — más nítido y con tu nombre bien escrito.'},
+      {e:'☕',k:'ORGULLO PR',t:'Puerto Rico produce café de altura premiado a nivel mundial. Si vendes café, presúmelo sin pena.'},
+      {e:'🧠',k:'TIP',t:'Mientras más le cuentes a tu corillo sobre tu negocio, mejores te salen los posts.'}
+    ];
+    for(var i=DECK.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var tmp=DECK[i]; DECK[i]=DECK[j]; DECK[j]=tmp; }
+    var si=0, ci=0, st=document.getElementById('waitStatus');
+    setInterval(function(){ si=(si+1)%STATUS.length; st.style.opacity=0; setTimeout(function(){ st.textContent=STATUS[si]; st.style.opacity=1; },300); },2800);
+    var card=document.getElementById('waitCard'), we=document.getElementById('wcEmoji'), wk=document.getElementById('wcKind'), wt=document.getElementById('wcText');
+    function showCard(){ var c=DECK[ci%DECK.length]; we.textContent=c.e; wk.textContent=c.k; wt.textContent=c.t; card.style.animation='none'; void card.offsetWidth; card.style.animation='wcIn .35s ease'; }
+    function next(){ ci++; showCard(); }
+    showCard();
+    var auto=setInterval(next,7000);
+    document.getElementById('waitNext').addEventListener('click',function(){ clearInterval(auto); next(); auto=setInterval(next,7000); });
+  })();
 
 <?php if (!$publicado): ?>
   var actsB=document.getElementById('actsBorrador'), actsE=document.getElementById('actsEdit'),
