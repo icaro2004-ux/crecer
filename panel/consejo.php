@@ -109,7 +109,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <?php if ($apertura !== ''): ?>
       <div class="cj-m ia"><?= $h($apertura) ?></div>
     <?php else: ?>
-      <div class="cj-m ia">¡Wepa! Arranquemos el consejo. Cuéntame: ¿qué quieres que el corillo empuje esta semana, y hay alguna fecha o evento que se venga?</div>
+      <div class="cj-m ia">¡Dale! Arranquemos el consejo. Cuéntame: ¿qué quieres que el corillo empuje esta semana, y hay alguna fecha o evento que se venga?</div>
     <?php endif; ?>
   </div>
   <form class="cj-form" id="cj-form" autocomplete="off">

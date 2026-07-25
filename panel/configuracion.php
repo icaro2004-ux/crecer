@@ -341,7 +341,7 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
       </div>
     </form>
 
-    <form method="post" action="<?= $turl('negocio') ?>" onsubmit="var b=this.querySelector('button');b.textContent='✨ El corillo está trabajando…';b.disabled=true;">
+    <form method="post" action="<?= $turl('negocio') ?>" onsubmit="var b=this.querySelector('button');b.textContent='✨ Tu equipo está trabajando…';b.disabled=true;">
       <?= csrf_field() ?><input type="hidden" name="accion" value="corre_ahora">
       <div class="cfg-card">
         <h2><?= ico('sparkles') ?> ¿No quieres esperar?</h2>

@@ -237,7 +237,7 @@ require __DIR__ . '/_shell.php';
   <div class="ret-box">
     <h3>✨ Mensaje para tu cliente</h3>
     <div class="who" id="retWho"></div>
-    <div id="retBody"><div class="ret-load">El corillo está escribiendo…</div></div>
+    <div id="retBody"><div class="ret-load">Tu equipo está escribiendo…</div></div>
   </div>
 </div>
 
@@ -278,7 +278,7 @@ require __DIR__ . '/_shell.php';
   window.corilloEscribe = function(btn){
     var card = btn.closest('.cl-card');
     retWho.textContent = 'Para ' + (card.dataset.nombre||'tu cliente') + ' · segmento ' + card.dataset.seg;
-    retBody.innerHTML = '<div class="ret-load">El corillo está escribiendo…</div>';
+    retBody.innerHTML = '<div class="ret-load">Tu equipo está escribiendo…</div>';
     retOv.classList.add('show');
     fetch('/crecer/panel/clientela.php?ajax=retencion&marca='+MARCA, {
       method:'POST', headers:{'Content-Type':'application/json'},

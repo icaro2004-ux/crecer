@@ -595,7 +595,7 @@ $credito  = $has_deck
   <?php else: ?>
   <div class="tn-solo">
     <p class="tn-solo-t">Al día.</p>
-    <p class="tn-solo-s">El corillo sigue trabajando. No necesitas hacer nada.</p>
+    <p class="tn-solo-s">Tu equipo sigue trabajando. No necesitas hacer nada.</p>
   </div>
   <?php endif; ?>
 </main>

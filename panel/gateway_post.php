@@ -461,7 +461,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   function aiRewrite(accion, extra){
     var prev=capBox.textContent;
     actsB.style.display='none'; actsC.style.display='none';
-    capBox.innerHTML='<span style="color:var(--muted)">✍️ El corillo está escribiendo…</span>';
+    capBox.innerHTML='<span style="color:var(--muted)">✍️ Tu equipo está escribiendo…</span>';
     self(accion, extra).then(function(d){
       if(d&&d.ok&&d.caption){ capBox.textContent=d.caption; if(capEdit) capEdit.value=d.caption; T('Nueva versión ✓'); }
       else { capBox.textContent=prev; T((d&&d.err)||'No se pudo ahora.'); }

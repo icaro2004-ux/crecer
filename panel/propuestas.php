@@ -208,7 +208,7 @@ require __DIR__ . '/_shell.php';
     <div class="est-done">
       <div class="mk"><?= ico('check-circle') ?></div>
       <h2>Nada que revisar por ahora.</h2>
-      <p>El corillo está preparando lo próximo. Vuelve en un rato.</p>
+      <p>Tu equipo está preparando lo próximo. Vuelve en un rato.</p>
       <div class="acts">
         <a href="<?= $BASE ?>/aprobar2.php?<?= $mid ?>">Pídeles algo nuevo</a>
         <a href="<?= $BASE ?>/resultados.php?marca=<?= $marca_id ?>">Ver lo publicado</a>
