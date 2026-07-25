@@ -164,12 +164,13 @@ function reels_analizar(PDO $pdo, array $reel, array $clips): array {
     $imgs_validas = array_values(array_filter($imagenes, fn($im) => $im['data'] !== ''));
 
     $res = ia_ejecutar($pdo, 'reels', 'analizar_clips', $prompt, [
-        'marca_id'   => $marca_id,
-        'sistema'    => $sistema,
-        'imagenes'   => $imgs_validas,
-        'json'       => true,
-        'max_tokens' => 1400,
-        'temperatura'=> 0.7,
+        'marca_id'       => $marca_id,
+        'sistema'        => $sistema,
+        'imagenes'       => $imgs_validas,
+        'json'           => true,
+        'max_tokens'     => 3000,
+        'temperatura'    => 0.7,
+        'thinking_budget'=> 0,   // apaga el "pensamiento": sin truncar el JSON, más rápido y barato
     ]);
 
     if (!empty($res['ia_log_id'])) reels_set($pdo, (int)$reel['id'], ['ia_log_id' => (int)$res['ia_log_id']]);
