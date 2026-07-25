@@ -36,6 +36,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $preset = in_array($_POST['preset'] ?? '', array_keys(reels_presets()), true) ? $_POST['preset'] : 'vivido';
         $contexto = mb_substr(trim((string)($_POST['contexto'] ?? '')), 0, 300);
         $subtitulos = !empty($_POST['subtitulos']) ? 1 : 0;
+        $mus_ok = array_merge(['auto','none'], array_keys(reels_music_catalogo()));
+        $musica = in_array($_POST['musica'] ?? '', $mus_ok, true) ? $_POST['musica'] : 'auto';
 
         $UP_PATH = reels_uploads_path() . "/marca_{$marca_id}/reels";
         $FR_PATH = $UP_PATH . '/frames';
@@ -49,8 +51,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         };
 
         // Crear el reel primero (para el id).
-        $pdo->prepare("INSERT INTO crecer_reels (marca_id, estado, preset, contexto, subtitulos) VALUES (?, 'borrador', ?, ?, ?)")
-            ->execute([$marca_id, $preset, $contexto, $subtitulos]);
+        $pdo->prepare("INSERT INTO crecer_reels (marca_id, estado, preset, contexto, subtitulos, musica) VALUES (?, 'borrador', ?, ?, ?, ?)")
+            ->execute([$marca_id, $preset, $contexto, $subtitulos, $musica]);
         $reel_id = (int)$pdo->lastInsertId();
 
         $ord = 0; $guardados = 0; $errores = [];
@@ -174,7 +176,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ── Polling del estado ──
     if ($accion === 'estado') {
         $rid = (int)($_POST['reel_id'] ?? 0);
-        $r = $pdo->prepare("SELECT id, estado, video_url, poster_url, duracion_seg, error_msg, edl_json FROM crecer_reels WHERE id=? AND marca_id=?");
+        $r = $pdo->prepare("SELECT id, estado, video_url, poster_url, duracion_seg, error_msg, edl_json, activo_id, copy_post FROM crecer_reels WHERE id=? AND marca_id=?");
         $r->execute([$rid, $marca_id]); $row = $r->fetch(PDO::FETCH_ASSOC);
         if (!$row) { echo json_encode(['ok'=>false,'err'=>'No encontrado.']); exit; }
         $edl = $row['edl_json'] ? json_decode($row['edl_json'], true) : null;
@@ -187,7 +189,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'error'     => $row['error_msg'],
             'resumen'   => $edl['resumen'] ?? null,
             'hook'      => $edl['hook'] ?? null,
+            'guardado'  => !empty($row['activo_id']),
+            'copy'      => $row['copy_post'],
         ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // ── Regenerar el copy del post ──
+    if ($accion === 'recopy') {
+        $rid = (int)($_POST['reel_id'] ?? 0);
+        $r = $pdo->prepare("SELECT * FROM crecer_reels WHERE id=? AND marca_id=?");
+        $r->execute([$rid, $marca_id]); $reel = $r->fetch(PDO::FETCH_ASSOC);
+        if (!$reel) { echo json_encode(['ok'=>false,'err'=>'No encontrado.']); exit; }
+        $txt = reels_generar_copy($pdo, $reel, null);
+        if ($txt === null) { echo json_encode(['ok'=>false,'err'=>'No pude escribir el copy. Reintenta.']); exit; }
+        echo json_encode(['ok'=>true, 'copy'=>$txt], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -195,6 +211,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $presets = reels_presets();
+$musica_cat = reels_music_catalogo();
 $render_ok = render_disponible();
 $CSRF = csrf_token();
 ?>
@@ -284,6 +301,15 @@ button{font-family:inherit;cursor:pointer}
 .subsw input:checked + .knob::after{transform:translateX(19px)}
 .subsw .lbl b{display:block;font-size:14.5px;font-family:'Poppins'}
 .subsw .lbl small{color:var(--muted);font-size:12.5px}
+.msec{margin-top:16px}
+.mlbl{font-family:'Poppins';font-weight:700;font-size:14px;margin-bottom:9px}
+.mrow{display:flex;gap:8px;flex-wrap:wrap}
+.mchip{display:inline-flex;align-items:center;gap:7px;border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:9px 14px;font-size:13.5px;font-weight:600;color:var(--tinta);transition:.15s}
+.mchip:hover{border-color:#cfcad4}
+.mchip.sel{border-color:var(--rosa);background:#fff5f8;color:var(--rosa)}
+.mchip .mp{font-size:12px;width:20px;height:20px;border-radius:50%;background:var(--crema2);display:flex;align-items:center;justify-content:center}
+.mchip.sel .mp{background:#ffe3ec}
+.mchip .mp[data-play].playing{background:var(--rosa);color:#fff}
 
 /* Botones */
 .row{display:flex;gap:10px;align-items:center;margin-top:20px}
@@ -330,6 +356,12 @@ button{font-family:inherit;cursor:pointer}
 .seg .ord .del{color:#c0392b}
 .bibsel{outline:3px solid var(--rosa);outline-offset:-3px}
 .bibnum{position:absolute;bottom:6px;left:6px;background:var(--rosa);color:#fff;font-size:11px;font-weight:800;padding:2px 7px;border-radius:999px}
+.savedchip{display:inline-block;margin:12px 0 4px;background:#e8f8f0;color:#0d7a44;border:1px solid #b9e6cf;border-radius:999px;padding:7px 14px;font-size:13px;font-weight:700}
+.copybox{margin-top:16px;background:var(--crema);border:1px solid var(--line);border-radius:16px;padding:14px}
+.copybox .cbh{display:flex;align-items:center;margin-bottom:8px}
+.copybox .cbh b{font-family:'Poppins';font-size:15px}
+.copybox .mini{margin-left:auto;background:#fff;border:1px solid var(--line);border-radius:9px;padding:5px 11px;font-size:12.5px;font-weight:700;color:var(--muted)}
+.copyta{width:100%;min-height:130px;border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14px;font-family:inherit;line-height:1.5;background:#fff;resize:vertical;margin-bottom:10px}
 
 @media(min-width:760px){
   .presets{grid-template-columns:repeat(3,1fr)}
@@ -411,6 +443,18 @@ button{font-family:inherit;cursor:pointer}
       <h2 class="qh">¿De qué es? <span style="color:var(--muted);font-weight:600;font-size:15px">(opcional)</span></h2>
       <p class="sub">Una línea ayuda al corillo a escribir mejores captions. Si no, él se inventa algo con sabor.</p>
       <input type="text" class="field" id="contexto" maxlength="140" placeholder="Ej: bizcocho de guayaba para el Día de las Madres">
+      <div class="msec">
+        <div class="mlbl">🎵 Música</div>
+        <div class="mrow" id="mrow">
+          <button type="button" class="mchip sel" data-m="auto"><span class="mp">⭐</span><span>El corillo elige</span></button>
+          <?php foreach ($musica_cat as $k => $t): ?>
+          <button type="button" class="mchip" data-m="<?= $h($k) ?>" data-url="<?= $h($t['url']) ?>">
+            <span class="mp" data-play>▶</span><span><?= $t['emoji'] ?> <?= $h($t['nombre']) ?></span>
+          </button>
+          <?php endforeach; ?>
+          <button type="button" class="mchip" data-m="none"><span class="mp">🔇</span><span>Sin música</span></button>
+        </div>
+      </div>
       <label class="subsw" id="subsw">
         <input type="checkbox" id="subtitulos">
         <span class="knob"></span>
@@ -449,6 +493,12 @@ button{font-family:inherit;cursor:pointer}
         <h2 class="kh" id="rhook">Quedó brutal</h2>
         <p class="rs" id="rsum"></p>
         <div id="rchips"></div>
+        <div class="savedchip" id="rsaved" style="display:none">✅ Guardado en tu Biblioteca</div>
+        <div class="copybox" id="copybox" style="display:none">
+          <div class="cbh"><b>📝 Texto para tu post</b><button class="mini" id="cregen">↻ Otro</button></div>
+          <textarea class="copyta" id="copytext" readonly></textarea>
+          <button class="btn btn-ghost" id="ccopy" style="width:100%">📋 Copiar texto</button>
+        </div>
         <div class="row" style="flex-wrap:wrap">
           <a class="btn btn-go" id="rdl" download style="text-decoration:none;text-align:center">⬇️ Descargar</a>
           <button class="btn btn-primary" id="redit" style="flex:1">✂️ Ajustar timing y textos</button>
@@ -603,8 +653,27 @@ document.querySelectorAll('.preset').forEach(b=>b.onclick=()=>{
   b.classList.add('sel'); preset=b.dataset.p;
 });
 
+// ── Paso 3: música (selección + preview) ──
+let musica='auto', mAudio=null, mPlayingBtn=null;
+function stopPreview(){ if(mAudio){mAudio.pause();mAudio=null;} if(mPlayingBtn){mPlayingBtn.classList.remove('playing');mPlayingBtn.textContent='▶';mPlayingBtn=null;} }
+document.querySelectorAll('.mchip').forEach(chip=>{
+  chip.onclick=(e)=>{
+    if(e.target.closest('[data-play]')){ // botón de preview, no selecciona
+      const play=chip.querySelector('[data-play]'); const url=chip.dataset.url;
+      if(mPlayingBtn===play){ stopPreview(); return; }
+      stopPreview();
+      if(url){ mAudio=new Audio(url); mAudio.volume=.85; mAudio.play().catch(()=>{}); mPlayingBtn=play; play.classList.add('playing'); play.textContent='⏸';
+        mAudio.onended=()=>stopPreview(); }
+      return;
+    }
+    document.querySelectorAll('.mchip').forEach(c=>c.classList.remove('sel'));
+    chip.classList.add('sel'); musica=chip.dataset.m;
+  };
+});
+
 // ── Paso 3: crear ──
 $('#crear').onclick=async()=>{
+  stopPreview();
   if(files.length<2){ go(1); return; }
   $('#crear').disabled=true;
   go('load'); animateLoad();
@@ -612,6 +681,7 @@ $('#crear').onclick=async()=>{
   fd.append('csrf',CSRF); fd.append('accion','crear'); fd.append('preset',preset);
   fd.append('contexto', $('#contexto').value||'');
   fd.append('subtitulos', $('#subtitulos').checked ? '1' : '');
+  fd.append('musica', musica);
   const lib=[];
   files.forEach(it=>{
     if(it.file){
@@ -675,7 +745,29 @@ function showDone(j){
   if(j.duracion) chips.push('⏱️ '+Math.round(j.duracion)+'s');
   chips.push('📱 9:16');
   $('#rchips').innerHTML=chips.map(c=>'<span class="chip">'+c+'</span>').join('');
+  // Guardado en Biblioteca + copy del post
+  $('#rsaved').style.display = j.guardado ? 'inline-block' : 'none';
+  if(j.copy){ $('#copybox').style.display='block'; $('#copytext').value=j.copy; }
+  else{ $('#copybox').style.display='block'; $('#copytext').value=''; $('#copytext').placeholder='El corillo está escribiendo el texto…'; setTimeout(()=>refreshCopy(), 3000); }
 }
+async function refreshCopy(){
+  if(!curReel) return;
+  const fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion','estado'); fd.append('reel_id',curReel);
+  try{ const j=await (await fetch(HERE,{method:'POST',body:fd})).json();
+    if(j.ok && j.copy){ $('#copytext').value=j.copy; } else if(j.ok){ setTimeout(refreshCopy, 3000); }
+  }catch(e){}
+}
+$('#ccopy').onclick=()=>{ const t=$('#copytext'); t.select(); document.execCommand('copy');
+  navigator.clipboard && navigator.clipboard.writeText(t.value).catch(()=>{});
+  $('#ccopy').textContent='✅ ¡Copiado!'; setTimeout(()=>$('#ccopy').textContent='📋 Copiar texto',1600); };
+$('#cregen').onclick=async()=>{
+  $('#cregen').textContent='…'; $('#cregen').disabled=true;
+  const fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion','recopy'); fd.append('reel_id',curReel);
+  try{ const j=await (await fetch(HERE,{method:'POST',body:fd})).json();
+    if(j.ok) $('#copytext').value=j.copy; else alert(j.err||'No pude regenerar.');
+  }catch(e){ alert('Se cayó la conexión.'); }
+  $('#cregen').textContent='↻ Otro'; $('#cregen').disabled=false;
+};
 function showFail(msg){ go('fail'); $('#failmsg').textContent=msg; }
 $('#retry').onclick=()=>{ $('#crear').disabled=false; go(3); };
 $('#ragain').onclick=()=>{ files=[]; renderClips(); $('#contexto').value=''; go(1); };

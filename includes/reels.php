@@ -238,13 +238,20 @@ function reels_caption_asset(string $text, array $preset, bool $hook = false): a
     return ['type'=>'html', 'html'=>$html, 'css'=>$css, 'width'=>$bw, 'height'=>$bh, 'background'=>'transparent'];
 }
 
-/** Datos de la marca para el cierre (nombre, WhatsApp, preferencia de contacto, logo). */
+/** Datos de la marca para el cierre + copy (nombre, WhatsApp, contacto, logo, voz). */
 function reels_marca(PDO $pdo, int $marca_id): ?array {
     try {
-        $st = $pdo->prepare("SELECT nombre_negocio, whatsapp, contacto_preferencia, logo_path FROM crecer_marca WHERE id=?");
+        $st = $pdo->prepare("SELECT nombre_negocio, whatsapp, contacto_preferencia, logo_path, voz FROM crecer_marca WHERE id=?");
         $st->execute([$marca_id]);
         return $st->fetch(PDO::FETCH_ASSOC) ?: null;
-    } catch (Throwable $e) { return null; }
+    } catch (Throwable $e) {
+        // 'voz' podría no existir en algún esquema viejo → reintento sin ella.
+        try {
+            $st = $pdo->prepare("SELECT nombre_negocio, whatsapp, contacto_preferencia, logo_path FROM crecer_marca WHERE id=?");
+            $st->execute([$marca_id]);
+            return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+        } catch (Throwable $e2) { return null; }
+    }
 }
 
 /**
@@ -262,6 +269,29 @@ function reels_music(string $mood): ?string {
         'elegant'    => 'https://shotstack-assets.s3.amazonaws.com/music/unminus/ambisax.mp3',
     ];
     return $map[strtolower($mood)] ?? reset($map) ?: null;
+}
+
+/**
+ * Catálogo de pistas que el CLIENTE puede escoger (con preview en el wizard).
+ * Pistas libres (Unminus) por defecto — reemplazables por las tuyas con licencia.
+ */
+function reels_music_catalogo(): array {
+    if (defined('REELS_MUSIC_CATALOGO') && is_array(REELS_MUSIC_CATALOGO)) return REELS_MUSIC_CATALOGO;
+    $b = 'https://shotstack-assets.s3.amazonaws.com/music/unminus/';
+    return [
+        'palmtrees' => ['nombre' => 'Alegre',   'emoji' => '🌴', 'url' => $b . 'palmtrees.mp3'],
+        'lit'       => ['nombre' => 'Hype',     'emoji' => '🔥', 'url' => $b . 'lit.mp3'],
+        'ambisax'   => ['nombre' => 'Elegante', 'emoji' => '🎷', 'url' => $b . 'ambisax.mp3'],
+        'berlin'    => ['nombre' => 'Moderna',  'emoji' => '🎧', 'url' => $b . 'berlin.mp3'],
+    ];
+}
+
+/** Resuelve la música: 'none'→sin música, clave del catálogo→esa pista, ''/'auto'→por mood. */
+function reels_music_pick(string $choice, string $mood): ?string {
+    if ($choice === 'none') return null;
+    $cat = reels_music_catalogo();
+    if ($choice !== '' && $choice !== 'auto' && isset($cat[$choice])) return $cat[$choice]['url'];
+    return reels_music($mood);
 }
 
 /** Subtítulo automático (rich-caption) para un segmento, transcribiendo su voz. */
@@ -370,7 +400,7 @@ function reels_construir_timeline(array $reel, array $clips, array $edl, ?array 
     }
 
     // Música + ducking: baja el audio de los clips (más si NO hay subtítulos).
-    $music   = reels_music((string)($edl['musica_mood'] ?? $preset['mood']));
+    $music   = reels_music_pick((string)($reel['musica'] ?? ''), (string)($edl['musica_mood'] ?? $preset['mood']));
     $clip_vol = $music ? ($subs ? 0.85 : 0.35) : 1.0;
     foreach ($video_clips as &$vc0) {
         if (($vc0['asset']['type'] ?? '') === 'video') $vc0['asset']['volume'] = $clip_vol;
@@ -505,6 +535,114 @@ function reels_edl_desde_clips(PDO $pdo, array $reel, array $clips): array {
     return $edl;
 }
 
+/**
+ * FASE 4 — Descarga el mp4 (y poster) de Shotstack a uploads/ y lo registra
+ * en la Biblioteca (crecer_activos). Las URLs de Shotstack son TEMPORALES, por
+ * eso hay que persistir. Devuelve ['video_url','poster_url','activo_id'] locales,
+ * o null si no se pudo descargar (el caller cae a la URL remota).
+ */
+function reels_persistir(PDO $pdo, array $reel, string $remote_url, ?string $remote_poster): ?array {
+    $marca_id = (int)$reel['marca_id'];
+    $rid = (int)$reel['id'];
+    $dir_abs = reels_uploads_path() . "/marca_{$marca_id}/reels/final";
+    if (!is_dir($dir_abs)) @mkdir($dir_abs, 0775, true);
+
+    $rel_mp4 = "marca_{$marca_id}/reels/final/{$rid}.mp4";
+    $abs_mp4 = reels_uploads_path() . '/' . $rel_mp4;
+    if (!reels_descargar($remote_url, $abs_mp4)) return null;   // sin video local no seguimos
+    $bytes = @filesize($abs_mp4) ?: null;
+
+    $poster_local = null;
+    if ($remote_poster) {
+        $rel_jpg = "marca_{$marca_id}/reels/final/{$rid}.jpg";
+        if (reels_descargar($remote_poster, reels_uploads_path() . '/' . $rel_jpg)) {
+            $poster_local = reels_public_url($rel_jpg);
+        }
+    }
+
+    // Registrar en la Biblioteca (si aún no está).
+    $activo_id = $reel['activo_id'] ?? null;
+    if (!$activo_id) {
+        try {
+            $nombre = 'Reel · ' . date('d/m/Y');
+            $pdo->prepare("INSERT INTO crecer_activos (marca_id,tipo,archivo,nombre,mime,bytes,origen,estado) VALUES (?,?,?,?,?,?, 'generado','activo')")
+                ->execute([$marca_id, 'video', $rel_mp4, $nombre, 'video/mp4', $bytes]);
+            $activo_id = (int)$pdo->lastInsertId();
+        } catch (Throwable $e) { error_log('reels_persistir activo #' . $rid . ': ' . $e->getMessage()); }
+    }
+
+    return ['video_url' => reels_public_url($rel_mp4), 'poster_url' => $poster_local, 'activo_id' => $activo_id];
+}
+
+/** Descarga un archivo remoto a una ruta absoluta. true si quedó > 1KB. */
+function reels_descargar(string $url, string $abs): bool {
+    $fp = @fopen($abs, 'wb');
+    if (!$fp) return false;
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_FILE           => $fp,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT        => 120,
+        CURLOPT_CONNECTTIMEOUT => 15,
+        CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    $ok = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    fclose($fp);
+    if (!$ok || $code < 200 || $code >= 300 || (@filesize($abs) ?: 0) < 1024) { @unlink($abs); return false; }
+    return true;
+}
+
+/**
+ * FASE 4 — El agente escribe el COPY del post desde el contenido del reel
+ * (hook + captions + contexto + voz del negocio). Voz boricua, con CTA que
+ * respeta anti-misrepresentación. Se registra en crecer_ia_log. Guarda en
+ * crecer_reels.copy_post. Devuelve el texto (o null si falla; no rompe el reel).
+ */
+function reels_generar_copy(PDO $pdo, array $reel, ?array $marca): ?string {
+    $marca = $marca ?: reels_marca($pdo, (int)$reel['marca_id']);
+    $edl = $reel['edl_json'] ? json_decode((string)$reel['edl_json'], true) : [];
+    $hook = trim((string)($edl['hook'] ?? ''));
+    $caps = [];
+    foreach (($edl['segmentos'] ?? []) as $s) { $c = trim((string)($s['caption'] ?? '')); if ($c !== '') $caps[] = $c; }
+    $contexto = trim((string)($reel['contexto'] ?? ''));
+    $negocio  = trim((string)($marca['nombre_negocio'] ?? 'el negocio'));
+    $voz      = trim((string)($marca['voz'] ?? ''));
+    $wa       = trim((string)($marca['whatsapp'] ?? ''));
+    $pref     = (string)($marca['contacto_preferencia'] ?? '');
+    $cta_via  = ($wa !== '' && $pref !== 'dm') ? 'WhatsApp' : 'DM/mensaje directo';
+
+    $sistema = "Eres el community manager boricua de \"{$negocio}\". Escribes el copy "
+        . "de un Reel para Instagram/Facebook. Español BORICUA auténtico, cálido y "
+        . "vendedor, NUNCA traducido ni 'AI slop'. " . ($voz !== '' ? "Voz del negocio: {$voz}. " : "")
+        . "No inventes productos ni promesas que no estén en el contenido.";
+    $prompt = "El reel muestra:\n"
+        . ($hook !== '' ? "- Gancho: {$hook}\n" : "")
+        . ($caps ? "- Momentos: " . implode(' · ', array_slice($caps, 0, 8)) . "\n" : "")
+        . ($contexto !== '' ? "- Contexto del dueño: {$contexto}\n" : "")
+        . "\nEscribe el copy del post: 2–4 líneas con chispa, 1 llamada a la acción "
+        . "para escribir por {$cta_via}, y 4–6 hashtags boricuas relevantes al final. "
+        . "Devuelve SOLO el texto del post, sin comillas ni explicación.";
+
+    try {
+        $res = ia_ejecutar($pdo, 'reels', 'copy_post', $prompt, [
+            'marca_id' => (int)$reel['marca_id'],
+            'sistema'  => $sistema,
+            'max_tokens' => 700,
+            'temperatura' => 0.85,
+            'thinking_budget' => 0,
+        ]);
+        $txt = trim((string)$res['texto']);
+        if ($txt === '') return null;
+        reels_set($pdo, (int)$reel['id'], ['copy_post' => $txt]);
+        return $txt;
+    } catch (Throwable $e) {
+        error_log('reels_generar_copy #' . (int)$reel['id'] . ': ' . $e->getMessage());
+        return null;
+    }
+}
+
 /** Envía el documento al render y hace polling hasta done|failed|timeout. */
 function reels_finalizar_render(PDO $pdo, int $id, array $doc): void {
     if (!render_disponible()) {
@@ -527,12 +665,24 @@ function reels_finalizar_render(PDO $pdo, int $id, array $doc): void {
         reels_set($pdo, $id, ['intentos_poll' => $i + 1]);
         if (!$st['ok']) continue;
         if ($st['status'] === 'done') {
+            // FASE 4 — persistir a la Biblioteca (las URLs de Shotstack expiran)
+            // y que el agente escriba el copy del post. Best-effort: si algo de
+            // esto falla, el reel igual queda 'listo' con la URL remota.
+            $reel = $pdo->query("SELECT * FROM crecer_reels WHERE id=" . (int)$id)->fetch(PDO::FETCH_ASSOC) ?: [];
+            $video = $st['url']; $poster = $st['poster']; $activo_id = $reel['activo_id'] ?? null;
+            $saved = reels_persistir($pdo, $reel, (string)$st['url'], $st['poster'] ?? null);
+            if ($saved) { $video = $saved['video_url']; $poster = $saved['poster_url'] ?: $poster; $activo_id = $saved['activo_id']; }
             reels_set($pdo, $id, [
                 'estado'     => 'listo',
-                'video_url'  => $st['url'],
-                'poster_url' => $st['poster'],
+                'video_url'  => $video,
+                'poster_url' => $poster,
+                'activo_id'  => $activo_id,
                 'error_msg'  => null,
             ]);
+            if (empty($reel['copy_post'])) {
+                $reel['edl_json'] = $reel['edl_json'] ?? null;
+                reels_generar_copy($pdo, $reel, null);
+            }
             return;
         }
         if ($st['status'] === 'failed') {
