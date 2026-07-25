@@ -101,7 +101,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($accion === 'regenerar_imagen') {
         @set_time_limit(0);
         require_once __DIR__ . '/../includes/img_responses.php';
-        $con_txt = ($_POST['con_texto'] ?? '') === '1';
+        // con_texto: '1'=con texto · '0'=sin texto · ausente=null (el modelo decide, mejor enfoque).
+        $ct_raw = (string)($_POST['con_texto'] ?? '');
+        $con_txt = ($ct_raw === '' ? null : ($ct_raw === '1'));
         $cap = (string)$pdo->query("SELECT caption FROM crecer_contenido WHERE id={$post_id}")->fetchColumn();
         if (img_resp_activo() && img_resp_encolar($pdo, $marca_id, $post_id, $cap, $con_txt) !== '') {
             echo json_encode(['ok'=>true, 'job'=>1]); exit;   // → el frontend consulta con poll_imagen
@@ -370,16 +372,9 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   </div>
 
   <?php if ($grafica): ?>
-  <div class="imgmode">
-    <div class="lbl">La imagen — tú decides</div>
-    <div class="seg" id="imgMode">
-      <button type="button" class="opt on" data-txt="0">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>Foto sola
-      </button>
-      <button type="button" class="opt" data-txt="1">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>Con texto
-      </button>
-    </div>
+  <div class="imgmode" style="text-align:center">
+    <button type="button" class="btn gho" id="btnRegen">🔄 Hacer otra imagen</button>
+    <div class="lbl" style="margin-top:6px">¿No te convence? Tu equipo te diseña otra al momento.</div>
   </div>
   <?php endif; ?>
 
@@ -542,25 +537,21 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   var btnCambioGo=document.getElementById('btnCambioGo');
   if(btnCambioGo) btnCambioGo.addEventListener('click',function(){ var n=(document.getElementById('cambioNota').value||'').trim(); if(!n){ T('Escribe qué cambiar.'); return; } aiRewrite('pedir_cambio',{nota:n}); });
 
-  // 🎨 Imagen con/sin texto — el dueño decide; corre el director de arte y regenera.
-  var imgMode=document.getElementById('imgMode');
-  if(imgMode) imgMode.querySelectorAll('.opt').forEach(function(b){
-    b.addEventListener('click',function(){
-      if(b.classList.contains('on')) return;
-      var ct=b.getAttribute('data-txt');
-      showLoad(ct==='1'?'El director de arte está diseñando tu gráfico…':'El director de arte está rediseñando tu foto…');
-      self('regenerar_imagen',{con_texto:ct}).then(function(d){
-        if(d&&d.job){   // motor Responses: se generó en background → esperar por polling
-          pollImg(function(url){ hideLoad();
-            if(url){ swapImg(url); imgMode.querySelectorAll('.opt').forEach(function(x){x.classList.remove('on');}); b.classList.add('on'); T('Imagen lista ✓'); }
-            else T('No se pudo esta vez.'); });
-          return;
-        }
-        hideLoad();
-        if(d&&d.ok&&d.img){ swapImg(d.img); imgMode.querySelectorAll('.opt').forEach(function(x){x.classList.remove('on');}); b.classList.add('on'); T('Imagen lista ✓'); }
-        else T((d&&d.err)||'No se pudo ahora.');
-      }).catch(function(){ hideLoad(); T('Error de conexión.'); });
-    });
+  // 🎨 Hacer otra imagen — el modelo (gpt-image-2) decide el mejor enfoque (flyer con texto, etc.).
+  var btnRegen=document.getElementById('btnRegen');
+  if(btnRegen) btnRegen.addEventListener('click',function(){
+    btnRegen.disabled=true;
+    showLoad('Tu equipo está diseñando otra imagen…');
+    self('regenerar_imagen',{}).then(function(d){   // sin con_texto → el modelo decide
+      if(d&&d.job){   // Responses en background → polling
+        pollImg(function(url){ hideLoad(); btnRegen.disabled=false;
+          if(url){ swapImg(url); T('Nueva imagen ✓'); } else T('No se pudo esta vez.'); });
+        return;
+      }
+      hideLoad(); btnRegen.disabled=false;
+      if(d&&d.ok&&d.img){ swapImg(d.img); T('Nueva imagen ✓'); }
+      else T((d&&d.err)||'No se pudo ahora.');
+    }).catch(function(){ hideLoad(); btnRegen.disabled=false; T('Error de conexión.'); });
   });
   document.getElementById('btnGuardar').addEventListener('click',function(){
     var b=this; b.disabled=true;
