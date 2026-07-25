@@ -36,6 +36,7 @@ function reels_presets(): array {
             'seg_max'   => 3.0,
             'background'=> '#0e0e12',
             'ritmo'     => 'rápido y alegre',
+            'cap'       => ['family'=>"'Arial Black', Arial, sans-serif", 'size'=>52, 'weight'=>900, 'transform'=>'none', 'ls'=>'0px'],
         ],
         'accion' => [
             'nombre'    => 'Acción',
@@ -50,6 +51,7 @@ function reels_presets(): array {
             'seg_max'   => 2.2,
             'background'=> '#000000',
             'ritmo'     => 'intenso y punchy',
+            'cap'       => ['family'=>"'Arial Black', Arial, sans-serif", 'size'=>56, 'weight'=>900, 'transform'=>'uppercase', 'ls'=>'1px'],
         ],
         'elegante' => [
             'nombre'    => 'Elegante',
@@ -64,6 +66,7 @@ function reels_presets(): array {
             'seg_max'   => 4.0,
             'background'=> '#101014',
             'ritmo'     => 'pausado y con respiración',
+            'cap'       => ['family'=>"Georgia, 'Times New Roman', serif", 'size'=>44, 'weight'=>600, 'transform'=>'none', 'ls'=>'0.5px'],
         ],
     ];
 }
@@ -209,6 +212,26 @@ function reels_validar_edl(array $edl, array $clips, array $preset): array {
     ];
 }
 
+// Caja de caption en HTML (wrap real + márgenes seguros + tamaño por preset).
+// Reemplaza el asset 'title' de Shotstack, que no hace wrap y se sale por los lados.
+function reels_caption_asset(string $text, array $preset, bool $hook = false): array {
+    $c = $preset['cap'];
+    $color = $preset['title_color'];
+    $size  = $hook ? $c['size'] + 18 : $c['size'];
+    $bw = 960; $bh = $hook ? 1000 : 600;               // caja ancha; deja ~60px de margen a cada lado
+    $align = $hook ? 'center' : 'flex-end';            // hook al centro; captions al tercio inferior
+    $padb  = $hook ? '0' : '48px';
+    $t = htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+    $css = "html,body{margin:0;padding:0}"
+         . ".c{width:{$bw}px;height:{$bh}px;display:flex;align-items:{$align};justify-content:center;box-sizing:border-box;padding:0 50px {$padb}}"
+         . ".c span{font-family:{$c['family']};font-size:{$size}px;font-weight:{$c['weight']};color:{$color};"
+         . "text-align:center;line-height:1.14;text-transform:{$c['transform']};letter-spacing:{$c['ls']};"
+         . "text-shadow:0 3px 16px rgba(0,0,0,.6);background:rgba(0,0,0,.32);padding:14px 24px;border-radius:22px;"
+         . "-webkit-box-decoration-break:clone;box-decoration-break:clone}";
+    $html = '<div class="c"><span>' . $t . '</span></div>';
+    return ['type'=>'html', 'html'=>$html, 'css'=>$css, 'width'=>$bw, 'height'=>$bh, 'background'=>'transparent'];
+}
+
 // ── 2) TIMELINE — EDL + preset → documento de Shotstack ─────
 function reels_construir_timeline(array $reel, array $clips, array $edl): array {
     $preset  = reels_preset((string)$reel['preset']);
@@ -237,16 +260,10 @@ function reels_construir_timeline(array $reel, array $clips, array $edl): array 
         // Caption del segmento (capa superior).
         if ($s['caption'] !== '') {
             $caption_clips[] = [
-                'asset' => [
-                    'type'     => 'title',
-                    'text'     => $s['caption'],
-                    'style'    => $preset['title_style'],
-                    'color'    => $preset['title_color'],
-                    'size'     => 'medium',
-                    'position' => 'bottom',
-                ],
-                'start'  => $start,
-                'length' => $len,
+                'asset'    => reels_caption_asset($s['caption'], $preset, false),
+                'start'    => $start,
+                'length'   => $len,
+                'position' => 'bottom',
                 'transition' => ['in' => 'fade', 'out' => 'fade'],
             ];
         }
@@ -261,16 +278,10 @@ function reels_construir_timeline(array $reel, array $clips, array $edl): array 
     if (!empty($edl['hook'])) {
         $hook_len = min(2.2, max(1.2, $total * 0.25));
         $tracks[] = ['clips' => [[
-            'asset' => [
-                'type'     => 'title',
-                'text'     => $edl['hook'],
-                'style'    => $preset['title_style'],
-                'color'    => $preset['title_color'],
-                'size'     => 'large',
-                'position' => 'center',
-            ],
-            'start'  => 0,
-            'length' => $hook_len,
+            'asset'    => reels_caption_asset($edl['hook'], $preset, true),
+            'start'    => 0,
+            'length'   => $hook_len,
+            'position' => 'center',
             'transition' => ['in' => 'fade', 'out' => 'fade'],
         ]]];
     }
