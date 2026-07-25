@@ -35,6 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         @set_time_limit(0);
         $preset = in_array($_POST['preset'] ?? '', array_keys(reels_presets()), true) ? $_POST['preset'] : 'vivido';
         $contexto = mb_substr(trim((string)($_POST['contexto'] ?? '')), 0, 300);
+        $subtitulos = !empty($_POST['subtitulos']) ? 1 : 0;
 
         $UP_PATH = reels_uploads_path() . "/marca_{$marca_id}/reels";
         $FR_PATH = $UP_PATH . '/frames';
@@ -48,8 +49,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         };
 
         // Crear el reel primero (para el id).
-        $pdo->prepare("INSERT INTO crecer_reels (marca_id, estado, preset, contexto) VALUES (?, 'borrador', ?, ?)")
-            ->execute([$marca_id, $preset, $contexto]);
+        $pdo->prepare("INSERT INTO crecer_reels (marca_id, estado, preset, contexto, subtitulos) VALUES (?, 'borrador', ?, ?, ?)")
+            ->execute([$marca_id, $preset, $contexto, $subtitulos]);
         $reel_id = (int)$pdo->lastInsertId();
 
         $ord = 0; $guardados = 0; $errores = [];
@@ -275,6 +276,14 @@ button{font-family:inherit;cursor:pointer}
 /* Inputs */
 .field{width:100%;border:1.5px solid var(--line);border-radius:14px;padding:14px 16px;font-size:15px;font-family:inherit;background:#fff}
 .field:focus{outline:none;border-color:var(--teal)}
+.subsw{display:flex;align-items:center;gap:12px;margin-top:14px;padding:14px 16px;border:1.5px solid var(--line);border-radius:14px;cursor:pointer;user-select:none}
+.subsw input{position:absolute;opacity:0;pointer-events:none}
+.subsw .knob{flex-shrink:0;width:46px;height:27px;border-radius:999px;background:#d8d4dd;position:relative;transition:.2s}
+.subsw .knob::after{content:'';position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.subsw input:checked + .knob{background:var(--teal)}
+.subsw input:checked + .knob::after{transform:translateX(19px)}
+.subsw .lbl b{display:block;font-size:14.5px;font-family:'Poppins'}
+.subsw .lbl small{color:var(--muted);font-size:12.5px}
 
 /* Botones */
 .row{display:flex;gap:10px;align-items:center;margin-top:20px}
@@ -402,6 +411,11 @@ button{font-family:inherit;cursor:pointer}
       <h2 class="qh">¿De qué es? <span style="color:var(--muted);font-weight:600;font-size:15px">(opcional)</span></h2>
       <p class="sub">Una línea ayuda al corillo a escribir mejores captions. Si no, él se inventa algo con sabor.</p>
       <input type="text" class="field" id="contexto" maxlength="140" placeholder="Ej: bizcocho de guayaba para el Día de las Madres">
+      <label class="subsw" id="subsw">
+        <input type="checkbox" id="subtitulos">
+        <span class="knob"></span>
+        <span class="lbl"><b>🗣️ Alguien habla en los clips</b><small>Pongo subtítulos automáticos de la voz (no inventados)</small></span>
+      </label>
       <?php if (!$render_ok): ?>
         <div class="warn">⚠️ El motor de render todavía no está configurado en este servidor. Puedes crear el reel (el corillo lo planifica), pero el mp4 final no se generará hasta poner la key de Shotstack en producción.</div>
       <?php endif; ?>
@@ -597,6 +611,7 @@ $('#crear').onclick=async()=>{
   const fd=new FormData();
   fd.append('csrf',CSRF); fd.append('accion','crear'); fd.append('preset',preset);
   fd.append('contexto', $('#contexto').value||'');
+  fd.append('subtitulos', $('#subtitulos').checked ? '1' : '');
   const lib=[];
   files.forEach(it=>{
     if(it.file){

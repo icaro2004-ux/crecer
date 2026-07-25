@@ -36,6 +36,8 @@ function reels_presets(): array {
             'seg_max'   => 3.0,
             'background'=> '#0e0e12',
             'ritmo'     => 'rápido y alegre',
+            'filtro'    => 'boost',      // color saturado/contrastado
+            'mood'      => 'upbeat',
             'cap'       => ['family'=>"'Arial Black', Arial, sans-serif", 'size'=>52, 'weight'=>900, 'transform'=>'none', 'ls'=>'0px'],
         ],
         'accion' => [
@@ -51,6 +53,8 @@ function reels_presets(): array {
             'seg_max'   => 2.2,
             'background'=> '#000000',
             'ritmo'     => 'intenso y punchy',
+            'filtro'    => 'contrast',
+            'mood'      => 'energetico',
             'cap'       => ['family'=>"'Arial Black', Arial, sans-serif", 'size'=>56, 'weight'=>900, 'transform'=>'uppercase', 'ls'=>'1px'],
         ],
         'elegante' => [
@@ -66,6 +70,8 @@ function reels_presets(): array {
             'seg_max'   => 4.0,
             'background'=> '#101014',
             'ritmo'     => 'pausado y con respiración',
+            'filtro'    => 'muted',
+            'mood'      => 'elegante',
             'cap'       => ['family'=>"Georgia, 'Times New Roman', serif", 'size'=>44, 'weight'=>600, 'transform'=>'none', 'ls'=>'0.5px'],
         ],
     ];
@@ -232,13 +238,85 @@ function reels_caption_asset(string $text, array $preset, bool $hook = false): a
     return ['type'=>'html', 'html'=>$html, 'css'=>$css, 'width'=>$bw, 'height'=>$bh, 'background'=>'transparent'];
 }
 
+/** Datos de la marca para el cierre (nombre, WhatsApp, preferencia de contacto, logo). */
+function reels_marca(PDO $pdo, int $marca_id): ?array {
+    try {
+        $st = $pdo->prepare("SELECT nombre_negocio, whatsapp, contacto_preferencia, logo_path FROM crecer_marca WHERE id=?");
+        $st->execute([$marca_id]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    } catch (Throwable $e) { return null; }
+}
+
+/**
+ * Pista musical por mood. Pistas libres (Unminus) por defecto — reemplazables
+ * por TUS pistas con licencia comercial (súbelas a uploads y cambia estas URLs,
+ * o define REELS_MUSIC_MANIFEST en config). REELS_MUSIC_OFF=true las apaga.
+ */
+function reels_music(string $mood): ?string {
+    if (defined('REELS_MUSIC_OFF') && REELS_MUSIC_OFF) return null;
+    $map = defined('REELS_MUSIC_MANIFEST') && is_array(REELS_MUSIC_MANIFEST) ? REELS_MUSIC_MANIFEST : [
+        'upbeat'     => 'https://shotstack-assets.s3.amazonaws.com/music/unminus/palmtrees.mp3',
+        'energetico' => 'https://shotstack-assets.s3.amazonaws.com/music/unminus/lit.mp3',
+        'energetic'  => 'https://shotstack-assets.s3.amazonaws.com/music/unminus/lit.mp3',
+        'elegante'   => 'https://shotstack-assets.s3.amazonaws.com/music/unminus/ambisax.mp3',
+        'elegant'    => 'https://shotstack-assets.s3.amazonaws.com/music/unminus/ambisax.mp3',
+    ];
+    return $map[strtolower($mood)] ?? reset($map) ?: null;
+}
+
+/** Subtítulo automático (rich-caption) para un segmento, transcribiendo su voz. */
+function reels_richcaption_clip(string $alias, array $preset, float $start, float $len): array {
+    $c = $preset['cap'];
+    return [
+        'asset' => [
+            'type'   => 'rich-caption',
+            'src'    => 'alias://' . $alias,
+            'font'   => ['family' => 'Montserrat ExtraBold', 'size' => min(44, (int)$c['size'] - 8), 'color' => $preset['title_color']],
+            'stroke' => ['width' => 3, 'color' => '#000000'],
+            'animation' => ['style' => 'highlight'],
+            'align'  => ['vertical' => 'bottom'],
+        ],
+        'start'  => $start,
+        'length' => $len,
+    ];
+}
+
+/** Cierre de marca (end card): logo + nombre + CTA. Respeta anti-misrepresentación. */
+function reels_endcard_asset(?array $marca, array $preset): ?array {
+    if (!$marca) return null;
+    $nombre = trim((string)($marca['nombre_negocio'] ?? ''));
+    if ($nombre === '') return null;
+    $wa   = trim((string)($marca['whatsapp'] ?? ''));
+    $pref = (string)($marca['contacto_preferencia'] ?? '');
+    // WhatsApp SOLO si hay número y la preferencia no es DM. Nunca inventa número.
+    $cta = ($wa !== '' && $pref !== 'dm') ? 'Escríbeme por WhatsApp' : 'Escríbeme por DM';
+    $logo_html = '';
+    $logo = trim((string)($marca['logo_path'] ?? ''));
+    if ($logo !== '') {
+        $logo_html = '<img class="lg" src="' . htmlspecialchars(reels_public_url($logo), ENT_QUOTES) . '">';
+    }
+    $c  = $preset['cap'];
+    $bg = $preset['background'];
+    $nm = htmlspecialchars($nombre, ENT_QUOTES, 'UTF-8');
+    $ct = htmlspecialchars($cta, ENT_QUOTES, 'UTF-8');
+    $css = "html,body{margin:0;padding:0}"
+         . ".card{width:1080px;height:1920px;background:{$bg};display:flex;flex-direction:column;align-items:center;justify-content:center;box-sizing:border-box;padding:90px;text-align:center}"
+         . ".lg{max-width:360px;max-height:360px;object-fit:contain;margin-bottom:46px;border-radius:28px}"
+         . ".nm{font-family:{$c['family']};font-size:78px;font-weight:{$c['weight']};color:{$preset['title_color']};line-height:1.08}"
+         . ".cta{font-family:Arial,sans-serif;font-size:46px;color:{$preset['title_color']};opacity:.95;margin-top:40px;background:rgba(255,255,255,.14);padding:22px 46px;border-radius:999px}";
+    $html = '<div class="card">' . $logo_html . '<div class="nm">' . $nm . '</div><div class="cta">📲 ' . $ct . '</div></div>';
+    return ['type'=>'html', 'html'=>$html, 'css'=>$css, 'width'=>1080, 'height'=>1920, 'background'=>$bg];
+}
+
 // ── 2) TIMELINE — EDL + preset → documento de Shotstack ─────
-function reels_construir_timeline(array $reel, array $clips, array $edl): array {
+function reels_construir_timeline(array $reel, array $clips, array $edl, ?array $marca = null): array {
     $preset  = reels_preset((string)$reel['preset']);
     $overlap = (float)$preset['overlap'];
+    $subs    = !empty($reel['subtitulos']);
 
     $video_clips = [];
     $caption_clips = [];
+    $sub_clips = [];
     $cursor = 0.0;
 
     foreach ($edl['segmentos'] as $idx => $s) {
@@ -252,13 +330,18 @@ function reels_construir_timeline(array $reel, array $clips, array $edl): array 
             'start' => $start,
             'length'=> $len,
             'fit'   => 'crop',                 // llena el 9:16 sin bordes
+            'filter'=> $preset['filtro'],      // color por estilo (boost/contrast/muted)
             'transition' => ['in' => $preset['trans_in'], 'out' => $preset['trans_out']],
         ];
         if (!empty($preset['efecto'])) $vc['effect'] = $preset['efecto'];
+        if ($subs) $vc['alias'] = 'seg' . $idx;   // para transcribir su voz
         $video_clips[] = $vc;
 
-        // Caption del segmento (capa superior).
-        if ($s['caption'] !== '') {
+        if ($subs) {
+            // Subtítulos reales de la voz de este clip (no inventados).
+            $sub_clips[] = reels_richcaption_clip('seg' . $idx, $preset, $start, $len);
+        } elseif ($s['caption'] !== '') {
+            // Caption escrito por la IA (cuando no hay voz).
             $caption_clips[] = [
                 'asset'    => reels_caption_asset($s['caption'], $preset, false),
                 'start'    => $start,
@@ -273,10 +356,31 @@ function reels_construir_timeline(array $reel, array $clips, array $edl): array 
 
     $total = round($cursor + $overlap, 2);
 
-    // Hook: título grande sobre el primer ~2s.
+    // Cierre de marca (end card ~2.6s).
+    $endcard = reels_endcard_asset($marca, $preset);
+    if ($endcard) {
+        $ec_len = 2.6;
+        $video_clips[] = [
+            'asset'  => $endcard,
+            'start'  => round($total, 2),
+            'length' => $ec_len,
+            'transition' => ['in' => 'fade'],
+        ];
+        $total = round($total + $ec_len, 2);
+    }
+
+    // Música + ducking: baja el audio de los clips (más si NO hay subtítulos).
+    $music   = reels_music((string)($edl['musica_mood'] ?? $preset['mood']));
+    $clip_vol = $music ? ($subs ? 0.85 : 0.35) : 1.0;
+    foreach ($video_clips as &$vc0) {
+        if (($vc0['asset']['type'] ?? '') === 'video') $vc0['asset']['volume'] = $clip_vol;
+    }
+    unset($vc0);
+
+    // Hook + capas.
     $tracks = [];
     if (!empty($edl['hook'])) {
-        $hook_len = min(2.2, max(1.2, $total * 0.25));
+        $hook_len = min(2.2, max(1.2, $total * 0.22));
         $tracks[] = ['clips' => [[
             'asset'    => reels_caption_asset($edl['hook'], $preset, true),
             'start'    => 0,
@@ -285,19 +389,18 @@ function reels_construir_timeline(array $reel, array $clips, array $edl): array 
             'transition' => ['in' => 'fade', 'out' => 'fade'],
         ]]];
     }
-    if ($caption_clips) $tracks[] = ['clips' => $caption_clips];
+    if ($sub_clips)     $tracks[] = ['clips' => $sub_clips];     // subtítulos de voz (capa arriba)
+    if ($caption_clips) $tracks[] = ['clips' => $caption_clips]; // o captions de la IA
     $tracks[] = ['clips' => $video_clips];
 
+    $timeline = ['background' => $preset['background'], 'tracks' => $tracks];
+    if ($music) {
+        $timeline['soundtrack'] = ['src' => $music, 'effect' => 'fadeInFadeOut', 'volume' => $subs ? 0.22 : 0.6];
+    }
+
     $doc = [
-        'timeline' => [
-            'background' => $preset['background'],
-            'tracks'     => $tracks,
-        ],
-        'output' => [
-            'format' => 'mp4',
-            'size'   => ['width' => 1080, 'height' => 1920],
-            'fps'    => 30,
-        ],
+        'timeline' => $timeline,
+        'output'   => ['format' => 'mp4', 'size' => ['width' => 1080, 'height' => 1920], 'fps' => 30],
     ];
     return ['doc' => $doc, 'duracion' => $total];
 }
@@ -333,7 +436,8 @@ function reels_procesar(PDO $pdo, int $id): void {
     }
 
     // 2) Timeline.
-    $built = reels_construir_timeline($reel, $clips, $edl);
+    $marca = reels_marca($pdo, (int)$reel['marca_id']);
+    $built = reels_construir_timeline($reel, $clips, $edl, $marca);
     reels_set($pdo, $id, [
         'timeline_json' => json_encode($built['doc'], JSON_UNESCAPED_UNICODE),
         'duracion_seg'  => $built['duracion'],
@@ -361,7 +465,8 @@ function reels_reprocesar(PDO $pdo, int $id): void {
     $edl = reels_edl_desde_clips($pdo, $reel, $clips);
     reels_set($pdo, $id, ['estado' => 'armando', 'edl_json' => json_encode($edl, JSON_UNESCAPED_UNICODE), 'error_msg' => null]);
 
-    $built = reels_construir_timeline($reel, $clips, $edl);
+    $marca = reels_marca($pdo, (int)$reel['marca_id']);
+    $built = reels_construir_timeline($reel, $clips, $edl, $marca);
     reels_set($pdo, $id, [
         'timeline_json' => json_encode($built['doc'], JSON_UNESCAPED_UNICODE),
         'duracion_seg'  => $built['duracion'],
