@@ -601,12 +601,14 @@ $credito  = $has_deck
       ['sala.php',       'chat',   '#7c58e8', '#f2edff', 'La Sala',        'Habla con tu corillo'],
       ['biblioteca.php', 'image',  '#c78a16', '#fff7df', 'Sube fotos',     'Alimenta al corillo'],
     ];
+    $hh = (int)date('G');
+    $saludo = $hh < 12 ? 'Buenos días' : ($hh < 19 ? 'Buenas tardes' : 'Buenas noches');
   ?>
   <div class="hm">
     <div class="hm-hero">
-      <div class="hm-eyebrow"><?= $h($negocio) ?></div>
-      <h1>Todo al día.</h1>
-      <p>El corillo mantuvo tu tienda al día. ¿Qué hacemos ahora?</p>
+      <div class="hm-eyebrow"><?= $saludo ?></div>
+      <h1>¿Qué creamos hoy?</h1>
+      <p>Tu corillo dejó todo al día. Escoge por dónde seguimos.</p>
     </div>
     <div class="hm-grid">
       <?php foreach ($cards as $i => $c): ?>
@@ -626,6 +628,7 @@ $credito  = $has_deck
   </div>
   <style>
     .turno:has(.hm){justify-content:flex-start;overflow-y:auto;overflow-x:hidden;padding:0;background:#fff}
+    .turno:has(.hm) .tn-top{display:none}
     .hm{width:100%;max-width:520px;margin:0 auto;padding:20px 16px 44px}
     .hm-hero{position:relative;padding:16px 4px 4px}
     .hm-eyebrow{color:#57545c;font-weight:700;font-size:13.5px;margin-bottom:10px}
