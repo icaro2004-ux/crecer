@@ -318,10 +318,10 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
 .screen{display:none;animation:rise .45s cubic-bezier(.2,.8,.2,1)}
 .screen.on{display:block}
 @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
-.card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:22px;box-shadow:0 1px 0 rgba(0,0,0,.02)}
-.kick{font-weight:800;color:var(--rosa);font-size:12.5px;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px}
-.qh{font-size:clamp(20px,4.5vw,26px);font-weight:800;letter-spacing:-.01em;margin:0 0 4px}
-.sub{color:var(--muted);font-size:14.5px;margin:0 0 18px}
+.card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:17px;box-shadow:0 1px 0 rgba(0,0,0,.02)}
+.kick{font-weight:800;color:var(--rosa);font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px}
+.qh{font-size:clamp(19px,4.5vw,24px);font-weight:800;letter-spacing:-.01em;margin:0 0 3px}
+.sub{color:var(--muted);font-size:13.5px;line-height:1.4;margin:0 0 13px}
 
 /* Dropzone */
 .drop{border:2px dashed #d9d5de;border-radius:18px;background:var(--crema);padding:34px 20px;text-align:center;transition:.2s;cursor:pointer}
@@ -350,20 +350,20 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
 .preset.sel .tick{background:var(--rosa);border-color:var(--rosa)}
 
 /* Inputs */
-.field{width:100%;border:1.5px solid var(--line);border-radius:14px;padding:14px 16px;font-size:15px;font-family:inherit;background:#fff}
+.field{width:100%;border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;font-size:14.5px;font-family:inherit;background:#fff}
 .field:focus{outline:none;border-color:var(--teal)}
-.subsw{display:flex;align-items:center;gap:12px;margin-top:14px;padding:14px 16px;border:1.5px solid var(--line);border-radius:14px;cursor:pointer;user-select:none}
+.subsw{display:flex;align-items:center;gap:11px;margin-top:12px;padding:11px 13px;border:1.5px solid var(--line);border-radius:14px;cursor:pointer;user-select:none}
 .subsw input{position:absolute;opacity:0;pointer-events:none}
 .subsw .knob{flex-shrink:0;width:46px;height:27px;border-radius:999px;background:#d8d4dd;position:relative;transition:.2s}
 .subsw .knob::after{content:'';position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .subsw input:checked + .knob{background:var(--teal)}
 .subsw input:checked + .knob::after{transform:translateX(19px)}
-.subsw .lbl b{display:block;font-size:14.5px;font-family:'Poppins'}
-.subsw .lbl small{color:var(--muted);font-size:12.5px}
-.msec{margin-top:16px}
-.mlbl{font-family:'Poppins';font-weight:700;font-size:14px;margin-bottom:9px}
-.mrow{display:flex;gap:8px;flex-wrap:wrap}
-.mchip{display:inline-flex;align-items:center;gap:7px;border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:9px 14px;font-size:13.5px;font-weight:600;color:var(--tinta);transition:.15s}
+.subsw .lbl b{display:block;font-size:14px;font-family:'Poppins'}
+.subsw .lbl small{color:var(--muted);font-size:12px}
+.msec{margin-top:13px}
+.mlbl{font-family:'Poppins';font-weight:700;font-size:13.5px;margin-bottom:8px}
+.mrow{display:flex;gap:7px;flex-wrap:wrap}
+.mchip{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:7px 12px;font-size:13px;font-weight:600;color:var(--tinta);transition:.15s}
 .mchip:hover{border-color:#cfcad4}
 .mchip.sel{border-color:var(--rosa);background:#fff5f8;color:var(--rosa)}
 .mchip .mp{font-size:12px;width:20px;height:20px;border-radius:50%;background:var(--crema2);display:flex;align-items:center;justify-content:center}
@@ -513,7 +513,7 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
     <div class="card">
       <div class="kick">Paso 3 de 3</div>
       <h2 class="qh">¿De qué es? <span style="color:var(--muted);font-weight:600;font-size:15px">(opcional)</span></h2>
-      <p class="sub">Una línea ayuda al corillo a escribir mejores captions. Si no, él se inventa algo con sabor.</p>
+      <p class="sub">Ayuda al corillo con el caption. Si no, él lo inventa.</p>
       <input type="text" class="field" id="contexto" maxlength="140" placeholder="Ej: bizcocho de guayaba para el Día de las Madres">
       <div class="msec">
         <div class="mlbl">Música</div>
@@ -530,7 +530,7 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
       <label class="subsw" id="subsw">
         <input type="checkbox" id="subtitulos">
         <span class="knob"></span>
-        <span class="lbl"><b>Alguien habla en los clips</b><small>Pongo subtítulos automáticos de la voz (no inventados)</small></span>
+        <span class="lbl"><b>Alguien habla en los clips</b><small>Subtítulos de la voz, automáticos</small></span>
       </label>
       <?php if (!$render_ok): ?>
         <div class="warn"><?= ico('bolt') ?> El motor de render todavía no está configurado en este servidor. Puedes crear el reel (el corillo lo planifica), pero el mp4 final no se generará hasta poner la key de Shotstack en producción.</div>
