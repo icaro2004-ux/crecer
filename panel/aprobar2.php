@@ -1866,6 +1866,7 @@ $cf = [
     var oldph=ta.placeholder; ta.placeholder='✍️ El Diseñador está pensando una idea…';
     if(btn) btn.disabled=true;
     var fd=new FormData(); fd.append('accion','sugerir_arte'); fd.append('id',id);
+    fd.append('estilo_arte', (Array.from(document.querySelectorAll('#art-estilo input:checked')).map(function(x){return x.value;}).join('+')||'realista'));   // el estilo elegido guía la idea
     if(ajuste) fd.append('ajuste',ajuste); else if(prev) fd.append('evitar',prev);   // "otra idea" → distinta a la anterior
     fetch(location.pathname+location.search,{method:'POST',body:fd})
       .then(function(r){return r.json();})
@@ -1894,6 +1895,8 @@ $cf = [
   });
   var artSug=document.getElementById('art-sug');
   if(artSug) artSug.addEventListener('click', function(){ sugerirArte(''); });
+  // Al cambiar el estilo (realista/creativo/…), el Director re-escribe la idea EN ese estilo.
+  document.querySelectorAll('#art-estilo input').forEach(function(inp){ inp.addEventListener('change', function(){ sugerirArte(''); }); });
   var artLogo=document.getElementById('art-logo');
   if(artLogo) artLogo.addEventListener('change', function(){ document.getElementById('art-logoest').style.display=this.checked?'block':'none'; });
   function ponerImagen(card,img,thenApprove){
