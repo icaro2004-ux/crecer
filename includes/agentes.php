@@ -2474,3 +2474,55 @@ function correr_corillo(PDO $pdo): array {
     }
     return ['marcas' => count($rows), 'creadas' => $tot, 'detalle' => $detalle];
 }
+
+/**
+ * EL ANALISTA lee los KPIs reales de Resultados y devuelve, por KPI, una
+ * EXPLICACIÓN educativa (para que el dueño entienda lo que ve) + una
+ * recomendación. Y un RESUMEN general al inicio (panorama + tendencias +
+ * recomendaciones basadas en todo). Cachea por hash de los números: no
+ * re-llama a Gemini si los números no cambiaron. Voz = el tono del negocio.
+ *
+ * @param array $d números reales (alcance, interacciones, mix, por red, estrella, tendencia)
+ * @return array {resumen,alcance,interacciones,instagram,facebook,estrella} → cada uno {lectura,reco}
+ */
+function analista_resultados(PDO $pdo, int $marca_id, array $d): array {
+    $hash = md5(json_encode($d, JSON_UNESCAPED_UNICODE));
+    try {
+        $q = $pdo->prepare("SELECT datos FROM crecer_analisis_kpi WHERE marca_id=? AND hash=?");
+        $q->execute([$marca_id, $hash]);
+        if ($cache = $q->fetchColumn()) { $j = json_decode((string)$cache, true); if (is_array($j) && $j) return $j; }
+    } catch (Throwable $e) { /* sin cache: seguimos y generamos */ }
+
+    $m = leer_marca($pdo, $marca_id);
+    $nombre = equipo_nombre($m, 'analista');
+    $sys = "Eres {$nombre}, EL ANALISTA del corillo (analista de marketing digital para un microempresario). "
+        . "Tu trabajo: que el dueño ENTIENDA sus números de redes. Por cada KPI, EXPLÍCALE en cristiano qué es esa "
+        . "métrica y qué significa para su negocio, y dile cómo va la suya (bien / regular / hay que mejorar y POR QUÉ). "
+        . "Educas, no impresionas: nada de jerga ni de inventar métricas que no están en los datos. Corto y claro.\n"
+        . reglas_idioma($m) . tono_instruccion($m);
+    $prompt = "Negocio:\n" . marca_contexto($m) . "\n\n"
+        . "NÚMEROS REALES de este mes (NO inventes otros; si algo está en 0 o vacío, dilo con honestidad):\n"
+        . json_encode($d, JSON_UNESCAPED_UNICODE) . "\n\n"
+        . "Devuelve SOLO este JSON (sin texto fuera):\n"
+        . '{'
+        . '"resumen":{"lectura":"<panorama del mes: los números clave y las TENDENCIAS (qué subió/bajó), en 2-3 frases claras>","reco":"<2-3 recomendaciones GENERALES basadas en todo el análisis, concretas>"},'
+        . '"alcance":{"lectura":"<qué es el alcance + cómo va el suyo, educativo, 2 frases>","reco":"<1 acción concreta para subir el alcance>"},'
+        . '"interacciones":{"lectura":"<qué son las interacciones (me gusta/comentarios/guardados/compartidos) + cómo va, 2 frases>","reco":"<1 acción concreta>"},'
+        . '"instagram":{"lectura":"<lectura de su Instagram con estos números, 1-2 frases>","reco":"<1 acción para IG>"},'
+        . '"facebook":{"lectura":"<lectura de su Facebook con estos números, 1-2 frases>","reco":"<1 acción para FB>"},'
+        . '"estrella":{"lectura":"<por qué este post fue el que más pegó, qué tuvo, 1-2 frases>","reco":"<1 idea para repetir ese éxito>"}'
+        . '}';
+    $r = ia_ejecutar($pdo, 'analista', 'Resultados: lectura de KPIs', $prompt, [
+        'marca_id' => $marca_id, 'sistema' => $sys, 'json' => true,
+        'temperatura' => 0.6, 'max_tokens' => 1500, 'thinking_budget' => 0,
+        'mock_texto' => '{"resumen":{"lectura":"Este mes publicaste con constancia y tu alcance viene subiendo.","reco":"Sigue publicando lo que más guardan y prueba un post extra los fines de semana."}}',
+    ]);
+    $j = json_decode((string)($r['texto'] ?? ''), true);
+    if (!is_array($j)) $j = [];
+    try {
+        $pdo->prepare("INSERT INTO crecer_analisis_kpi (marca_id, hash, datos) VALUES (?,?,?)
+                       ON DUPLICATE KEY UPDATE hash=VALUES(hash), datos=VALUES(datos)")
+            ->execute([$marca_id, $hash, json_encode($j, JSON_UNESCAPED_UNICODE)]);
+    } catch (Throwable $e) { /* cache best-effort */ }
+    return $j;
+}
