@@ -986,14 +986,36 @@ $cf = [
     <div class="empty"><div class="big"><?= ico('inbox-empty') ?></div><p>Aquí queda el historial de lo que publiques. Todavía no hay nada publicado.</p></div>
   <?php endif; ?>
 
-  <?php foreach ($piezas as $p):
+  <?php if ($piezas): ?>
+  <style>
+    .postnav{display:flex;align-items:center;gap:12px;margin:4px 0 14px;max-width:600px}
+    .pn-arw{width:38px;height:38px;flex:none;border-radius:50%;border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-size:20px;line-height:1;cursor:pointer;display:grid;place-items:center;transition:.15s}
+    .pn-arw:hover{border-color:var(--terracota);color:var(--terracota)}
+    .pn-arw:disabled{opacity:.3;pointer-events:none}
+    .pn-mid{flex:1;display:flex;flex-direction:column;gap:6px}
+    .pn-count{font-size:12.5px;font-weight:800;color:var(--muted);text-align:center}
+    .pn-bar{height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+    .pn-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--coral),var(--magenta));transition:width .35s}
+    .postwiz{overflow:hidden;transition:height .4s cubic-bezier(.22,1,.36,1);max-width:600px}
+    .postwiz-track{position:relative}
+    .postwiz .post{margin:0 auto 2px;width:100%}
+  </style>
+  <div class="postnav" id="postNav">
+    <button type="button" class="pn-arw" id="pnPrev" aria-label="Post anterior">‹</button>
+    <div class="pn-mid"><span class="pn-count" id="postCount"></span><span class="pn-bar"><i id="postBar"></i></span></div>
+    <button type="button" class="pn-arw" id="pnNext" aria-label="Siguiente post">›</button>
+  </div>
+  <div class="postwiz" id="postWiz"><div class="postwiz-track" id="postTrack">
+  <?php endif; ?>
+
+  <?php foreach ($piezas as $__pi => $p):
     [$pl_label,$pl_cls] = $plat[$p['plataforma']] ?? [ucfirst($p['plataforma']),''];
     [$pi_label,$pi_cls] = $pill[$p['estado']] ?? ['—','wait'];
     $done = in_array($p['estado'],['aprobado','rechazado','publicado'],true);
     $fecha = date('d/m', strtotime($p['fecha_programada'] ?: 'now'));
   ?>
     <?php $has_cap = trim($p['caption'])!==''; $has_art = !empty($p['grafica_path']); $is_ok = in_array($p['estado'],['aprobado','publicado'],true); ?>
-    <article class="post" data-id="<?= $p['id'] ?>" data-img="<?= $has_art?'1':'' ?>" data-intentos="<?= max(0, CRECER_IMG_POST - (int)($p['arte_intentos'] ?? 0)) ?>">
+    <article class="post" data-id="<?= $p['id'] ?>" data-img="<?= $has_art?'1':'' ?>" data-intentos="<?= max(0, CRECER_IMG_POST - (int)($p['arte_intentos'] ?? 0)) ?>"<?= $__pi>0?' style="display:none"':'' ?>>
       <div class="post-head">
         <span class="chip <?= $pl_cls ?>"><span class="ico"></span><?= $h($pl_label) ?></span>
         <span class="chip"><?= $h($p['tipo']) ?></span>
@@ -1082,6 +1104,7 @@ $cf = [
       </div>
     </article>
   <?php endforeach; ?>
+  <?php if ($piezas): ?></div></div><?php endif; ?>
 </div>
 <?php endif; /* fin vistas: hub | fábrica */ ?>
 
@@ -1345,7 +1368,8 @@ $cf = [
                  || (TAB==='listos' && (d.estado==='aprobado'||d.estado==='programado'||d.estado==='fallido'))
                  || (TAB==='biblioteca' && d.estado==='publicado');
         if(!enTab){
-          // Cola: la pieza decidida sale y la interfaz avanza a la siguiente.
+          // Cola: la pieza decidida sale y el wizard avanza a la siguiente (con fade).
+          if(window.PW){ PW.retire(card); return; }
           card.style.transition='opacity .3s, transform .3s'; card.style.opacity='0'; card.style.transform='translateX(24px)';
           setTimeout(function(){
             card.remove();
@@ -1399,6 +1423,7 @@ $cf = [
         if(!d.ok){ toast('⚠️ '+(d.err||'No se pudo borrar')); return; }
         var cp=document.getElementById('cnt-pend'),ca=document.getElementById('cnt-aprob'),cb=document.getElementById('cnt-bib');
         if(cp)cp.textContent=d.revisar; if(ca)ca.textContent=d.listos; if(cb)cb.textContent=d.biblioteca;
+        if(window.PW){ PW.retire(card); return; }
         card.style.transition='opacity .3s, transform .3s'; card.style.opacity='0'; card.style.transform='translateX(24px)';
         setTimeout(function(){ card.remove(); if(!document.querySelector('.feedwrap .post')) location.reload(); },320);
       }).catch(function(){ toast('⚠️ Error de conexión. Intenta de nuevo.'); });
@@ -2347,6 +2372,60 @@ $cf = [
   .wiz-card-go{margin-top:4px;border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:14.5px;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));padding:12px;border-radius:13px}
   .wiz-card-go:active{transform:scale(.98)}
 </style>
+
+<script>
+// ── WIZARD HORIZONTAL de posts (Contenido): una card a la vez, cross-fade izq↔der ──
+(function(){
+  var view=document.getElementById('postWiz'), track=document.getElementById('postTrack');
+  if(!view||!track) return;
+  var counter=document.getElementById('postCount'), bar=document.getElementById('postBar');
+  var prevB=document.getElementById('pnPrev'), nextB=document.getElementById('pnNext');
+  var REDUCE=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function cards(){ return [].slice.call(track.querySelectorAll('.post')); }
+  var idx=0;
+  function paint(){ var n=cards().length; if(counter)counter.textContent=n?('Post '+(idx+1)+' de '+n):''; if(bar)bar.style.width=n?Math.round(((idx+1)/n)*100)+'%':'0'; if(prevB)prevB.disabled=idx<=0; if(nextB)nextB.disabled=idx>=n-1; }
+  function fit(){ var c=cards()[idx]; if(c) view.style.height=c.offsetHeight+'px'; }
+  function go(target){
+    var cs=cards(); target=Math.max(0,Math.min(cs.length-1,target)); if(target===idx){ fit(); return; }
+    var dir=target>idx?1:-1, a=cs[idx], b=cs[target]; idx=target; paint();
+    if(REDUCE){ a.style.display='none'; b.style.display=''; fit(); return; }
+    a.style.transition='opacity .2s ease, transform .2s ease'; a.style.opacity='0'; a.style.transform='translateX('+(-14*dir)+'px)';
+    setTimeout(function(){
+      a.style.display='none'; a.style.transition=''; a.style.transform=''; a.style.opacity='';
+      b.style.display=''; b.style.opacity='0'; b.style.transform='translateX('+(16*dir)+'px)'; view.style.height=b.offsetHeight+'px';
+      requestAnimationFrame(function(){ b.style.transition='opacity .34s cubic-bezier(.22,1,.36,1), transform .34s cubic-bezier(.22,1,.36,1)'; b.style.opacity='1'; b.style.transform='none'; });
+    }, 190);
+  }
+  if(prevB) prevB.addEventListener('click',function(){ go(idx-1); });
+  if(nextB) nextB.addEventListener('click',function(){ go(idx+1); });
+  // swipe (no interfiere con inputs/editor/acciones/video)
+  var x0=null,y0=null,lock=null;
+  view.addEventListener('touchstart',function(e){ if(e.target.closest('input,textarea,button,a,.editform,details,video,.post-actions')){x0=null;return;} var t=e.touches[0];x0=t.clientX;y0=t.clientY;lock=null; },{passive:true});
+  view.addEventListener('touchmove',function(e){ if(x0===null)return; var t=e.touches[0],dx=t.clientX-x0,dy=t.clientY-y0; if(lock===null&&(Math.abs(dx)>8||Math.abs(dy)>8)) lock=Math.abs(dx)>Math.abs(dy)?'x':'y'; },{passive:true});
+  view.addEventListener('touchend',function(e){ if(x0===null||lock!=='x'){x0=null;return;} var dx=e.changedTouches[0].clientX-x0; if(dx<-45)go(idx+1); else if(dx>45)go(idx-1); x0=null; },{passive:true});
+  window.addEventListener('resize',fit); window.addEventListener('load',fit);
+  // Cualquier cambio de altura de la card visible (editar/regenerar/arte) reajusta el alto
+  if(window.ResizeObserver){ new ResizeObserver(function(){ fit(); }).observe(track); }
+  // Expuesto a los handlers existentes (aprobar/rechazar/borrar): sacar card y avanzar con fade
+  window.PW={
+    refit: fit,
+    retire: function(card){
+      if(cards().indexOf(card)<0){ card.remove(); return; }
+      card.style.transition='opacity .2s ease, transform .2s ease'; card.style.opacity='0'; card.style.transform='translateX(-16px)';
+      setTimeout(function(){
+        card.remove(); var cs=cards();
+        if(!cs.length){ location.reload(); return; }
+        if(idx>cs.length-1) idx=cs.length-1;
+        var b=cs[idx]; b.style.display=''; b.style.opacity='0'; b.style.transform='translateX(16px)'; view.style.height=b.offsetHeight+'px';
+        requestAnimationFrame(function(){ b.style.transition='opacity .34s cubic-bezier(.22,1,.36,1), transform .34s cubic-bezier(.22,1,.36,1)'; b.style.opacity='1'; b.style.transform='none'; });
+        paint();
+      }, 190);
+    }
+  };
+  // init: card 0 visible (las demás ya en display:none por el markup)
+  idx=0; var cs=cards(); cs.forEach(function(c,x){ c.style.display=x===0?'':'none'; }); paint(); fit();
+})();
+</script>
 
 <?php if ($necesita_telefono) require __DIR__ . '/../includes/_sms_gate.php'; ?>
 <?php require __DIR__ . '/_shell_foot.php'; ?>
