@@ -74,6 +74,86 @@ function reels_presets(): array {
             'mood'      => 'elegante',
             'cap'       => ['family'=>"Georgia, 'Times New Roman', serif", 'size'=>44, 'weight'=>600, 'transform'=>'none', 'ls'=>'0.5px'],
         ],
+        'sabroso' => [
+            'nombre'    => 'Apetitoso',
+            'tagline'   => 'Para comida: cálido, en close-up, con antojo.',
+            'emoji'     => '🍰',
+            'title_color'=> '#ffffff',
+            'trans_in'  => 'fade',
+            'trans_out' => 'fade',
+            'efecto'    => 'zoomIn',     // acercarse a la comida = antojo
+            'overlap'   => 0.3,
+            'seg_max'   => 3.5,
+            'background'=> '#1a1310',
+            'ritmo'     => 'sabroso, que dé antojo',
+            'filtro'    => 'boost',      // colores ricos, saturados
+            'mood'      => 'upbeat',
+            'cap'       => ['family'=>"'Poppins', 'Trebuchet MS', sans-serif", 'size'=>50, 'weight'=>800, 'transform'=>'none', 'ls'=>'0px'],
+        ],
+        'fiesta' => [
+            'nombre'    => 'Fiesta',
+            'tagline'   => 'Promos y celebración: colorido, rápido, alegre.',
+            'emoji'     => '🎉',
+            'title_color'=> '#ffffff',
+            'trans_in'  => 'slideLeft',
+            'trans_out' => 'slideLeft',
+            'efecto'    => 'zoomIn',
+            'overlap'   => 0.0,
+            'seg_max'   => 2.4,
+            'background'=> '#12071a',
+            'ritmo'     => 'de fiesta, con energía alegre',
+            'filtro'    => 'boost',
+            'mood'      => 'energetico',
+            'cap'       => ['family'=>"'Arial Black', Arial, sans-serif", 'size'=>54, 'weight'=>900, 'transform'=>'none', 'ls'=>'0px'],
+        ],
+        'minimal' => [
+            'nombre'    => 'Limpio',
+            'tagline'   => 'Minimalista: mucho aire, poco texto, suave.',
+            'emoji'     => '🤍',
+            'title_color'=> '#ffffff',
+            'trans_in'  => 'fade',
+            'trans_out' => 'fade',
+            'efecto'    => null,         // sin movimiento, calma total
+            'overlap'   => 0.7,
+            'seg_max'   => 4.0,
+            'background'=> '#0f0f10',
+            'ritmo'     => 'pausado, limpio, con mucho aire',
+            'filtro'    => null,         // sin filtro, colores tal cual
+            'mood'      => 'elegante',
+            'cap'       => ['family'=>"'Helvetica Neue', Arial, sans-serif", 'size'=>42, 'weight'=>500, 'transform'=>'none', 'ls'=>'1px'],
+        ],
+        'retro' => [
+            'nombre'    => 'Retro',
+            'tagline'   => 'Nostálgico y cálido, sabor vintage.',
+            'emoji'     => '📼',
+            'title_color'=> '#ffe9c7',
+            'trans_in'  => 'fade',
+            'trans_out' => 'fade',
+            'efecto'    => 'zoomIn',
+            'overlap'   => 0.4,
+            'seg_max'   => 3.5,
+            'background'=> '#14100a',
+            'ritmo'     => 'nostálgico, cálido, con calma',
+            'filtro'    => 'muted',      // desaturado tipo vintage
+            'mood'      => 'elegante',
+            'cap'       => ['family'=>"'Courier New', monospace", 'size'=>44, 'weight'=>700, 'transform'=>'none', 'ls'=>'1px'],
+        ],
+        'oferta' => [
+            'nombre'    => 'Oferta',
+            'tagline'   => 'Anuncio directo: texto grande y vendedor.',
+            'emoji'     => '🏷️',
+            'title_color'=> '#ffffff',
+            'trans_in'  => 'zoom',
+            'trans_out' => 'zoom',
+            'efecto'    => 'zoomIn',
+            'overlap'   => 0.0,
+            'seg_max'   => 2.2,
+            'background'=> '#000000',
+            'ritmo'     => 'directo y vendedor, con urgencia honesta',
+            'filtro'    => 'contrast',
+            'mood'      => 'energetico',
+            'cap'       => ['family'=>"'Arial Black', Arial, sans-serif", 'size'=>60, 'weight'=>900, 'transform'=>'uppercase', 'ls'=>'1px'],
+        ],
     ];
 }
 function reels_preset(string $slug): array {
@@ -419,9 +499,9 @@ function reels_construir_timeline(array $reel, array $clips, array $edl, ?array 
             'start' => $start,
             'length'=> $len,
             'fit'   => 'crop',                 // llena el 9:16 sin bordes
-            'filter'=> $preset['filtro'],      // color por estilo (boost/contrast/muted)
             'transition' => ['in' => $preset['trans_in'], 'out' => $preset['trans_out']],
         ];
+        if (!empty($preset['filtro'])) $vc['filter'] = $preset['filtro'];   // color por estilo
         if (!empty($preset['efecto'])) $vc['effect'] = $preset['efecto'];
         if ($subs) $vc['alias'] = 'seg' . $idx;   // para transcribir su voz
         $video_clips[] = $vc;
