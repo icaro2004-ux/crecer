@@ -92,7 +92,7 @@ h1{font-family:'Poppins';font-size:26px;font-weight:900;margin:6px 0 16px}
 <div class="wrap">
   <div class="top"><a href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>">← Volver al panel</a></div>
   <div class="hbar">
-    <h1 style="margin:0;display:flex;align-items:center;gap:9px"><?= ico('bell') ?> Notificaciones</h1>
+    <h1 style="margin:0;display:flex;align-items:center;gap:9px"><?= ico('bell-solid') ?> Notificaciones</h1>
     <?php if ($items): ?><button class="clr" id="clearAll">Limpiar todo</button><?php endif; ?>
   </div>
 
