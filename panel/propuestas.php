@@ -116,21 +116,13 @@ require __DIR__ . '/_shell.php';
   .est-owner{font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--muted);text-transform:none;margin:0 0 22px}
   .est-owner b{color:var(--tinta);font-weight:600}
 
-  /* Deck HORIZONTAL: los posts lado a lado; swipe entre ellos; decidir desliza al siguiente */
-  .est-deck{overflow:hidden;transition:height .3s var(--ease)}
-  .est-deck-track{display:flex;align-items:flex-start;transition:transform .4s cubic-bezier(.22,1,.36,1);will-change:transform}
-  .est-prop{flex:0 0 100%;min-width:0;box-sizing:border-box;padding:0 2px;opacity:1}
-  .est-count{display:flex;align-items:center;gap:10px;margin:0 0 16px;font-size:12px;font-weight:700;color:var(--muted)}
-  .est-count .bar{flex:1;height:5px;border-radius:3px;background:var(--line);overflow:hidden}
-  .est-count .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--coral),var(--magenta));transition:width .35s var(--ease)}
-  .est-count .hint{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
-  .est-count .hint svg{width:14px;height:14px}
+  .est-prop{opacity:0}
+  .est-prop.show{opacity:1}
   .est-ctx{font-size:12.5px;font-weight:600;color:var(--muted);text-transform:capitalize;margin:0 0 14px}
   .est-art{border-radius:22px;overflow:hidden;background:var(--crema-2);border:1px solid var(--line);
     display:grid;place-items:center;margin:0 0 20px;
     box-shadow:0 2px 6px rgba(40,22,28,.05), 0 30px 62px -26px rgba(40,22,28,.3)}
-  .est-art img{width:100%;max-height:52vh;object-fit:cover;display:block}
-  @media(max-width:760px){.est-art img{max-height:44vh}}
+  .est-art img{width:100%;max-height:72vh;object-fit:cover;display:block}
   .est-art.txt{aspect-ratio:16/10;color:var(--teal)}
   .est-art.txt svg{width:38px;height:38px;opacity:.6}
   .est-vtag{display:flex;flex-direction:column;align-items:center;gap:7px;color:var(--teal-700);font-size:12px;font-weight:700;padding:38px 0}
@@ -223,8 +215,6 @@ require __DIR__ . '/_shell.php';
       </div>
     </div>
   <?php else: ?>
-    <div class="est-count" id="estCount"><span class="hint"><?= ico('sparkles') ?> <span id="estCountTxt"></span></span><span class="bar"><i id="estCountBar"></i></span></div>
-    <div class="est-deck" id="estDeck"><div class="est-deck-track" id="estTrack">
     <?php foreach ($props as $i => $p):
       $cap  = trim((string)$p['caption']);
       $arte = !empty($p['grafica_path']);
@@ -233,7 +223,7 @@ require __DIR__ . '/_shell.php';
       $ctx  = ucfirst((string)($p['plataforma'] ?? '')) . (!empty($p['fecha_programada']) ? ' · sale ' . _fecha_humana($p['fecha_programada']) : '');
       $cred = $creditos($p);
     ?>
-      <article class="est-prop" id="prop-<?= (int)$p['id'] ?>" data-id="<?= (int)$p['id'] ?>">
+      <article class="est-prop<?= $i===0?' show':'' ?>" id="prop-<?= (int)$p['id'] ?>" data-id="<?= (int)$p['id'] ?>" <?= $i===0?'':'style="display:none"' ?>>
         <p class="est-ctx"><?= $h($ctx) ?></p>
 
         <?php if ($img || $video): ?>
@@ -295,7 +285,6 @@ require __DIR__ . '/_shell.php';
         </div>
       </article>
     <?php endforeach; ?>
-    </div></div><!-- /est-deck-track /est-deck -->
 
     <!-- El cierre en calma -->
     <div class="est-done" id="estDone" hidden>
@@ -324,32 +313,35 @@ require __DIR__ . '/_shell.php';
     return fetch(BASE + '/aprobar2.php?marca=' + MARCA, { method: 'POST', body: fd }).then(function (r) { return r.json(); });
   }
 
-  // ── DECK HORIZONTAL: cards lado a lado; swipe entre posts; decidir desliza al siguiente ──
-  var view = document.getElementById('estDeck'), track = document.getElementById('estTrack');
-  var countTxt = document.getElementById('estCountTxt'), countBar = document.getElementById('estCountBar');
-  var total = props.length;
-
-  function visibleCards() { return props.filter(function (c) { return c.style.display !== 'none'; }); }
-  function fit() { var c = visibleCards()[idx]; if (c && view) view.style.height = c.offsetHeight + 'px'; }
-  function updateCounter() {
-    var vis = visibleCards(), decided = total - vis.length, pos = decided + idx + 1;
-    if (countTxt) countTxt.textContent = vis.length ? ('Post ' + pos + ' de ' + total) : '';
-    if (countBar) countBar.style.width = Math.round((decided / total) * 100) + '%';
-  }
-  function go(i) {
-    var vis = visibleCards(); if (!vis.length) return;
-    i = Math.max(0, Math.min(vis.length - 1, i)); idx = i;
-    if (track) track.style.transform = 'translateX(-' + (i * 100) + '%)';
-    updateCounter(); fit();
-  }
-  // decisión tomada → saca la card y desliza a la siguiente (el pase, ahora horizontal)
-  function pase() { var c = visibleCards()[idx]; if (c) retire(c); }
-  function retire(card) {
-    card.style.display = 'none';
-    var vis = visibleCards();
-    if (!vis.length) { if (track) track.style.transform = 'translateX(0)'; if (view) view.style.height = 'auto'; done.hidden = false; updateCounter(); return; }
-    if (idx > vis.length - 1) idx = vis.length - 1;
-    go(idx);
+  // El pase: la propuesta sale, la siguiente sube al mismo lugar. El único movimiento.
+  function pase() {
+    var cur = props[idx];
+    idx++;
+    var next = props[idx];
+    if (!next) {
+      if (reduce) { cur.style.display = 'none'; done.hidden = false; return; }
+      cur.style.transition = 'opacity .34s ease, transform .34s ease';
+      cur.style.opacity = '0'; cur.style.transform = 'translateY(-8px)';
+      setTimeout(function () { cur.style.display = 'none'; done.hidden = false; }, 320);
+      return;
+    }
+    if (reduce) {
+      cur.style.display = 'none';
+      next.style.display = ''; next.classList.add('show');
+      return;
+    }
+    cur.style.transition = 'opacity .30s ease, transform .30s ease';
+    cur.style.opacity = '0'; cur.style.transform = 'translateY(-8px)';
+    setTimeout(function () {
+      cur.style.display = 'none';
+      next.style.display = '';
+      next.style.opacity = '0'; next.style.transform = 'translateY(10px)';
+      next.classList.add('show');
+      requestAnimationFrame(function () {
+        next.style.transition = 'opacity .38s cubic-bezier(.22,1,.36,1), transform .38s cubic-bezier(.22,1,.36,1)';
+        next.style.opacity = '1'; next.style.transform = 'none';
+      });
+    }, 300);
   }
 
   function toast(card, msg) { var n = card.querySelector('[data-panelnote]'); if (n) n.textContent = msg; }
@@ -364,16 +356,16 @@ require __DIR__ . '/_shell.php';
     go.addEventListener('click', function () {
       if (busy) return; busy = true; go.disabled = true; var old = go.textContent; go.textContent = 'Un momento…';
       post('aprobar', id).then(function (d) {
-        if (d && d.ok) { retire(card); }
+        if (d && d.ok) { pase(); }
         else { go.disabled = false; go.textContent = old; alert((d && d.err) || 'No se pudo. Intenta otra vez.'); }
       }).catch(function () { go.disabled = false; go.textContent = old; alert('Se cayó la conexión.'); })
         .finally(function () { busy = false; });
     });
 
-    // Ajústalo / No (abrir puertas) — refit por el overflow:hidden del deck
-    card.querySelector('[data-adjust]').addEventListener('click', function () { var open = panels.adjust.hidden; closePanels(); panels.adjust.hidden = !open; fit(); });
-    card.querySelector('[data-reject]').addEventListener('click', function () { var open = panels.reject.hidden; closePanels(); panels.reject.hidden = !open; fit(); });
-    card.querySelectorAll('[data-cancel]').forEach(function (b) { b.addEventListener('click', function () { closePanels(); fit(); }); });
+    // Ajústalo / No (abrir puertas)
+    card.querySelector('[data-adjust]').addEventListener('click', function () { var open = panels.adjust.hidden; closePanels(); panels.adjust.hidden = !open; });
+    card.querySelector('[data-reject]').addEventListener('click', function () { var open = panels.reject.hidden; closePanels(); panels.reject.hidden = !open; });
+    card.querySelectorAll('[data-cancel]').forEach(function (b) { b.addEventListener('click', closePanels); });
 
     // Guardar texto
     card.querySelector('[data-save]').addEventListener('click', function () {
@@ -381,7 +373,7 @@ require __DIR__ . '/_shell.php';
       var cap = ta.value.trim(); if (!cap) return;
       var btn = this; btn.disabled = true; btn.textContent = 'Guardando…';
       post('editar', id, { caption: cap }).then(function (d) {
-        if (d && d.ok) { card.querySelector('[data-cap]').textContent = d.caption || cap; closePanels(); fit(); }
+        if (d && d.ok) { card.querySelector('[data-cap]').textContent = d.caption || cap; closePanels(); }
         else toast(card, 'No se pudo guardar.');
       }).catch(function () { toast(card, 'Se cayó la conexión.'); })
         .finally(function () { btn.disabled = false; btn.textContent = 'Guardar'; });
@@ -394,7 +386,7 @@ require __DIR__ . '/_shell.php';
         if (d && d.ok && d.caption) {
           card.querySelector('[data-cap]').textContent = d.caption;
           card.querySelector('[data-editor]').value = d.caption;
-          toast(card, 'Lista. Si te gusta, Guardar o Vamos con este.'); fit();
+          toast(card, 'Lista. Si te gusta, Guardar o Vamos con este.');
         } else if (d && d.paywall) { toast(card, 'Reescribir con IA es del plan pago. El texto actual queda igual.'); }
         else { toast(card, 'No pude reescribir ahora. Intenta de nuevo.'); }
       }).catch(function () { toast(card, 'Se cayó la conexión.'); })
@@ -406,7 +398,7 @@ require __DIR__ . '/_shell.php';
       b.addEventListener('click', function () {
         if (busy) return; busy = true;
         post('rechazar', id, { razon: b.getAttribute('data-razon') }).then(function (d) {
-          if (d && d.ok) { closePanels(); retire(card); }
+          if (d && d.ok) { closePanels(); pase(); }
           else alert((d && d.err) || 'No se pudo.');
         }).catch(function () { alert('Se cayó la conexión.'); })
           .finally(function () { busy = false; });
@@ -426,23 +418,12 @@ require __DIR__ . '/_shell.php';
           if (d && d.ok && d.url) {
             var art = document.createElement('div'); art.className = 'est-art';
             art.innerHTML = '<img src="' + d.url + '" alt="">';
-            bib.replaceWith(art); fit();   // "ya tenemos la foto" — la propuesta ahora la lleva
+            bib.replaceWith(art);   // "ya tenemos la foto" — la propuesta ahora la lleva
           } else { t.style.opacity = ''; t.dataset.busy = ''; alert((d && d.err) || 'No se pudo poner la foto.'); }
         }).catch(function () { t.style.opacity = ''; t.dataset.busy = ''; alert('Se cayó la conexión.'); });
       });
     });
   });
-
-  // Arranque + swipe horizontal para navegar entre posts (no choca con inputs/biblioteca)
-  go(0);
-  var sx = null, sy = null, slock = null;
-  if (view) {
-    view.addEventListener('touchstart', function (e) { if (e.target.closest('.est-bib-row,textarea,input,button,a,.est-panel')) { sx = null; return; } var t = e.touches[0]; sx = t.clientX; sy = t.clientY; slock = null; }, { passive: true });
-    view.addEventListener('touchmove', function (e) { if (sx === null) return; var t = e.touches[0], dx = t.clientX - sx, dy = t.clientY - sy; if (slock === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) slock = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y'; }, { passive: true });
-    view.addEventListener('touchend', function (e) { if (sx === null || slock !== 'x') { sx = null; return; } var dx = e.changedTouches[0].clientX - sx; if (dx < -45) go(idx + 1); else if (dx > 45) go(idx - 1); sx = null; }, { passive: true });
-  }
-  window.addEventListener('resize', fit);
-  window.addEventListener('load', fit);
 })();
 </script>
 
