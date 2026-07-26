@@ -593,10 +593,31 @@ $credito  = $has_deck
   </div>
 
   <?php else: ?>
-  <div class="tn-solo">
-    <p class="tn-solo-t">Al día.</p>
-    <p class="tn-solo-s">Tu equipo sigue trabajando. No necesitas hacer nada.</p>
+  <div class="tn-launch">
+    <p class="tn-solo-t">Todo al día ✨</p>
+    <p class="tn-solo-s">El corillo mantuvo tu tienda al día. ¿Qué hacemos ahora?</p>
+    <div class="lch-grid">
+      <a class="lch" href="<?= $BASE ?>/reels.php?<?= $mid ?>"><span class="e">🎬</span><b>Haz un reel</b><small>Sube clips, yo lo armo</small></a>
+      <a class="lch" href="<?= $BASE ?>/propuestas.php?<?= $mid ?>"><span class="e">✍️</span><b>Tus propuestas</b><small>Mira lo que preparé</small></a>
+      <a class="lch" href="<?= $BASE ?>/sala.php?<?= $mid ?>"><span class="e">💬</span><b>La Sala</b><small>Habla con tu corillo</small></a>
+      <a class="lch" href="<?= $BASE ?>/biblioteca.php?<?= $mid ?>"><span class="e">📸</span><b>Sube fotos</b><small>Alimenta al corillo</small></a>
+      <a class="lch" href="<?= $BASE ?>/resultados.php?<?= $mid ?>"><span class="e">📊</span><b>Resultados</b><small>Cómo va tu presencia</small></a>
+    </div>
+    <?php if (!empty($prox_fecha)): ?><p class="lch-next">📅 Próximo post programado <?= $h(_fecha_humana($prox_fecha)) ?></p><?php endif; ?>
   </div>
+  <style>
+    .turno:has(.tn-launch){justify-content:flex-start;overflow-y:auto;padding-top:8vh}
+    .tn-launch{width:100%;max-width:760px;margin:0 auto;padding:24px 20px 40px;text-align:center}
+    .lch-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:22px}
+    @media(min-width:720px){.lch-grid{grid-template-columns:repeat(3,1fr)}}
+    .lch{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-decoration:none;color:var(--tinta,#231F20);
+      background:#fff;border:1px solid var(--line,#eceaee);border-radius:18px;padding:18px 16px;transition:.16s;text-align:left}
+    .lch:hover{transform:translateY(-3px);box-shadow:0 16px 34px -18px rgba(40,22,28,.35);border-color:#dcd7e0}
+    .lch .e{font-size:30px;margin-bottom:8px;line-height:1}
+    .lch b{font-family:'Poppins',sans-serif;font-size:16px;font-weight:600}
+    .lch small{color:var(--muted,#7a7580);font-size:12.5px;line-height:1.3}
+    .lch-next{margin-top:20px;color:var(--muted,#7a7580);font-size:13px}
+  </style>
   <?php endif; ?>
 </main>
 
