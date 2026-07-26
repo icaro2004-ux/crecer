@@ -125,7 +125,8 @@ require __DIR__ . '/_shell.php';
   .fz-big{text-align:center;padding:6px 0 2px}
   .fz-big .l{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
   .fz-big .v{font-family:var(--font-display);font-weight:800;font-size:clamp(38px,9vw,52px);letter-spacing:-.03em;line-height:1;margin-top:6px;color:var(--teal-700,#00827e);font-variant-numeric:tabular-nums}
-  .fz-big .v.neg{color:var(--magenta)}
+  .fz-big .v.neg{color:#e0384f}
+  .fz-r .v.loss{color:#e0384f}
   .fz-rows{display:flex;flex-direction:column;gap:1px;border-radius:14px;overflow:hidden;border:1px solid var(--line)}
   .fz-r{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:var(--card);font-size:13.5px}
   .fz-r .k{color:var(--ink-soft,#4a444c);font-weight:600;display:flex;align-items:center;gap:8px}
@@ -182,7 +183,7 @@ require __DIR__ . '/_shell.php';
           <p class="hint">Estimado para Hacienda. Ajústalo con tu contador.</p></div>
       </div>
       <div class="fz-out">
-        <div class="fz-big"><div class="l">Te queda limpio</div><div class="v" id="fzNeto">$0</div></div>
+        <div class="fz-big"><div class="l" id="fzNetoLbl">Te queda limpio</div><div class="v" id="fzNeto">$0</div></div>
         <div class="fz-stack" id="fzStack"><i style="background:var(--magenta)"></i><i style="background:var(--amber,#c78a16)"></i><i style="background:var(--teal)"></i></div>
         <div class="fz-rows">
           <div class="fz-r"><span class="k">Ventas</span><span class="v" id="fzRVentas">$0</span></div>
@@ -258,22 +259,31 @@ require __DIR__ . '/_shell.php';
 
   // ── Calculadora (client-side + recuerda tus valores) ──
   var g=function(id){return document.getElementById(id);};
-  var f=function(n){return '$'+(Math.round(n)).toLocaleString('en-US');};
+  var f=function(n){ n=Math.round(n); return (n<0?'-$':'$')+Math.abs(n).toLocaleString('en-US'); };
   var V=g('fzVentas'), C=g('fzCostos'), T=g('fzTax');
   try{ var saved=JSON.parse(localStorage.getItem('fz_calc')||'{}');
     if(saved.v!=null)V.value=saved.v; if(saved.c!=null)C.value=saved.c; if(saved.t!=null)T.value=saved.t; }catch(e){}
   function calc(){
     var ventas=+V.value||0, costos=+C.value||0, taxpct=+T.value||0;
-    var bruto=Math.max(0,ventas-costos), tax=bruto*taxpct/100, neto=bruto-tax;
+    var bruto=ventas-costos;
+    var tax = bruto>0 ? bruto*taxpct/100 : 0;   // no se aparta para contribuciones sobre una pérdida
+    var neto = bruto - tax;
+    var loss = neto < 0;
     g('fzRVentas').textContent=f(ventas);
     g('fzRCostos').textContent='– '+f(costos);
     g('fzRTax').textContent='– '+f(tax);
-    g('fzRNeto').textContent=f(neto);
-    var ne=g('fzNeto'); ne.textContent=f(neto); ne.classList.toggle('neg',neto<=0 && ventas>0);
+    var rN=g('fzRNeto'); rN.textContent=f(neto); rN.classList.toggle('loss',loss);
+    var ne=g('fzNeto'); ne.textContent=f(neto); ne.classList.toggle('neg',loss);
+    g('fzNetoLbl').textContent = loss ? 'Estás perdiendo' : 'Te queda limpio';
     g('fzMargen').textContent=(ventas>0?Math.round(neto/ventas*100):0)+'%';
     g('fzBE').textContent=f(costos);
-    var tot=Math.max(1,ventas), s=g('fzStack').children;
-    s[0].style.width=(costos/tot*100)+'%'; s[1].style.width=(tax/tot*100)+'%'; s[2].style.width=(Math.max(0,neto)/tot*100)+'%';
+    var s=g('fzStack').children;
+    if(loss){ s[0].style.width='100%'; s[0].style.background='#e0384f'; s[1].style.width='0%'; s[2].style.width='0%'; }
+    else {
+      var tot=Math.max(1,ventas);
+      s[0].style.background='var(--magenta)';
+      s[0].style.width=(costos/tot*100)+'%'; s[1].style.width=(tax/tot*100)+'%'; s[2].style.width=(Math.max(0,neto)/tot*100)+'%';
+    }
     try{ localStorage.setItem('fz_calc',JSON.stringify({v:V.value,c:C.value,t:T.value})); }catch(e){}
   }
   [V,C,T].forEach(function(el){ el.addEventListener('input',calc); });
