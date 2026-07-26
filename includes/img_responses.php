@@ -105,7 +105,14 @@ function img_resp_encolar(PDO $pdo, int $marca_id, int $post_id, string $copy, ?
                            'responses:' . ($bg['modelo'] ?? ''), $brief, $bg['id']]);
         } catch (Throwable $e) { /* log best-effort */ }
         return $bg['id'];
-    } catch (Throwable $e) { error_log('img_resp_encolar: ' . $e->getMessage()); return ''; }
+    } catch (Throwable $e) {
+        error_log('img_resp_encolar: ' . $e->getMessage());
+        // Deja el error EXACTO en el log (para ver por qué gpt-image-2 cae a Gemini: 429/key/modelo/tool).
+        try { $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,estado,error_msg)
+                             VALUES (?,?,?,?,?,?, 'error', ?)")
+            ->execute([$marca_id, 'director_imagen', 'gpt-image-2 NO pudo crear el job', 'responses', mb_substr($copy, 0, 400), '', mb_substr($e->getMessage(), 0, 400)]); } catch (Throwable $e2) {}
+        return '';
+    }
 }
 
 /**
