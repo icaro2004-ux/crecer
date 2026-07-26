@@ -115,7 +115,7 @@ $nav_perfil = [
     </div>
     <div class="content">
     <?php if (function_exists('activacion_de_prueba') && activacion_de_prueba($u_actual['email'] ?? null)): ?>
-      <div style="background:#fff4d6;border:1px solid #f2d488;color:#8a5a00;border-radius:10px;padding:8px 13px;margin-bottom:14px;font-size:12.5px;font-weight:700">MODO PRUEBA — esta cuenta activa sin cobro (Stripe en bypass).</div>
+      <div style="color:var(--muted);font-size:11.5px;margin-bottom:8px;letter-spacing:.02em">Modo prueba · cuenta activa sin cobro</div>
     <?php endif; ?>
     <?php if (!empty($viendo_como_admin)): ?>
       <div style="background:#140a16;color:#fff;padding:11px 16px;border-radius:12px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13.5px">
