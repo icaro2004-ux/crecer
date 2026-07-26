@@ -56,7 +56,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
      Hereda tokens de Crecer (crema, rosa/teal, Poppins/Oswald). */
   .content{max-width:760px}
   .sc-top{margin-bottom:2px}
-  .sc-top h1{font-family:'Oswald',sans-serif;font-weight:700;font-size:23px;letter-spacing:.4px;color:var(--tinta);margin:0;line-height:1.1}
+  .sc-top h1{font-family:var(--font-display);font-weight:700;font-size:23px;letter-spacing:.4px;color:var(--tinta);margin:0;line-height:1.1}
   .sc-top p{font-size:13px;color:var(--muted);margin:4px 0 0;max-width:560px;line-height:1.45}
 
   /* Equipo presente: caras con nombre, "en la sala" */
