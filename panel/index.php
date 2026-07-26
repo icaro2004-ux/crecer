@@ -709,11 +709,6 @@ $credito  = $has_deck
     </div>
   </div>
 
-  <section class="hz-card" id="hzIdea">
-    <div class="hz-ch"><b>Idea del día</b></div>
-    <div class="hz-tip"><span class="ic pur"><?= ico('sparkles') ?></span><p id="hzIdeaTxt" style="color:var(--muted);font-style:italic">El corillo está pensando una idea para hoy…</p></div>
-  </section>
-
   <?php if ($hz_post):
     $hz_g = (string)($hz_post['grafica_path'] ?? '');
     $hz_vid = $hz_g !== '' && preg_match('#\.(mp4|mov|m4v)$#i', $hz_g);
@@ -810,6 +805,11 @@ $credito  = $has_deck
     <div class="hz-fc"><div class="fc-n"><?= $hz_proj ?></div><div class="fc-l">posts este mes si sigues a este ritmo<br><small><?= $hz_mespub ?> publicado<?= $hz_mespub==1?'':'s' ?> en <?= $hz_diames ?> día<?= $hz_diames==1?'':'s' ?></small></div></div>
   </section>
   <?php endif; ?>
+
+  <section class="hz-card" id="hzIdea">
+    <div class="hz-ch"><b>Idea del día</b></div>
+    <div class="hz-tip"><span class="ic pur"><?= ico('sparkles') ?></span><p id="hzIdeaTxt" style="color:var(--muted);font-style:italic">El corillo está pensando una idea para hoy…</p></div>
+  </section>
 </main>
 
 <script>
