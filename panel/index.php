@@ -21,6 +21,16 @@ $marca_id = (int)$marca['id'];
 $BASE = '/crecer/panel';
 $mid  = "marca={$marca_id}";
 
+// ── AJAX: Idea del día (async; el front la pide al cargar) ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'idea') {
+    require_once __DIR__ . '/../includes/agentes.php';
+    header('Content-Type: application/json; charset=utf-8');
+    if (function_exists('csrf_ok') && !csrf_ok()) { echo json_encode(['ok'=>false]); exit; }
+    try { echo json_encode(['ok'=>true, 'idea'=>idea_del_dia($pdo, $marca_id)], JSON_UNESCAPED_UNICODE); }
+    catch (Throwable $e) { echo json_encode(['ok'=>false]); }
+    exit;
+}
+
 // Hechos verificables: contenido por estado.
 $cuenta = ['borrador'=>0,'aprobado'=>0,'programado'=>0,'publicando'=>0,'publicado'=>0,'fallido'=>0,'rechazado'=>0];
 $cq = $pdo->prepare("SELECT estado, COUNT(*) n FROM crecer_contenido WHERE marca_id=? GROUP BY estado");
@@ -330,6 +340,7 @@ $hz_nombre = trim((string)($usuario['nombre'] ?? ''));
 $hz_nombre = $hz_nombre !== '' ? ucfirst(mb_strtolower(explode(' ', $hz_nombre)[0])) : (string)($marca['nombre_negocio'] ?? '');
 $hh = (int)date('G');
 $hz_saludo = $hh < 12 ? 'Buenos días' : ($hh < 19 ? 'Buenas tardes' : 'Buenas noches');
+$hz_pueblo = trim((string)($marca['pueblo'] ?? ''));
 
 $hz_post = null;
 foreach ($trabajo as $t) { if (($t['estado'] ?? '') === 'borrador')  { $hz_post = $t; $hz_post['modo'] = 'aprobar';    break; } }
@@ -365,14 +376,16 @@ try {
 $hz_hay_serie = array_sum($hz_serie) > 0;
 $hz_creciendo = $racha >= 2 || ($hz_hay_serie && end($hz_serie) >= reset($hz_serie));
 
+require_once __DIR__ . '/../includes/agentes.php';   // para crecer_sin_emoji()
+$_noemo = function_exists('crecer_sin_emoji') ? 'crecer_sin_emoji' : function ($x) { return $x; };
 // Tip del Analista (lee el CACHE de Resultados — no llama a Gemini)
 $hz_analista = null;
 try { $j = json_decode((string)$pdo->query("SELECT datos FROM crecer_analisis_kpi WHERE marca_id={$marca_id}")->fetchColumn(), true);
-  if (is_array($j) && !empty($j['resumen']) && is_array($j['resumen'])) $hz_analista = $j['resumen']; } catch (Throwable $e) {}
+  if (is_array($j) && !empty($j['resumen']) && is_array($j['resumen'])) $hz_analista = $_noemo($j['resumen']); } catch (Throwable $e) {}
 // Tip financiero (lee el CACHE de Finanzas)
 $hz_fin = null;
 try { $j = json_decode((string)$pdo->query("SELECT datos FROM crecer_finanzas_consejos WHERE marca_id={$marca_id}")->fetchColumn(), true);
-  if (is_array($j) && !empty($j['consejo_mes'])) $hz_fin = (string)$j['consejo_mes']; } catch (Throwable $e) {}
+  if (is_array($j) && !empty($j['consejo_mes'])) $hz_fin = $_noemo((string)$j['consejo_mes']); } catch (Throwable $e) {}
 // Notificaciones recientes
 require_once __DIR__ . '/../includes/notif.php';
 $hz_notifs = function_exists('notif_listar') ? array_slice(notif_listar($pdo, $marca_id, 3), 0, 3) : [];
@@ -637,13 +650,34 @@ $credito  = $has_deck
     .hz-card:has(.hz-next){grid-column:1 / -1}       /* Próximo post = hero ancho */
     .hz-card:has(.hz-next) .hz-next .im{width:200px}
   }
+  /* Saludo + clima a la derecha */
+  .hz-hi{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+  .hz-hi-l{min-width:0}
+  .hz-wx{flex:none;display:flex;flex-direction:column;align-items:flex-end;text-align:right;padding-top:6px}
+  .hz-wx .wx-ic svg{width:30px;height:30px}
+  .hz-wx .wx-t{font-family:var(--font-display);font-weight:800;font-size:24px;letter-spacing:-.02em;color:var(--tinta);line-height:1.1}
+  .hz-wx .wx-c{font-size:11.5px;font-weight:700;color:var(--muted)}
+  .hz-tip .ic.pur{background:#efeaff;color:#7c58e8}
+  .hz-cap{font-size:12px;color:var(--muted);margin-top:8px;font-weight:600}
 </style>
 <main class="hz">
   <div class="hz-hi">
-    <div class="hz-eyebrow"><?= $hz_saludo ?></div>
-    <div class="hz-hello">¡Hola, <?= $h($hz_nombre) ?>!</div>
-    <div class="hz-status"><?= ico('check-circle') ?> <?= $h($hz_status) ?></div>
+    <div class="hz-hi-l">
+      <div class="hz-eyebrow"><?= $hz_saludo ?></div>
+      <div class="hz-hello">¡Hola, <?= $h($hz_nombre) ?>!</div>
+      <div class="hz-status"><?= ico('check-circle') ?> <?= $h($hz_status) ?></div>
+    </div>
+    <div class="hz-wx" id="hzWx" hidden>
+      <span class="wx-ic" id="hzWxIc"></span>
+      <span class="wx-t" id="hzWxT">--°</span>
+      <span class="wx-c" id="hzWxC"></span>
+    </div>
   </div>
+
+  <section class="hz-card" id="hzIdea">
+    <div class="hz-ch"><b>Idea del día</b></div>
+    <div class="hz-tip"><span class="ic pur"><?= ico('sparkles') ?></span><p id="hzIdeaTxt" style="color:var(--muted);font-style:italic">El corillo está pensando una idea para hoy…</p></div>
+  </section>
 
   <?php if ($hz_post):
     $hz_g = (string)($hz_post['grafica_path'] ?? '');
@@ -700,6 +734,7 @@ $credito  = $has_deck
       <polyline points="<?= $poly ?>" fill="none" stroke="var(--teal)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
       <circle cx="<?= $lastp[0] ?>" cy="<?= $lastp[1] ?>" r="4.5" fill="var(--teal)"/>
     </svg>
+    <div class="hz-cap">Posts publicados por semana · últimas 8<?= $hay_insights ? '' : ' · conecta tus redes para ver alcance' ?></div>
     <?php else: ?>
     <p class="hz-empty">Publica esta semana y aquí verás tu rendimiento crecer.</p>
     <?php endif; ?>
@@ -741,6 +776,41 @@ $credito  = $has_deck
   </section>
   <?php endif; ?>
 </main>
+
+<script>
+(function(){
+  // ── Clima (Open-Meteo, sin key; cache 1h por pueblo) ──
+  var box=document.getElementById('hzWx');
+  if(box){
+    var PUEBLO=<?= json_encode($hz_pueblo) ?>;
+    var SVG={
+      sol:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5.6 5.6 4.2 4.2M19.8 19.8l-1.4-1.4M18.4 5.6l1.4-1.4M4.2 19.8l1.4-1.4"/></svg>',
+      nube:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h9a4 4 0 0 0 .4-8 6 6 0 0 0-11.6 1.4A3.5 3.5 0 0 0 7 18z"/></svg>',
+      lluvia:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 15h9a4 4 0 0 0 .4-8 6 6 0 0 0-11.6 1.4A3.5 3.5 0 0 0 7 15z"/><path d="M8 19v2M12 19v2M16 19v2"/></svg>',
+      tormenta:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 15h9a4 4 0 0 0 .4-8 6 6 0 0 0-11.6 1.4A3.5 3.5 0 0 0 7 15z"/><path d="M12 15l-2 4h3l-2 4"/></svg>'
+    };
+    var COL={sol:'#e0a83a',nube:'#8b93a1',lluvia:'#4a9cc7',tormenta:'#7c58e8'};
+    function cond(c){ if(c===0)return['Despejado','sol']; if(c<=3)return['Parcial nublado','nube']; if(c===45||c===48)return['Neblina','nube']; if(c>=51&&c<=67)return['Lluvia','lluvia']; if(c>=71&&c<=77)return['Nieve','nube']; if(c>=80&&c<=82)return['Aguaceros','lluvia']; if(c>=95)return['Tormenta','tormenta']; return['—','nube']; }
+    function show(t,c){ var k=cond(c); var ic=document.getElementById('hzWxIc'); ic.innerHTML=SVG[k[1]]||SVG.nube; ic.style.color=COL[k[1]]||'#8b93a1'; document.getElementById('hzWxT').textContent=Math.round(t)+'°'; document.getElementById('hzWxC').textContent=k[0]; box.hidden=false; }
+    var fresh=false;
+    try{ var cx=JSON.parse(localStorage.getItem('hz_wx')||'{}'); if(cx.t!=null && (Date.now()-cx.at<3600000) && cx.p===PUEBLO){ show(cx.t,cx.c); fresh=true; } }catch(e){}
+    if(!fresh){
+      var wx=function(la,lo){ fetch('https://api.open-meteo.com/v1/forecast?latitude='+la+'&longitude='+lo+'&current=temperature_2m,weather_code&temperature_unit=fahrenheit').then(function(r){return r.json();}).then(function(d){ var cu=d&&d.current; if(!cu)return; show(cu.temperature_2m,cu.weather_code); try{localStorage.setItem('hz_wx',JSON.stringify({t:cu.temperature_2m,c:cu.weather_code,p:PUEBLO,at:Date.now()}));}catch(x){} }).catch(function(){}); };
+      if(PUEBLO){ fetch('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(PUEBLO)+'&count=1&country=PR&language=es').then(function(r){return r.json();}).then(function(d){ var g=d&&d.results&&d.results[0]; if(g)wx(g.latitude,g.longitude); else wx(18.4655,-66.1057); }).catch(function(){ wx(18.4655,-66.1057); }); }
+      else wx(18.4655,-66.1057);
+    }
+  }
+  // ── Idea del día (async) ──
+  var it=document.getElementById('hzIdeaTxt');
+  if(it){
+    var fdi=new FormData(); fdi.append('accion','idea'); fdi.append('csrf',<?= json_encode(csrf_token()) ?>);
+    fetch(location.pathname+location.search,{method:'POST',body:fdi}).then(function(r){return r.json();}).then(function(d){
+      if(d&&d.ok&&d.idea){ it.textContent=d.idea; it.style.color=''; it.style.fontStyle=''; }
+      else { var c=document.getElementById('hzIdea'); if(c)c.remove(); }
+    }).catch(function(){ var c=document.getElementById('hzIdea'); if(c)c.remove(); });
+  }
+})();
+</script>
 
 <?php if (false): /* ── Home viejo (deck/launcher) DESACTIVADO — reversible ── */ ?>
 <main class="turno" id="turno">

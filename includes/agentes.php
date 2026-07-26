@@ -21,6 +21,17 @@ if (!defined('CRECER_COPILOTO_MODEL'))      define('CRECER_COPILOTO_MODEL', 'gem
 if (!defined('CRECER_IMG_SEMANA')) define('CRECER_IMG_SEMANA', 15); // máximo por semana (ventana 7 días) = 5 posts × 3
 if (!defined('CRECER_IMG_POST'))   define('CRECER_IMG_POST', 3);    // máximo de generaciones IA por post
 
+/**
+ * Quita emojis/pictogramas del texto (Manuel los odia). NO toca flechas (← →),
+ * checks (✓ ✕) ni glifos neutros — solo los emoji a color. Recursivo en arrays.
+ */
+function crecer_sin_emoji($x) {
+    if (is_array($x)) { foreach ($x as $k => $v) $x[$k] = crecer_sin_emoji($v); return $x; }
+    if (!is_string($x)) return $x;
+    $x = preg_replace('/[\x{1F000}-\x{1FAFF}\x{FE00}-\x{FE0F}\x{200D}\x{2600}-\x{26FF}]/u', '', $x);
+    return trim(preg_replace('/[ \t]{2,}/', ' ', $x));
+}
+
 /** Convierte "El Palo Dulce" → "el-palo-dulce" (para links públicos). */
 function slugify(string $s): string {
     $s = mb_strtolower(trim($s), 'UTF-8');
@@ -2490,7 +2501,7 @@ function analista_resultados(PDO $pdo, int $marca_id, array $d): array {
     try {
         $q = $pdo->prepare("SELECT datos FROM crecer_analisis_kpi WHERE marca_id=? AND hash=?");
         $q->execute([$marca_id, $hash]);
-        if ($cache = $q->fetchColumn()) { $j = json_decode((string)$cache, true); if (is_array($j) && $j) return $j; }
+        if ($cache = $q->fetchColumn()) { $j = json_decode((string)$cache, true); if (is_array($j) && $j) return crecer_sin_emoji($j); }
     } catch (Throwable $e) { /* sin cache: seguimos y generamos */ }
 
     $m = leer_marca($pdo, $marca_id);
@@ -2519,6 +2530,7 @@ function analista_resultados(PDO $pdo, int $marca_id, array $d): array {
     ]);
     $j = json_decode((string)($r['texto'] ?? ''), true);
     if (!is_array($j)) $j = [];
+    $j = crecer_sin_emoji($j);
     try {
         $pdo->prepare("INSERT INTO crecer_analisis_kpi (marca_id, hash, datos) VALUES (?,?,?)
                        ON DUPLICATE KEY UPDATE hash=VALUES(hash), datos=VALUES(datos)")
@@ -2543,7 +2555,7 @@ function consejos_finanzas(PDO $pdo, int $marca_id, array $d): array {
     try {
         $q = $pdo->prepare("SELECT datos FROM crecer_finanzas_consejos WHERE marca_id=? AND hash=?");
         $q->execute([$marca_id, $hash]);
-        if ($c = $q->fetchColumn()) { $j = json_decode((string)$c, true); if (is_array($j) && $j) return $j; }
+        if ($c = $q->fetchColumn()) { $j = json_decode((string)$c, true); if (is_array($j) && $j) return crecer_sin_emoji($j); }
     } catch (Throwable $e) { /* sin cache: generamos */ }
 
     $m = leer_marca($pdo, $marca_id);
@@ -2568,10 +2580,41 @@ function consejos_finanzas(PDO $pdo, int $marca_id, array $d): array {
     ]);
     $j = json_decode((string)($r['texto'] ?? ''), true);
     if (!is_array($j)) $j = [];
+    $j = crecer_sin_emoji($j);
     try {
         $pdo->prepare("INSERT INTO crecer_finanzas_consejos (marca_id, hash, datos) VALUES (?,?,?)
                        ON DUPLICATE KEY UPDATE hash=VALUES(hash), datos=VALUES(datos)")
             ->execute([$marca_id, $hash, json_encode($j, JSON_UNESCAPED_UNICODE)]);
     } catch (Throwable $e) { /* cache best-effort */ }
     return $j;
+}
+
+/**
+ * IDEA DEL DÍA — una idea corta de contenido/negocio para hoy, en la voz del negocio.
+ * Cacheada por DÍA (crecer_idea_dia): cambia a diario, no re-llama a Gemini en cada carga.
+ */
+function idea_del_dia(PDO $pdo, int $marca_id): string {
+    $dia = date('Y-m-d');
+    try {
+        $q = $pdo->prepare("SELECT texto FROM crecer_idea_dia WHERE marca_id=? AND dia=?");
+        $q->execute([$marca_id, $dia]);
+        if ($t = $q->fetchColumn()) return crecer_sin_emoji((string)$t);
+    } catch (Throwable $e) {}
+    $m = leer_marca($pdo, $marca_id);
+    $sys = "Eres " . equipo_nombre($m, 'estratega') . ", EL ESTRATEGA del corillo. Da UNA idea para HOY: de contenido "
+        . "o de negocio, corta (1-2 frases), CONCRETA y accionable, pegada a ESTE negocio. Nada de relleno, nada de "
+        . "jerga, NUNCA emojis.\n" . reglas_idioma($m) . tono_instruccion($m);
+    $prompt = "Negocio:\n" . marca_contexto($m) . "\n\nHoy es {$dia}. Dame UNA sola idea fresca para hoy (no repitas siempre lo "
+        . "mismo). Responde SOLO con la idea, sin comillas ni introducción.";
+    $r = ia_ejecutar($pdo, 'estratega', 'Idea del día', $prompt, [
+        'marca_id' => $marca_id, 'sistema' => $sys, 'temperatura' => 0.95, 'max_tokens' => 180, 'thinking_budget' => 0,
+        'mock_texto' => 'Sube una foto real de tu producto estrella y termina el caption con una pregunta para que la gente comente.',
+    ]);
+    $txt = crecer_sin_emoji(trim((string)($r['texto'] ?? '')));
+    try {
+        $pdo->prepare("INSERT INTO crecer_idea_dia (marca_id, dia, texto) VALUES (?,?,?)
+                       ON DUPLICATE KEY UPDATE dia=VALUES(dia), texto=VALUES(texto)")
+            ->execute([$marca_id, $dia, $txt]);
+    } catch (Throwable $e) {}
+    return $txt;
 }
