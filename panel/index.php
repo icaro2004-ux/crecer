@@ -365,6 +365,22 @@ try {
 $hz_hay_serie = array_sum($hz_serie) > 0;
 $hz_creciendo = $racha >= 2 || ($hz_hay_serie && end($hz_serie) >= reset($hz_serie));
 
+// Tip del Analista (lee el CACHE de Resultados — no llama a Gemini)
+$hz_analista = null;
+try { $j = json_decode((string)$pdo->query("SELECT datos FROM crecer_analisis_kpi WHERE marca_id={$marca_id}")->fetchColumn(), true);
+  if (is_array($j) && !empty($j['resumen']) && is_array($j['resumen'])) $hz_analista = $j['resumen']; } catch (Throwable $e) {}
+// Tip financiero (lee el CACHE de Finanzas)
+$hz_fin = null;
+try { $j = json_decode((string)$pdo->query("SELECT datos FROM crecer_finanzas_consejos WHERE marca_id={$marca_id}")->fetchColumn(), true);
+  if (is_array($j) && !empty($j['consejo_mes'])) $hz_fin = (string)$j['consejo_mes']; } catch (Throwable $e) {}
+// Notificaciones recientes
+require_once __DIR__ . '/../includes/notif.php';
+$hz_notifs = function_exists('notif_listar') ? array_slice(notif_listar($pdo, $marca_id, 3), 0, 3) : [];
+// Forecast: proyección de posts del mes al ritmo actual
+$hz_mespub  = (int)($prod['publicados_mes'] ?? 0);
+$hz_diames  = (int)date('j'); $hz_totdias = (int)date('t');
+$hz_proj    = ($hz_diames > 0 && $hz_mespub > 0) ? (int)round($hz_mespub / $hz_diames * $hz_totdias) : 0;
+
 $active = 'inicio';
 $page_title = 'Inicio';
 $guia = null; // El Home no se explica: se siente. (Overlay-guía eliminado a propósito.)
@@ -590,6 +606,26 @@ $credito  = $has_deck
   .hz-day.on .d,.hz-day.on .n{color:#fff}
   .hz-spark{width:100%;height:78px;display:block}
   .hz-empty{color:var(--muted);font-size:14px;line-height:1.45;padding:4px 2px}
+  .hz-tip{display:flex;gap:12px;align-items:flex-start}
+  .hz-tip .ic{width:38px;height:38px;border-radius:11px;flex:none;display:grid;place-items:center}
+  .hz-tip .ic.teal{background:color-mix(in srgb,var(--teal) 12%,#fff);color:var(--teal)}
+  .hz-tip .ic.amber{background:color-mix(in srgb,var(--amber,#c78a16) 15%,#fff);color:var(--amber-ink,#9a6b00)}
+  .hz-tip .ic svg{width:20px;height:20px}
+  .hz-tip p{margin:0;font-size:14px;line-height:1.5;color:var(--tinta)}
+  .hz-reco{margin-top:11px;background:color-mix(in srgb,var(--teal) 8%,#fff);border:1px solid color-mix(in srgb,var(--teal) 22%,#fff);border-radius:12px;padding:10px 12px;font-size:13px;color:var(--ink-soft,#4a444c);line-height:1.45;display:flex;gap:8px;align-items:flex-start}
+  .hz-reco svg{width:15px;height:15px;color:var(--teal);flex:none;margin-top:2px}
+  .hz-notlist{display:flex;flex-direction:column}
+  .hz-not{display:flex;gap:11px;align-items:center;padding:10px 2px;text-decoration:none;color:inherit;border-top:1px solid var(--line)}
+  .hz-not:first-child{border-top:0}
+  .hz-not .ni{width:34px;height:34px;border-radius:10px;flex:none;display:grid;place-items:center;background:var(--crema-2);color:var(--magenta)}
+  .hz-not .ni svg{width:17px;height:17px}
+  .hz-not .nt{min-width:0}
+  .hz-not .nt b{display:block;font-size:13.5px;font-weight:700;color:var(--tinta);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hz-not .nt small{display:block;font-size:12px;color:var(--muted)}
+  .hz-fc{display:flex;align-items:center;gap:16px}
+  .hz-fc .fc-n{font-family:var(--font-display);font-weight:800;font-size:46px;letter-spacing:-.03em;color:var(--teal-700,#00827e);line-height:1}
+  .hz-fc .fc-l{font-size:13.5px;color:var(--ink-soft,#4a444c);line-height:1.4}
+  .hz-fc .fc-l small{color:var(--muted)}
 </style>
 <main class="hz">
   <div class="hz-hi">
@@ -657,6 +693,42 @@ $credito  = $has_deck
     <p class="hz-empty">Publica esta semana y aquí verás tu rendimiento crecer.</p>
     <?php endif; ?>
   </section>
+
+  <?php if ($hz_analista && (!empty($hz_analista['lectura']) || !empty($hz_analista['reco']))): ?>
+  <section class="hz-card">
+    <div class="hz-ch"><b>Cómo vas</b><a href="<?= $BASE ?>/resultados.php?<?= $mid ?>">Ver resultados →</a></div>
+    <div class="hz-tip"><span class="ic teal"><?= ico('chart') ?></span><p><?= $h($hz_analista['lectura'] ?? $hz_analista['reco']) ?></p></div>
+    <?php if (!empty($hz_analista['reco'])): ?><div class="hz-reco"><?= ico('bolt') ?><span><?= $h($hz_analista['reco']) ?></span></div><?php endif; ?>
+  </section>
+  <?php endif; ?>
+
+  <?php if ($hz_fin): ?>
+  <section class="hz-card">
+    <div class="hz-ch"><b>Tip de finanzas</b><a href="<?= $BASE ?>/finanzas.php?<?= $mid ?>">Ver finanzas →</a></div>
+    <div class="hz-tip"><span class="ic amber"><?= ico('dollar') ?></span><p><?= $h($hz_fin) ?></p></div>
+  </section>
+  <?php endif; ?>
+
+  <?php if ($hz_notifs): ?>
+  <section class="hz-card">
+    <div class="hz-ch"><b>Lo último</b><a href="<?= $BASE ?>/notificaciones_centro.php?<?= $mid ?>">Ver todo →</a></div>
+    <div class="hz-notlist">
+      <?php foreach ($hz_notifs as $nt): ?>
+      <a class="hz-not" href="<?= $BASE ?>/notificaciones_centro.php?<?= $mid ?>">
+        <span class="ni"><?= ico(($nt['icono'] ?? '') ?: 'bell') ?></span>
+        <span class="nt"><b><?= $h($nt['titulo'] ?? '') ?></b><?php if (!empty($nt['mensaje'])): ?><small><?= $h(mb_strimwidth((string)$nt['mensaje'],0,60,'…')) ?></small><?php endif; ?></span>
+      </a>
+      <?php endforeach; ?>
+    </div>
+  </section>
+  <?php endif; ?>
+
+  <?php if ($hz_proj > 0): ?>
+  <section class="hz-card">
+    <div class="hz-ch"><b>Proyección del mes</b></div>
+    <div class="hz-fc"><div class="fc-n"><?= $hz_proj ?></div><div class="fc-l">posts este mes si sigues a este ritmo<br><small><?= $hz_mespub ?> publicado<?= $hz_mespub==1?'':'s' ?> en <?= $hz_diames ?> día<?= $hz_diames==1?'':'s' ?></small></div></div>
+  </section>
+  <?php endif; ?>
 </main>
 
 <?php if (false): /* ── Home viejo (deck/launcher) DESACTIVADO — reversible ── */ ?>
