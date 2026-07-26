@@ -428,7 +428,7 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
 <div class="rtop">
   <a class="back" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>">← Volver al panel</a>
   <a href="<?= $BASE ?>/notificaciones_centro.php?marca=<?= $marca_id ?>" aria-label="Notificaciones" title="Notificaciones" style="position:relative;margin-left:auto;font-size:21px;text-decoration:none;line-height:1;display:flex;align-items:center"><?= ico('bell-solid') ?><?php if ($notif_nl > 0): ?><span style="position:absolute;top:-6px;right:-8px;background:var(--rosa);color:#fff;font-size:10px;font-weight:800;min-width:16px;height:16px;border-radius:999px;display:flex;align-items:center;justify-content:center;padding:0 4px"><?= $notif_nl > 9 ? '9+' : $notif_nl ?></span><?php endif; ?></a>
-  <div class="brand" style="margin-left:12px"><span class="badge">Reels</span> <b>Crecer</b> <span style="font-size:.72em;font-weight:500;color:var(--muted)">by Encuéntralo</span></div>
+  <div class="brand" style="margin-left:12px"><span class="badge">Reels</span> <b style="display:inline-flex;flex-direction:column;line-height:1;gap:0"><span style="color:var(--teal)">Crecer</span><span style="font-size:.62em;font-weight:500;color:var(--muted);margin-top:1px">by Encuéntralo</span></b></div>
 </div>
 
 <div class="wrap">
