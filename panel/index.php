@@ -568,7 +568,7 @@ $credito  = $has_deck
       <?php endforeach; ?>
     </div>
     <div class="tn-end" id="tnEnd">
-      <p class="tn-end-t">✓ Listo.</p>
+      <p class="tn-end-t"><?= ico('check') ?> Listo.</p>
       <p class="tn-end-s">Los que aprobaste están guardados en <b>Listos para publicar</b>.</p>
       <a class="tn-ok" href="<?= $BASE ?>/aprobar2.php?marca=<?= $marca_id ?>&tab=listos" style="margin-top:18px">Ver y publicar →</a>
     </div>
@@ -592,31 +592,55 @@ $credito  = $has_deck
     <a class="tn-ok" href="<?= $BASE ?>/precios.php?<?= $mid ?>" style="margin-top:22px">Activar mi Corillo</a>
   </div>
 
-  <?php else: ?>
+  <?php else:
+    $chev = '<svg class="arw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>';
+    $lch = [
+      ['reels.php',      'camera', '#EF4375', 'Haz un reel',    'Sube clips, yo lo armo'],
+      ['propuestas.php', 'pen',    '#00A49F', 'Tus propuestas', 'Mira lo que preparé'],
+      ['sala.php',       'chat',   '#6B5AED', 'La Sala',        'Habla con tu corillo'],
+      ['biblioteca.php', 'image',  '#F59E0B', 'Sube tus fotos', 'Alimenta al corillo'],
+      ['resultados.php', 'chart',  '#22A06B', 'Resultados',     'Cómo va tu presencia'],
+    ];
+  ?>
   <div class="tn-launch">
-    <p class="tn-solo-t">Todo al día ✨</p>
-    <p class="tn-solo-s">El corillo mantuvo tu tienda al día. ¿Qué hacemos ahora?</p>
-    <div class="lch-grid">
-      <a class="lch" href="<?= $BASE ?>/reels.php?<?= $mid ?>"><span class="e">🎬</span><b>Haz un reel</b><small>Sube clips, yo lo armo</small></a>
-      <a class="lch" href="<?= $BASE ?>/propuestas.php?<?= $mid ?>"><span class="e">✍️</span><b>Tus propuestas</b><small>Mira lo que preparé</small></a>
-      <a class="lch" href="<?= $BASE ?>/sala.php?<?= $mid ?>"><span class="e">💬</span><b>La Sala</b><small>Habla con tu corillo</small></a>
-      <a class="lch" href="<?= $BASE ?>/biblioteca.php?<?= $mid ?>"><span class="e">📸</span><b>Sube fotos</b><small>Alimenta al corillo</small></a>
-      <a class="lch" href="<?= $BASE ?>/resultados.php?<?= $mid ?>"><span class="e">📊</span><b>Resultados</b><small>Cómo va tu presencia</small></a>
+    <div class="lch-head">
+      <h2>Todo al día</h2>
+      <p>El corillo mantuvo tu tienda al día. ¿Qué hacemos ahora?</p>
     </div>
-    <?php if (!empty($prox_fecha)): ?><p class="lch-next">📅 Próximo post programado <?= $h(_fecha_humana($prox_fecha)) ?></p><?php endif; ?>
+    <div class="lch-list">
+      <?php foreach ($lch as $i => $c): ?>
+      <a class="lch" href="<?= $BASE ?>/<?= $c[0] ?>?<?= $mid ?>" style="--acc:<?= $c[2] ?>;--d:<?= $i * 60 ?>ms">
+        <span class="ic-wrap"><?= ico($c[1]) ?></span>
+        <span class="txt"><b><?= $h($c[3]) ?></b><small><?= $h($c[4]) ?></small></span>
+        <?= $chev ?>
+      </a>
+      <?php endforeach; ?>
+    </div>
+    <?php if (!empty($prox_fecha)): ?><p class="lch-next"><?= ico('calendar') ?> Próximo post programado <?= $h(_fecha_humana($prox_fecha)) ?></p><?php endif; ?>
   </div>
   <style>
-    .turno:has(.tn-launch){justify-content:flex-start;overflow-y:auto;padding-top:8vh}
-    .tn-launch{width:100%;max-width:760px;margin:0 auto;padding:24px 20px 40px;text-align:center}
-    .lch-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:22px}
-    @media(min-width:720px){.lch-grid{grid-template-columns:repeat(3,1fr)}}
-    .lch{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-decoration:none;color:var(--tinta,#231F20);
-      background:#fff;border:1px solid var(--line,#eceaee);border-radius:18px;padding:18px 16px;transition:.16s;text-align:left}
-    .lch:hover{transform:translateY(-3px);box-shadow:0 16px 34px -18px rgba(40,22,28,.35);border-color:#dcd7e0}
-    .lch .e{font-size:30px;margin-bottom:8px;line-height:1}
-    .lch b{font-family:'Poppins',sans-serif;font-size:16px;font-weight:600}
-    .lch small{color:var(--muted,#7a7580);font-size:12.5px;line-height:1.3}
-    .lch-next{margin-top:20px;color:var(--muted,#7a7580);font-size:13px}
+    .turno:has(.tn-launch){justify-content:flex-start;overflow-y:auto;background:#fff}
+    .tn-launch{width:100%;max-width:600px;margin:0 auto;padding:9vh 22px 48px}
+    .lch-head h2{font-family:'Poppins',sans-serif;font-weight:600;font-size:27px;letter-spacing:-.01em;margin:0 0 6px;color:var(--tinta,#231F20)}
+    .lch-head p{color:var(--muted,#7a7580);font-size:15px;margin:0 0 28px;line-height:1.45}
+    .lch-list{display:flex;flex-direction:column;gap:11px}
+    .lch{display:flex;align-items:center;gap:15px;background:#fff;border:1px solid var(--line,#eceaee);border-radius:16px;
+      padding:15px 18px;text-decoration:none;color:var(--tinta,#231F20);position:relative;
+      transition:transform .22s cubic-bezier(.2,.85,.25,1),box-shadow .22s,border-color .22s;
+      opacity:0;transform:translateY(12px);animation:lchIn .5s cubic-bezier(.2,.85,.25,1) forwards;animation-delay:var(--d)}
+    @keyframes lchIn{to{opacity:1;transform:none}}
+    .lch:hover{transform:translateX(5px);border-color:transparent;box-shadow:0 14px 34px -14px color-mix(in srgb,var(--acc) 55%,transparent)}
+    .lch .ic-wrap{width:46px;height:46px;flex-shrink:0;border-radius:13px;display:flex;align-items:center;justify-content:center;
+      color:var(--acc);background:color-mix(in srgb,var(--acc) 12%,#fff);transition:.22s}
+    .lch:hover .ic-wrap{background:var(--acc);color:#fff;transform:scale(1.04)}
+    .lch .ic-wrap svg{width:22px;height:22px;stroke-width:1.9}
+    .lch .txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+    .lch .txt b{font-family:'Poppins',sans-serif;font-weight:600;font-size:16.5px;letter-spacing:-.005em}
+    .lch .txt small{color:var(--muted,#7a7580);font-size:13px}
+    .lch .arw{width:19px;height:19px;flex-shrink:0;color:#cfcad4;transition:transform .22s,color .22s}
+    .lch:hover .arw{transform:translateX(4px);color:var(--acc)}
+    .lch-next{margin-top:26px;display:flex;align-items:center;justify-content:center;gap:7px;color:var(--muted,#7a7580);font-size:13px}
+    .lch-next svg{width:15px;height:15px}
   </style>
   <?php endif; ?>
 </main>
