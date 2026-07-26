@@ -96,7 +96,7 @@ $creditos = function(array $p) use ($ags) {
 };
 
 $active = 'contenido';
-$page_title = 'Propuestas';
+$page_title = 'Tus Posts';
 $guia = ['key'=>'propuestas','agente'=>'sparkles','titulo'=>'El estudio',
   'intro'=>'Aquí revisas lo que tu corillo preparó — una propuesta a la vez.',
   'pasos'=>[
