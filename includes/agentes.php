@@ -848,21 +848,80 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
         } catch (Throwable $e) { error_log("pipeline {$pipeline}: " . $e->getMessage()); }
     }
 
-    // Calidad make-or-break: SIEMPRE el Pro (Nano Banana Pro). Antes el "sin texto"
-    // caía al flash barato y se notaba la baja calidad. El Pro (~$0.13) vale la pena
-    // frente a un plan de $39/mes. (Reversible: volver a flash para bajar costo.)
-    $modelo = 'gemini-3-pro-image';
     $fname = "marca_{$marca_id}/graficas/post_" . uniqid() . ".png";
+
+    // ── ARTE DESDE CERO → MISMO motor que la imagen INICIAL/muestra: Responses
+    //    (director + gpt-image-1), con el logo real si aplica. Así el cliente que PAGA
+    //    recibe la MISMA calidad que lo enamoró — no se le baja al hacer posts.
+    //    FOTO REAL del cliente → Gemini (realce fiel, abajo). Si Responses falla o tarda
+    //    de más → cae a Gemini para no trabar la fábrica. ──
+    if (!$tiene_foto && function_exists('img_resp_activo') && img_resp_activo()) {
+        $rr = generar_grafica_responses($pdo, $marca_id, $m, $copy, $con_texto, ($con_logo && $logo_abs) ? $logo_abs : null, $fname);
+        if ($rr) {
+            $pdo->prepare("INSERT INTO crecer_graficas (marca_id, archivo, copy_text) VALUES (?,?,?)")
+                ->execute([$marca_id, $rr['archivo'], $copy]);
+            return $rr;
+        }
+    }
+
+    // Foto real (realce fiel) o respaldo → Gemini (Nano Banana Pro).
+    $modelo = 'gemini-3-pro-image';
     $r = ia_imagen($pdo, 'creador', 'Crear arte de post', $prompt, $fname, [
         'marca_id'  => $marca_id,
         'modelo'    => $modelo,
         'imagenes'  => $imagenes,
-        'foto_real' => $tiene_foto,               // foto real → Gemini (fiel); arte desde cero → gpt-image-1
+        'foto_real' => $tiene_foto,               // foto real → Gemini (fiel)
         'aspect'    => $opts['aspect'] ?? '1:1',   // cuadrado (feed IG/FB); encuadre limpio
     ]);
     $pdo->prepare("INSERT INTO crecer_graficas (marca_id, archivo, copy_text) VALUES (?,?,?)")
         ->execute([$marca_id, $r['archivo'], $copy]);
     return $r;
+}
+
+/**
+ * Arte DESDE CERO con el motor Responses (director + gpt-image-1), el MISMO que la
+ * imagen inicial/muestra. Síncrono: encola background + poll acotado (~60s; gpt-image-1
+ * suele completar en 20-45s). Soporta el LOGO real. Devuelve ['archivo','costo','modelo']
+ * o null → el llamador cae a Gemini (nunca se traba la fábrica). Loguea en crecer_ia_log.
+ */
+function generar_grafica_responses(PDO $pdo, int $marca_id, array $m, string $copy, bool $con_texto, ?string $logo_abs, string $fname): ?array {
+    require_once __DIR__ . '/img_responses.php';
+    if (!function_exists('openai_configurado') || !openai_configurado()) return null;
+    $logo = null;
+    if ($logo_abs && is_file($logo_abs)) {
+        $mime = (function_exists('mime_content_type') ? mime_content_type($logo_abs) : '') ?: 'image/png';
+        $logo = ['data' => base64_encode((string)file_get_contents($logo_abs)), 'mime' => $mime];
+    }
+    $brief = img_resp_brief($m, $copy, $con_texto, $logo !== null);
+    $t0 = microtime(true);
+    try {
+        $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1'] + ($logo ? ['logo' => $logo] : []));
+    } catch (Throwable $e) { error_log('generar_grafica_responses crear: ' . $e->getMessage()); return null; }
+    $rid = (string)($bg['id'] ?? '');
+    if ($rid === '') return null;
+    $b64 = '';
+    for ($i = 0; $i < 30; $i++) {                       // ~60s máx
+        try { $st = openai_responses_estado($rid); }
+        catch (Throwable $e) { usleep(2000000); continue; }   // transitorio → reintenta
+        $status = (string)($st['status'] ?? '');
+        if ($status === 'completed' && (string)($st['b64'] ?? '') !== '') { $b64 = (string)$st['b64']; break; }
+        if (in_array($status, ['failed', 'cancelled', 'incomplete'], true)) return null;
+        usleep(2000000);                               // 2s entre polls
+    }
+    if ($b64 === '') return null;                       // timeout → llamador cae a Gemini
+    $bin = base64_decode($b64, true);
+    if ($bin === false || $bin === '') return null;
+    $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $fname);
+    @mkdir(dirname($abs), 0775, true);
+    if (@file_put_contents($abs, $bin) === false) return null;
+    $url = rtrim(UPLOADS_URL, '/') . '/' . $fname;
+    $lat = (int)round((microtime(true) - $t0) * 1000);
+    try {
+        $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,costo_usd,latencia_ms,estado)
+                       VALUES (?,?,?,?,?,?,?,?, 'ok')")
+            ->execute([$marca_id, 'creador', 'Crear arte de post · Responses (gpt-image-1)', 'responses/gpt-image-1', $brief, $url, 0.17, $lat]);
+    } catch (Throwable $e) { /* log best-effort */ }
+    return ['archivo' => $url, 'costo' => 0.17, 'modelo' => 'gpt-image-1'];
 }
 
 /**
