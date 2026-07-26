@@ -16,10 +16,35 @@ if (!$marca) { header('Location: /crecer/onboarding.php'); exit; }
 $marca_id = (int)$marca['id'];
 
 // ── AJAX: el dueño habla en la sala ──
+//  ASÍNCRONO: el mensaje se ENCOLA y respondemos al instante con un job id.
+//  El worker corre la cadena de agentes por detrás; el front hace polling.
+//  (Antes era síncrono → producir una campaña tardaba 1-3 min → 504 / "se cayó
+//   la conexión". Ver includes/sala_async.php.)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    @set_time_limit(0);   // producir una campaña (planificar + escribir + arte) toma su tiempo
     header('Content-Type: application/json; charset=utf-8');
     if (!csrf_ok()) { echo json_encode(['ok'=>false,'err'=>'Sesión expiró. Recarga la página.']); exit; }
+    require_once __DIR__ . '/../includes/sala_async.php';
+
+    // (a) POLLING: el front pregunta por el estado de un job.
+    if (isset($_POST['job'])) {
+        $st = sala_job_estado($pdo, (int)$_POST['job'], $marca_id);
+        if (!$st) { echo json_encode(['ok'=>false,'err'=>'No encuentro ese mensaje.']); exit; }
+        if ($st['estado'] === 'done') {
+            echo json_encode([
+                'ok'=>true, 'estado'=>'done',
+                'respuesta'=>(string)$st['respuesta'],
+                'accion'=>(string)($st['accion'] ?? 'conversar'),
+                'aprendido'=>json_decode((string)($st['aprendido'] ?? 'null'), true),
+            ], JSON_UNESCAPED_UNICODE);
+        } elseif ($st['estado'] === 'failed') {
+            echo json_encode(['ok'=>true, 'estado'=>'failed', 'err'=>(string)($st['error_msg'] ?? 'Se trabó el equipo.')], JSON_UNESCAPED_UNICODE);
+        } else {
+            echo json_encode(['ok'=>true, 'estado'=>'working']);
+        }
+        exit;
+    }
+
+    // (b) ENVIAR: encolar el mensaje y disparar el worker.
     $mensaje = trim((string)($_POST['mensaje'] ?? ''));
     if ($mensaje === '') { echo json_encode(['ok'=>false,'err'=>'Escribe o di algo.']); exit; }
     $historial = json_decode((string)($_POST['historial'] ?? '[]'), true);
@@ -27,15 +52,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_once __DIR__ . '/../includes/suscripcion.php';
     $puede_producir = (function_exists('activacion_de_prueba') && activacion_de_prueba($usuario['email'] ?? null))
         || (function_exists('plan_de_marca') && plan_de_marca($pdo, $marca_id) !== null);
-    // El límite del copiloto solo aplica a cuentas FREE (protege costo). Plan/prueba: libre —
-    // La Sala es el centro de trabajo y cada mensaje usa varios agentes por dentro.
+    // El límite del copiloto solo aplica a cuentas FREE (protege costo). Plan/prueba: libre.
     if (!$puede_producir) {
         $limite = copiloto_limite_uso($pdo, $marca_id);
         if (empty($limite['ok'])) { echo json_encode(['ok'=>false, 'err'=>$limite['err']], JSON_UNESCAPED_UNICODE); exit; }
     }
     try {
-        $r = sala_responder($pdo, $marca_id, mb_substr($mensaje, 0, 1000), $historial, $puede_producir);
-        echo json_encode($r, JSON_UNESCAPED_UNICODE);
+        $job = sala_encolar($pdo, $marca_id, mb_substr($mensaje, 0, 1000), $historial, $puede_producir);
+        sala_disparar($job);
+        echo json_encode(['ok'=>true, 'job'=>$job], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         echo json_encode(['ok'=>false, 'err'=>substr($e->getMessage(), 0, 160)], JSON_UNESCAPED_UNICODE);
     }
@@ -194,18 +219,40 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     }catch(e){}
   }
 
+  var URL=location.pathname+location.search;
+  function reactivar(){ input.disabled=false; send.disabled=false; input.focus(); }
+
   function enviar(t){
     t=(t||'').trim(); if(!t) return;
     meBubble(t); hist.push({rol:'user',texto:t}); input.value=''; input.disabled=true; send.disabled=true;
     var load=loadBubble();
     var fd=new FormData(); fd.append('csrf',CSRF); fd.append('mensaje',t); fd.append('historial',JSON.stringify(hist));
-    fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
-      load.remove(); input.disabled=false; send.disabled=false; input.focus();
-      if(!d.ok){ iaBubble('No pude seguir ahora: '+(d.err||'intenta otra vez')); return; }
-      learn(d.aprendido);
-      iaBubble(d.respuesta); hist.push({rol:'ia',texto:d.respuesta}); decir(d.respuesta);
-      if(d.accion==='campana') cta();
-    }).catch(function(){ load.remove(); input.disabled=false; send.disabled=false; iaBubble('Se cayó la conexión. Intenta otra vez.'); });
+    fetch(URL,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+      if(!d.ok || !d.job){ load.remove(); reactivar(); iaBubble('No pude seguir ahora: '+(d.err||'intenta otra vez')); return; }
+      sondear(d.job, load);   // el corillo ya está en eso; seguimos preguntando por el estado
+    }).catch(function(){ load.remove(); reactivar(); iaBubble('No pude enviar el mensaje. Intenta otra vez.'); });
+  }
+
+  // Polling del job: cada 2s hasta 'done'/'failed'. Aguanta cortes puntuales de red.
+  function sondear(job, load){
+    var intentos=0, MAX=150, fallosRed=0;   // 150 * 2s = 5 min de margen
+    var iv=setInterval(function(){
+      intentos++;
+      var fd=new FormData(); fd.append('csrf',CSRF); fd.append('job',job);
+      fetch(URL,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+        fallosRed=0;
+        if(!d.ok || d.estado==='failed'){ clearInterval(iv); load.remove(); reactivar();
+          iaBubble('Se me trabó el equipo a mitad. Dame un momento y pídemelo otra vez.'); return; }
+        if(d.estado==='done'){ clearInterval(iv); load.remove(); reactivar();
+          learn(d.aprendido); iaBubble(d.respuesta); hist.push({rol:'ia',texto:d.respuesta}); decir(d.respuesta);
+          if(d.accion==='campana') cta(); return; }
+        // sigue trabajando: a los ~10s subimos el aviso para producciones largas
+        if(intentos===5){ var b=load.querySelector('.sc-bubble'); if(b) b.lastChild.textContent=' el corillo está armando tu contenido… (esto puede tomar un momento)'; }
+        if(intentos>=MAX){ clearInterval(iv); load.remove(); reactivar();
+          iaBubble('Esto está tardando más de lo normal. El corillo sigue en eso — si pediste contenido, revisa Tus Posts en un ratito.'); }
+      }).catch(function(){ if(++fallosRed>=8){ clearInterval(iv); load.remove(); reactivar();
+          iaBubble('Se cayó la conexión. El corillo pudo haber seguido — revisa Tus Posts.'); } });
+    }, 2000);
   }
   form.addEventListener('submit',function(e){ e.preventDefault(); enviar(input.value); });
 
