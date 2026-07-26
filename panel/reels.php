@@ -284,14 +284,14 @@ $notif_nl = function_exists('notif_no_leidas') ? notif_no_leidas($pdo, $marca_id
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
-body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:var(--tinta);background:var(--crema);-webkit-font-smoothing:antialiased}
+body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:var(--tinta);background:#fff;-webkit-font-smoothing:antialiased}
 h1,h2,h3,.pop{font-family:'Poppins',sans-serif}
 button{font-family:inherit;cursor:pointer}
 svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
 .wrap{max-width:1080px;margin:0 auto;padding:0 18px}
 
 /* Topbar propio (chrome aislada) */
-.rtop{display:flex;align-items:center;gap:10px;padding:13px 16px;max-width:1080px;margin:0 auto}
+.rtop{display:flex;align-items:center;gap:10px;padding:13px 16px;position:sticky;top:0;z-index:50;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
 .rbrand{display:flex;align-items:center;gap:9px;text-decoration:none;color:inherit}
 .rbrand img{width:33px;height:33px}
 .rbrand b{display:inline-flex;flex-direction:column;line-height:1;font-family:'Poppins',sans-serif;font-size:17px}
@@ -882,11 +882,15 @@ $('#reelOpen').onclick=()=>{ reelLb.classList.add('on'); const v=$('#rvid'); v.c
 $('#reelLbX').onclick=reelClose;
 reelLb.onclick=e=>{ if(e.target===reelLb) reelClose(); };
 
-// Popup tras publicar: despacha al usuario (recomendación o ir al inicio; ellos escogen)
-function openPubModal(){ $('#pubModal').classList.add('on'); }
-$('#pubClose').onclick=()=>$('#pubModal').classList.remove('on');
-$('#pubOtro').onclick=()=>{ $('#pubModal').classList.remove('on'); files=[]; renderClips(); $('#contexto').value=''; go(1); };
-$('#pubModal').onclick=e=>{ if(e.target.id==='pubModal') $('#pubModal').classList.remove('on'); };
+// Popup tras publicar: despacha al usuario (recomendación o ir al inicio; ellos escogen).
+// Handlers perezosos: el modal está más abajo en el DOM, se enlaza al abrir.
+function openPubModal(){
+  const m=$('#pubModal'); if(!m) return;
+  m.classList.add('on');
+  m.onclick=e=>{ if(e.target.id==='pubModal') m.classList.remove('on'); };
+  const x=$('#pubClose'); if(x) x.onclick=()=>m.classList.remove('on');
+  const o=$('#pubOtro'); if(o) o.onclick=()=>{ m.classList.remove('on'); files=[]; renderClips(); $('#contexto').value=''; go(1); };
+}
 
 // ── Publicar a IG/FB (reusa el publicador del app) ──
 let pubTries=0;
