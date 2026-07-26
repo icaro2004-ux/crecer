@@ -274,7 +274,7 @@ body{
 .content{padding:30px 32px 60px;max-width:1000px;margin-inline:auto}  /* CENTRADO por defecto: toda página centra su contenido (antes quedaba pegado a la izquierda) */
 .backdrop{display:none;position:fixed;inset:0;background:rgba(20,12,8,.4);z-index:40}
 
-.page-h{font-family:var(--font-impact);font-weight:400;text-transform:uppercase;font-size:clamp(25px,4vw,37px);letter-spacing:.02em;line-height:1.02}
+.page-h{font-family:var(--font-display);font-weight:800;text-transform:none;font-size:clamp(23px,4.2vw,32px);letter-spacing:-.02em;line-height:1.05}
 .page-sub{color:var(--muted);font-size:15px;margin-top:4px}
 
 /* tarjetas/grid reutilizables del panel */

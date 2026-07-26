@@ -48,7 +48,7 @@ $nav_perfil = [
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=22" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=23" rel="stylesheet">
 <style>
   /* Fondo blanco unificado + bottom-nav móvil (una nav para todo el app) */
   .main{background:#fff}
