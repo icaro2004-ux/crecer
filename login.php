@@ -6,10 +6,17 @@ require __DIR__ . '/includes/db.php';
 require __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/iconos.php';
 
+// "Entrar" SIEMPRE muestra el login (no reingresa automático). Si hay una sesión
+// abierta, se ofrece "Continuar donde quedaste" o entrar con otra cuenta. Tras autenticar,
+// gateway_redirigir rutea solo: pagado/activo → su app; sin terminar → el paso del post.
+$sesion_u = null;
 if (esta_logueado()) {
-    $u = usuario_actual($pdo);
-    if ($u) { require_once __DIR__ . '/includes/gateway.php'; gateway_redirigir($pdo, $u); }
-    logout_usuario();   // sesión fantasma → cae al formulario de entrar
+    $sesion_u = usuario_actual($pdo);
+    if (!$sesion_u) { logout_usuario(); }                       // sesión fantasma → limpia
+    elseif (isset($_GET['salir'])) { logout_usuario(); header('Location: /crecer/login.php'); exit; }
+    elseif (isset($_GET['continuar'])) {                        // seguir con esta sesión → el gateway retoma donde quedó
+        require_once __DIR__ . '/includes/gateway.php'; gateway_redirigir($pdo, $sesion_u);
+    }
 }
 
 $err = ''; $email = '';
@@ -127,6 +134,13 @@ $nf = fn($n) => number_format($n);
       <?= csrf_field() ?>
       <?php if ($exito): ?><div class="alert-ok"><?= $h($exito) ?></div><?php endif; ?>
       <?php if ($err): ?><div class="alert-err"><?= $err ?></div><?php endif; ?>
+      <?php if ($sesion_u): ?>
+        <div class="alert-ok" style="text-align:left;line-height:1.5">
+          Ya tienes una sesión abierta como <b><?= $h($sesion_u['email']) ?></b>.<br>
+          <a href="?continuar=1" style="font-weight:700;color:var(--teal-dark);text-decoration:none">Continuar donde quedaste →</a>
+          &nbsp;·&nbsp; <a href="?salir=1" style="color:var(--muted);text-decoration:none">Entrar con otra cuenta</a>
+        </div>
+      <?php endif; ?>
 
       <label class="f-label">Email</label>
       <input class="f-input" type="email" name="email" required autofocus value="<?= $h($email) ?>" placeholder="tu@email.com">
