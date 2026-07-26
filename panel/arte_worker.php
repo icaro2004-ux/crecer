@@ -23,6 +23,18 @@ if (function_exists('fastcgi_finish_request')) { fastcgi_finish_request(); }
 @ignore_user_abort(true);
 @set_time_limit(0);
 
+// Si aún no hay job de imagen → CREARLO AQUÍ (la llamada lenta a OpenAI corre en el
+// worker, NUNCA en la pantalla del dueño → cero timeout / "error de conexión").
+$ct_raw = (string)($_GET['ct'] ?? 'x');
+$con_texto = ($ct_raw === 'x' ? null : ($ct_raw === '1'));
+$extra = trim((string)($_GET['extra'] ?? ''));
+try {
+    $row = $pdo->query("SELECT img_job, caption FROM crecer_contenido WHERE id=" . $pid)->fetch(PDO::FETCH_ASSOC);
+    if ($row && trim((string)($row['img_job'] ?? '')) === '') {
+        img_resp_encolar($pdo, $mid, $pid, (string)($row['caption'] ?? ''), $con_texto, $extra !== '' ? $extra : null);
+    }
+} catch (Throwable $e) { error_log("arte_worker #{$pid} crear: " . $e->getMessage()); }
+
 $link = '/crecer/panel/propuestas.php?marca=' . $mid;
 $estado = 'queued';
 for ($i = 0; $i < 60; $i++) {                 // ~3 min máx (gpt-image-1 suele < 1 min)

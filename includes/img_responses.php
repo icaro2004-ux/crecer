@@ -23,9 +23,11 @@ function img_resp_activo(): bool {
  * background hasta que la imagen esté y AVISA por notificación (campanita). Así el
  * dueño encola y sigue editando / se va; la notificación lo lleva al post listo.
  */
-function arte_disparar(int $marca_id, int $post_id): void {
+function arte_disparar(int $marca_id, int $post_id, ?bool $con_texto = null, ?string $extra = null): void {
     $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
-    $url  = 'https://' . $host . '/crecer/panel/arte_worker.php?marca=' . $marca_id . '&id=' . $post_id . '&key=' . ARTE_WORKER_KEY;
+    $q = '&ct=' . ($con_texto === null ? 'x' : ($con_texto ? '1' : '0'));
+    if ($extra !== null && trim($extra) !== '') $q .= '&extra=' . rawurlencode(mb_substr(trim($extra), 0, 300));
+    $url  = 'https://' . $host . '/crecer/panel/arte_worker.php?marca=' . $marca_id . '&id=' . $post_id . '&key=' . ARTE_WORKER_KEY . $q;
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER    => true,

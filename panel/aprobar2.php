@@ -202,17 +202,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($src) && function_exists('img_resp_activo') && img_resp_activo()) {
             $con_txt = ($_POST['con_texto'] ?? '') === '1';
             $extra   = trim($_POST['instrucciones'] ?? '');
-            $jid = img_resp_encolar($pdo, $marca_id, $id, $copy, $con_txt, $extra !== '' ? $extra : null);
-            if ($jid !== '') {
-                $pdo->prepare("UPDATE crecer_contenido SET arte_intentos=arte_intentos+1, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$id, $marca_id]);
-                arte_disparar($marca_id, $id);   // worker en background: sondea y AVISA por notificación al terminar
-                header('Content-Type: application/json');
-                echo json_encode(['ok'=>true, 'async'=>true, 'id'=>$id,
-                    'restantes'=>max(0, CRECER_IMG_SEMANA - ($usados+1)),
-                    'restantes_post'=>max(0, CRECER_IMG_POST - ($intentos+1)), 'reset'=>$reset], JSON_UNESCAPED_UNICODE);
-                exit;
-            }
-            // encolar falló → cae al sync de abajo (Gemini)
+            // NO se llama a OpenAI aquí (eso colgaba la pantalla → timeout/"error de conexión").
+            // Marcamos 'queued' y el WORKER crea el job + sondea + avisa por notificación.
+            $pdo->prepare("UPDATE crecer_contenido SET img_estado='queued', img_job=NULL, arte_intentos=arte_intentos+1, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$id, $marca_id]);
+            arte_disparar($marca_id, $id, $con_txt, $extra !== '' ? $extra : null);
+            header('Content-Type: application/json');
+            echo json_encode(['ok'=>true, 'async'=>true, 'id'=>$id,
+                'restantes'=>max(0, CRECER_IMG_SEMANA - ($usados+1)),
+                'restantes_post'=>max(0, CRECER_IMG_POST - ($intentos+1)), 'reset'=>$reset], JSON_UNESCAPED_UNICODE);
+            exit;
         }
         try {
             $r = generar_grafica($pdo, $marca_id, $src, [
@@ -564,6 +562,14 @@ $dir_fotos = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/fotos";
 $url_fotos = rtrim(UPLOADS_URL, '/') . "/marca_{$marca_id}/fotos";
 $fotos = is_dir($dir_fotos) ? array_values(array_filter(scandir($dir_fotos), fn($x)=>$x[0]!=='.')) : [];
 $tiene_logo = !empty($marca['logo_path']);
+// Al VOLVER al estudio, recoge los jobs de imagen que ya terminaron en OpenAI (el worker
+// muere en Hostinger antes de que gpt-image-2 acabe ~170s). Así la imagen aparece sola.
+try {
+    require_once __DIR__ . '/../includes/img_responses.php';
+    $pend = $pdo->prepare("SELECT id FROM crecer_contenido WHERE marca_id=? AND img_estado='queued' AND img_job IS NOT NULL ORDER BY id DESC LIMIT 4");
+    $pend->execute([$marca_id]);
+    foreach ($pend->fetchAll(PDO::FETCH_COLUMN) as $pid) { img_resp_completar($pdo, $marca_id, (int)$pid); }
+} catch (Throwable $e) {}
 $wk = $pdo->prepare("SELECT COUNT(*) c, MIN(created_at) oldest FROM crecer_graficas WHERE marca_id=? AND created_at >= (NOW() - INTERVAL 7 DAY)");
 $wk->execute([$marca_id]); $w = $wk->fetch();
 $sin_limite_img = img_generacion_ilimitada($pdo, $marca_id);   // fundador/prueba → sin tope
@@ -1914,12 +1920,16 @@ $cf = [
     else toast('Tu arte ya está listo.');
   }
   function marcarGenerando(card){
-    if(!document.getElementById('artgen-css')){ var s=document.createElement('style'); s.id='artgen-css'; s.textContent='@keyframes aspin{to{transform:rotate(360deg)}}'; document.head.appendChild(s); }
+    if(!document.getElementById('artgen-css')){ var s=document.createElement('style'); s.id='artgen-css';
+      s.textContent='@keyframes aspin{to{transform:rotate(360deg)}}@keyframes ashim{0%{background-position:-200% 0}100%{background-position:200% 0}}.artgen-sk{position:absolute;inset:0;background:linear-gradient(100deg,#e9e7e4 20%,#f6f4f2 42%,#e9e7e4 64%);background-size:200% 100%;animation:ashim 1.5s linear infinite}';
+      document.head.appendChild(s); }
     var wrap=card.querySelector('.artwrap'); if(!wrap) return;
-    wrap.innerHTML='<div style="padding:34px 18px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:9px;background:var(--crema-2)">'
-      +'<span style="width:26px;height:26px;border-radius:50%;border:3px solid rgba(0,0,0,.12);border-top-color:var(--terracota);animation:aspin .8s linear infinite;display:inline-block"></span>'
-      +'<b style="font-size:14px;color:var(--tinta)">El corillo está montando tu arte…</b>'
-      +'<small style="font-size:12px;color:var(--muted);max-width:28ch;line-height:1.4">Puedes seguir editando otros posts o salir. Te aviso en Notificaciones cuando esté.</small></div>';
+    wrap.innerHTML='<div style="position:relative;width:100%;aspect-ratio:1/1;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:11px;text-align:center;padding:24px">'
+      +'<div class="artgen-sk"></div>'
+      +'<div style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:10px">'
+      +'<span style="width:30px;height:30px;border-radius:50%;border:3px solid rgba(0,0,0,.14);border-top-color:var(--terracota);animation:aspin .8s linear infinite;display:inline-block"></span>'
+      +'<b style="font-size:15px;color:var(--tinta)">Tu imagen se está generando…</b>'
+      +'<small style="font-size:12.5px;color:var(--muted);max-width:30ch;line-height:1.45">Toma un par de minutos. Sigue en lo tuyo o vuelve luego — te avisamos en <b>Notificaciones</b> cuando esté lista.</small></div></div>';
   }
   function pollArte(card,id,thenApprove){
     if(!id) return; var tries=0;
