@@ -1941,35 +1941,29 @@ $cf = [
   }
   artform.addEventListener('submit', function(e){
     e.preventDefault(); if(!artCard) return;
-    var go=document.getElementById('art-go'); go.disabled=true; go.textContent='Enviando…';
     var card=artCard, thenApprove=artThenApprove;
     var fd=new FormData(artform); fd.append('ajax','1');
+    // Guarda el placeholder por si hay que revertir (límite/paywall).
+    var wrap=card.querySelector('.artwrap'); var orig = wrap ? wrap.innerHTML : null;
+    // OPTIMISTA: cierra el modal y pon el recuadro gris AL INSTANTE — no esperamos a OpenAI.
+    // (La generación es lenta / puede rate-limitear; el worker la hace por detrás y avisa.)
+    cerrarArte(); marcarGenerando(card);
+    toast('Tu imagen se está generando — te avisamos en Notificaciones cuando esté.');
     fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
-      go.disabled=false; go.textContent='✨ Crear el arte';
-      if(!d.ok){
+      if(d && !d.ok){
+        if(wrap && orig!=null) wrap.innerHTML = orig;   // revertir el recuadro
         if(d.err==='post_limite') toast('Ya usaste las <?= CRECER_IMG_POST ?> generaciones de este post. Recicla o sube tu foto.');
         else if(d.err==='limite') toast('Usaste tus <?= CRECER_IMG_SEMANA ?> imágenes de la semana'+(d.reset?' (vuelven el '+d.reset+')':'')+'.');
         else if(d.err==='paywall'){ toast('Usaste tu imagen de muestra. Actívate para crear más.'); setTimeout(function(){location.href='/crecer/panel/precios.php?marca=<?= $marca_id ?>&motivo=muestra';},1400); }
         else toast('No se pudo crear el arte. Intenta de nuevo.');
         return;
       }
-      card.dataset.intentos=d.restantes_post;
-      if(d.restantes!=null) document.getElementById('art-rest').textContent=d.restantes;
-      cerrarArte();
-      if(d.async){
-        // No bloquea: se genera en background. El dueño sigue / se va; la notificación lo trae al post.
-        marcarGenerando(card);
-        toast('El corillo está montando tu arte en alta calidad. Sigue tranquilo — te aviso en Notificaciones.');
-        pollArte(card,d.id,thenApprove);
-      } else {
-        ponerImagen(card,d.img,thenApprove);
-      }
-    }).catch(function(){
-      // La petición pudo tardar, pero el arte se está generando en background igual.
-      go.disabled=false; go.textContent='✨ Crear el arte';
-      cerrarArte(); if(artCard) marcarGenerando(artCard);
-      toast('Se está generando en background — te avisamos en Notificaciones cuando esté.');
-    });
+      if(d){ if(d.restantes_post!=null) card.dataset.intentos=d.restantes_post;
+             if(d.restantes!=null){ var ar=document.getElementById('art-rest'); if(ar) ar.textContent=d.restantes; } }
+      // El recuadro gris ya está; si el dueño se queda, pollArte lo cambia solo al terminar.
+      if(d && d.async){ pollArte(card,d.id,thenApprove); }
+      else if(d && d.img){ ponerImagen(card,d.img,thenApprove); }
+    }).catch(function(){ /* la petición tardó, pero el arte se hace igual — el recuadro ya está puesto */ });
   });
   // Reusar un arte ya creado (clic en miniatura)
   artform.addEventListener('click', function(e){
