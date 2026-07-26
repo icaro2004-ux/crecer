@@ -2536,6 +2536,16 @@ function analista_resultados(PDO $pdo, int $marca_id, array $d): array {
  * @return array {consejo_mes, metrica_mes, consejos:[{titulo,texto,metrica}]}
  */
 function consejos_finanzas(PDO $pdo, int $marca_id, array $d): array {
+    // Cache por DÍA (marca + hash de métricas + fecha): cambian cada día (dinámicos),
+    // pero no re-llaman a Gemini en cada carga de la página.
+    $dia  = date('Y-m-d');
+    $hash = md5(json_encode($d, JSON_UNESCAPED_UNICODE) . '|' . $dia);
+    try {
+        $q = $pdo->prepare("SELECT datos FROM crecer_finanzas_consejos WHERE marca_id=? AND hash=?");
+        $q->execute([$marca_id, $hash]);
+        if ($c = $q->fetchColumn()) { $j = json_decode((string)$c, true); if (is_array($j) && $j) return $j; }
+    } catch (Throwable $e) { /* sin cache: generamos */ }
+
     $m = leer_marca($pdo, $marca_id);
     $nombre = equipo_nombre($m, 'estratega');
     $sys = "Eres {$nombre}, EL ESTRATEGA del corillo — mentor de negocio de un microempresario boricua. Das consejos "
@@ -2549,12 +2559,19 @@ function consejos_finanzas(PDO $pdo, int $marca_id, array $d): array {
         . '{"consejo_mes":"<el consejo principal del mes, 2-3 frases, ligado a un número real cuando se pueda>",'
         . '"metrica_mes":"<en qué dato te basas, corto>",'
         . '"consejos":[{"titulo":"<corto>","texto":"<1-2 frases accionables>","metrica":"<de qué dato sale, corto>"}]}'
-        . " con EXACTAMENTE 4 consejos en este orden de tema: precio, apartar para contribuciones, reinvertir en lo que ya funciona, separar negocio/personal. Adáptalos a SUS números.";
+        . " con EXACTAMENTE 4 consejos en este orden de tema: precio, apartar para contribuciones, reinvertir en lo que ya funciona, separar negocio/personal. Adáptalos a SUS números."
+        . " Hoy es {$dia}: dale un ángulo FRESCO y ejemplos variados, no repitas siempre las mismas frases.";
     $r = ia_ejecutar($pdo, 'estratega', 'Finanzas: consejos', $prompt, [
         'marca_id' => $marca_id, 'sistema' => $sys, 'json' => true,
         'temperatura' => 0.7, 'max_tokens' => 1200, 'thinking_budget' => 0,
         'mock_texto' => '{"consejo_mes":"Tu contenido está llamando la atención — es buen momento para revisar precios y agarrar el hábito de apartar un poco de cada venta para las contribuciones, antes de gastarlo.","metrica_mes":"actividad del mes","consejos":[{"titulo":"Precio con confianza","texto":"Si tu gente interactúa, valora lo que haces; puedes subir precios poco a poco sin miedo.","metrica":"engagement"},{"titulo":"Aparta para contribuciones","texto":"Guarda un porcentaje de cada venta en una cuenta o sobre aparte. Cuando llegue la fecha, ya está.","metrica":"hábito mensual"},{"titulo":"Reinvierte en lo que pega","texto":"Promociona tu mejor post, no el que no funciona. Ahí está tu mejor inversión.","metrica":"post estrella"},{"titulo":"Separa negocio y personal","texto":"Una cuenta solo del negocio te deja ver la realidad y crecer sin sustos.","metrica":"base sana"}]}',
     ]);
     $j = json_decode((string)($r['texto'] ?? ''), true);
-    return is_array($j) ? $j : [];
+    if (!is_array($j)) $j = [];
+    try {
+        $pdo->prepare("INSERT INTO crecer_finanzas_consejos (marca_id, hash, datos) VALUES (?,?,?)
+                       ON DUPLICATE KEY UPDATE hash=VALUES(hash), datos=VALUES(datos)")
+            ->execute([$marca_id, $hash, json_encode($j, JSON_UNESCAPED_UNICODE)]);
+    } catch (Throwable $e) { /* cache best-effort */ }
+    return $j;
 }

@@ -65,6 +65,29 @@ require __DIR__ . '/_shell.php';
   .fz-sec{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:30px 0 13px;display:flex;align-items:center;gap:10px}
   .fz-sec::after{content:"";flex:1;height:1px;background:var(--line)}
 
+  /* Botón que abre la calculadora en popup */
+  .fz-calcbtn{display:flex;align-items:center;gap:12px;width:100%;max-width:430px;text-align:left;background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:13px 15px;cursor:pointer;font:inherit;box-shadow:var(--shadow-sm);transition:border-color .15s,transform .12s;margin:0 0 4px}
+  .fz-calcbtn:hover{border-color:var(--teal);transform:translateY(-1px)}
+  .fz-calcbtn .ic{width:40px;height:40px;border-radius:11px;flex:none;display:grid;place-items:center;background:color-mix(in srgb,var(--teal) 12%,#fff);color:var(--teal)}
+  .fz-calcbtn .ic svg{width:21px;height:21px}
+  .fz-calcbtn .tx{flex:1;min-width:0}
+  .fz-calcbtn .tx b{display:block;font-size:14.5px;color:var(--tinta);font-family:var(--font-display)}
+  .fz-calcbtn .tx small{color:var(--muted);font-size:12px}
+  .fz-calcbtn .ar{color:var(--muted);font-size:22px;font-weight:400;flex:none}
+
+  /* Popup de la calculadora */
+  .fz-modal{position:fixed;inset:0;z-index:200;background:rgba(20,12,22,.55);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);display:none;align-items:flex-end;justify-content:center}
+  .fz-modal.show{display:flex;animation:fzfade .2s ease}
+  @keyframes fzfade{from{opacity:0}to{opacity:1}}
+  .fz-sheet{background:var(--card);width:100%;max-width:640px;max-height:92vh;overflow-y:auto;border-radius:22px 22px 0 0;box-shadow:0 -20px 50px -18px rgba(0,0,0,.45);animation:fzrise .28s cubic-bezier(.22,1,.36,1) both}
+  @media(min-width:680px){.fz-modal{align-items:center}.fz-sheet{border-radius:22px}}
+  @keyframes fzrise{from{transform:translateY(26px);opacity:.6}to{transform:none;opacity:1}}
+  .fz-sheet-h{display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--card);z-index:1}
+  .fz-sheet-h b{font-family:var(--font-display);font-weight:800;font-size:16px;display:inline-flex;align-items:center;gap:8px}
+  .fz-sheet-h b svg{width:18px;height:18px;color:var(--teal)}
+  .fz-sheet-h .x{background:none;border:0;font-size:18px;color:var(--muted);cursor:pointer;padding:6px;line-height:1}
+  .fz-modal .fz-calc{border:0;border-radius:0;box-shadow:none}
+
   /* Consejo del mes */
   .fz-adv{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px 20px 18px;box-shadow:var(--shadow-sm);position:relative;overflow:hidden}
   .fz-adv::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:linear-gradient(180deg,var(--magenta),var(--teal))}
@@ -146,6 +169,12 @@ require __DIR__ . '/_shell.php';
   <h1 class="fz-h1">Consejos & Finanzas</h1>
   <p class="fz-lead">Guía sencilla, ligada a tus números de redes, para que el negocio no solo se vea bien — también dé dinero.</p>
 
+  <button type="button" class="fz-calcbtn" id="fzOpenCalc">
+    <span class="ic"><?= ico('dollar') ?></span>
+    <span class="tx"><b>Calculadora</b><small>¿Cuánto te queda? Ganancias y pérdidas</small></span>
+    <span class="ar">›</span>
+  </button>
+
   <!-- CONSEJO DEL MES -->
   <div class="fz-sec"><?= ico('lightbulb') ?> El consejo del mes</div>
   <div class="fz-adv">
@@ -167,19 +196,23 @@ require __DIR__ . '/_shell.php';
     <button type="button" id="fzNext" aria-label="Siguiente">›</button>
   </div>
 
-  <!-- CALCULADORA -->
-  <div class="fz-sec"><?= ico('dollar') ?> Calculadora · ¿Cuánto te queda?</div>
-  <div class="fz-calc">
+  <!-- CALCULADORA (se abre en popup desde el botón de arriba) -->
+  <div class="fz-modal" id="fzModal" aria-hidden="true">
+    <div class="fz-sheet">
+      <div class="fz-sheet-h"><b><?= ico('dollar') ?> Calculadora · ¿Cuánto te queda?</b><button type="button" class="x" id="fzCalcX" aria-label="Cerrar">✕</button></div>
+      <div class="fz-calc">
     <div class="fz-cg">
       <div class="fz-in">
         <h3>Tus números del mes</h3>
         <p class="sub">Escríbelos y abajo ves lo que de verdad te queda.</p>
         <div class="fld"><label>Ventas del mes</label>
-          <div class="box"><span class="pre">$</span><input id="fzVentas" type="number" inputmode="decimal" placeholder="0"></div></div>
-        <div class="fld"><label>Costos y gastos (ingredientes, empaque, delivery…)</label>
-          <div class="box"><span class="pre">$</span><input id="fzCostos" type="number" inputmode="decimal" placeholder="0"></div></div>
+          <div class="box"><span class="pre">$</span><input id="fzVentas" type="number" inputmode="decimal" min="0" placeholder="0"></div></div>
+        <div class="fld"><label>Costo de lo que vendes <span style="color:var(--muted);font-weight:500">(ingredientes, empaque… sube con cada venta)</span></label>
+          <div class="box"><span class="pre">$</span><input id="fzVar" type="number" inputmode="decimal" min="0" placeholder="0"></div></div>
+        <div class="fld"><label>Gastos fijos del mes <span style="color:var(--muted);font-weight:500">(renta, luz, plan… los pagas vendas o no)</span></label>
+          <div class="box"><span class="pre">$</span><input id="fzFijos" type="number" inputmode="decimal" min="0" placeholder="0"></div></div>
         <div class="fld"><label>Aparta para contribuciones</label>
-          <div class="box"><input id="fzTax" class="pct" type="number" inputmode="decimal" value="15"><span class="post">%</span></div>
+          <div class="box"><input id="fzTax" class="pct" type="number" inputmode="decimal" min="0" max="100" step="0.5" value="15"><span class="post">%</span></div>
           <p class="hint">Estimado para Hacienda. Ajústalo con tu contador.</p></div>
       </div>
       <div class="fz-out">
@@ -191,14 +224,17 @@ require __DIR__ . '/_shell.php';
           <div class="fz-r tax"><span class="k"><i style="background:var(--amber,#c78a16)"></i>Reserva contribuciones</span><span class="v" id="fzRTax">$0</span></div>
           <div class="fz-r"><span class="k"><i style="background:var(--teal)"></i>Ganancia limpia</span><span class="v" id="fzRNeto">$0</span></div>
         </div>
-        <div class="fz-mrow"><span>Margen del negocio</span><b id="fzMargen">0%</b></div>
-        <div class="fz-mrow"><span>Para cubrir gastos necesitas vender</span><b id="fzBE">$0</b></div>
+        <div class="fz-mrow"><span>Margen de contribución</span><b id="fzMC">0%</b></div>
+        <div class="fz-mrow"><span>Margen del negocio (neto)</span><b id="fzMargen">0%</b></div>
+        <div class="fz-mrow"><span>Punto de equilibrio (vender al mes)</span><b id="fzBE">$0</b></div>
       </div>
     </div>
-  </div>
+      </div><!-- /fz-calc -->
+    </div><!-- /fz-sheet -->
+  </div><!-- /fz-modal -->
 
   <div class="fz-foot">
-    <b>Cómo funciona:</b> los consejos los escribe <?= $h($estratega_nombre) ?> leyendo tus métricas reales (alcance, engagement, guardados), en tu tono. La calculadora es orientativa para que veas tu ganancia real de un vistazo.
+    <b>Cómo funciona:</b> los consejos los escribe <?= $h($estratega_nombre) ?> leyendo tus <b>métricas de redes</b> (alcance, engagement, guardados) — <b>no</b> los números de la calculadora. La calculadora es aparte y orientativa: lo que escribes ahí se queda en tu teléfono. Los consejos se refrescan cada día.
     <br><br><b>Nota:</b> esto es <b>guía general, no asesoría contributiva</b>. Las contribuciones, IVU (11.5% en PR) y patente dependen de tu caso — para lo oficial, consulta un contador o Hacienda.
   </div>
 </div>
@@ -260,35 +296,52 @@ require __DIR__ . '/_shell.php';
   // ── Calculadora (client-side + recuerda tus valores) ──
   var g=function(id){return document.getElementById(id);};
   var f=function(n){ n=Math.round(n); return (n<0?'-$':'$')+Math.abs(n).toLocaleString('en-US'); };
-  var V=g('fzVentas'), C=g('fzCostos'), T=g('fzTax');
-  try{ var saved=JSON.parse(localStorage.getItem('fz_calc')||'{}');
-    if(saved.v!=null)V.value=saved.v; if(saved.c!=null)C.value=saved.c; if(saved.t!=null)T.value=saved.t; }catch(e){}
+  var STORAGE_KEY='fz_calc_<?= (int)$marca_id ?>';   // por-marca: no se cruzan negocios
+  var V=g('fzVentas'), VAR=g('fzVar'), FIJ=g('fzFijos'), T=g('fzTax');
+  try{ var saved=JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');
+    if(saved.v!=null)V.value=saved.v; if(saved.var!=null)VAR.value=saved.var; if(saved.fij!=null)FIJ.value=saved.fij; if(saved.t!=null)T.value=saved.t; }catch(e){}
   function calc(){
-    var ventas=+V.value||0, costos=+C.value||0, taxpct=+T.value||0;
+    var ventas=+V.value||0, variable=+VAR.value||0, fijos=+FIJ.value||0, taxpct=+T.value||0;
+    taxpct = Math.max(0, Math.min(100, taxpct));                    // % entre 0 y 100
+    var costos = variable + fijos;
     var bruto = ventas - costos;
-    var baseContributiva = Math.max(0, bruto);          // no se aparta para contribuciones sobre una pérdida
+    var baseContributiva = Math.max(0, bruto);                      // no se aparta % sobre una pérdida
     var tax = baseContributiva * taxpct / 100;
     var neto = bruto - tax;
     var loss = neto < 0;
+    // Margen de contribución (ratio) y punto de equilibrio EN VENTAS
+    var mc = ventas > 0 ? (ventas - variable) / ventas : 0;         // (ventas - variable) / ventas
+    var breakeven = mc > 0 ? fijos / mc : 0;                        // costos fijos ÷ margen de contribución
     g('fzRVentas').textContent=f(ventas);
     g('fzRCostos').textContent='– '+f(costos);
     g('fzRTax').textContent='– '+f(tax);
     var rN=g('fzRNeto'); rN.textContent=f(neto); rN.classList.toggle('loss',loss);
     var ne=g('fzNeto'); ne.textContent=f(neto); ne.classList.toggle('neg',loss);
     g('fzNetoLbl').textContent = loss ? 'Estás perdiendo' : 'Te queda limpio';
+    g('fzMC').textContent=Math.round(mc*100)+'%';
     g('fzMargen').textContent=(ventas>0?Math.round(neto/ventas*100):0)+'%';
-    g('fzBE').textContent=f(costos);
+    g('fzBE').textContent = breakeven>0 ? f(breakeven) : '—';
+    // Barra normalizada: nunca se desborda aunque los costos superen las ventas
+    var base=Math.max(ventas, costos + tax + Math.max(0,neto), 1);
     var s=g('fzStack').children;
-    if(loss){ s[0].style.width='100%'; s[0].style.background='#e0384f'; s[1].style.width='0%'; s[2].style.width='0%'; }
-    else {
-      var tot=Math.max(1,ventas);
-      s[0].style.background='var(--magenta)';
-      s[0].style.width=(costos/tot*100)+'%'; s[1].style.width=(tax/tot*100)+'%'; s[2].style.width=(Math.max(0,neto)/tot*100)+'%';
-    }
-    try{ localStorage.setItem('fz_calc',JSON.stringify({v:V.value,c:C.value,t:T.value})); }catch(e){}
+    s[0].style.background = loss ? '#e0384f' : 'var(--magenta)';
+    s[0].style.width=(costos/base*100)+'%';
+    s[1].style.width=(tax/base*100)+'%';
+    s[2].style.width=(Math.max(0,neto)/base*100)+'%';
+    try{ localStorage.setItem(STORAGE_KEY,JSON.stringify({v:V.value,var:VAR.value,fij:FIJ.value,t:T.value})); }catch(e){}
   }
-  [V,C,T].forEach(function(el){ el.addEventListener('input',calc); });
+  [V,VAR,FIJ,T].forEach(function(el){ el.addEventListener('input',calc); });
   calc();
+
+  // Popup de la calculadora (verla rápido sin salir de Consejos & Finanzas)
+  var oc=g('fzOpenCalc'), modal=g('fzModal'), cx=g('fzCalcX');
+  if(oc&&modal){
+    function closeM(){ modal.classList.remove('show'); modal.setAttribute('aria-hidden','true'); document.body.style.overflow=''; }
+    oc.addEventListener('click',function(){ modal.classList.add('show'); modal.setAttribute('aria-hidden','false'); document.body.style.overflow='hidden'; calc(); });
+    if(cx) cx.addEventListener('click',closeM);
+    modal.addEventListener('click',function(e){ if(e.target===modal) closeM(); });
+    document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&modal.classList.contains('show')) closeM(); });
+  }
 })();
 </script>
 
