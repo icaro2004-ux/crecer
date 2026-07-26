@@ -344,7 +344,7 @@ require __DIR__ . '/_shell.php';
 <div class="mk-view" id="mkView"><div class="mk-track" id="mkTrack">
 <section class="mk-pane on" id="mk-voz">
 <h2 class="sec-h"><?= ico('mic') ?> Tu tono de voz</h2>
-<p class="subline">Define cómo te escribe La Creativa: mueve los controles, genera ejemplos y guárdalo. Así suena <b>todo tu contenido</b>.</p>
+<p class="subline">Así suena <b>todo tu contenido</b>. Tres pasos y listo.</p>
 <?php include __DIR__ . '/_tono_panel.php'; ?>
 </section>
 
@@ -626,7 +626,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
   if(window.ResizeObserver){ new ResizeObserver(fitHeight).observe(track); }
 
   var x0=null,y0=null,lock=null;
-  view.addEventListener('touchstart',function(e){ if(e.target.closest('.gallery,.cer-grid,.chips')){x0=null;return;} var t=e.touches[0];x0=t.clientX;y0=t.clientY;lock=null;},{passive:true});
+  view.addEventListener('touchstart',function(e){ if(e.target.closest('.gallery,.cer-grid,.chips,.vz-view')){x0=null;return;} var t=e.touches[0];x0=t.clientX;y0=t.clientY;lock=null;},{passive:true});
   view.addEventListener('touchmove',function(e){ if(x0===null)return; var t=e.touches[0],dx=t.clientX-x0,dy=t.clientY-y0; if(lock===null&&(Math.abs(dx)>8||Math.abs(dy)>8)) lock=Math.abs(dx)>Math.abs(dy)?'x':'y'; },{passive:true});
   view.addEventListener('touchend',function(e){ if(x0===null||lock!=='x'){x0=null;return;} var dx=e.changedTouches[0].clientX-x0; if(dx<-45)go(cur+1); else if(dx>45)go(cur-1); x0=null; },{passive:true});
 })();
