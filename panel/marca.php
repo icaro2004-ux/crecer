@@ -282,12 +282,48 @@ require __DIR__ . '/_shell.php';
   #mk-voz{order:0}#mk-identidad{order:1}#mk-aprendido{order:2}   /* orden visual = orden de los tabs (aunque el DOM difiera) */
   @media (prefers-reduced-motion: reduce){.mk-view,.mk-track{transition:none}}
   .mk-pane .sec-h:first-child{margin-top:14px}
+
+  /* ── MÓVIL: pantalla compacta, todo lo que sea lista = carrusel horizontal ── */
+  @media (max-width:760px){
+    .content{padding:16px 14px 90px}
+    /* Banner de entrevista compacto (una línea, sin párrafo largo) */
+    .mk-intro{padding:12px 14px;margin-bottom:12px}
+    .mk-intro-sub{display:none}
+    /* Hero más chico */
+    .mk-hero{gap:13px;padding:2px}
+    .mk-av{width:54px;height:54px;border-radius:15px}
+    .mk-tagline{display:none}
+    /* Tabs = control segmentado full-width */
+    .mk-tabs{gap:6px;margin:14px 0 2px}
+    .mk-tab{flex:1;justify-content:center;padding:10px 4px;font-size:12.5px;border-radius:13px}
+    .mk-tab svg{width:15px;height:15px}
+    .sec-h{font-size:16.5px;margin:22px 0 4px}
+    .subline{font-size:13.5px}
+    .genbox{padding:16px;border-radius:16px}
+
+    /* GALERÍA de logos → carrusel horizontal con peek */
+    .gallery{display:flex;grid-template-columns:none;gap:11px;overflow-x:auto;scroll-snap-type:x proximity;
+      -webkit-overflow-scrolling:touch;padding:2px 2px 10px;margin-top:16px}
+    .gallery::-webkit-scrollbar{height:0}
+    .tile{flex:0 0 58%;max-width:220px;scroll-snap-align:start}
+
+    /* LO APRENDIDO → carrusel horizontal con peek */
+    .cer-grid{display:flex;grid-template-columns:none;gap:11px;overflow-x:auto;scroll-snap-type:x proximity;
+      -webkit-overflow-scrolling:touch;padding:2px 2px 10px;margin-top:14px}
+    .cer-grid::-webkit-scrollbar{height:0}
+    .cer-card{flex:0 0 84%;scroll-snap-align:start}
+
+    /* CHIPS (estilo / tipografía) → fila deslizable, no envuelven en varias líneas */
+    .chips{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity;padding-bottom:6px}
+    .chips::-webkit-scrollbar{height:0}
+    .chip-opt{flex:0 0 auto;scroll-snap-align:start}
+  }
 </style>
 
 <?php $logo_url = (string)($marca['logo_path'] ?? '') ?: (string)($elegido['archivo'] ?? ''); ?>
-<a href="/crecer/panel/entrevista.php?marca=<?= $marca_id ?>" style="display:flex;align-items:center;gap:12px;text-decoration:none;background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;border-radius:16px;padding:14px 18px;margin-bottom:16px;box-shadow:0 12px 30px -12px rgba(239,67,117,.5)">
+<a class="mk-intro" href="/crecer/panel/entrevista.php?marca=<?= $marca_id ?>" style="display:flex;align-items:center;gap:12px;text-decoration:none;background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;border-radius:16px;padding:14px 18px;margin-bottom:16px;box-shadow:0 12px 30px -12px rgba(239,67,117,.5)">
   <span style="font-size:22px"><?= ico('chat') ?></span>
-  <span style="flex:1"><b style="font-size:15px">Cuéntame de tu negocio (entrevista)</b><br><span style="font-size:12.5px;opacity:.9">Una conversación — mientras mejor te conozca el corillo, mejor sale todo (copy, arte, estrategia).</span></span>
+  <span style="flex:1"><b style="font-size:15px">Cuéntame de tu negocio</b><br><span class="mk-intro-sub" style="font-size:12.5px;opacity:.9">Una conversación — mientras mejor te conozca el corillo, mejor sale todo (copy, arte, estrategia).</span></span>
   <span style="font-size:18px;opacity:.9">→</span>
 </a>
 <div class="mk-hero">
@@ -590,7 +626,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
   if(window.ResizeObserver){ new ResizeObserver(fitHeight).observe(track); }
 
   var x0=null,y0=null,lock=null;
-  view.addEventListener('touchstart',function(e){var t=e.touches[0];x0=t.clientX;y0=t.clientY;lock=null;},{passive:true});
+  view.addEventListener('touchstart',function(e){ if(e.target.closest('.gallery,.cer-grid,.chips')){x0=null;return;} var t=e.touches[0];x0=t.clientX;y0=t.clientY;lock=null;},{passive:true});
   view.addEventListener('touchmove',function(e){ if(x0===null)return; var t=e.touches[0],dx=t.clientX-x0,dy=t.clientY-y0; if(lock===null&&(Math.abs(dx)>8||Math.abs(dy)>8)) lock=Math.abs(dx)>Math.abs(dy)?'x':'y'; },{passive:true});
   view.addEventListener('touchend',function(e){ if(x0===null||lock!=='x'){x0=null;return;} var dx=e.changedTouches[0].clientX-x0; if(dx<-45)go(cur+1); else if(dx>45)go(cur-1); x0=null; },{passive:true});
 })();
