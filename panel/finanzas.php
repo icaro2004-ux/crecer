@@ -339,8 +339,7 @@ require __DIR__ . '/_shell.php';
     function closeM(){ modal.classList.remove('show'); modal.setAttribute('aria-hidden','true'); document.body.style.overflow=''; }
     oc.addEventListener('click',function(){ modal.classList.add('show'); modal.setAttribute('aria-hidden','false'); document.body.style.overflow='hidden'; calc(); });
     if(cx) cx.addEventListener('click',closeM);
-    modal.addEventListener('click',function(e){ if(e.target===modal) closeM(); });
-    document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&modal.classList.contains('show')) closeM(); });
+    // Cierra SOLO con la X (no al tocar fuera).
   }
 })();
 </script>
