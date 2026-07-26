@@ -265,8 +265,9 @@ require __DIR__ . '/_shell.php';
     if(saved.v!=null)V.value=saved.v; if(saved.c!=null)C.value=saved.c; if(saved.t!=null)T.value=saved.t; }catch(e){}
   function calc(){
     var ventas=+V.value||0, costos=+C.value||0, taxpct=+T.value||0;
-    var bruto=ventas-costos;
-    var tax = bruto>0 ? bruto*taxpct/100 : 0;   // no se aparta para contribuciones sobre una pérdida
+    var bruto = ventas - costos;
+    var baseContributiva = Math.max(0, bruto);          // no se aparta para contribuciones sobre una pérdida
+    var tax = baseContributiva * taxpct / 100;
     var neto = bruto - tax;
     var loss = neto < 0;
     g('fzRVentas').textContent=f(ventas);
