@@ -604,7 +604,6 @@ $credito  = $has_deck
   ?>
   <div class="hm">
     <div class="hm-hero">
-      <div class="hm-blob"></div>
       <div class="hm-eyebrow"><?= $h($negocio) ?></div>
       <h1>Todo al día.</h1>
       <p>El corillo mantuvo tu tienda al día. ¿Qué hacemos ahora?</p>
@@ -626,12 +625,9 @@ $credito  = $has_deck
     </a>
   </div>
   <style>
-    .turno:has(.hm){justify-content:flex-start;overflow-y:auto;overflow-x:hidden;padding:0;
-      background:radial-gradient(circle at 95% 15%, rgba(0,164,159,.10), transparent 22%),radial-gradient(circle at 104% 21%, rgba(239,67,117,.08), transparent 16%),#f6f4f1}
+    .turno:has(.hm){justify-content:flex-start;overflow-y:auto;overflow-x:hidden;padding:0;background:#fff}
     .hm{width:100%;max-width:520px;margin:0 auto;padding:20px 16px 44px}
     .hm-hero{position:relative;padding:16px 4px 4px}
-    .hm-blob{position:absolute;right:-14px;top:0;width:120px;height:120px;border-radius:50%;pointer-events:none;
-      background:radial-gradient(circle at 62% 45%, rgba(239,67,117,.30), transparent 44%),radial-gradient(circle at 38% 64%, rgba(0,164,159,.24), transparent 48%);filter:blur(1px)}
     .hm-eyebrow{color:#57545c;font-weight:700;font-size:13.5px;margin-bottom:10px}
     .hm-hero h1{margin:0;font-family:'Poppins',sans-serif;font-weight:700;font-size:36px;line-height:1.03;letter-spacing:-.04em;color:#25232b;max-width:290px}
     .hm-hero p{margin:13px 0 0;color:var(--muted,#7b7880);font-size:15.5px;line-height:1.5;max-width:320px}
