@@ -261,6 +261,8 @@ $presets = reels_presets();
 $musica_cat = reels_music_catalogo();
 $render_ok = render_disponible();
 $CSRF = csrf_token();
+require_once __DIR__ . '/../includes/notif.php';
+$notif_nl = function_exists('notif_no_leidas') ? notif_no_leidas($pdo, $marca_id) : 0;
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -424,7 +426,8 @@ button{font-family:inherit;cursor:pointer}
 
 <div class="rtop">
   <a class="back" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>">← Volver al panel</a>
-  <div class="brand"><span class="badge">Reels</span> encuéntralo <span>crecer</span></div>
+  <a href="<?= $BASE ?>/notificaciones_centro.php?marca=<?= $marca_id ?>" aria-label="Notificaciones" title="Notificaciones" style="position:relative;margin-left:auto;font-size:21px;text-decoration:none;line-height:1;display:flex;align-items:center">🔔<?php if ($notif_nl > 0): ?><span style="position:absolute;top:-6px;right:-8px;background:var(--rosa);color:#fff;font-size:10px;font-weight:800;min-width:16px;height:16px;border-radius:999px;display:flex;align-items:center;justify-content:center;padding:0 4px"><?= $notif_nl > 9 ? '9+' : $notif_nl ?></span><?php endif; ?></a>
+  <div class="brand" style="margin-left:12px"><span class="badge">Reels</span> encuéntralo <span>crecer</span></div>
 </div>
 
 <div class="wrap">
