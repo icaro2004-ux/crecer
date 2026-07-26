@@ -659,6 +659,41 @@ $credito  = $has_deck
   .hz-wx .wx-c{font-size:11.5px;font-weight:700;color:var(--muted)}
   .hz-tip .ic.pur{background:#efeaff;color:#7c58e8}
   .hz-cap{font-size:12px;color:var(--muted);margin-top:8px;font-weight:600}
+  /* Entrada: fade-in desde abajo, escalonada */
+  @keyframes hzIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+  .hz-hi,.hz-card{opacity:0;animation:hzIn .5s cubic-bezier(.2,.85,.25,1) both}
+  .hz-hi{animation-delay:.03s}
+  .hz-card:nth-of-type(1){animation-delay:.10s}
+  .hz-card:nth-of-type(2){animation-delay:.16s}
+  .hz-card:nth-of-type(3){animation-delay:.22s}
+  .hz-card:nth-of-type(4){animation-delay:.28s}
+  .hz-card:nth-of-type(5){animation-delay:.34s}
+  .hz-card:nth-of-type(6){animation-delay:.40s}
+  .hz-card:nth-of-type(7){animation-delay:.46s}
+  .hz-card:nth-of-type(n+8){animation-delay:.52s}
+  @media(prefers-reduced-motion:reduce){.hz-hi,.hz-card{animation:none;opacity:1}}
+  /* Spark: micro-interacciones */
+  .hz-card{transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
+  @media(hover:hover){
+    .hz-card:hover{transform:translateY(-3px);box-shadow:0 18px 42px -20px rgba(40,32,45,.24);border-color:#e5dfd8}
+    .hz-next .im img,.hz-next .im video{transition:transform .3s ease}
+    .hz-card:hover .hz-next .im img,.hz-card:hover .hz-next .im video{transform:scale(1.06)}
+  }
+  .hz-approve{transition:transform .15s ease,box-shadow .15s ease}
+  .hz-approve:hover{transform:translateY(-2px);box-shadow:0 16px 30px -10px rgba(239,67,117,.6)}
+  .hz-approve:active{transform:translateY(0)}
+  .hz-status{transition:transform .15s ease}
+  .hz-status:hover{transform:scale(1.02)}
+  /* La gráfica se dibuja sola */
+  .hz-spark polyline{stroke-dasharray:520;stroke-dashoffset:520;animation:hzdraw 1.1s .35s cubic-bezier(.4,0,.2,1) forwards}
+  .hz-spark circle{opacity:0;animation:hzdot .3s 1.3s forwards}
+  @keyframes hzdraw{to{stroke-dashoffset:0}}
+  @keyframes hzdot{to{opacity:1}}
+  @media(prefers-reduced-motion:reduce){
+    .hz-spark polyline{stroke-dasharray:none;stroke-dashoffset:0;animation:none}
+    .hz-spark circle{opacity:1;animation:none}
+    .hz-card,.hz-approve{transition:none}
+  }
 </style>
 <main class="hz">
   <div class="hz-hi">
