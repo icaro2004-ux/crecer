@@ -399,11 +399,22 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
 .dots i.on{background:var(--teal);transform:scale(1.3)}
 
 /* Resultado */
-.result{display:grid;grid-template-columns:1fr;gap:18px}
-.player{background:var(--stage);border-radius:22px;padding:14px;display:flex;justify-content:center}
-.player video{width:100%;max-width:300px;aspect-ratio:9/16;border-radius:14px;background:#000;display:block}
-.meta .kh{font-family:'Poppins';font-weight:800;font-size:22px;margin:0 0 6px}
-.meta .rs{color:var(--muted);font-size:14.5px;margin:0 0 14px;line-height:1.5}
+.result{max-width:560px;margin:0 auto}
+.meta .kh{font-family:'Poppins';font-weight:800;font-size:22px;margin:0 0 5px}
+.meta .rs{color:var(--muted);font-size:14px;margin:0 0 4px;line-height:1.45}
+/* Aviso-botón: abre el reel en lightbox (menos scroll) */
+.reel-ready{display:flex;align-items:center;gap:13px;width:100%;text-align:left;cursor:pointer;
+  background:linear-gradient(100deg,#fff0f5,#eafaf8);border:1px solid var(--line);border-radius:18px;padding:14px 16px;margin:12px 0 2px;transition:transform .16s,box-shadow .16s}
+.reel-ready:hover{transform:translateY(-2px);box-shadow:0 14px 30px -14px rgba(239,67,117,.4)}
+.reel-ready .rr-play{width:46px;height:46px;flex-shrink:0;border-radius:50%;background:var(--rosa);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px -4px rgba(239,67,117,.6)}
+.reel-ready .rr-play svg{width:22px;height:22px;margin-left:2px}
+.reel-ready .rr-txt b{font-family:'Poppins';font-size:16px;font-weight:700;display:block}
+.reel-ready .rr-txt small{color:var(--muted);font-size:12.5px}
+.reel-lb{display:none;position:fixed;inset:0;z-index:80;background:rgba(14,14,18,.93);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px}
+.reel-lb.on{display:flex}
+.reel-lb video{width:100%;max-width:330px;aspect-ratio:9/16;border-radius:16px;background:#000;display:block}
+.reel-lb-x{position:absolute;top:16px;right:16px;width:42px;height:42px;border-radius:50%;border:0;background:rgba(255,255,255,.16);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.reel-lb-x svg{width:22px;height:22px}
 .chip{display:inline-flex;align-items:center;gap:6px;background:var(--crema2);border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:700;margin:0 6px 6px 0}
 .err{background:#fff0f0;border:1px solid #f3c2c2;color:#9c2b2b;border-radius:14px;padding:14px 16px;font-size:14px}
 .warn{background:#fff8e6;border:1px solid #f0dfa0;color:#7a5b00;border-radius:12px;padding:10px 14px;font-size:13px;margin-top:14px}
@@ -554,24 +565,25 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
   <!-- RESULTADO -->
   <section class="screen" id="sdone">
     <div class="result">
-      <div class="player">
-        <video id="rvid" controls playsinline></video>
-      </div>
       <div class="meta">
         <div class="kick">Tu reel está listo</div>
         <h2 class="kh" id="rhook">Quedó brutal</h2>
         <p class="rs" id="rsum"></p>
+        <button type="button" class="reel-ready" id="reelOpen">
+          <span class="rr-play"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"/></svg></span>
+          <span class="rr-txt"><b>Ver tu reel</b><small>Toca para reproducirlo</small></span>
+        </button>
         <div id="rchips"></div>
         <div class="savedchip" id="rsaved" style="display:none"><?= ico('check-circle') ?> Guardado en tu Biblioteca</div>
+        <div class="row" style="flex-wrap:wrap;margin-top:14px">
+          <button class="btn btn-go" id="rpub" style="flex:1">Publicar ahora</button>
+        </div>
+        <div id="pubmsg" style="display:none;margin-top:10px"></div>
         <div class="copybox" id="copybox" style="display:none">
           <div class="cbh"><b>Texto para tu post</b><button class="mini" id="cregen">Otro</button></div>
           <textarea class="copyta" id="copytext" readonly></textarea>
           <button class="btn btn-ghost" id="ccopy" style="width:100%">Copiar texto</button>
         </div>
-        <div class="row" style="flex-wrap:wrap">
-          <button class="btn btn-go" id="rpub" style="flex:1">Publicar ahora</button>
-        </div>
-        <div id="pubmsg" style="display:none;margin-top:10px"></div>
         <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:10px">
           <a class="btn btn-ghost" id="rdl" download style="text-decoration:none;text-align:center;flex:1">Descargar</a>
           <button class="btn btn-ghost" id="redit" style="flex:1">Ajustar</button>
@@ -580,6 +592,12 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
       </div>
     </div>
   </section>
+
+  <!-- Lightbox del reel -->
+  <div class="reel-lb" id="reelLb">
+    <button class="reel-lb-x" id="reelLbX" aria-label="Cerrar"><?= ico('x') ?></button>
+    <video id="rvid" controls playsinline></video>
+  </div>
 
   <!-- EDITOR de timing/captions -->
   <section class="screen" id="sedit">
@@ -843,6 +861,13 @@ $('#cregen').onclick=async()=>{
 function showFail(msg){ go('fail'); $('#failmsg').textContent=msg; }
 $('#retry').onclick=()=>{ $('#crear').disabled=false; go(3); };
 $('#ragain').onclick=()=>{ files=[]; renderClips(); $('#contexto').value=''; go(1); };
+
+// Lightbox del reel (abrir/cerrar) — menos scroll
+const reelLb=$('#reelLb');
+function reelClose(){ reelLb.classList.remove('on'); const v=$('#rvid'); v.pause(); }
+$('#reelOpen').onclick=()=>{ reelLb.classList.add('on'); const v=$('#rvid'); v.currentTime=0; v.play().catch(()=>{}); };
+$('#reelLbX').onclick=reelClose;
+reelLb.onclick=e=>{ if(e.target===reelLb) reelClose(); };
 
 // ── Publicar a IG/FB (reusa el publicador del app) ──
 let pubTries=0;
