@@ -89,7 +89,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .sc-cta a{display:inline-flex;align-items:center;gap:6px;background:var(--tinta);color:#fff;text-decoration:none;font-weight:800;font-size:13px;padding:10px 16px;border-radius:13px}
 
   /* Composer: voz al frente */
-  .sc-composer{display:flex;gap:9px;align-items:center;position:sticky;bottom:0;background:linear-gradient(to top,var(--crema,#F7F5F1) 74%,transparent);padding:12px 0 6px}
+  .sc-composer{display:flex;gap:9px;align-items:center;position:sticky;bottom:0;z-index:46;background:linear-gradient(to top,var(--crema,#F7F5F1) 74%,transparent);padding:12px 0 6px}
   .sc-input{flex:1;font-family:inherit;font-size:15px;border:1.5px solid var(--line);border-radius:16px;padding:14px 16px;background:var(--card,#fff);color:var(--tinta)}
   .sc-input:focus{outline:0;border-color:var(--magenta,#EF4375)}
   .sc-mic{border:1.5px solid var(--line);background:var(--card,#fff);cursor:pointer;width:52px;height:52px;border-radius:16px;flex:none;display:grid;place-items:center;transition:transform .12s,background .15s,border-color .15s}
@@ -110,6 +110,10 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   @media(max-width:760px){
     .content{padding:16px 14px 8px}
     .sc-thread{padding-bottom:4px}
+  }
+  /* El bottom-nav (≤860px) es fijo abajo: subimos el compositor para que no lo tape */
+  @media(max-width:860px){
+    .sc-composer{bottom:calc(60px + env(safe-area-inset-bottom))}
   }
 </style>
 
