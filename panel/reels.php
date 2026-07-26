@@ -415,6 +415,19 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
 .reel-lb video{width:100%;max-width:330px;aspect-ratio:9/16;border-radius:16px;background:#000;display:block}
 .reel-lb-x{position:absolute;top:16px;right:16px;width:42px;height:42px;border-radius:50%;border:0;background:rgba(255,255,255,.16);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .reel-lb-x svg{width:22px;height:22px}
+.pub-modal{display:none;position:fixed;inset:0;z-index:90;background:rgba(20,12,22,.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:22px}
+.pub-modal.on{display:flex;animation:pubfade .2s}
+@keyframes pubfade{from{opacity:0}to{opacity:1}}
+.pub-card{position:relative;background:#fff;border-radius:24px;padding:30px 24px 22px;max-width:400px;width:100%;text-align:center;box-shadow:0 30px 70px -20px rgba(0,0,0,.5);animation:pubrise .32s cubic-bezier(.2,.85,.25,1)}
+@keyframes pubrise{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}
+.pub-ic{width:60px;height:60px;margin:0 auto 14px;border-radius:50%;background:#eafaf8;color:var(--teal);display:flex;align-items:center;justify-content:center}
+.pub-ic svg{width:28px;height:28px}
+.pub-card h3{font-family:'Poppins';font-size:21px;font-weight:800;margin:0 0 8px}
+.pub-card p{color:var(--muted);font-size:14.5px;line-height:1.5;margin:0 0 18px}
+.pub-q{font-family:'Poppins';font-weight:700;font-size:14px;margin-bottom:12px}
+.pub-next{display:flex;flex-direction:column;gap:9px}
+.pub-x{position:absolute;top:14px;right:14px;width:34px;height:34px;border-radius:50%;border:0;background:#f4f2f6;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.pub-x svg{width:18px;height:18px}
 .chip{display:inline-flex;align-items:center;gap:6px;background:var(--crema2);border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:700;margin:0 6px 6px 0}
 .err{background:#fff0f0;border:1px solid #f3c2c2;color:#9c2b2b;border-radius:14px;padding:14px 16px;font-size:14px}
 .warn{background:#fff8e6;border:1px solid #f0dfa0;color:#7a5b00;border-radius:12px;padding:10px 14px;font-size:13px;margin-top:14px}
@@ -869,6 +882,12 @@ $('#reelOpen').onclick=()=>{ reelLb.classList.add('on'); const v=$('#rvid'); v.c
 $('#reelLbX').onclick=reelClose;
 reelLb.onclick=e=>{ if(e.target===reelLb) reelClose(); };
 
+// Popup tras publicar: despacha al usuario (recomendación o ir al inicio; ellos escogen)
+function openPubModal(){ $('#pubModal').classList.add('on'); }
+$('#pubClose').onclick=()=>$('#pubModal').classList.remove('on');
+$('#pubOtro').onclick=()=>{ $('#pubModal').classList.remove('on'); files=[]; renderClips(); $('#contexto').value=''; go(1); };
+$('#pubModal').onclick=e=>{ if(e.target.id==='pubModal') $('#pubModal').classList.remove('on'); };
+
 // ── Publicar a IG/FB (reusa el publicador del app) ──
 let pubTries=0;
 $('#rpub').onclick=async()=>{
@@ -881,9 +900,9 @@ $('#rpub').onclick=async()=>{
     if(!j.ok){ b.disabled=false; b.textContent=old; pm.style.display='block';
       const link=j.conectar?(' <a href="/crecer/panel/conectar.php?marca='+MARCA+'" style="color:#9c2b2b;font-weight:800">Conectar mis redes →</a>'):'';
       pm.innerHTML='<div class="err">'+(j.err||'No se pudo publicar.')+link+'</div>'; return; }
-    // Publicando por detrás → polling.
-    pm.style.display='block'; pm.innerHTML='<div class="pill" style="background:#fff5f8;color:var(--rosa)">Subiendo a tus redes… (Meta procesa el video, aguanta ~1 min)</div>';
-    pubTries=0; pollPublish();
+    // Despachado: publica por detrás. Popup + redirect al inicio (no esperar).
+    b.disabled=false; b.textContent=old;
+    openPubModal();
   }catch(e){ b.disabled=false; b.textContent=old; pm.style.display='block'; pm.innerHTML='<div class="err">Se cayó la conexión al arrancar. Reintenta.</div>'; }
 };
 async function pollPublish(){
@@ -985,5 +1004,20 @@ $('#bibadd').onclick=()=>{
   <a class="bn" href="<?= $BASE ?>/resultados.php?marca=<?= $marca_id ?>"><?= ico('chart') ?><span>Resultados</span></a>
   <a class="bn" href="<?= $BASE ?>/marca.php?marca=<?= $marca_id ?>"><?= ico('palette') ?><span>Mi marca</span></a>
 </nav>
+
+<!-- Popup: despachar al usuario tras publicar -->
+<div class="pub-modal" id="pubModal">
+  <div class="pub-card">
+    <button class="pub-x" id="pubClose" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    <div class="pub-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg></div>
+    <h3>¡En camino!</h3>
+    <p>Estoy publicando tu reel. Te aviso en Notificaciones cuando esté — no tienes que esperar aquí.</p>
+    <div class="pub-q">¿Qué hacemos ahora?</div>
+    <div class="pub-next">
+      <button class="btn btn-go" id="pubOtro" style="width:100%">Hacer otro reel</button>
+      <a class="btn btn-ghost" style="width:100%;text-decoration:none;text-align:center" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>">Ir al inicio</a>
+    </div>
+  </div>
+</div>
 </body>
 </html>
