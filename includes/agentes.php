@@ -22,6 +22,21 @@ if (!defined('CRECER_IMG_SEMANA')) define('CRECER_IMG_SEMANA', 15); // máximo p
 if (!defined('CRECER_IMG_POST'))   define('CRECER_IMG_POST', 3);    // máximo de generaciones IA por post
 
 /**
+ * ¿Esta marca genera imágenes SIN LÍMITE? — cuentas de fundador/prueba
+ * (email en CRECER_TEST_EMAILS). Para probar sin toparse con el tope semanal/por-post.
+ */
+function img_generacion_ilimitada(PDO $pdo, int $marca_id): bool {
+    static $cache = [];
+    if (array_key_exists($marca_id, $cache)) return $cache[$marca_id];
+    $ilim = false;
+    try {
+        $email = (string)$pdo->query("SELECT u.email FROM crecer_marca c JOIN usuarios u ON u.id=c.usuario_id WHERE c.id=" . (int)$marca_id)->fetchColumn();
+        $ilim = function_exists('activacion_de_prueba') && activacion_de_prueba($email);
+    } catch (Throwable $e) {}
+    return $cache[$marca_id] = $ilim;
+}
+
+/**
  * Quita emojis/pictogramas del texto (Manuel los odia). NO toca flechas (← →),
  * checks (✓ ✕) ni glifos neutros — solo los emoji a color. Recursivo en arrays.
  */

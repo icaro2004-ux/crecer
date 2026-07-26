@@ -174,12 +174,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Tope por post: 3 generaciones IA — SIEMPRE.
         $ai = $pdo->prepare("SELECT arte_intentos FROM crecer_contenido WHERE id=? AND marca_id=?");
         $ai->execute([$id, $marca_id]); $intentos = (int)$ai->fetchColumn();
-        if ($intentos >= CRECER_IMG_POST) { header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'post_limite']); exit; }
-        // Tope semanal: 10 imágenes (= 5 posts) — SIEMPRE.
+        $sin_limite = img_generacion_ilimitada($pdo, $marca_id);   // fundador/prueba → genera sin tope
+        if ($intentos >= CRECER_IMG_POST && !$sin_limite) { header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'post_limite']); exit; }
+        // Tope semanal: 15 imágenes (= 5 posts × 3) — salvo cuentas de fundador/prueba.
         $wk = $pdo->prepare("SELECT COUNT(*) c, MIN(created_at) oldest FROM crecer_graficas WHERE marca_id=? AND created_at >= (NOW() - INTERVAL 7 DAY)");
         $wk->execute([$marca_id]); $w = $wk->fetch(); $usados = (int)$w['c'];
         $reset = $w['oldest'] ? date('d/m', strtotime($w['oldest'].' +7 days')) : null;
-        if ($usados >= CRECER_IMG_SEMANA) { header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'limite','reset'=>$reset]); exit; }
+        if ($usados >= CRECER_IMG_SEMANA && !$sin_limite) { header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'limite','reset'=>$reset]); exit; }
         // Foto: subida nueva (inline) o escogida del picker
         $src = null;
         if (!empty($_FILES['foto_nueva']['tmp_name']) && $_FILES['foto_nueva']['error'] === UPLOAD_ERR_OK) {
@@ -565,6 +566,7 @@ $fotos = is_dir($dir_fotos) ? array_values(array_filter(scandir($dir_fotos), fn(
 $tiene_logo = !empty($marca['logo_path']);
 $wk = $pdo->prepare("SELECT COUNT(*) c, MIN(created_at) oldest FROM crecer_graficas WHERE marca_id=? AND created_at >= (NOW() - INTERVAL 7 DAY)");
 $wk->execute([$marca_id]); $w = $wk->fetch();
+$sin_limite_img = img_generacion_ilimitada($pdo, $marca_id);   // fundador/prueba → sin tope
 $restantes_sem = max(0, CRECER_IMG_SEMANA - (int)$w['c']);
 $reset_fecha = $w['oldest'] ? date('d/m', strtotime($w['oldest'].' +7 days')) : null;
 // Artes ya creados (para reciclar sin gastar del límite)
@@ -1239,7 +1241,11 @@ $cf = [
     <div id="art-postnote" style="font-size:12px;font-weight:700;margin-top:14px;text-align:center"></div>
     <button type="submit" class="art-go" id="art-go">Crear el arte</button>
     <a href="#" class="art-skip" id="art-skip" style="display:none">Aprobar solo con el texto (sin imagen) →</a>
+    <?php if ($sin_limite_img): ?>
+    <div class="art-note"><?= ico("calendar") ?> Generación <b style="color:var(--terracota)">ilimitada</b> (cuenta de creador). Con texto = modelo Pro.</div>
+    <?php else: ?>
     <div class="art-note"><?= ico("calendar") ?> Te quedan <b id="art-rest" style="color:var(--terracota)"><?= $restantes_sem ?></b> de <?= CRECER_IMG_SEMANA ?> generaciones esta semana<?php if($reset_fecha): ?> · se recargan el <span id="art-reset"><?= $h($reset_fecha) ?></span><?php endif; ?>. Con texto = modelo Pro.</div>
+    <?php endif; ?>
 
     </div><!-- /modo ia -->
 

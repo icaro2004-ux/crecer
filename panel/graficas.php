@@ -36,9 +36,10 @@ $wk->execute([$marca_id]); $w = $wk->fetch();
 $usados_sem = (int)$w['c'];
 $restantes_sem = max(0, $LIMITE_SEM - $usados_sem);
 $reset_fecha = $w['oldest'] ? date('d/m', strtotime($w['oldest'] . ' +7 days')) : null;
+$sin_limite_img = img_generacion_ilimitada($pdo, $marca_id);   // fundador/prueba → sin tope
 // Cuota: pagado usa el límite semanal; no pagado tiene 1 imagen de muestra.
 $perm_img   = puede_generar_tipo($pdo, $marca_id, 'imagen');
-$puede_arte = $pagado ? ($restantes_sem > 0) : $perm_img['ok'];
+$puede_arte = $sin_limite_img ? true : ($pagado ? ($restantes_sem > 0) : $perm_img['ok']);
 
 $err = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -57,9 +58,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($accion === 'arte') {
         $perm = puede_generar_tipo($pdo, $marca_id, 'imagen');
-        if (!$perm['ok']) {
+        if (!$perm['ok'] && !$sin_limite_img) {
             $err = 'Ya usaste tu imagen de muestra gratis. Activa un plan para crear más arte con IA.';
-        } elseif ($perm['pagado'] && $restantes_sem <= 0) {
+        } elseif ($perm['pagado'] && $restantes_sem <= 0 && !$sin_limite_img) {
             $err = "Usaste tus {$LIMITE_SEM} imágenes de la semana. Se recargan el {$reset_fecha}.";
         } else {
         $nombre = basename($_POST['foto'] ?? '');
