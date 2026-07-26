@@ -5,7 +5,7 @@
 <!-- Bottom nav (solo móvil) · EXACTAMENTE 4 destinos, sin FAB central · Perfil vive en el avatar del top-bar -->
 <nav class="botnav botnav-4">
   <a href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='inicio'?'on':'' ?>"><?= ico('home') ?>Inicio</a>
-  <a href="<?= $BASE ?>/propuestas.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='contenido'?'on':'' ?>"><?= ico('image') ?>Propuestas</a>
+  <a href="<?= $BASE ?>/propuestas.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='contenido'?'on':'' ?>"><?= ico('list') ?>Tus Posts</a>
   <a href="<?= $BASE ?>/resultados.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='resultados'?'on':'' ?>"><?= ico('chart') ?>Resultados</a>
   <a href="<?= $BASE ?>/marca.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='marca'?'on':'' ?>"><?= ico('palette') ?>Mi marca</a>
 </nav>
