@@ -256,7 +256,7 @@ $fnum = fn($n) => number_format((int)$n);
 <div class="rzw">
   <div class="rzw-top">
     <div><b>Resultados</b> · <?= $h(date('n/Y')) ?></div>
-    <?php if ($hay_ins): ?>
+    <?php if ($meta_ok): ?>
     <form method="post"><?= csrf_field() ?><input type="hidden" name="accion" value="refrescar_metricas">
       <button class="rzw-refresh" type="submit"><?= ico('refresh') ?> Actualizar</button></form>
     <?php endif; ?>
@@ -267,19 +267,25 @@ $fnum = fn($n) => number_format((int)$n);
   <div class="rzw-view" id="rzView"><div class="rzw-track" id="rzTrack">
   <?php $__f = true; $disp = function() use (&$__f) { if ($__f) { $__f = false; return ''; } return ' style="display:none"'; }; ?>
 
-  <?php if ($hay_ins): ?>
-    <!-- ── Card 1: RESUMEN general (panorama + tendencias + recos) ── -->
-    <section class="rzc" data-k="resumen"<?= $disp() ?>>
-      <div class="rzc-eyebrow"><?= ico('sparkles') ?> Resumen del mes</div>
-      <div class="rzc-chips">
-        <div class="rzc-chip"><div class="n"><?= $fnum($tot_ins['alcance']) ?></div><div class="l">personas te vieron</div></div>
-        <div class="rzc-chip"><div class="n"><?= $fnum($tot_ins['interacciones']) ?></div><div class="l">interacciones</div></div>
-        <div class="rzc-chip"><div class="n"><?= (int)$prod['publicados_mes'] ?></div><div class="l">posts</div></div>
-      </div>
-      <?php $ai('resumen'); ?>
-    </section>
+  <?php $analizar = true; /* el Analista siempre da su lectura */ ?>
+  <!-- ── Card 1: RESUMEN general — SIEMPRE (panorama + recomendaciones) ── -->
+  <section class="rzc" data-k="resumen"<?= $disp() ?>>
+    <div class="rzc-eyebrow"><?= ico('sparkles') ?> Resumen del mes</div>
+    <div class="rzc-chips">
+      <div class="rzc-chip"><div class="n"><?= $fnum($tot_ins['alcance']) ?></div><div class="l">personas te vieron</div></div>
+      <div class="rzc-chip"><div class="n"><?= $fnum($tot_ins['interacciones']) ?></div><div class="l">interacciones</div></div>
+      <div class="rzc-chip"><div class="n"><?= (int)$prod['publicados_mes'] ?></div><div class="l">posts publicados</div></div>
+    </div>
+    <?php if (!$hay_ins): ?>
+      <div class="rzc-sub" style="margin-top:12px"><?= $meta_ok
+        ? 'Todavía no traje los números — dale a <b>Actualizar</b> arriba. Los KPIs de abajo se llenan solos.'
+        : 'Los KPIs de abajo están en cero hasta que conectes tus redes. Conéctalas y verás crecer los números.' ?></div>
+    <?php endif; ?>
+    <?php $ai('resumen'); ?>
+  </section>
 
-    <!-- Alcance -->
+  <!-- KPIs SIEMPRE (aunque en 0, para ver el progreso) -->
+  <!-- Alcance -->
     <section class="rzc" data-k="alcance"<?= $disp() ?>>
       <div class="rzc-eyebrow"><?= ico('eye') ?> Alcance</div>
       <div class="rzc-num"><?= $fnum($tot_ins['alcance']) ?></div>
@@ -288,15 +294,18 @@ $fnum = fn($n) => number_format((int)$n);
       <?php $ai('alcance'); ?>
     </section>
 
-    <?php if ($mix_total > 0):
-      $p1 = round($mix['me_gusta']/$mix_total*100); $p2 = $p1 + round($mix['comentarios']/$mix_total*100);
-      $p3 = $p2 + round($mix['guardados']/$mix_total*100);
+    <?php
+      if ($mix_total > 0) {
+        $p1 = round($mix['me_gusta']/$mix_total*100); $p2 = $p1 + round($mix['comentarios']/$mix_total*100);
+        $p3 = $p2 + round($mix['guardados']/$mix_total*100);
+        $donut_bg = "conic-gradient(var(--magenta) 0 {$p1}%, var(--teal) {$p1}% {$p2}%, var(--amber,#c78a16) {$p2}% {$p3}%, var(--ink-soft,#4a444c) {$p3}% 100%)";
+      } else { $donut_bg = 'var(--line)'; }
     ?>
     <!-- Interacciones -->
     <section class="rzc" data-k="interacciones"<?= $disp() ?>>
       <div class="rzc-eyebrow"><?= ico('heart') ?> Interacciones</div>
       <div class="rzc-mix">
-        <div class="rzc-donut" style="background:conic-gradient(var(--magenta) 0 <?= $p1 ?>%, var(--teal) <?= $p1 ?>% <?= $p2 ?>%, var(--amber,#c78a16) <?= $p2 ?>% <?= $p3 ?>%, var(--ink-soft,#4a444c) <?= $p3 ?>% 100%)">
+        <div class="rzc-donut" style="background:<?= $donut_bg ?>">
           <span><?= $fnum($mix_total) ?></span>
         </div>
         <div class="rzc-mixlist">
@@ -308,9 +317,7 @@ $fnum = fn($n) => number_format((int)$n);
       </div>
       <?php $ai('interacciones'); ?>
     </section>
-    <?php endif; ?>
 
-    <?php if ($has_ig): ?>
     <!-- Instagram -->
     <section class="rzc" data-k="instagram"<?= $disp() ?>>
       <div class="rzc-eyebrow" style="color:#c837ab"><?= ico('instagram') ?> Instagram</div>
@@ -324,9 +331,7 @@ $fnum = fn($n) => number_format((int)$n);
       </div>
       <?php $ai('instagram'); ?>
     </section>
-    <?php endif; ?>
 
-    <?php if ($has_fb): ?>
     <!-- Facebook -->
     <section class="rzc" data-k="facebook"<?= $disp() ?>>
       <div class="rzc-eyebrow" style="color:#0a7cff"><?= ico('facebook') ?> Facebook</div>
@@ -340,7 +345,6 @@ $fnum = fn($n) => number_format((int)$n);
       </div>
       <?php $ai('facebook'); ?>
     </section>
-    <?php endif; ?>
 
     <?php if ($top): ?>
     <!-- Post estrella -->
@@ -365,24 +369,13 @@ $fnum = fn($n) => number_format((int)$n);
     </section>
     <?php endif; ?>
 
-  <?php else: /* Sin insights: producción + CTA (nunca ceros falsos) */ ?>
-    <section class="rzc" data-k="resumen"<?= $disp() ?>>
-      <div class="rzc-eyebrow"><?= ico('calendar') ?> Este mes</div>
-      <div class="rzc-num"><?= (int)$prod['publicados_mes'] ?><span class="u">post<?= $prod['publicados_mes']==1?'':'s' ?></span></div>
-      <div class="rzc-sub">publicados<?php if ($prod['listos'] > 0): ?> · <b><?= (int)$prod['listos'] ?></b> listo<?= $prod['listos']==1?'':'s' ?> para salir<?php endif; ?><?php if ($racha >= 2): ?> · <b><?= (int)$racha ?> semanas</b> seguidas<?php endif; ?></div>
-      <?php if ($total_pub_8sem > 0) echo $barras(); ?>
-    </section>
+  <?php if (!$meta_ok): ?>
+    <!-- Sin conexión: los KPIs de arriba están en 0 hasta conectar -->
     <section class="rzc" data-k="cta"<?= $disp() ?>>
       <div class="rzc-cta">
-        <div class="rzc-eyebrow" style="justify-content:center"><?= ico('chart') ?> Métricas de redes</div>
-        <?php if ($meta_ok): ?>
-          <p style="margin-top:12px">Tus redes están conectadas. Trae de Meta a cuántas personas llegaste y el Analista te lo explica.</p>
-          <form method="post"><?= csrf_field() ?><input type="hidden" name="accion" value="refrescar_metricas">
-            <button class="b" type="submit">Traer mis métricas</button></form>
-        <?php else: ?>
-          <p style="margin-top:12px">Conecta Instagram/Facebook y aquí verás — con gráficas y la lectura del Analista — a cuánta gente llegaste.</p>
-          <a class="b" href="<?= $BASE ?>/conectar.php?marca=<?= $marca_id ?>">Conectar mis redes</a>
-        <?php endif; ?>
+        <div class="rzc-eyebrow" style="justify-content:center"><?= ico('chart') ?> Conecta tus redes</div>
+        <p style="margin-top:12px">Conecta Instagram/Facebook y estos KPIs se empiezan a llenar con datos reales, con la lectura del Analista.</p>
+        <a class="b" href="<?= $BASE ?>/conectar.php?marca=<?= $marca_id ?>">Conectar mis redes</a>
       </div>
     </section>
   <?php endif; ?>
@@ -428,8 +421,8 @@ $fnum = fn($n) => number_format((int)$n);
   cur=0; cards.forEach(function(c,x){ c.style.display=x===0?'':'none'; }); paint(); fit();
 
   // ── La lectura del Analista (IA) ──
-  var HASINS=<?= $hay_ins ? 'true' : 'false' ?>, CSRF=<?= json_encode(csrf_token()) ?>;
-  if(HASINS){
+  var ANALIZAR=<?= $analizar ? 'true' : 'false' ?>, CSRF=<?= json_encode(csrf_token()) ?>;
+  if(ANALIZAR){
     function fail(msg){ cards.forEach(function(c){ var r=c.querySelector('.rzc-read'); if(r) r.textContent=msg; }); fit(); }
     var fd=new FormData(); fd.append('accion','analizar'); fd.append('csrf',CSRF);
     fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
