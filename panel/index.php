@@ -325,6 +325,46 @@ if (defined('CRECER_KERNEL_V1_ENABLED') && CRECER_KERNEL_V1_ENABLED) {
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 $ICON = '/crecer/assets/icons';
 
+// ── Home tipo briefing (snapshot): saludo + próximo post + semana + rendimiento ──
+$hz_nombre = trim((string)($usuario['nombre'] ?? ''));
+$hz_nombre = $hz_nombre !== '' ? ucfirst(mb_strtolower(explode(' ', $hz_nombre)[0])) : (string)($marca['nombre_negocio'] ?? '');
+$hh = (int)date('G');
+$hz_saludo = $hh < 12 ? 'Buenos días' : ($hh < 19 ? 'Buenas tardes' : 'Buenas noches');
+
+$hz_post = null;
+foreach ($trabajo as $t) { if (($t['estado'] ?? '') === 'borrador')  { $hz_post = $t; $hz_post['modo'] = 'aprobar';    break; } }
+if (!$hz_post) foreach ($trabajo as $t) { if (($t['estado'] ?? '') === 'programado') { $hz_post = $t; $hz_post['modo'] = 'programado'; break; } }
+if (!$hz_post && !empty($trabajo)) { $hz_post = $trabajo[0]; $hz_post['modo'] = 'listo'; }
+
+$hz_pend = (int)($cuenta['borrador'] ?? 0);
+$hz_status = $hz_pend > 0 ? "Tienes {$hz_pend} post" . ($hz_pend==1?'':'s') . " esperando tu OK" : 'Todo listo para hoy';
+
+// Semana actual (Lun→Dom) con lo que hay cada día
+$hz_week = [];
+try {
+    $ws = $pdo->prepare("SELECT DAYOFWEEK(fecha_programada) dw, plataforma
+                         FROM crecer_contenido
+                         WHERE marca_id=? AND fecha_programada IS NOT NULL
+                           AND YEARWEEK(fecha_programada,3)=YEARWEEK(CURDATE(),3)");
+    $ws->execute([$marca_id]);
+    foreach ($ws->fetchAll(PDO::FETCH_ASSOC) as $r) { $hz_week[(int)$r['dw']][] = $r; }
+} catch (Throwable $e) {}
+$hz_mon = strtotime('monday this week'); $hz_lbl = ['LUN','MAR','MIÉ','JUE','VIE','SÁB','DOM']; $hz_dias = [];
+for ($i=0;$i<7;$i++){ $ts=$hz_mon + $i*86400; $dw=(int)date('w',$ts)+1;
+    $hz_dias[] = ['lbl'=>$hz_lbl[$i],'num'=>date('j',$ts),'hoy'=>date('Y-m-d',$ts)===date('Y-m-d'),'items'=>$hz_week[$dw] ?? []]; }
+
+// Rendimiento: actividad de publicación (8 semanas) para el sparkline
+$hz_serie = [];
+try {
+    $sq = $pdo->prepare("SELECT YEARWEEK(publicado_at,3) wk, COUNT(*) n FROM crecer_contenido
+                         WHERE marca_id=? AND estado='publicado' AND publicado_at>=(NOW()-INTERVAL 8 WEEK) GROUP BY wk");
+    $sq->execute([$marca_id]); $wm=[];
+    foreach ($sq->fetchAll(PDO::FETCH_ASSOC) as $r) $wm[(int)$r['wk']]=(int)$r['n'];
+    for($i=7;$i>=0;$i--){ $ts=time()-$i*7*86400; $hz_serie[]=($wm[(int)date('oW',$ts)] ?? 0); }
+} catch (Throwable $e) { $hz_serie=[0,0,0,0,0,0,0,0]; }
+$hz_hay_serie = array_sum($hz_serie) > 0;
+$hz_creciendo = $racha >= 2 || ($hz_hay_serie && end($hz_serie) >= reset($hz_serie));
+
 $active = 'inicio';
 $page_title = 'Inicio';
 $guia = null; // El Home no se explica: se siente. (Overlay-guía eliminado a propósito.)
@@ -516,6 +556,110 @@ $credito  = $has_deck
   @media(max-width:420px){.ta-list{grid-template-columns:1fr}}
 </style>
 
+<style>
+  .hz{max-width:560px;margin:0 auto;width:100%;font-family:var(--font-body);padding:8px 16px 18px;box-sizing:border-box}
+  .hz-hi{padding:6px 2px 2px}
+  .hz-eyebrow{color:var(--muted);font-weight:700;font-size:13px}
+  .hz-hello{font-family:var(--font-display);font-weight:800;font-size:clamp(28px,7.5vw,36px);letter-spacing:-.03em;color:var(--tinta);line-height:1.05;margin-top:4px}
+  .hz-status{display:inline-flex;align-items:center;gap:7px;margin-top:11px;color:var(--teal-700,#00827e);font-weight:700;font-size:13.5px;background:color-mix(in srgb,var(--teal) 10%,#fff);border:1px solid color-mix(in srgb,var(--teal) 22%,#fff);border-radius:999px;padding:5px 13px}
+  .hz-status svg{width:15px;height:15px}
+  .hz-card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:16px;box-shadow:var(--shadow-sm);margin-top:16px}
+  .hz-ch{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}
+  .hz-ch b{font-family:var(--font-display);font-weight:700;font-size:16px;color:var(--ink-soft,#4a444c)}
+  .hz-ch a{color:var(--magenta);font-weight:700;font-size:12.5px;text-decoration:none}
+  .hz-up{color:#1f9d63;font-weight:800;font-size:12.5px;display:inline-flex;align-items:center;gap:5px}
+  .hz-up svg{width:14px;height:14px}
+  .hz-next{display:flex;gap:15px;align-items:stretch}
+  .hz-next .l{flex:1;min-width:0;display:flex;flex-direction:column}
+  .hz-next .eb{font-size:11.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--magenta)}
+  .hz-next .cap{font-size:15px;line-height:1.45;color:var(--tinta);margin:7px 0 13px;font-weight:600;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .hz-approve{margin-top:auto;align-self:flex-start;background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:11px 18px;border-radius:12px;display:inline-flex;align-items:center;gap:8px;box-shadow:0 10px 22px -10px rgba(239,67,117,.5)}
+  .hz-approve svg{width:16px;height:16px}
+  .hz-when{margin-top:auto;font-size:13px;color:var(--muted);font-weight:600}
+  .hz-when a{color:var(--teal-700,#00827e);font-weight:700;text-decoration:none;margin-left:6px}
+  .hz-next .im{width:110px;flex:none;border-radius:14px;overflow:hidden;background:var(--crema-2);border:1px solid var(--line);display:grid;place-items:center;color:var(--muted);aspect-ratio:4/5}
+  .hz-next .im img,.hz-next .im video{width:100%;height:100%;object-fit:cover;display:block}
+  .hz-next .im svg{width:30px;height:30px}
+  .hz-week{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .hz-day{display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 0 7px;border-radius:13px}
+  .hz-day .d{font-size:10px;font-weight:800;color:var(--muted);letter-spacing:.02em}
+  .hz-day .n{font-size:15px;font-weight:700;color:var(--ink-soft,#4a444c);font-variant-numeric:tabular-nums}
+  .hz-day .dots{display:flex;gap:3px;height:7px;margin-top:2px}
+  .hz-day .dots i{width:5px;height:5px;border-radius:50%}
+  .hz-day.on{background:var(--teal)}
+  .hz-day.on .d,.hz-day.on .n{color:#fff}
+  .hz-spark{width:100%;height:78px;display:block}
+  .hz-empty{color:var(--muted);font-size:14px;line-height:1.45;padding:4px 2px}
+</style>
+<main class="hz">
+  <div class="hz-hi">
+    <div class="hz-eyebrow"><?= $hz_saludo ?></div>
+    <div class="hz-hello">¡Hola, <?= $h($hz_nombre) ?>!</div>
+    <div class="hz-status"><?= ico('check-circle') ?> <?= $h($hz_status) ?></div>
+  </div>
+
+  <?php if ($hz_post):
+    $hz_g = (string)($hz_post['grafica_path'] ?? '');
+    $hz_vid = $hz_g !== '' && preg_match('#\.(mp4|mov|m4v)$#i', $hz_g);
+    $hz_cap = trim((string)($hz_post['caption'] ?? ''));
+  ?>
+  <section class="hz-card">
+    <div class="hz-next">
+      <div class="l">
+        <span class="eb">Próximo post</span>
+        <p class="cap"><?= $h($hz_cap !== '' ? $hz_cap : 'Tu próximo post — el corillo lo está afinando.') ?></p>
+        <?php if ($hz_post['modo']==='aprobar'): ?>
+          <a class="hz-approve" href="<?= $BASE ?>/propuestas.php?<?= $mid ?>"><?= ico('check') ?> Aprobar post</a>
+        <?php elseif ($hz_post['modo']==='programado'): ?>
+          <div class="hz-when">Sale <?= $h(_fecha_humana($hz_post['fecha_programada'] ?? '')) ?><a href="<?= $BASE ?>/calendario.php?<?= $mid ?>">Ver →</a></div>
+        <?php else: ?>
+          <div class="hz-when">Listo para publicar<a href="<?= $BASE ?>/aprobar2.php?marca=<?= $marca_id ?>&tab=listos">Ver →</a></div>
+        <?php endif; ?>
+      </div>
+      <div class="im">
+        <?php if ($hz_vid): ?><video src="<?= $h($hz_g) ?>" muted playsinline></video>
+        <?php elseif ($hz_g !== ''): ?><img src="<?= $h($hz_g) ?>" alt="">
+        <?php else: ?><?= ico('image') ?><?php endif; ?>
+      </div>
+    </div>
+  </section>
+  <?php else: ?>
+  <section class="hz-card"><p class="hz-empty">Todo al día. El corillo está preparando lo próximo — te aviso cuando haya algo para tu OK.</p></section>
+  <?php endif; ?>
+
+  <section class="hz-card">
+    <div class="hz-ch"><b>Calendario</b><a href="<?= $BASE ?>/calendario.php?<?= $mid ?>">Ver todo →</a></div>
+    <div class="hz-week">
+      <?php foreach ($hz_dias as $d): ?>
+      <div class="hz-day<?= $d['hoy']?' on':'' ?>">
+        <span class="d"><?= $d['lbl'] ?></span>
+        <span class="n"><?= $d['num'] ?></span>
+        <span class="dots"><?php foreach (array_slice($d['items'],0,3) as $it){ $pl=$it['plataforma']??''; $col=$pl==='facebook'?'var(--teal)':($pl==='instagram'?'var(--magenta)':'var(--amber,#c78a16)'); echo '<i style="background:'.($d['hoy']?'#fff':$col).'"></i>'; } ?></span>
+      </div>
+      <?php endforeach; ?>
+    </div>
+  </section>
+
+  <section class="hz-card">
+    <div class="hz-ch"><b>Rendimiento</b><?php if ($hz_creciendo): ?><span class="hz-up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/></svg> En crecimiento</span><?php endif; ?></div>
+    <?php if ($hz_hay_serie):
+      $n=count($hz_serie); $mx=max(1,max($hz_serie)); $pts=[];
+      foreach($hz_serie as $i=>$v){ $x=$n>1?round(($i/($n-1))*300,1):0; $y=round(64-($v/$mx)*54,1); $pts[]="$x,$y"; }
+      $poly=implode(' ',$pts); $lastp=explode(',',end($pts));
+    ?>
+    <svg class="hz-spark" viewBox="0 0 300 72" preserveAspectRatio="none">
+      <defs><linearGradient id="hzg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--teal)" stop-opacity=".28"/><stop offset="1" stop-color="var(--teal)" stop-opacity="0"/></linearGradient></defs>
+      <polygon points="0,72 <?= $poly ?> 300,72" fill="url(#hzg)"/>
+      <polyline points="<?= $poly ?>" fill="none" stroke="var(--teal)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="<?= $lastp[0] ?>" cy="<?= $lastp[1] ?>" r="4.5" fill="var(--teal)"/>
+    </svg>
+    <?php else: ?>
+    <p class="hz-empty">Publica esta semana y aquí verás tu rendimiento crecer.</p>
+    <?php endif; ?>
+  </section>
+</main>
+
+<?php if (false): /* ── Home viejo (deck/launcher) DESACTIVADO — reversible ── */ ?>
 <main class="turno" id="turno">
   <div class="tn-top">
     <span class="tn-neg"><?= $h($negocio) ?></span>
@@ -663,6 +807,7 @@ $credito  = $has_deck
   </style>
   <?php endif; ?>
 </main>
+<?php endif; /* fin Home viejo (deck/launcher) desactivado */ ?>
 
 <script>
 (function () {
