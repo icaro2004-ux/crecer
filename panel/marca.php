@@ -283,6 +283,22 @@ require __DIR__ . '/_shell.php';
   @media (prefers-reduced-motion: reduce){.mk-view,.mk-track{transition:none}}
   .mk-pane .sec-h:first-child{margin-top:14px}
 
+  /* Wizard shell (compartido con Voz; se define aquí también por si acaso) */
+  .vz-view{overflow:hidden;transition:height .35s var(--ease)}
+  .vz-track{display:flex;align-items:flex-start;transition:transform .38s var(--ease);will-change:transform}
+  .vz-card{flex:0 0 100%;min-width:0;box-sizing:border-box}
+  /* Hub de logo: dos elecciones grandes */
+  .idz-hub{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:6px}
+  .idz-choice{border:1.5px solid var(--line);background:#fff;border-radius:16px;padding:18px 14px;cursor:pointer;text-decoration:none;text-align:center;
+    display:flex;flex-direction:column;align-items:center;gap:8px;font-family:inherit;transition:border-color .15s,transform .12s,box-shadow .15s}
+  .idz-choice:hover{transform:translateY(-2px);box-shadow:var(--shadow-sm);border-color:color-mix(in srgb,var(--magenta) 40%,var(--line))}
+  .idz-choice .chip{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;background:color-mix(in srgb,var(--magenta) 10%,#fff);color:var(--magenta)}
+  .idz-choice .chip svg{width:23px;height:23px}
+  .idz-choice b{font-size:14.5px;color:var(--tinta)}
+  .idz-choice small{color:var(--muted);font-size:11.5px;line-height:1.3}
+  .idz-choice.locked .chip{background:color-mix(in srgb,var(--terracota) 12%,#fff);color:var(--terracota)}
+  @media(max-width:400px){.idz-hub{grid-template-columns:1fr}}
+
   /* ── MÓVIL: pantalla compacta, todo lo que sea lista = carrusel horizontal ── */
   @media (max-width:760px){
     .content{padding:16px 14px 90px}
@@ -389,10 +405,15 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
 
 <section class="mk-pane" id="mk-identidad">
 <?php $ev_actual = (string)$pdo->query("SELECT estilo_visual FROM crecer_marca WHERE id={$marca_id}")->fetchColumn(); ?>
-<h2 class="sec-h"><?= ico('palette') ?>Línea de diseño</h2>
-<p class="subline">El estilo visual de <b>TU</b> negocio (colores, vibra, tipo de foto). La IA lo aplica a <b>todas</b> tus imágenes para que tu feed se vea de la misma familia. Es único de tu marca — cada cliente tiene la suya.</p>
+<div class="vz-dots" id="idzDots"></div>
+<div class="vz-view" id="idzView"><div class="vz-track" id="idzTrack">
+
+<!-- ── Identidad · Card 1: Línea de diseño ── -->
+<section class="vz-card" data-card="linea">
+<h2 class="sec-h" style="margin-top:2px"><?= ico('palette') ?>Tu línea de diseño</h2>
+<p class="subline">El estilo visual de <b>TU</b> negocio (colores, vibra, tipo de foto). La IA lo aplica a <b>todas</b> tus imágenes para que el feed se vea de la misma familia.</p>
 <?php if (!empty($_GET['estilo'])): ?><div class="ok-banner">✓ Línea de diseño guardada.</div><?php endif; ?>
-<div class="genbox" style="margin-bottom:18px">
+<div class="genbox" style="margin-bottom:0">
   <form method="post" onsubmit="var b=this.querySelector('.genbtn');b.disabled=true;b.textContent='Guardando…';">
     <input type="hidden" name="accion" value="guardar_estilo"><input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(),ENT_QUOTES) ?>">
     <textarea name="estilo_visual" id="estilo-ta" rows="4" placeholder="Ej: paleta cálida (terracota y crema), luz natural de tarde, fotos reales sobre madera, composición limpia con aire para texto, vibra artesanal y acogedora…"><?= $h($ev_actual) ?></textarea>
@@ -418,14 +439,14 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
   });
 })();
 </script>
+<div class="vz-nav"><span></span><button type="button" class="vz-next" data-goto="hub">Siguiente: tu logo <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button></div>
+</section>
 
-<h2 class="sec-h"><?= ico('palette') ?>Tu logo</h2>
-<?php if ($pagado): ?>
-  <p class="subline">Tienes <b><?= $LIMITE_LOGO ?> oportunidades</b> para crear tu logo con IA. Genéralos, compáralos y escoge el que más te guste.</p>
-<?php else: ?>
-  <p class="subline">Tu logo profesional con IA — <b>se desbloquea con un plan</b>.</p>
-<?php endif; ?>
-<?php if (!empty($_GET['ok'])): ?><div class="ok-banner">✓ ¡Logo guardado! Mira la galería abajo.</div><?php endif; ?>
+<!-- ── Identidad · Card 2: Tu logo (hub) ── -->
+<section class="vz-card" data-card="hub">
+<h2 class="sec-h" style="margin-top:2px"><?= ico('palette') ?>Tu logo</h2>
+<p class="subline"><?= $pagado ? 'Súbelo si ya lo tienes, o deja que el Diseñador te lo cree.' : 'Súbelo si ya lo tienes. Crearlo con IA se desbloquea con un plan.' ?></p>
+<?php if (!empty($_GET['ok'])): ?><div class="ok-banner">✓ ¡Logo guardado! Míralo en tu catálogo.</div><?php endif; ?>
 <?php if ($err): ?><div class="err-banner"><?= ico('bolt') ?> <?= $h($err) ?></div><?php endif; ?>
 <?php if ($logo_pendiente): ?>
 <div class="ok-banner" id="logoWait" style="display:flex;align-items:center;gap:12px">
@@ -444,8 +465,31 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
 </script>
 <?php endif; ?>
 
+<div class="idz-hub">
+  <button type="button" class="idz-choice" data-goto="subir">
+    <span class="chip"><?= ico('upload') ?></span>
+    <b>Ya tengo mi logo</b><small>Súbelo desde tu teléfono</small>
+  </button>
+  <?php if ($pagado): ?>
+    <button type="button" class="idz-choice" data-goto="crear">
+      <span class="chip"><?= ico('sparkles') ?></span>
+      <b>Crear con IA</b><small><?= $final ? 'Tu logo ya está listo' : "Te quedan {$restantes} de {$LIMITE_LOGO}" ?></small>
+    </button>
+  <?php else: ?>
+    <a class="idz-choice locked" href="/crecer/panel/precios.php?marca=<?= $marca_id ?>">
+      <span class="chip"><?= ico('lock') ?></span>
+      <b>Crear con IA</b><small>Se desbloquea con un plan</small>
+    </a>
+  <?php endif; ?>
+</div>
+<?php if ($logos): ?><button type="button" class="vz-ex" data-goto="catalogo" style="margin-top:14px"><?= ico('image') ?> Ver mi catálogo (<?= count($logos) ?>)</button><?php endif; ?>
+<div class="vz-nav"><button type="button" class="vz-back" data-goto="linea"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>Atrás</button><span></span></div>
+</section>
+
+<!-- ── Identidad · Card 3: Subir tu logo ── -->
+<section class="vz-card" data-card="subir">
 <!-- SUBIR LOGO PROPIO (principal o secundarios) — no es premium -->
-<div class="genbox" style="margin-bottom:16px">
+<div class="genbox" style="margin-bottom:0">
   <h3 style="font-size:15px;margin:0 0 4px"><?= ico('upload') ?> Sube tu logo</h3>
   <p class="subline" style="margin-bottom:10px">¿Ya tienes logo? Súbelo (principal y/o secundarios). La IA lo usará como referencia en tus posts. Lo ideal: <b>PNG con fondo transparente</b>.</p>
   <form method="post" enctype="multipart/form-data" onsubmit="var b=this.querySelector('.genbtn');b.textContent='Subiendo…';b.disabled=true;">
@@ -458,7 +502,11 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
     <button class="genbtn" type="submit">Subir logo</button>
   </form>
 </div>
+<div class="vz-nav"><button type="button" class="vz-back" data-goto="hub"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>Atrás</button><span></span></div>
+</section>
 
+<!-- ── Identidad · Card 4: Crear con IA ── -->
+<section class="vz-card" data-card="crear">
 <?php if (!$pagado): ?>
   <div class="genbox" style="text-align:center;background:linear-gradient(135deg,rgba(255,107,61,.07),rgba(255,43,133,.07))">
     <div style="color:var(--terracota)"><?= ico('lock','ic-xl') ?></div>
@@ -511,7 +559,12 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
     <div class="genline">Escoge tu favorito abajo. ¿Quieres más opciones? Compra intentos adicionales o pide un logo personalizado por un artista gráfico.</div>
   </div>
 <?php endif; ?>
+<div class="vz-nav"><button type="button" class="vz-back" data-goto="hub"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>Atrás</button><span></span></div>
+</section>
 
+<!-- ── Identidad · Card 5: Tu catálogo ── -->
+<section class="vz-card" data-card="catalogo">
+<h2 class="sec-h" style="margin-top:2px"><?= ico('image') ?>Tus logos</h2>
 <?php if ($final): ?>
   <div class="ok-banner" style="max-width:620px">Tu logo final está elegido. Descárgalo cuando quieras en los formatos que necesites.</div>
 <?php endif; ?>
@@ -596,7 +649,41 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
     img.src = document.getElementById('logoimg').src;
   }
 </script>
-</section>
+<div class="vz-nav"><button type="button" class="vz-back" data-goto="hub"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>Atrás</button><span></span></div>
+</section><!-- /catalogo -->
+
+</div></div><!-- /idz-track /idz-view -->
+
+<script>
+// Identidad — wizard de swipe-cards (línea → hub → subir → crear → catálogo).
+(function(){
+  var view=document.getElementById('idzView'), track=document.getElementById('idzTrack');
+  if(!view||!track) return;
+  var cards=[].slice.call(track.querySelectorAll('.vz-card'));
+  var keys=cards.map(function(c){return c.dataset.card;});
+  var dotsWrap=document.getElementById('idzDots'), dots=[];
+  cards.forEach(function(_,i){ var d=document.createElement('i'); if(i===0)d.className='on'; dotsWrap.appendChild(d); dots.push(d); });
+  var cur=0;
+  function fit(){ var c=cards[cur]; if(c) view.style.height=c.offsetHeight+'px'; window.dispatchEvent(new Event('resize')); }
+  function go(i){ i=Math.max(0,Math.min(cards.length-1,i)); cur=i;
+    track.style.transform='translateX(-'+(i*100)+'%)';
+    dots.forEach(function(d,x){ d.classList.toggle('on',x===i); }); fit(); }
+  function goKey(k){ var i=keys.indexOf(k); if(i>=0) go(i); }
+  track.querySelectorAll('[data-goto]').forEach(function(b){ if(b.tagName==='A')return; b.addEventListener('click',function(){ goKey(b.dataset.goto); }); });
+  // swipe (no interfiere con inputs/sliders/galería)
+  var x0=null,y0=null,lock=null;
+  view.addEventListener('touchstart',function(e){ if(e.target.closest('input,textarea,.gallery,button,a')){x0=null;return;} var t=e.touches[0];x0=t.clientX;y0=t.clientY;lock=null; },{passive:true});
+  view.addEventListener('touchmove',function(e){ if(x0===null)return; var t=e.touches[0],dx=t.clientX-x0,dy=t.clientY-y0; if(lock===null&&(Math.abs(dx)>8||Math.abs(dy)>8)) lock=Math.abs(dx)>Math.abs(dy)?'x':'y'; },{passive:true});
+  view.addEventListener('touchend',function(e){ if(x0===null||lock!=='x'){x0=null;return;} var dx=e.changedTouches[0].clientX-x0; if(dx<-45)go(cur+1); else if(dx>45)go(cur-1); x0=null; },{passive:true});
+  window.addEventListener('resize',function(){ var c=cards[cur]; if(c) view.style.height=c.offsetHeight+'px'; });
+  // deep-link: dónde arranca según el estado
+  var init='linea';
+  <?php if ($err): ?>init='crear';<?php elseif ($logo_pendiente): ?>init='catalogo';<?php endif; ?>
+  if(/[?&](ok|logo_gen)=/.test(location.search)) init='catalogo';
+  track.style.transition='none'; goKey(init); requestAnimationFrame(function(){ track.style.transition=''; });
+})();
+</script>
+</section><!-- /mk-identidad -->
 </div></div><!-- /mk-track /mk-view -->
 
 <script>
@@ -619,7 +706,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
 
   var init=0;
   if(location.hash==='#cerebro') init=2;                         // volver de corregir/descartar memoria
-  else if(/[?&]ok=/.test(location.search)) init=1;               // volver de generar logo
+  else if(location.hash==='#identidad' || /[?&](ok|estilo|logo_gen)=/.test(location.search)) init=1;  // línea de diseño / logo
   track.style.transition='none'; go(init); requestAnimationFrame(function(){ track.style.transition=''; });
   window.addEventListener('resize', fitHeight);
   window.addEventListener('load', fitHeight);
