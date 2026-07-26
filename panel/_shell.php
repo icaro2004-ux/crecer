@@ -49,6 +49,22 @@ $nav_perfil = [
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link href="/crecer/assets/encuentralo-ui.css?v=22" rel="stylesheet">
+<style>
+  /* Fondo blanco unificado + bottom-nav móvil (una nav para todo el app) */
+  .main{background:#fff}
+  .botnav{display:none}
+  @media(max-width:860px){
+    .botnav{display:grid;grid-template-columns:repeat(4,1fr);position:fixed;left:10px;right:10px;bottom:10px;z-index:60;
+      background:rgba(255,255,255,.96);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+      border:1px solid var(--line);border-radius:22px;box-shadow:0 14px 34px rgba(34,29,38,.14);
+      padding:8px 6px calc(8px + env(safe-area-inset-bottom))}
+    .botnav .bn{display:flex;flex-direction:column;align-items:center;gap:3px;text-decoration:none;color:#8b8790;
+      font-size:10.5px;font-weight:700;padding:7px 2px;border-radius:15px;transition:color .15s,background .15s;letter-spacing:.01em}
+    .botnav .bn svg.ic{width:22px;height:22px;stroke-width:2}
+    .botnav .bn.on{color:var(--rosa);background:#fff0f5}
+    .content{padding-bottom:96px !important}
+  }
+</style>
 </head>
 <body>
 <div class="layout">
@@ -113,6 +129,19 @@ $nav_perfil = [
         <span class="av"><?= $h(mb_strtoupper(mb_substr($marca['nombre_negocio'],0,1))) ?></span>
       </button>
     </div>
+    <?php
+      $bn = [
+        ['inicio',    'home',    'Inicio',     "index.php"],
+        ['contenido', 'list',    'Propuestas', "propuestas.php"],
+        ['resultados','chart',   'Resultados', "resultados.php"],
+        ['marca',     'palette', 'Mi marca',   "marca.php"],
+      ];
+    ?>
+    <nav class="botnav">
+      <?php foreach ($bn as $t): ?>
+        <a class="bn <?= $active===$t[0]?'on':'' ?>" href="<?= $BASE ?>/<?= $t[3] ?>?marca=<?= $marca_id ?>"><?= ico($t[1]) ?><span><?= $t[2] ?></span></a>
+      <?php endforeach; ?>
+    </nav>
     <div class="content">
     <?php if (function_exists('activacion_de_prueba') && activacion_de_prueba($u_actual['email'] ?? null)): ?>
       <div style="color:var(--muted);font-size:11.5px;margin-bottom:8px;letter-spacing:.02em">Modo prueba · cuenta activa sin cobro</div>
