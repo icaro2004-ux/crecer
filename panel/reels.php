@@ -329,22 +329,24 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
 .drop .big{font-size:40px;line-height:1;color:var(--teal)}
 .drop b{display:block;margin-top:8px;font-family:'Poppins';font-size:16px}
 .drop small{color:var(--muted);display:block;margin-top:4px}
-.clips{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;margin-top:16px}
-.clip{position:relative;aspect-ratio:9/16;border-radius:12px;overflow:hidden;background:#000;border:1px solid var(--line)}
+.clips{display:flex;gap:10px;margin-top:14px;overflow-x:auto;overflow-y:hidden;padding:2px 2px 8px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
+.clips::-webkit-scrollbar{height:0}
+.clip{flex:0 0 92px;width:92px;scroll-snap-align:start;position:relative;aspect-ratio:9/16;border-radius:12px;overflow:hidden;background:#000;border:1px solid var(--line)}
 .clip video{width:100%;height:100%;object-fit:cover;display:block}
 .clip .num{position:absolute;top:6px;left:6px;background:rgba(0,0,0,.6);color:#fff;font-weight:800;font-size:11px;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center}
 .clip .x{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.6);color:#fff;border:none;width:22px;height:22px;border-radius:50%;font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center}
 .clip .load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35);color:#fff;font-size:11px;font-weight:700}
 
 /* Presets */
-.presets{display:grid;grid-template-columns:1fr;gap:12px}
-.preset{display:flex;align-items:center;gap:14px;text-align:left;width:100%;background:#fff;border:2px solid var(--line);border-radius:16px;padding:16px;transition:.18s}
+.presets{display:flex;gap:11px;overflow-x:auto;padding:2px 2px 10px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
+.presets::-webkit-scrollbar{height:0}
+.preset{flex:0 0 152px;scroll-snap-align:start;display:flex;flex-direction:column;align-items:flex-start;gap:8px;text-align:left;background:#fff;border:2px solid var(--line);border-radius:16px;padding:14px;transition:.18s;position:relative}
 .preset:hover{border-color:#cfcad4;transform:translateY(-1px)}
 .preset.sel{border-color:var(--rosa);background:#fff5f8;box-shadow:0 6px 22px -12px rgba(239,67,117,.5)}
-.preset .em{width:34px;height:34px;border-radius:10px;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
-.preset .nm{font-family:'Poppins';font-weight:800;font-size:17px}
-.preset .tg{color:var(--muted);font-size:13.5px;margin-top:2px}
-.preset .tick{margin-left:auto;width:24px;height:24px;border-radius:50%;border:2px solid var(--line);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff}
+.preset .em{width:38px;height:38px;border-radius:11px;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+.preset .nm{font-family:'Poppins';font-weight:700;font-size:15.5px;line-height:1.1}
+.preset .tg{color:var(--muted);font-size:12px;margin-top:1px;line-height:1.32}
+.preset .tick{position:absolute;top:10px;right:10px;width:20px;height:20px;border-radius:50%;border:2px solid var(--line);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px}
 .preset.sel .tick{background:var(--rosa);border-color:var(--rosa)}
 
 /* Inputs */
@@ -445,12 +447,8 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
 .copyta{width:100%;min-height:130px;border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14px;font-family:inherit;line-height:1.5;background:#fff;resize:vertical;margin-bottom:10px}
 
 @media(min-width:760px){
-  .presets{grid-template-columns:repeat(3,1fr)}
-  .preset{flex-direction:column;align-items:flex-start;text-align:left;min-height:170px}
-  .preset .tick{margin-left:0;position:absolute;top:14px;right:14px}
-  .preset{position:relative;padding:20px}
-  .result{grid-template-columns:320px 1fr;align-items:start}
-  .player video{max-width:100%}
+  .clip{flex-basis:104px;width:104px}
+  .preset{flex-basis:170px}
 }
 </style>
 
