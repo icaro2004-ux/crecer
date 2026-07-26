@@ -75,6 +75,7 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
   /* ── 1 · HERO: solo la pregunta ── */
   #ask{min-height:calc(100dvh - 64px);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 22px 12vh}
+  .ask-hi{font-family:var(--body);font-weight:600;font-size:clamp(14px,3.6vw,16px);color:var(--pink);letter-spacing:.01em;margin:0 0 12px;text-wrap:balance}
   .ask-q{font-family:var(--disp);font-weight:600;font-size:clamp(30px,6.6vw,48px);line-height:1.12;letter-spacing:-.025em;color:var(--ink);text-wrap:balance;max-width:14ch}
   .namebox{display:flex;align-items:center;gap:10px;margin-top:34px;width:min(440px,100%);
     background:var(--card);border:1px solid var(--line);border-radius:18px;padding:8px 8px 8px 20px;
@@ -173,15 +174,16 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
 <!-- ── 1 · HERO — solo la pregunta ── -->
 <header id="ask">
+  <p class="ask-hi">¡Hola! Qué bueno tenerte por aquí.</p>
   <h1 class="ask-q">¿Cómo se llama tu negocio?</h1>
   <form class="namebox" id="fiche" method="get" action="/crecer/crecer.php" autocomplete="off">
     <input id="negInput" name="negocio" maxlength="60" required
            value="<?= $has_name ? $h($negocio) : '' ?>"
-           placeholder="Escríbelo aquí…" aria-label="Nombre de tu negocio"
+           placeholder="Ej. Repostería La Bendición" aria-label="Nombre de tu negocio"
            enterkeyhint="go" autocapitalize="words" spellcheck="false">
     <button type="submit" aria-label="Entrar">→</button>
   </form>
-  <p class="whisper">Tu corillo te está esperando.</p>
+  <p class="whisper">Con el nombre basta para empezar. Tu corillo se encarga del resto.</p>
 </header>
 
 <!-- ── 2–5 · LA EXPERIENCIA (se revela al fichar) ── -->
