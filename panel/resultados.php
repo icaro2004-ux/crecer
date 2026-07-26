@@ -142,13 +142,13 @@ require __DIR__ . '/_shell.php';
 
   /* lo que salió: galería visual (misma lengua que Biblioteca) */
   .rz-galt{font-family:var(--font-display);font-size:16px;font-weight:600;color:var(--ink-soft);margin:34px 0 16px}
-  .rz-gal{column-count:2;column-gap:12px}
-  @media(min-width:560px){.rz-gal{column-count:3}}
-  .rz-shot{position:relative;display:block;break-inside:avoid;margin:0 0 12px;border-radius:16px;overflow:hidden;background:var(--crema-2);
+  .rz-gal{display:flex;gap:12px;overflow-x:auto;padding:2px 2px 12px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
+  .rz-gal::-webkit-scrollbar{height:0}
+  .rz-shot{position:relative;flex:0 0 140px;width:140px;aspect-ratio:4/5;scroll-snap-align:start;display:block;border-radius:16px;overflow:hidden;background:var(--crema-2);
     box-shadow:0 1px 3px rgba(40,22,28,.06);transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease);text-decoration:none}
   .rz-shot:hover{transform:translateY(-3px);box-shadow:0 18px 40px -16px rgba(40,22,28,.3)}
-  .rz-shot img,.rz-shot video{width:100%;height:auto;display:block}
-  .rz-shot .ph{aspect-ratio:1;display:grid;place-items:center;color:var(--muted)}
+  .rz-shot img,.rz-shot video{width:100%;height:100%;object-fit:cover;display:block}
+  .rz-shot .ph{width:100%;height:100%;display:grid;place-items:center;color:var(--muted)}
   .rz-shot .chip{position:absolute;left:10px;bottom:10px;display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:#fff;
     background:rgba(0,0,0,.5);backdrop-filter:blur(4px);padding:5px 10px;border-radius:99px}
   .rz-shot .chip svg{width:13px;height:13px}
