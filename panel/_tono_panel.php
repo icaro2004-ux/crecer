@@ -13,9 +13,9 @@ $creativa = (function_exists('equipo_nombre') && isset($marca)) ? equipo_nombre(
   .vz-dots{display:flex;gap:7px;justify-content:center;margin:2px 0 14px}
   .vz-dots i{width:8px;height:8px;border-radius:50%;background:var(--line);transition:width .3s var(--ease),background .3s}
   .vz-dots i.on{width:22px;background:linear-gradient(90deg,var(--coral),var(--magenta))}
-  .vz-view{overflow:hidden;transition:height .35s var(--ease)}
-  .vz-track{display:flex;align-items:flex-start;transition:transform .38s var(--ease);will-change:transform}
-  .vz-card{flex:0 0 100%;min-width:0;box-sizing:border-box;background:var(--card);border:1px solid var(--line);
+  .vz-view{overflow:hidden;transition:height .4s cubic-bezier(.22,1,.36,1)}
+  .vz-track{position:relative}
+  .vz-card{box-sizing:border-box;background:var(--card);border:1px solid var(--line);
     border-radius:20px;padding:20px 20px 22px;box-shadow:var(--shadow-sm)}
   .vz-step{font-family:'Poppins',sans-serif;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--magenta)}
   .vz-t{font-family:var(--font-display);font-weight:600;font-size:19px;color:var(--ink-soft);letter-spacing:-.01em;margin:3px 0 3px;line-height:1.15}
@@ -115,7 +115,7 @@ $creativa = (function_exists('equipo_nombre') && isset($marca)) ? equipo_nombre(
     </section>
 
     <!-- ── Paso 2: afinar ── -->
-    <section class="vz-card" data-i="1">
+    <section class="vz-card" data-i="1" style="display:none">
       <span class="vz-step">Paso 2 de 3</span>
       <h3 class="vz-t">Afínalo a tu gusto</h3>
       <p class="vz-hint">Mueve los controles hasta que suene a ti.</p>
@@ -138,7 +138,7 @@ $creativa = (function_exists('equipo_nombre') && isset($marca)) ? equipo_nombre(
     </section>
 
     <!-- ── Paso 3: así suena + guardar ── -->
-    <section class="vz-card" data-i="2">
+    <section class="vz-card" data-i="2" style="display:none">
       <span class="vz-step">Paso 3 de 3</span>
       <h3 class="vz-t">Así va a sonar</h3>
       <div class="vz-voice" id="vzVoice"></div>
@@ -171,13 +171,27 @@ $creativa = (function_exists('equipo_nombre') && isset($marca)) ? equipo_nombre(
   var cards=[].slice.call(track.querySelectorAll('.vz-card')), dots=[].slice.call(document.querySelectorAll('#vzDots i'));
   var cur=0;
 
-  function fit(){ var c=cards[cur]; if(c){ view.style.height=c.offsetHeight+'px'; } window.dispatchEvent(new Event('resize')); }
-  function go(i){
-    i=Math.max(0,Math.min(cards.length-1,i)); cur=i;
-    track.style.transform='translateX(-'+(i*100)+'%)';
-    dots.forEach(function(d,x){ d.classList.toggle('on',x===i); });
-    if(i===2) paint();
-    fit();
+  var REDUCE = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function fit(){ var c=cards[cur]; if(c) view.style.height=c.offsetHeight+'px'; window.dispatchEvent(new Event('resize')); }
+  // Transición: FADE-OUT / FADE-IN direccional (izq↔der), como el pase de propuestas.
+  function go(target){
+    target=Math.max(0,Math.min(cards.length-1,target));
+    if(target===cur){ fit(); return; }
+    var dir=target>cur?1:-1, a=cards[cur], b=cards[target];
+    cur=target; dots.forEach(function(d,x){ d.classList.toggle('on',x===cur); });
+    if(target===2) paint();
+    if(REDUCE){ a.style.display='none'; b.style.display=''; fit(); return; }
+    a.style.transition='opacity .2s ease, transform .2s ease';
+    a.style.opacity='0'; a.style.transform='translateX('+(-14*dir)+'px)';
+    setTimeout(function(){
+      a.style.display='none'; a.style.transition=''; a.style.transform=''; a.style.opacity='';
+      b.style.display=''; b.style.opacity='0'; b.style.transform='translateX('+(16*dir)+'px)';
+      view.style.height=b.offsetHeight+'px'; window.dispatchEvent(new Event('resize'));
+      requestAnimationFrame(function(){
+        b.style.transition='opacity .34s cubic-bezier(.22,1,.36,1), transform .34s cubic-bezier(.22,1,.36,1)';
+        b.style.opacity='1'; b.style.transform='none';
+      });
+    }, 190);
   }
   // Botones atrás/siguiente
   track.querySelectorAll('[data-go]').forEach(function(b){ b.addEventListener('click',function(){ go(+b.dataset.go); }); });
@@ -225,8 +239,8 @@ $creativa = (function_exists('equipo_nombre') && isset($marca)) ? equipo_nombre(
   view.addEventListener('touchend',function(e){ if(x0===null||lock!=='x'){x0=null;return;} var dx=e.changedTouches[0].clientX-x0; if(dx<-45)go(cur+1); else if(dx>45)go(cur-1); x0=null; },{passive:true});
 
   window.addEventListener('resize',function(){ var c=cards[cur]; if(c) view.style.height=c.offsetHeight+'px'; });
-  // arranque
-  track.style.transition='none'; go(0); requestAnimationFrame(function(){ track.style.transition=''; });
+  // arranque: card 0 visible (las demás ya en display:none por el markup)
+  cur=0; dots.forEach(function(d,x){ d.classList.toggle('on',x===0); }); fit();
 
   // ── Ejemplos en LIGHTBOX ──
   var ex=document.getElementById('vzEx'), lb=document.getElementById('vzLb'), lbX=document.getElementById('vzLbX'), exRes=document.getElementById('vzExRes');

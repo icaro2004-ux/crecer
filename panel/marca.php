@@ -275,18 +275,18 @@ require __DIR__ . '/_shell.php';
   .mk-tab svg{width:16px;height:16px}
   .mk-tab.on{border-color:transparent;background:linear-gradient(135deg,var(--teal),var(--teal-700));color:#fff;box-shadow:0 8px 20px -10px rgba(0,164,159,.45)}
   .mk-tab.on svg{color:#fff}
-  /* MOLDE ventana limpia + slide lateral (igual que Configuración) */
-  .mk-view{overflow:hidden;transition:height .38s var(--ease)}
-  .mk-track{display:flex;align-items:flex-start;transition:transform .38s var(--ease);will-change:transform}
-  .mk-pane{flex:0 0 100%;min-width:0;padding:2px}
-  #mk-voz{order:0}#mk-identidad{order:1}#mk-aprendido{order:2}   /* orden visual = orden de los tabs (aunque el DOM difiera) */
-  @media (prefers-reduced-motion: reduce){.mk-view,.mk-track{transition:none}}
+  /* MOLDE ventana limpia + CROSS-FADE (panes apilados absolutos → los wizards internos
+     siguen midiendo su altura bien; el activo es relative y manda la altura) */
+  .mk-view{overflow:hidden;transition:height .4s cubic-bezier(.22,1,.36,1)}
+  .mk-track{position:relative}
+  .mk-pane{position:absolute;top:0;left:0;width:100%;min-width:0;box-sizing:border-box;padding:2px;opacity:0;visibility:hidden;pointer-events:none}
+  .mk-pane.on{position:relative;opacity:1;visibility:visible;pointer-events:auto}
   .mk-pane .sec-h:first-child{margin-top:14px}
 
-  /* Wizard shell (compartido con Voz; se define aquí también por si acaso) */
-  .vz-view{overflow:hidden;transition:height .35s var(--ease)}
-  .vz-track{display:flex;align-items:flex-start;transition:transform .38s var(--ease);will-change:transform}
-  .vz-card{flex:0 0 100%;min-width:0;box-sizing:border-box}
+  /* Wizard shell (compartido con Voz): fade-stack (cross-fade direccional, no slide) */
+  .vz-view{overflow:hidden;transition:height .4s cubic-bezier(.22,1,.36,1)}
+  .vz-track{position:relative}
+  .vz-card{box-sizing:border-box}
   /* Hub de logo: dos elecciones grandes */
   .idz-hub{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:6px}
   .idz-choice{border:1.5px solid var(--line);background:#fff;border-radius:16px;padding:18px 14px;cursor:pointer;text-decoration:none;text-align:center;
@@ -404,12 +404,20 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
 </section>
 
 <section class="mk-pane" id="mk-identidad">
-<?php $ev_actual = (string)$pdo->query("SELECT estilo_visual FROM crecer_marca WHERE id={$marca_id}")->fetchColumn(); ?>
+<?php
+  $ev_actual = (string)$pdo->query("SELECT estilo_visual FROM crecer_marca WHERE id={$marca_id}")->fetchColumn();
+  // Card inicial del wizard (deep-link por estado) → los demás arrancan ocultos (sin flash)
+  $idz_init = 'linea';
+  if ($err) $idz_init = 'crear';
+  elseif ($logo_pendiente) $idz_init = 'catalogo';
+  if (!empty($_GET['ok']) || !empty($_GET['logo_gen'])) $idz_init = 'catalogo';
+  $idzHide = fn($k) => $idz_init === $k ? '' : ' style="display:none"';
+?>
 <div class="vz-dots" id="idzDots"></div>
 <div class="vz-view" id="idzView"><div class="vz-track" id="idzTrack">
 
 <!-- ── Identidad · Card 1: Línea de diseño ── -->
-<section class="vz-card" data-card="linea">
+<section class="vz-card" data-card="linea"<?= $idzHide('linea') ?>>
 <h2 class="sec-h" style="margin-top:2px"><?= ico('palette') ?>Tu línea de diseño</h2>
 <p class="subline">El estilo visual de <b>TU</b> negocio (colores, vibra, tipo de foto). La IA lo aplica a <b>todas</b> tus imágenes para que el feed se vea de la misma familia.</p>
 <?php if (!empty($_GET['estilo'])): ?><div class="ok-banner">✓ Línea de diseño guardada.</div><?php endif; ?>
@@ -443,7 +451,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
 </section>
 
 <!-- ── Identidad · Card 2: Tu logo (hub) ── -->
-<section class="vz-card" data-card="hub">
+<section class="vz-card" data-card="hub"<?= $idzHide('hub') ?>>
 <h2 class="sec-h" style="margin-top:2px"><?= ico('palette') ?>Tu logo</h2>
 <p class="subline"><?= $pagado ? 'Súbelo si ya lo tienes, o deja que el Diseñador te lo cree.' : 'Súbelo si ya lo tienes. Crearlo con IA se desbloquea con un plan.' ?></p>
 <?php if (!empty($_GET['ok'])): ?><div class="ok-banner">✓ ¡Logo guardado! Míralo en tu catálogo.</div><?php endif; ?>
@@ -487,7 +495,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
 </section>
 
 <!-- ── Identidad · Card 3: Subir tu logo ── -->
-<section class="vz-card" data-card="subir">
+<section class="vz-card" data-card="subir"<?= $idzHide('subir') ?>>
 <!-- SUBIR LOGO PROPIO (principal o secundarios) — no es premium -->
 <div class="genbox" style="margin-bottom:0">
   <h3 style="font-size:15px;margin:0 0 4px"><?= ico('upload') ?> Sube tu logo</h3>
@@ -506,7 +514,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
 </section>
 
 <!-- ── Identidad · Card 4: Crear con IA ── -->
-<section class="vz-card" data-card="crear">
+<section class="vz-card" data-card="crear"<?= $idzHide('crear') ?>>
 <?php if (!$pagado): ?>
   <div class="genbox" style="text-align:center;background:linear-gradient(135deg,rgba(255,107,61,.07),rgba(255,43,133,.07))">
     <div style="color:var(--terracota)"><?= ico('lock','ic-xl') ?></div>
@@ -563,7 +571,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
 </section>
 
 <!-- ── Identidad · Card 5: Tu catálogo ── -->
-<section class="vz-card" data-card="catalogo">
+<section class="vz-card" data-card="catalogo"<?= $idzHide('catalogo') ?>>
 <h2 class="sec-h" style="margin-top:2px"><?= ico('image') ?>Tus logos</h2>
 <?php if ($final): ?>
   <div class="ok-banner" style="max-width:620px">Tu logo final está elegido. Descárgalo cuando quieras en los formatos que necesites.</div>
@@ -663,11 +671,30 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
   var keys=cards.map(function(c){return c.dataset.card;});
   var dotsWrap=document.getElementById('idzDots'), dots=[];
   cards.forEach(function(_,i){ var d=document.createElement('i'); if(i===0)d.className='on'; dotsWrap.appendChild(d); dots.push(d); });
-  var cur=0;
+  // La card inicial la decidió PHP (deep-link): es la única sin display:none
+  var cur=0; for(var q=0;q<cards.length;q++){ if(cards[q].style.display!=='none'){ cur=q; break; } }
+  dots.forEach(function(d,x){ d.classList.toggle('on',x===cur); });
+  var REDUCE = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   function fit(){ var c=cards[cur]; if(c) view.style.height=c.offsetHeight+'px'; window.dispatchEvent(new Event('resize')); }
-  function go(i){ i=Math.max(0,Math.min(cards.length-1,i)); cur=i;
-    track.style.transform='translateX(-'+(i*100)+'%)';
-    dots.forEach(function(d,x){ d.classList.toggle('on',x===i); }); fit(); }
+  // Transición: FADE-OUT / FADE-IN direccional (izq↔der), igual que Voz y propuestas.
+  function go(target){
+    target=Math.max(0,Math.min(cards.length-1,target));
+    if(target===cur){ fit(); return; }
+    var dir=target>cur?1:-1, a=cards[cur], b=cards[target];
+    cur=target; dots.forEach(function(d,x){ d.classList.toggle('on',x===cur); });
+    if(REDUCE){ a.style.display='none'; b.style.display=''; fit(); return; }
+    a.style.transition='opacity .2s ease, transform .2s ease';
+    a.style.opacity='0'; a.style.transform='translateX('+(-14*dir)+'px)';
+    setTimeout(function(){
+      a.style.display='none'; a.style.transition=''; a.style.transform=''; a.style.opacity='';
+      b.style.display=''; b.style.opacity='0'; b.style.transform='translateX('+(16*dir)+'px)';
+      view.style.height=b.offsetHeight+'px'; window.dispatchEvent(new Event('resize'));
+      requestAnimationFrame(function(){
+        b.style.transition='opacity .34s cubic-bezier(.22,1,.36,1), transform .34s cubic-bezier(.22,1,.36,1)';
+        b.style.opacity='1'; b.style.transform='none';
+      });
+    }, 190);
+  }
   function goKey(k){ var i=keys.indexOf(k); if(i>=0) go(i); }
   track.querySelectorAll('[data-goto]').forEach(function(b){ if(b.tagName==='A')return; b.addEventListener('click',function(){ goKey(b.dataset.goto); }); });
   // swipe (no interfiere con inputs/sliders/galería)
@@ -676,11 +703,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
   view.addEventListener('touchmove',function(e){ if(x0===null)return; var t=e.touches[0],dx=t.clientX-x0,dy=t.clientY-y0; if(lock===null&&(Math.abs(dx)>8||Math.abs(dy)>8)) lock=Math.abs(dx)>Math.abs(dy)?'x':'y'; },{passive:true});
   view.addEventListener('touchend',function(e){ if(x0===null||lock!=='x'){x0=null;return;} var dx=e.changedTouches[0].clientX-x0; if(dx<-45)go(cur+1); else if(dx>45)go(cur-1); x0=null; },{passive:true});
   window.addEventListener('resize',function(){ var c=cards[cur]; if(c) view.style.height=c.offsetHeight+'px'; });
-  // deep-link: dónde arranca según el estado
-  var init='linea';
-  <?php if ($err): ?>init='crear';<?php elseif ($logo_pendiente): ?>init='catalogo';<?php endif; ?>
-  if(/[?&](ok|logo_gen)=/.test(location.search)) init='catalogo';
-  track.style.transition='none'; goKey(init); requestAnimationFrame(function(){ track.style.transition=''; });
+  fit();
 })();
 </script>
 </section><!-- /mk-identidad -->
@@ -694,20 +717,36 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
   var view=document.getElementById('mkView'), track=document.getElementById('mkTrack');
   var secBy={voz:document.getElementById('mk-voz'),identidad:document.getElementById('mk-identidad'),aprendido:document.getElementById('mk-aprendido')};
   if(!view||!track) return;
-  var cur=0;
+  var cur=0, REDUCE = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   function fitHeight(){ var s=secBy[order[cur]]; if(s) view.style.height=s.offsetHeight+'px'; }
+  // Cambio de tab con FADE-OUT / FADE-IN direccional (izq↔der), no slide.
   function go(i){
-    i=Math.max(0,Math.min(order.length-1,i)); cur=i;
-    track.style.transform='translateX(-'+(i*100)+'%)';
-    tabs.forEach(function(t){ t.classList.toggle('on', t.dataset.pane===order[i]); });
-    fitHeight(); window.scrollTo({top:0,behavior:'smooth'});
+    i=Math.max(0,Math.min(order.length-1,i)); if(i===cur){ fitHeight(); return; }
+    var dir=i>cur?1:-1, a=secBy[order[cur]], b=secBy[order[i]];
+    cur=i; tabs.forEach(function(t){ t.classList.toggle('on', t.dataset.pane===order[i]); });
+    window.scrollTo({top:0,behavior:'smooth'});
+    if(REDUCE){ a.classList.remove('on'); b.classList.add('on'); fitHeight(); return; }
+    a.style.transition='opacity .2s ease, transform .2s ease';
+    a.style.opacity='0'; a.style.transform='translateX('+(-14*dir)+'px)';
+    setTimeout(function(){
+      a.classList.remove('on'); a.style.transition=''; a.style.transform=''; a.style.opacity='';
+      b.classList.add('on'); b.style.opacity='0'; b.style.transform='translateX('+(16*dir)+'px)';
+      view.style.height=b.offsetHeight+'px';
+      requestAnimationFrame(function(){
+        b.style.transition='opacity .34s cubic-bezier(.22,1,.36,1), transform .34s cubic-bezier(.22,1,.36,1)';
+        b.style.opacity='1'; b.style.transform='none';
+      });
+    }, 190);
   }
   tabs.forEach(function(t){ t.addEventListener('click', function(){ go(order.indexOf(t.dataset.pane)); }); });
 
   var init=0;
   if(location.hash==='#cerebro') init=2;                         // volver de corregir/descartar memoria
   else if(location.hash==='#identidad' || /[?&](ok|estilo|logo_gen)=/.test(location.search)) init=1;  // línea de diseño / logo
-  track.style.transition='none'; go(init); requestAnimationFrame(function(){ track.style.transition=''; });
+  // arranque sin animación: marca el pane activo
+  cur=init; order.forEach(function(k,i){ secBy[k].classList.toggle('on', i===init); });
+  tabs.forEach(function(t){ t.classList.toggle('on', t.dataset.pane===order[init]); });
+  fitHeight();
   window.addEventListener('resize', fitHeight);
   window.addEventListener('load', fitHeight);
   if(window.ResizeObserver){ new ResizeObserver(fitHeight).observe(track); }
