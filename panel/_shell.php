@@ -53,7 +53,7 @@ $nav_perfil = [
 <body>
 <div class="layout">
   <aside class="side" id="side">
-    <a class="sbrand" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="text-decoration:none;color:inherit"><img src="/crecer/assets/brand/crecer-icon.png" alt="Inicio"><b>encuéntralo <span style="color:var(--teal)">crecer</span></b></a>
+    <a class="sbrand" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="text-decoration:none;color:inherit"><img src="/crecer/assets/brand/crecer-icon.png" alt="Inicio"><b>Crecer <span style="font-size:.58em;font-weight:500;color:var(--muted);letter-spacing:.01em">by Encuéntralo</span></b></a>
     <nav>
       <?php foreach ($nav as $n): ?>
         <a href="<?= $n['hr'] ?>" class="<?= $n['key']===$active?'on':'' ?>">
@@ -106,7 +106,7 @@ $nav_perfil = [
   <div class="main">
     <div class="ptop">
       <a href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit">
-        <img src="/crecer/assets/brand/crecer-icon.png" alt="Inicio"><b>encuéntralo <span style="color:var(--teal)">crecer</span></b></a>
+        <img src="/crecer/assets/brand/crecer-icon.png" alt="Inicio"><b>Crecer <span style="font-size:.58em;font-weight:500;color:var(--muted);letter-spacing:.01em">by Encuéntralo</span></b></a>
       <a href="<?= $BASE ?>/notificaciones_centro.php?marca=<?= $marca_id ?>" aria-label="Notificaciones" style="position:relative;margin-left:auto;margin-right:6px;display:flex;align-items:center;text-decoration:none;font-size:22px;line-height:1;color:var(--teal)"><?= ico('bell-solid') ?><?php if ($notif_nl > 0): ?><span style="position:absolute;top:-5px;right:-7px;background:var(--rosa);color:#fff;font-size:10px;font-weight:800;min-width:16px;height:16px;border-radius:999px;display:flex;align-items:center;justify-content:center;padding:0 4px"><?= $notif_nl > 9 ? '9+' : $notif_nl ?></span><?php endif; ?></a>
       <button id="burger" class="ptop-menu" aria-label="Abrir menú">
         <span class="bars" aria-hidden="true"><span></span><span></span><span></span></span>
