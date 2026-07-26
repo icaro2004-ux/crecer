@@ -91,6 +91,18 @@ require __DIR__ . '/_shell.php';
   .fz-card h3{margin:2px 0 0;font-size:15px;font-weight:800;letter-spacing:-.01em;color:var(--tinta);font-family:var(--font-display)}
   .fz-card p{margin:0;font-size:13.5px;color:var(--ink-soft,#4a444c);line-height:1.5}
   .fz-card .from{font-size:11px;font-weight:700;color:var(--muted);margin-top:auto;display:inline-flex;align-items:center;gap:6px;text-transform:lowercase}
+  /* Nav del wizard (solo móvil) */
+  .fz-wnav{display:none;align-items:center;justify-content:center;gap:14px;margin-top:14px}
+  .fz-wnav button{width:38px;height:38px;border-radius:50%;border:1.5px solid var(--line);background:var(--card);color:var(--tinta);font-size:20px;line-height:1;cursor:pointer;display:grid;place-items:center}
+  .fz-wnav button:disabled{opacity:.3;pointer-events:none}
+  .fz-dots{display:flex;gap:6px}
+  .fz-dots i{width:7px;height:7px;border-radius:50%;background:var(--line);transition:width .3s,background .3s}
+  .fz-dots i.on{width:20px;background:linear-gradient(90deg,var(--coral),var(--magenta))}
+  @media(max-width:640px){
+    .fz-cards.wiz{display:block;position:relative;overflow:hidden;transition:height .35s cubic-bezier(.22,1,.36,1)}
+    .fz-cards.wiz .fz-card{width:100%;min-height:0}
+    .fz-wnav.on{display:flex}
+  }
 
   /* Calculadora */
   .fz-calc{background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow-sm);overflow:hidden}
@@ -148,6 +160,11 @@ require __DIR__ . '/_shell.php';
       <div class="fz-card"><span class="fz-load"><span class="sp"></span> pensando…</span></div>
     <?php endfor; ?>
   </div>
+  <div class="fz-wnav" id="fzWnav">
+    <button type="button" id="fzPrev" aria-label="Anterior">‹</button>
+    <span class="fz-dots" id="fzDots"></span>
+    <button type="button" id="fzNext" aria-label="Siguiente">›</button>
+  </div>
 
   <!-- CALCULADORA -->
   <div class="fz-sec"><?= ico('dollar') ?> Calculadora · ¿Cuánto te queda?</div>
@@ -192,6 +209,34 @@ require __DIR__ . '/_shell.php';
   var ICON={0:'<?= addslashes(ico('dollar')) ?>',1:'<?= addslashes(ico('wallet')) ?>',2:'<?= addslashes(ico('chart')) ?>',3:'<?= addslashes(ico('briefcase')) ?>'};
   var TONE=['mag','amb','teal','pur'];
   function esc(s){var d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML;}
+  // En MÓVIL, los cards de consejos se vuelven un wizard con cross-fade (desktop = grid)
+  function initFzWizard(){
+    if(!window.matchMedia||!window.matchMedia('(max-width:640px)').matches) return;
+    var cont=document.getElementById('fzCards'), cards=[].slice.call(cont.querySelectorAll('.fz-card'));
+    if(cards.length<2) return;
+    cont.classList.add('wiz');
+    document.getElementById('fzWnav').classList.add('on');
+    var dotsW=document.getElementById('fzDots'), prevB=document.getElementById('fzPrev'), nextB=document.getElementById('fzNext'), dots=[];
+    dotsW.innerHTML=''; cards.forEach(function(_,i){var d=document.createElement('i');if(i===0)d.className='on';dotsW.appendChild(d);dots.push(d);});
+    var cur=0, REDUCE=window.matchMedia('(prefers-reduced-motion: reduce)').matches, x0=null, y0=0, lock=null;
+    cards.forEach(function(c,i){ c.style.display=i===0?'':'none'; });
+    function fit(){ var c=cards[cur]; if(c) cont.style.height=c.offsetHeight+'px'; }
+    function paint(){ dots.forEach(function(d,x){d.classList.toggle('on',x===cur);}); prevB.disabled=cur<=0; nextB.disabled=cur>=cards.length-1; }
+    function go(t){ t=Math.max(0,Math.min(cards.length-1,t)); if(t===cur){fit();return;} var dir=t>cur?1:-1,a=cards[cur],b=cards[t]; cur=t; paint();
+      if(REDUCE){a.style.display='none';b.style.display='';fit();return;}
+      a.style.transition='opacity .2s ease, transform .2s ease';a.style.opacity='0';a.style.transform='translateX('+(-14*dir)+'px)';
+      setTimeout(function(){a.style.display='none';a.style.transition='';a.style.transform='';a.style.opacity='';
+        b.style.display='';b.style.opacity='0';b.style.transform='translateX('+(16*dir)+'px)';cont.style.height=b.offsetHeight+'px';
+        requestAnimationFrame(function(){b.style.transition='opacity .34s cubic-bezier(.22,1,.36,1), transform .34s cubic-bezier(.22,1,.36,1)';b.style.opacity='1';b.style.transform='none';});
+      },190);
+    }
+    prevB.onclick=function(){go(cur-1);}; nextB.onclick=function(){go(cur+1);};
+    cont.addEventListener('touchstart',function(e){var t=e.touches[0];x0=t.clientX;y0=t.clientY;lock=null;},{passive:true});
+    cont.addEventListener('touchmove',function(e){if(x0===null)return;var t=e.touches[0],dx=t.clientX-x0,dy=t.clientY-y0;if(lock===null&&(Math.abs(dx)>8||Math.abs(dy)>8))lock=Math.abs(dx)>Math.abs(dy)?'x':'y';},{passive:true});
+    cont.addEventListener('touchend',function(e){if(x0===null||lock!=='x'){x0=null;return;}var dx=e.changedTouches[0].clientX-x0;if(dx<-45)go(cur+1);else if(dx>45)go(cur-1);x0=null;},{passive:true});
+    window.addEventListener('resize',fit);
+    paint(); fit();
+  }
   var fd=new FormData(); fd.append('accion','consejos'); fd.append('csrf',CSRF);
   fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
     var adv=document.getElementById('fzAdv'), tie=document.getElementById('fzTie'), cards=document.getElementById('fzCards');
@@ -208,6 +253,7 @@ require __DIR__ . '/_shell.php';
         (x.metrica?('<span class="from">'+esc(x.metrica)+'</span>'):'')+
       '</div>';
     }).join('') || '<div class="fz-card"><p>Publica y conecta tus redes para consejos personalizados.</p></div>';
+    initFzWizard();
   }).catch(function(){ document.getElementById('fzAdv').textContent='Se cayó la conexión al traer los consejos.'; document.getElementById('fzCards').innerHTML=''; });
 
   // ── Calculadora (client-side + recuerda tus valores) ──
