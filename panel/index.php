@@ -629,7 +629,7 @@ $credito  = $has_deck
   <style>
     .turno:has(.hm){justify-content:flex-start;overflow-y:auto;overflow-x:hidden;padding:0;background:#fff}
     .turno:has(.hm) .tn-top{display:none}
-    .hm{width:100%;max-width:520px;margin:0 auto;padding:20px 16px 44px}
+    .hm{width:100%;max-width:520px;margin:0 auto;padding:20px 16px 110px}
     .hm-hero{position:relative;padding:16px 4px 4px}
     .hm-eyebrow{color:#57545c;font-weight:700;font-size:13.5px;margin-bottom:10px}
     .hm-hero h1{margin:0;font-family:'Poppins',sans-serif;font-weight:700;font-size:36px;line-height:1.03;letter-spacing:-.04em;color:#25232b;max-width:290px}

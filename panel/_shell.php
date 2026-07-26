@@ -55,8 +55,7 @@ $nav_perfil = [
   .botnav{display:none}
   @media(max-width:860px){
     .botnav{display:grid;grid-template-columns:repeat(4,1fr);position:fixed;left:10px;right:10px;bottom:10px;z-index:60;
-      background:rgba(255,255,255,.96);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
-      border:1px solid var(--line);border-radius:22px;box-shadow:0 14px 34px rgba(34,29,38,.14);
+      background:#fff;border:1px solid var(--line);border-radius:22px;box-shadow:0 10px 30px rgba(34,29,38,.16),0 0 0 6px #fff;
       padding:8px 6px calc(8px + env(safe-area-inset-bottom))}
     .botnav .bn{display:flex;flex-direction:column;align-items:center;gap:3px;text-decoration:none;color:#8b8790;
       font-size:10.5px;font-weight:700;padding:7px 2px;border-radius:15px;transition:color .15s,background .15s;letter-spacing:.01em}
