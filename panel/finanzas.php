@@ -134,6 +134,10 @@ require __DIR__ . '/_shell.php';
   .fz-in{padding:20px 20px 22px;border-right:1px solid var(--line)}
   @media(max-width:680px){.fz-in{border-right:0;border-bottom:1px solid var(--line)}}
   .fz-in h3{margin:0 0 3px;font-size:16px;font-weight:800;font-family:var(--font-display)}
+  .fz-inh{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .fz-clear{flex:none;display:inline-flex;align-items:center;gap:5px;background:none;border:1px solid var(--line);border-radius:99px;padding:6px 12px;font:inherit;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;transition:.15s}
+  .fz-clear:hover{border-color:#e0384f;color:#e0384f}
+  .fz-clear svg{width:13px;height:13px}
   .fz-in .sub{font-size:12.5px;color:var(--muted);margin:0 0 16px}
   .fld{margin-bottom:14px}
   .fld label{display:block;font-size:12.5px;font-weight:700;color:var(--ink-soft,#4a444c);margin-bottom:6px}
@@ -203,7 +207,7 @@ require __DIR__ . '/_shell.php';
       <div class="fz-calc">
     <div class="fz-cg">
       <div class="fz-in">
-        <h3>Tus números del mes</h3>
+        <div class="fz-inh"><h3>Tus números del mes</h3><button type="button" id="fzClear" class="fz-clear"><?= ico('trash') ?> Borrar todo</button></div>
         <p class="sub">Escríbelos y abajo ves lo que de verdad te queda.</p>
         <div class="fld"><label>Ventas del mes</label>
           <div class="box"><span class="pre">$</span><input id="fzVentas" type="number" inputmode="decimal" min="0" placeholder="0"></div></div>
@@ -331,6 +335,9 @@ require __DIR__ . '/_shell.php';
     try{ localStorage.setItem(STORAGE_KEY,JSON.stringify({v:V.value,var:VAR.value,fij:FIJ.value,t:T.value})); }catch(e){}
   }
   [V,VAR,FIJ,T].forEach(function(el){ el.addEventListener('input',calc); });
+  var CLR=g('fzClear');
+  if(CLR) CLR.addEventListener('click',function(){ V.value=''; VAR.value=''; FIJ.value=''; T.value='15';
+    try{ localStorage.removeItem(STORAGE_KEY); }catch(e){} calc(); V.focus(); });
   calc();
 
   // Popup de la calculadora (verla rápido sin salir de Consejos & Finanzas)
