@@ -3,11 +3,12 @@
 </div><!-- /.layout -->
 
 <!-- Bottom nav (solo móvil) · EXACTAMENTE 4 destinos, sin FAB central · Perfil vive en el avatar del top-bar -->
-<nav class="botnav botnav-4">
+<nav class="botnav botnav-crear">
   <a href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='inicio'?'on':'' ?>"><?= ico('home') ?>Inicio</a>
-  <a href="<?= $BASE ?>/propuestas.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='contenido'?'on':'' ?>"><?= ico('list') ?>Tus Posts</a>
+  <a href="<?= $BASE ?>/calendario.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='calendario'?'on':'' ?>"><?= ico('calendar') ?>Calendario</a>
+  <a href="<?= $BASE ?>/propuestas.php?marca=<?= $marca_id ?>" class="bn-crear <?= ($active ?? '')==='contenido'?'on':'' ?>"><span class="ci"><?= ico('pen') ?></span><span class="cl">Crear</span></a>
   <a href="<?= $BASE ?>/resultados.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='resultados'?'on':'' ?>"><?= ico('chart') ?>Resultados</a>
-  <a href="<?= $BASE ?>/marca.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='marca'?'on':'' ?>"><?= ico('palette') ?>Mi marca</a>
+  <a href="<?= $BASE ?>/sala.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='sala'?'on':'' ?>"><?= ico('chat') ?>Sala</a>
 </nav>
 
 <div class="lightbox-ov" id="lightbox"><img src="" alt=""></div>

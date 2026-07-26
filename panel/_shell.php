@@ -52,7 +52,17 @@ $nav_perfil = [
 <style>
   /* Fondo blanco unificado (el bottom-nav lo renderiza _shell_foot.php, uno solo) */
   .main{background:#fff}
-  @media(max-width:860px){ .botnav a.on{color:var(--magenta)} }
+  @media(max-width:860px){
+    .botnav a.on{color:var(--magenta)}
+    /* Botón central "Crear" (estilo del arte): ícono elevado en teal */
+    .botnav a.bn-crear{gap:5px}
+    .botnav a.bn-crear .ci{display:grid;place-items:center;width:46px;height:46px;border-radius:16px;margin-top:-16px;
+      background:linear-gradient(135deg,var(--teal),var(--teal-700,#00827e));color:#fff;border:3px solid #fff;
+      box-shadow:0 10px 22px -6px rgba(0,164,159,.55)}
+    .botnav a.bn-crear .ci .ic{width:23px;height:23px;color:#fff}
+    .botnav a.bn-crear .cl{font-weight:800}
+    .botnav a.bn-crear.on{color:var(--teal)}
+  }
 </style>
 </head>
 <body>
