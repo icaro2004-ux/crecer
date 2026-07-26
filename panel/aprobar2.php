@@ -153,6 +153,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ' . $_SERVER['REQUEST_URI']); exit;
     }
 
+    // ── Polling del arte async (Responses): el front pregunta si la imagen ya está ──
+    if ($accion === 'poll_arte') {
+        require_once __DIR__ . '/../includes/img_responses.php';
+        header('Content-Type: application/json');
+        echo json_encode(img_resp_completar($pdo, $marca_id, (int)($_POST['id'] ?? 0)), JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     // ── Crear el ARTE del post SIN salir (fábrica de posts) ──
     if ($accion === 'arte') {
         @set_time_limit(0);
@@ -185,6 +193,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $capr = $pdo->prepare("SELECT caption FROM crecer_contenido WHERE id=? AND marca_id=?");
         $capr->execute([$id, $marca_id]); $copy = (string)$capr->fetchColumn();
+
+        // ARTE DESDE CERO → async Responses (igual que el post gratis): encola y el post
+        // se genera en BACKGROUND; el dueño puede seguir editando otros mientras sube.
+        // Inmune al 504 (Responses tarda). FOTO REAL que sube el cliente → sync/Gemini abajo.
+        require_once __DIR__ . '/../includes/img_responses.php';
+        if (empty($src) && function_exists('img_resp_activo') && img_resp_activo()) {
+            $con_txt = ($_POST['con_texto'] ?? '') === '1';
+            $extra   = trim($_POST['instrucciones'] ?? '');
+            $jid = img_resp_encolar($pdo, $marca_id, $id, $copy, $con_txt, $extra !== '' ? $extra : null);
+            if ($jid !== '') {
+                $pdo->prepare("UPDATE crecer_contenido SET arte_intentos=arte_intentos+1, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$id, $marca_id]);
+                arte_disparar($marca_id, $id);   // worker en background: sondea y AVISA por notificación al terminar
+                header('Content-Type: application/json');
+                echo json_encode(['ok'=>true, 'async'=>true, 'id'=>$id,
+                    'restantes'=>max(0, CRECER_IMG_SEMANA - ($usados+1)),
+                    'restantes_post'=>max(0, CRECER_IMG_POST - ($intentos+1)), 'reset'=>$reset], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            // encolar falló → cae al sync de abajo (Gemini)
+        }
         try {
             $r = generar_grafica($pdo, $marca_id, $src, [
                 'copy'         => $copy,
@@ -1209,7 +1237,7 @@ $cf = [
     <?php endif; ?>
 
     <div id="art-postnote" style="font-size:12px;font-weight:700;margin-top:14px;text-align:center"></div>
-    <button type="submit" class="art-go" id="art-go">Crear el arte (~15s)</button>
+    <button type="submit" class="art-go" id="art-go">Crear el arte</button>
     <a href="#" class="art-skip" id="art-skip" style="display:none">Aprobar solo con el texto (sin imagen) →</a>
     <div class="art-note"><?= ico("calendar") ?> Te quedan <b id="art-rest" style="color:var(--terracota)"><?= $restantes_sem ?></b> de <?= CRECER_IMG_SEMANA ?> generaciones esta semana<?php if($reset_fecha): ?> · se recargan el <span id="art-reset"><?= $h($reset_fecha) ?></span><?php endif; ?>. Con texto = modelo Pro.</div>
 
@@ -1852,7 +1880,7 @@ $cf = [
       note.style.color='var(--noo-ink)';
       note.innerHTML='⚠️ Usaste tus <?= CRECER_IMG_POST ?> generaciones IA de este post. Recicla un arte de arriba ♻️ o sube tu propia imagen abajo 📎.';
     } else {
-      go.disabled=false; go.textContent='✨ Crear el arte (~15s)';
+      go.disabled=false; go.textContent='✨ Crear el arte';
       note.style.color='var(--muted)';
       note.innerHTML='Te quedan <b style="color:var(--terracota)">'+rest+' de <?= CRECER_IMG_POST ?></b> generaciones IA en este post.';
     }
@@ -1868,32 +1896,61 @@ $cf = [
   if(artSug) artSug.addEventListener('click', function(){ sugerirArte(''); });
   var artLogo=document.getElementById('art-logo');
   if(artLogo) artLogo.addEventListener('change', function(){ document.getElementById('art-logoest').style.display=this.checked?'block':'none'; });
+  function ponerImagen(card,img,thenApprove){
+    var wrap=card.querySelector('.artwrap');
+    if(wrap) wrap.innerHTML='<img class="zoomable" src="'+img+'?t='+Date.now()+'" alt="arte" style="width:100%;display:block">';
+    card.dataset.img='1'; setChk(card,'art',true);
+    var tl=card.querySelector('.toolrow .artbtn'); if(tl) tl.innerHTML=ICO_IMG+' Cambiar arte';
+    if(thenApprove){ enviarAccion(card,'aprobar').then(function(){ toast('Post completo y aprobado.'); }); }
+    else toast('Tu arte ya está listo.');
+  }
+  function marcarGenerando(card){
+    if(!document.getElementById('artgen-css')){ var s=document.createElement('style'); s.id='artgen-css'; s.textContent='@keyframes aspin{to{transform:rotate(360deg)}}'; document.head.appendChild(s); }
+    var wrap=card.querySelector('.artwrap'); if(!wrap) return;
+    wrap.innerHTML='<div style="padding:34px 18px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:9px;background:var(--crema-2)">'
+      +'<span style="width:26px;height:26px;border-radius:50%;border:3px solid rgba(0,0,0,.12);border-top-color:var(--terracota);animation:aspin .8s linear infinite;display:inline-block"></span>'
+      +'<b style="font-size:14px;color:var(--tinta)">El corillo está montando tu arte…</b>'
+      +'<small style="font-size:12px;color:var(--muted);max-width:28ch;line-height:1.4">Puedes seguir editando otros posts o salir. Te aviso en Notificaciones cuando esté.</small></div>';
+  }
+  function pollArte(card,id,thenApprove){
+    if(!id) return; var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      var fd=new FormData(); fd.append('accion','poll_arte'); fd.append('id',id); fd.append('ajax','1');
+      fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+        if(d && d.estado==='ok' && d.img){ clearInterval(iv); ponerImagen(card,d.img,thenApprove); }
+        else if(d && d.estado==='error'){ clearInterval(iv);
+          var w=card.querySelector('.artwrap'); if(w) w.innerHTML='<button type="button" class="artph artbtn" data-id="'+id+'"><span>'+ICO_IMG+'</span><span>No salió — intenta otra vez</span></button>'; }
+        if(tries>=45) clearInterval(iv);   // ~3 min; la notificación es el respaldo si se fue
+      }).catch(function(){ if(tries>=45) clearInterval(iv); });
+    }, 4000);
+  }
   artform.addEventListener('submit', function(e){
     e.preventDefault(); if(!artCard) return;
-    var go=document.getElementById('art-go'); go.disabled=true; go.textContent='✨ Creando… (~15s)';
-    loaderShow('Generando tu imagen…', ['Imaginando la escena…','Ajustando la luz y el encuadre…','Puliendo texturas y detalles…','Dándole el acabado premium…','Casi lista…']);
+    var go=document.getElementById('art-go'); go.disabled=true; go.textContent='Enviando…';
     var card=artCard, thenApprove=artThenApprove;
     var fd=new FormData(artform); fd.append('ajax','1');
     fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
-      loaderHide();
+      go.disabled=false; go.textContent='✨ Crear el arte';
       if(!d.ok){
-        go.disabled=false; go.textContent='✨ Crear el arte (~15s)';
-        if(d.err==='post_limite') toast('⚠️ Ya usaste las <?= CRECER_IMG_POST ?> generaciones de este post. Recicla o sube tu foto.');
-        else if(d.err==='limite') toast('🗓️ Usaste tus <?= CRECER_IMG_SEMANA ?> imágenes de la semana'+(d.reset?' (vuelven el '+d.reset+')':'')+'.');
-        else if(d.err==='paywall'){ toast('🔒 Usaste tu imagen de muestra. Actívate para crear más.'); setTimeout(function(){location.href='/crecer/panel/precios.php?marca=<?= $marca_id ?>&motivo=muestra';},1400); }
+        if(d.err==='post_limite') toast('Ya usaste las <?= CRECER_IMG_POST ?> generaciones de este post. Recicla o sube tu foto.');
+        else if(d.err==='limite') toast('Usaste tus <?= CRECER_IMG_SEMANA ?> imágenes de la semana'+(d.reset?' (vuelven el '+d.reset+')':'')+'.');
+        else if(d.err==='paywall'){ toast('Usaste tu imagen de muestra. Actívate para crear más.'); setTimeout(function(){location.href='/crecer/panel/precios.php?marca=<?= $marca_id ?>&motivo=muestra';},1400); }
         else toast('No se pudo crear el arte. Intenta de nuevo.');
         return;
       }
-      var wrap=card.querySelector('.artwrap');
-      if(wrap) wrap.innerHTML='<img class="zoomable" src="'+d.img+'?t='+Date.now()+'" alt="arte" style="width:100%;display:block">';
-      card.dataset.img='1'; setChk(card,'art',true);
       card.dataset.intentos=d.restantes_post;
-      var tl=card.querySelector('.toolrow .artbtn'); if(tl) tl.innerHTML=ICO_IMG+' Cambiar arte';
-      document.getElementById('art-rest').textContent=d.restantes;
+      if(d.restantes!=null) document.getElementById('art-rest').textContent=d.restantes;
       cerrarArte();
-      if(thenApprove){ enviarAccion(card,'aprobar').then(function(){ toast('✅ Post completo y aprobado'); }); }
-      else toast('🎨 Arte listo y pegado al post');
-    }).catch(function(){ loaderHide(); go.disabled=false; go.textContent='✨ Crear el arte (~15s)'; toast('Error de conexión.'); });
+      if(d.async){
+        // No bloquea: se genera en background. El dueño sigue / se va; la notificación lo trae al post.
+        marcarGenerando(card);
+        toast('El corillo está montando tu arte en alta calidad. Sigue tranquilo — te aviso en Notificaciones.');
+        pollArte(card,d.id,thenApprove);
+      } else {
+        ponerImagen(card,d.img,thenApprove);
+      }
+    }).catch(function(){ go.disabled=false; go.textContent='✨ Crear el arte'; toast('Error de conexión.'); });
   });
   // Reusar un arte ya creado (clic en miniatura)
   artform.addEventListener('click', function(e){

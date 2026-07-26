@@ -11,9 +11,30 @@
 // ============================================================
 require_once __DIR__ . '/ia.php';
 
+const ARTE_WORKER_KEY = 'crarte_5x8p';
+
 /** ¿Está activo el motor Responses para producción? */
 function img_resp_activo(): bool {
     return (defined('IMAGE_ENGINE') ? IMAGE_ENGINE : 'actual') === 'responses';
+}
+
+/**
+ * Dispara el worker de arte por auto-HTTP (fire-and-forget): sondea el job en
+ * background hasta que la imagen esté y AVISA por notificación (campanita). Así el
+ * dueño encola y sigue editando / se va; la notificación lo lleva al post listo.
+ */
+function arte_disparar(int $marca_id, int $post_id): void {
+    $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
+    $url  = 'https://' . $host . '/crecer/panel/arte_worker.php?marca=' . $marca_id . '&id=' . $post_id . '&key=' . ARTE_WORKER_KEY;
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER    => true,
+        CURLOPT_CONNECTTIMEOUT_MS => 1500,
+        CURLOPT_TIMEOUT_MS        => 3000,   // el worker flushea 'ok' al instante; sigue solo
+        CURLOPT_NOSIGNAL          => 1,
+        CURLOPT_SSL_VERIFYPEER    => false,
+    ]);
+    curl_exec($ch); curl_close($ch);
 }
 
 /**
@@ -21,7 +42,7 @@ function img_resp_activo(): bool {
  * @param $con_texto  true = anuncio con texto · false = foto SIN texto · null = el modelo decide (variedad)
  * @param $tiene_logo true = se adjunta el logo REAL del negocio (úsalo, no inventes)
  */
-function img_resp_brief(array $m, string $copy, ?bool $con_texto = null, bool $tiene_logo = false): string {
+function img_resp_brief(array $m, string $copy, ?bool $con_texto = null, bool $tiene_logo = false, ?string $extra = null): string {
     $nombre  = trim((string)($m['nombre_negocio'] ?? ''));
     $desc    = trim((string)($m['descripcion'] ?? ''));
     $publico = trim((string)($m['publico_objetivo'] ?? ''));
@@ -46,6 +67,7 @@ function img_resp_brief(array $m, string $copy, ?bool $con_texto = null, bool $t
          . ($publico !== '' ? "Público: {$publico}\n" : '')
          . "\nTexto del post que la imagen va a acompañar:\n\"{$copy}\"\n\n"
          . "{$regla_texto}\n{$regla_logo}\n"
+         . (($extra !== null && trim($extra) !== '') ? "Indicación extra del dueño (respétala con buen gusto): " . trim($extra) . "\n" : '')
          . "No inventes datos, precios ni promociones que no estén aquí.\n\n"
          . "La imagen debe detener el scroll y dar ganas de comprar. Genera la mejor imagen publicitaria posible.";
 }
@@ -55,7 +77,7 @@ function img_resp_brief(array $m, string $copy, ?bool $con_texto = null, bool $t
  * en crecer_contenido.img_job (estado 'queued'). Devuelve el id, o '' si falla
  * (el llamador cae al motor viejo). Loguea en crecer_ia_log (evidencia XPRIZE #2).
  */
-function img_resp_encolar(PDO $pdo, int $marca_id, int $post_id, string $copy, ?bool $con_texto = null): string {
+function img_resp_encolar(PDO $pdo, int $marca_id, int $post_id, string $copy, ?bool $con_texto = null, ?string $extra = null): string {
     try {
         $m = function_exists('leer_marca') ? leer_marca($pdo, $marca_id)
            : $pdo->query("SELECT * FROM crecer_marca WHERE id=" . (int)$marca_id)->fetch(PDO::FETCH_ASSOC);
@@ -69,7 +91,7 @@ function img_resp_encolar(PDO $pdo, int $marca_id, int $post_id, string $copy, ?
                 $logo = ['data' => base64_encode((string)file_get_contents($labs)), 'mime' => $mime];
             }
         }
-        $brief = img_resp_brief($m, $copy, $con_texto, $logo !== null);
+        $brief = img_resp_brief($m, $copy, $con_texto, $logo !== null, $extra);
         $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1'] + ($logo ? ['logo' => $logo] : []));
         $pdo->prepare("UPDATE crecer_contenido SET img_job=?, img_estado='queued' WHERE id=? AND marca_id=?")
             ->execute([$bg['id'], $post_id, $marca_id]);
