@@ -22,7 +22,7 @@ $notif_nl = function_exists('notif_no_leidas') ? notif_no_leidas($pdo, $marca_id
 // menú (siguen accesibles por URL / por el perfil; reversible).
 $nav = [
   ['key'=>'inicio',    'ic'=>'home',    'lb'=>'Inicio',     'hr'=>"$BASE/index.php?marca=$marca_id"],
-  ['key'=>'contenido', 'ic'=>'image','lb'=>'Propuestas',  'hr'=>"$BASE/propuestas.php?marca=$marca_id"],
+  ['key'=>'contenido', 'ic'=>'list', 'lb'=>'Propuestas',  'hr'=>"$BASE/propuestas.php?marca=$marca_id"],
   ['key'=>'sala',      'ic'=>'sparkles','lb'=>'La Sala',    'hr'=>"$BASE/sala.php?marca=$marca_id"],
   ['key'=>'reels',     'ic'=>'camera',  'lb'=>'Reels',      'hr'=>"$BASE/reels.php?marca=$marca_id"],
   ['key'=>'equipo',    'ic'=>'users',   'lb'=>'Tu equipo',  'hr'=>"$BASE/equipo.php?marca=$marca_id"],
