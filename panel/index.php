@@ -653,7 +653,7 @@ $credito  = $has_deck
   /* Saludo + clima a la derecha */
   .hz-hi{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
   .hz-hi-l{min-width:0}
-  .hz-wx{flex:none;display:flex;flex-direction:column;align-items:flex-end;text-align:right;padding-top:6px}
+  .hz-wx{flex:none;display:flex;flex-direction:column;align-items:center;text-align:center;padding-top:6px;margin-right:clamp(12px,9vw,64px)}
   .hz-wx .wx-ic svg{width:30px;height:30px}
   .hz-wx .wx-t{font-family:var(--font-display);font-weight:800;font-size:24px;letter-spacing:-.02em;color:var(--tinta);line-height:1.1}
   .hz-wx .wx-c{font-size:11.5px;font-weight:700;color:var(--muted)}
