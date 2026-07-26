@@ -262,19 +262,11 @@ $presets = reels_presets();
 $musica_cat = reels_music_catalogo();
 $render_ok = render_disponible();
 $CSRF = csrf_token();
-require_once __DIR__ . '/../includes/notif.php';
-$notif_nl = function_exists('notif_no_leidas') ? notif_no_leidas($pdo, $marca_id) : 0;
+// Reels usa el MISMO shell que todo el panel (un solo nav, coherencia total).
+$active = 'reels';
+$page_title = 'Reels Studio';
+require __DIR__ . '/_shell.php';
 ?>
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Reels Studio · <?= $h($negocio) ?> — Crecer</title>
-<link rel="icon" type="image/png" href="/crecer/assets/brand/crecer-icon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
   --rosa:#EF4375; --teal:#00A49F; --navy:#231F20;
@@ -461,19 +453,8 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
   .player video{max-width:100%}
 }
 </style>
-</head>
-<body>
 
-<div class="rtop">
-  <a class="rbrand" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>">
-    <img src="/crecer/assets/brand/crecer-icon.png" alt="Inicio">
-    <b><span class="c1">Crecer</span><span class="c2">by Encuéntralo</span></b>
-    <span class="rbadge">Reels</span>
-  </a>
-  <a class="rbell" href="<?= $BASE ?>/notificaciones_centro.php?marca=<?= $marca_id ?>" aria-label="Notificaciones"><?= ico('bell-solid') ?><?php if ($notif_nl > 0): ?><span class="rdot"><?= $notif_nl > 9 ? '9+' : $notif_nl ?></span><?php endif; ?></a>
-</div>
-
-<div class="wrap">
+<div class="wrap" style="max-width:640px;padding-top:8px">
   <div class="hero">
     <h1>Reels Studio</h1>
     <p>Sube tus pedacitos de video. El corillo los une, elige el mejor momento de cada uno, les pone captions con sabor y te lo entrega listo. Tú casi ni trabajas.</p>
@@ -1002,13 +983,6 @@ $('#bibadd').onclick=()=>{
   addLib(picked); bibModal.style.display='none';
 };
 </script>
-<nav class="botnav">
-  <a class="bn" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>"><?= ico('home') ?><span>Inicio</span></a>
-  <a class="bn" href="<?= $BASE ?>/propuestas.php?marca=<?= $marca_id ?>"><?= ico('list') ?><span>Propuestas</span></a>
-  <a class="bn" href="<?= $BASE ?>/resultados.php?marca=<?= $marca_id ?>"><?= ico('chart') ?><span>Resultados</span></a>
-  <a class="bn" href="<?= $BASE ?>/marca.php?marca=<?= $marca_id ?>"><?= ico('palette') ?><span>Mi marca</span></a>
-</nav>
-
 <!-- Popup: despachar al usuario tras publicar -->
 <div class="pub-modal" id="pubModal">
   <div class="pub-card">
@@ -1023,5 +997,4 @@ $('#bibadd').onclick=()=>{
     </div>
   </div>
 </div>
-</body>
-</html>
+<?php require __DIR__ . '/_shell_foot.php'; ?>
