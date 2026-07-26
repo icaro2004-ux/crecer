@@ -573,7 +573,8 @@ $credito  = $has_deck
 </style>
 
 <style>
-  .hz{max-width:560px;margin:0 auto;width:100%;font-family:var(--font-body);padding:8px 16px 18px;box-sizing:border-box}
+  .hz{max-width:560px;margin:0 auto;width:100%;font-family:var(--font-body);padding:8px 16px 28px;box-sizing:border-box}
+  @media(max-width:860px){ .hz{padding-bottom:calc(120px + env(safe-area-inset-bottom))} }
   .hz-hi{padding:6px 2px 2px}
   .hz-eyebrow{color:var(--muted);font-weight:700;font-size:13px}
   .hz-hello{font-family:var(--font-display);font-weight:800;font-size:clamp(28px,7.5vw,36px);letter-spacing:-.03em;color:var(--tinta);line-height:1.05;margin-top:4px}
