@@ -292,18 +292,8 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
 .rbadge{font-size:10px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;background:#fff0f5;color:var(--rosa);padding:3px 8px;border-radius:999px;margin-left:2px}
 .rbell{position:relative;margin-left:auto;color:var(--teal);font-size:22px;display:flex;align-items:center;text-decoration:none;line-height:1}
 .rdot{position:absolute;top:-5px;right:-7px;background:var(--rosa);color:#fff;font-size:10px;font-weight:800;min-width:16px;height:16px;border-radius:999px;display:flex;align-items:center;justify-content:center;padding:0 4px}
-.botnav{display:none}
-@media(max-width:860px){
-  .botnav{display:grid;grid-template-columns:repeat(4,1fr);position:fixed;left:10px;right:10px;bottom:10px;z-index:60;
-    background:rgba(255,255,255,.96);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
-    border:1px solid var(--line);border-radius:22px;box-shadow:0 14px 34px rgba(34,29,38,.14);
-    padding:8px 6px calc(8px + env(safe-area-inset-bottom))}
-  .botnav .bn{display:flex;flex-direction:column;align-items:center;gap:3px;text-decoration:none;color:#8b8790;
-    font-size:10.5px;font-weight:700;padding:7px 2px;border-radius:15px}
-  .botnav .bn svg.ic{width:22px;height:22px}
-  .botnav .bn.on{color:var(--rosa);background:#fff0f5}
-  .wrap{padding-bottom:96px}
-}
+/* El bottom-nav lo pone _shell_foot.php (barra estándar, encuentralo-ui.css).
+   Reels NO redefine .botnav — antes lo pisaba con un estilo flotante distinto. */
 
 /* Hero + progreso de pasos */
 .hero{padding:6px 0 14px}

@@ -188,6 +188,14 @@ require __DIR__ . '/_shell.php';
   .bib-tile.sel{outline:3px solid var(--teal);outline-offset:-3px}
   .bib-tile.sel .bib-ck{background:var(--teal);border-color:var(--teal)}
   .bib-tile.sel img,.bib-tile.sel video{opacity:.82}
+  /* MÓVIL: carrusel horizontal (tiles cuadrados uniformes) en vez de masonry vertical */
+  @media(max-width:559px){
+    .bib-grid{column-count:unset;column-gap:0;display:flex;gap:11px;overflow-x:auto;overflow-y:hidden;
+      scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;padding-bottom:12px}
+    .bib-grid::-webkit-scrollbar{height:0}
+    .bib-tile,.bib-add{width:auto;margin:0;flex:0 0 46%;max-width:210px;scroll-snap-align:start;aspect-ratio:1}
+    .bib-tile img,.bib-tile video{width:100%;height:100%;object-fit:cover}
+  }
   .bib-selbar{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:60;background:var(--tinta,#231F20);color:#fff;border-radius:16px;padding:9px 10px 9px 18px;display:none;align-items:center;gap:10px;box-shadow:0 14px 40px -12px rgba(0,0,0,.5)}
   .bib-selbar.show{display:flex}
   .bib-selbar .cnt{font-weight:700;font-size:14px;white-space:nowrap}
