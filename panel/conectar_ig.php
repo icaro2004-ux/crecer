@@ -8,6 +8,7 @@
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/ig_direct.php';
+require_once __DIR__ . '/../includes/iconos.php';
 requiere_login();
 $usuario = usuario_actual($pdo);
 $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (int)$_GET['marca'] : null);
@@ -54,7 +55,7 @@ if (isset($_GET['code']) && !isset($_GET['done'])) {
 if (isset($_GET['error'])) {
     $err = 'Instagram no autorizó la conexión' . (isset($_GET['error_description']) ? ': ' . $h($_GET['error_description']) : '.');
 }
-if (isset($_GET['done'])) $msg = '¡Instagram conectado! 🎉 Ya el corillo puede publicar por ti.';
+if (isset($_GET['done'])) $msg = '¡Instagram conectado! Ya el corillo puede publicar por ti.';
 
 $conx = ig_conexion($pdo, $marca_id);
 $listo = ig_direct_disponible();
@@ -71,13 +72,14 @@ $listo = ig_direct_disponible();
 <style>
 :root{--rosa:#EF4375;--teal:#00A49F;--tinta:#231F20;--muted:#7a7580;--line:#eceaee;--crema:#faf9fb}
 *{box-sizing:border-box}body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:var(--tinta);background:var(--crema)}
+svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
 .wrap{max-width:560px;margin:0 auto;padding:20px 18px 60px}
 .top{display:flex;align-items:center;gap:10px;padding:6px 0 18px}
 .top a{color:var(--muted);text-decoration:none;font-weight:700;font-size:14px}
 .card{background:#fff;border:1px solid var(--line);border-radius:22px;padding:26px 22px;text-align:center;box-shadow:0 1px 0 rgba(0,0,0,.02)}
 h1{font-family:'Poppins';font-size:26px;font-weight:900;margin:.2em 0 .3em}
 .sub{color:var(--muted);font-size:15px;line-height:1.5;margin:0 0 22px}
-.iggrad{width:74px;height:74px;border-radius:22px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;font-size:38px;background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)}
+.iggrad{width:74px;height:74px;border-radius:22px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;font-size:38px;color:#fff;background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)}
 .btn{display:inline-block;width:100%;border:none;border-radius:16px;padding:16px 22px;font-family:'Poppins';font-weight:800;font-size:16px;text-decoration:none;transition:.16s;cursor:pointer}
 .btn-ig{background:linear-gradient(45deg,#f09433,#dc2743,#bc1888);color:#fff}
 .btn-ig:hover{transform:translateY(-1px)}
@@ -94,24 +96,24 @@ h1{font-family:'Poppins';font-size:26px;font-weight:900;margin:.2em 0 .3em}
 <div class="wrap">
   <div class="top"><a href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>">← Volver</a></div>
 
-  <?php if ($msg): ?><div class="ok">✓ <?= $h($msg) ?></div><?php endif; ?>
-  <?php if ($err): ?><div class="bad">⚠️ <?= $h($err) ?></div><?php endif; ?>
+  <?php if ($msg): ?><div class="ok"><?= ico('check-circle') ?> <?= $h($msg) ?></div><?php endif; ?>
+  <?php if ($err): ?><div class="bad"><?= ico('bolt') ?> <?= $h($err) ?></div><?php endif; ?>
 
   <div class="card">
-    <div class="iggrad">📸</div>
+    <div class="iggrad"><?= ico('instagram') ?></div>
     <?php if ($conx): ?>
       <h1>Instagram conectado</h1>
-      <div class="pill">✓ @<?= $h($conx['ig_username'] ?: $conx['ig_user_id']) ?></div>
+      <div class="pill"><?= ico('check') ?> @<?= $h($conx['ig_username'] ?: $conx['ig_user_id']) ?></div>
       <p class="sub">Tu Instagram está listo. El corillo ya puede publicar tus reels aquí.</p>
-      <a class="btn btn-ig" href="<?= $BASE ?>/reels.php?marca=<?= $marca_id ?>">🎬 Ir al Reels Studio</a>
+      <a class="btn btn-ig" href="<?= $BASE ?>/reels.php?marca=<?= $marca_id ?>">Ir al Reels Studio</a>
       <a class="btn btn-ghost" href="<?= $BASE ?>/conectar_ig.php?marca=<?= $marca_id ?>&go=1">Reconectar otra cuenta</a>
     <?php else: ?>
       <h1>Conecta tu Instagram</h1>
       <p class="sub">Sin páginas de Facebook, sin enredos. Entras con tu Instagram y ya — el corillo publica por ti.</p>
       <?php if (!$listo): ?>
-        <div class="warn">⚠️ El Instagram directo todavía no está activado en el servidor (falta la configuración de la app). Avísale al equipo de Crecer.</div>
+        <div class="warn"><?= ico('bolt') ?> El Instagram directo todavía no está activado en el servidor (falta la configuración de la app). Avísale al equipo de Crecer.</div>
       <?php endif; ?>
-      <a class="btn btn-ig <?= $listo ? '' : 'btn-ghost' ?>" href="<?= $listo ? $BASE.'/conectar_ig.php?marca='.$marca_id.'&go=1' : '#' ?>">📸 Conectar con Instagram</a>
+      <a class="btn btn-ig <?= $listo ? '' : 'btn-ghost' ?>" href="<?= $listo ? $BASE.'/conectar_ig.php?marca='.$marca_id.'&go=1' : '#' ?>">Conectar con Instagram</a>
       <div class="steps">
         <b>Solo necesitas:</b><br>
         1. Que tu Instagram sea <b>cuenta profesional</b> (Business o Creator) — es un cambio de 10 segundos dentro de Instagram.<br>

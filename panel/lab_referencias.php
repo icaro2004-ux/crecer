@@ -105,10 +105,10 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   form.inline{display:inline}
 </style></head>
 <body>
-<h1>🧪 Laboratorio de referencias visuales</h1>
+<h1>Laboratorio de referencias visuales</h1>
 <p class="sub">Interno / admin. Enseña al Director Creativo <b>criterio publicitario general</b> — no copia composiciones. Las imágenes NO se envían a las generaciones de clientes; solo el Playbook.</p>
 <?php if ($msg): ?><div class="flash ok"><?= $h($msg) ?></div><?php endif; ?>
-<?php if ($err): ?><div class="flash bad">⚠️ <?= $h($err) ?></div><?php endif; ?>
+<?php if ($err): ?><div class="flash bad"><?= $h($err) ?></div><?php endif; ?>
 
 <h2>Subir referencias</h2>
 <div class="up">
@@ -132,7 +132,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       <?= $F('analizar') ?><button type="submit" class="gho"><?= $prin ? 'Re-analizar' : 'Analizar' ?></button></form>
       <?php if ($r['estado'] !== 'approved'): ?><?= $F('aprobar') ?><button type="submit" class="ok">Aprobar</button></form><?php endif; ?>
       <?php if ($r['estado'] !== 'rejected'): ?><?= $F('rechazar') ?><button type="submit" class="no">Rechazar</button></form><?php endif; ?>
-      <?= $F('borrar_ref') ?><button type="submit" class="no" onclick="return confirm('¿Borrar?')">🗑</button></form>
+      <?= $F('borrar_ref') ?><button type="submit" class="no" onclick="return confirm('¿Borrar?')">Borrar</button></form>
     </div>
   </div>
   <?php endforeach; ?>
@@ -141,7 +141,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
 <h2>Creative Playbook</h2>
 <form class="inline" method="post"><?= csrf_field() ?><input type="hidden" name="accion" value="consolidar">
-  <button type="submit" <?= $n_aprob ? '' : 'disabled title="Aprueba referencias primero"' ?>>⚙️ Consolidar desde <?= $n_aprob ?> aprobadas</button>
+  <button type="submit" <?= $n_aprob ? '' : 'disabled title="Aprueba referencias primero"' ?>>Consolidar desde <?= $n_aprob ?> aprobadas</button>
 </form>
 <p class="sub" style="margin-top:10px">Esto es lo ÚNICO que recibe el Director Creativo (V3) como estándar de calidad.</p>
 <div class="card">
@@ -149,7 +149,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   <div class="pb <?= $p['activo'] ? '' : 'off' ?>">
     <form class="inline" method="post"><?= csrf_field() ?><input type="hidden" name="id" value="<?= $p['id'] ?>"><input type="hidden" name="accion" value="pb_toggle"><button type="submit" class="gho" title="Activar/Desactivar"><?= $p['activo'] ? '✓' : '○' ?></button></form>
     <div class="tx"><?= $h($p['principio']) ?><br><span class="tag"><?= $h($p['origen']) ?></span></div>
-    <form class="inline" method="post"><?= csrf_field() ?><input type="hidden" name="id" value="<?= $p['id'] ?>"><input type="hidden" name="accion" value="pb_borrar"><button type="submit" class="no" onclick="return confirm('¿Borrar?')">🗑</button></form>
+    <form class="inline" method="post"><?= csrf_field() ?><input type="hidden" name="id" value="<?= $p['id'] ?>"><input type="hidden" name="accion" value="pb_borrar"><button type="submit" class="no" onclick="return confirm('¿Borrar?')">Borrar</button></form>
   </div>
   <?php endforeach; ?>
   <?php if (!$pbs): ?><p style="color:#888;margin:0">Playbook vacío. Consolida desde las referencias aprobadas, o añade un principio a mano.</p><?php endif; ?>

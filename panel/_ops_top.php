@@ -25,7 +25,7 @@ if (isset($pdo)) { try { $op_prob = (int)$pdo->query("SELECT COUNT(DISTINCT marc
   @media(max-width:680px){.optop .ohi{display:none}.optop nav{width:100%;margin-left:0;padding-top:8px;border-top:1px solid rgba(255,255,255,.1)}}
 </style>
 <div class="optop">
-  <span class="obr">⚙ Operaciones</span>
+  <span class="obr">Operaciones</span>
   <?php if ($_nom !== ''): ?><span class="ohi">Hola, <?= htmlspecialchars($_nom, ENT_QUOTES, 'UTF-8') ?></span><?php endif; ?>
   <nav>
     <a class="<?= $_opl('analitica') ?>" href="/crecer/panel/admin.php">Analítica</a>

@@ -179,7 +179,7 @@ require __DIR__ . '/_shell.php';
 <h1 class="page-h">Estudio de arte</h1>
 <p class="subline">Convierte tus fotos en posts profesionales — la imagen va acorde a tu copy. Tú controlas todo.</p>
 <?php if (!empty($_GET['ok'])): ?><div class="ok-banner">✓ Listo.</div><?php endif; ?>
-<?php if ($err): ?><div class="err-banner">⚠️ <?= $h($err) ?></div><?php endif; ?>
+<?php if ($err): ?><div class="err-banner"><?= ico('bolt') ?> <?= $h($err) ?></div><?php endif; ?>
 
 <!-- 1. SUBIR -->
 <div class="sec">
@@ -198,12 +198,12 @@ require __DIR__ . '/_shell.php';
 <!-- 2. ESTUDIO -->
 <div class="sec">
   <h2>2. Crea el arte de tu post</h2>
-  <form class="card2" method="post" onsubmit="var b=this.querySelector('.genbtn');b.textContent='✨ Creando… (~15s)';b.disabled=true;">
+  <form class="card2" method="post" onsubmit="var b=this.querySelector('.genbtn');b.textContent='Creando… (~15s)';b.disabled=true;">
     <input type="hidden" name="accion" value="arte">
     <input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>">
     <input type="hidden" name="post" value="<?= $post_id ?>">
     <?php if ($post_id): ?>
-      <div style="background:var(--okk-bg);color:var(--okk-ink);font-weight:700;font-size:13.5px;padding:11px 14px;border-radius:12px;margin-bottom:14px">🎯 Creando el arte para tu post — al terminar se adjunta solo. <a href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>" style="color:var(--okk-ink);font-weight:800">← volver al post</a></div>
+      <div style="background:var(--okk-bg);color:var(--okk-ink);font-weight:700;font-size:13.5px;padding:11px 14px;border-radius:12px;margin-bottom:14px">Creando el arte para tu post — al terminar se adjunta solo. <a href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>" style="color:var(--okk-ink);font-weight:800">← volver al post</a></div>
     <?php endif; ?>
 
     <label class="fl">Escoge la foto base</label>
@@ -221,7 +221,7 @@ require __DIR__ . '/_shell.php';
         <?php foreach ($posts as $p): ?><option value="<?= $h($p['caption']) ?>"><?= $h(mb_substr($p['caption'],0,55)) ?>…</option><?php endforeach; ?>
       </select>
     <?php endif; ?>
-    <textarea id="copy" name="copy" rows="2" placeholder="Ej. ¡Mi gente! El bizcocho de guayaba fresquecito, ordena por WhatsApp 🇵🇷"><?= $h($post_caption) ?></textarea>
+    <textarea id="copy" name="copy" rows="2" placeholder="Ej. ¡Mi gente! El bizcocho de guayaba fresquecito, ordena por WhatsApp"><?= $h($post_caption) ?></textarea>
 
     <label class="fl">¿Texto sobre la imagen?</label>
     <div class="chips">
@@ -264,7 +264,7 @@ require __DIR__ . '/_shell.php';
     <?php else: ?>
       <div class="costnote" style="background:var(--amber-bg);color:var(--amber-ink);padding:12px;border-radius:12px;font-weight:600">
         Ya usaste tu imagen de muestra gratis.<br>
-        <a href="/crecer/panel/precios.php?marca=<?= $marca_id ?>" style="color:var(--terracota-700);font-weight:800">⚡ Activa un plan para crear más arte →</a>
+        <a href="/crecer/panel/precios.php?marca=<?= $marca_id ?>" style="color:var(--terracota-700);font-weight:800">Activa un plan para crear más arte →</a>
       </div>
     <?php endif; ?>
   </form>
@@ -303,22 +303,22 @@ require __DIR__ . '/_shell.php';
     <div class="mock ig" id="m-ig">
       <div class="ig-head"><img class="av" src="<?= $h($avatar) ?>"><b><?= $h($handle) ?></b><span class="dots">•••</span></div>
       <img class="post-img" id="ig-img" src="">
-      <div class="ig-acts"><span>♡</span><span>💬</span><span>➤</span><span class="sp"></span><span>🔖</span></div>
+      <div class="ig-acts"><span>♡</span><span><?= ico('chat') ?></span><span>➤</span><span class="sp"></span><span><?= ico('bookmark') ?></span></div>
       <div class="ig-likes">A 47 personas les gusta esto</div>
       <div class="ig-cap"><b><?= $h($handle) ?></b> <span id="ig-cap"></span></div>
     </div>
 
     <!-- Facebook -->
     <div class="mock fb" id="m-fb" style="display:none">
-      <div class="fb-head"><img class="av" src="<?= $h($avatar) ?>"><div><b><?= $h($marca['nombre_negocio']) ?></b><div class="fb-meta">Justo ahora · 🌐</div></div></div>
+      <div class="fb-head"><img class="av" src="<?= $h($avatar) ?>"><div><b><?= $h($marca['nombre_negocio']) ?></b><div class="fb-meta">Justo ahora</div></div></div>
       <div class="fb-text" id="fb-cap"></div>
       <img class="post-img" id="fb-img" src="">
-      <div class="fb-bar"><span>👍 Me gusta</span><span>💬 Comentar</span><span>➤ Compartir</span></div>
+      <div class="fb-bar"><span>Me gusta</span><span><?= ico('chat') ?> Comentar</span><span>➤ Compartir</span></div>
     </div>
 
     <div class="prev-actions">
       <button type="button" class="pa" onclick="copiarCopy()"><?= ico('copy') ?> Copiar copy</button>
-      <a class="pa" id="pa-dl" href="" download>⬇ Descargar imagen</a>
+      <a class="pa" id="pa-dl" href="" download><?= ico('download') ?> Descargar imagen</a>
       <form method="post" style="display:inline" id="pubform"><input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>"><input type="hidden" name="accion" value="publicar"><input type="hidden" name="gid" id="pub-gid"><button class="pa pub" type="submit">Publicar</button></form>
     </div>
     <div class="prev-note">Por ahora "Publicar" lo marca como publicado y te da el copy + la imagen para subirla. La publicación automática a IG/FB (conexión con Meta) viene pronto.</div>

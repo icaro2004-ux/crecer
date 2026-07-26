@@ -272,7 +272,7 @@ require __DIR__ . '/_shell.php';
   <div class="bib-selbar" id="bibSelBar">
     <span class="cnt" id="bibSelCnt">0 seleccionados</span>
     <button type="button" class="all" id="bibSelAll">Todos</button>
-    <button type="button" class="del" id="bibSelDel">🗑 Eliminar</button>
+    <button type="button" class="del" id="bibSelDel"><?= ico('trash') ?> Eliminar</button>
     <button type="button" class="cancel" id="bibSelCancel">Cancelar</button>
   </div>
 </main>

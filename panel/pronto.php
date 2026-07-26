@@ -12,11 +12,11 @@ if (!$marca) { header('Location: /crecer/onboarding.php'); exit; }
 $marca_id = (int)$marca['id'];
 
 $secs = [
-  'marca'     => ['🎨','Marca','Tu logo, colores y portada — generados por IA y listos para usar en todos lados.','crecer'],
-  'clientela' => ['👥','Clientela','Tus clientes y su historial, armados solitos desde tus órdenes. Para que les des seguimiento.','crecer'],
-  'cuentas'   => ['💵','Cuentas','Ingresos, gastos y ganancia clara del mes. Sin enredos, nada de planillas.','despegar'],
-  'analitica' => ['📊','Analítica','Qué se vende más, qué post jala más, y cómo crece tu negocio mes a mes.','despegar'],
-  'config'    => ['⚙️','Configuración','Edita tu negocio, tus datos, tu plan y tus redes.','crecer'],
+  'marca'     => ['palette','Marca','Tu logo, colores y portada — generados por IA y listos para usar en todos lados.','crecer'],
+  'clientela' => ['users','Clientela','Tus clientes y su historial, armados solitos desde tus órdenes. Para que les des seguimiento.','crecer'],
+  'cuentas'   => ['dollar','Cuentas','Ingresos, gastos y ganancia clara del mes. Sin enredos, nada de planillas.','despegar'],
+  'analitica' => ['chart','Analítica','Qué se vende más, qué post jala más, y cómo crece tu negocio mes a mes.','despegar'],
+  'config'    => ['settings','Configuración','Edita tu negocio, tus datos, tu plan y tus redes.','crecer'],
 ];
 $s = $_GET['s'] ?? 'config';
 // $plan_req = plan que EXIGE esta sección (no confundir con el plan del
@@ -47,18 +47,18 @@ $necesita_upgrade = ($plan_req === 'despegar') && !marca_puede($plan, 'analitica
 </style>
 
 <div class="soon-box">
-  <div class="e"><?= $ic ?></div>
+  <div class="e"><?= ico($ic,'ic ic-xl') ?></div>
   <h1><?= $h($titulo) ?></h1>
   <p><?= $h($desc) ?></p>
   <?php if ($necesita_upgrade): ?>
-    <div class="badge-soon badge-up">🚀 Plan Despegar</div>
+    <div class="badge-soon badge-up"><?= ico('rocket') ?> Plan Despegar</div>
     <p style="margin-top:14px;font-size:14px">Esta función viene con el plan <b>Despegar</b>. Súbete para activarla.</p>
     <a class="up" href="/crecer/panel/precios.php?marca=<?= $marca_id ?>">Ver plan Despegar →</a>
   <?php elseif ($plan_req === 'despegar'): ?>
-    <div class="badge-soon badge-up">🚀 Plan Despegar</div>
-    <p style="margin-top:14px;font-size:14px">Ya tienes el plan <b>Despegar</b> 🎉 Esta función está en construcción; te avisamos apenas esté lista.</p>
+    <div class="badge-soon badge-up"><?= ico('rocket') ?> Plan Despegar</div>
+    <p style="margin-top:14px;font-size:14px">Ya tienes el plan <b>Despegar</b> Esta función está en construcción; te avisamos apenas esté lista.</p>
   <?php else: ?>
-    <div class="badge-soon">🔧 Próximamente</div>
+    <div class="badge-soon"><?= ico('clock') ?> Próximamente</div>
     <p style="margin-top:14px;font-size:14px">Estamos construyéndola. Te avisamos apenas esté lista.</p>
   <?php endif; ?>
   <a class="back" href="/crecer/panel/index.php?marca=<?= $marca_id ?>">← Volver al inicio</a>

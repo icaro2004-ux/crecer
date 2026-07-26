@@ -372,7 +372,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
   var b=document.getElementById('estilo-sug'); if(!b) return;
   b.addEventListener('click', function(){
     var ta=document.getElementById('estilo-ta'), old=b.textContent;
-    b.disabled=true; b.textContent='💭 Pensando tu estilo…';
+    b.disabled=true; b.textContent='Pensando tu estilo…';
     var fd=new FormData(); fd.append('accion','sugerir_estilo'); fd.append('ajuste', ta.value.trim()); fd.append('csrf', <?= json_encode(csrf_token()) ?>);
     fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
       b.disabled=false; b.textContent=old;
@@ -390,11 +390,11 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
   <p class="subline">Tu logo profesional con IA — <b>se desbloquea con un plan</b>.</p>
 <?php endif; ?>
 <?php if (!empty($_GET['ok'])): ?><div class="ok-banner">✓ ¡Logo guardado! Mira la galería abajo.</div><?php endif; ?>
-<?php if ($err): ?><div class="err-banner">⚠️ <?= $h($err) ?></div><?php endif; ?>
+<?php if ($err): ?><div class="err-banner"><?= ico('bolt') ?> <?= $h($err) ?></div><?php endif; ?>
 <?php if ($logo_pendiente): ?>
 <div class="ok-banner" id="logoWait" style="display:flex;align-items:center;gap:12px">
   <span class="lspin"></span>
-  <span>🎨 El Diseñador está creando tu logo con IA de alta precisión… <b>un par de minutos.</b> Quédate aquí; aparece solo.</span>
+  <span><?= ico('palette') ?> El Diseñador está creando tu logo con IA de alta precisión… <b>un par de minutos.</b> Quédate aquí; aparece solo.</span>
 </div>
 <style>.lspin{width:22px;height:22px;border-radius:50%;border:3px solid rgba(0,0,0,.15);border-top-color:#EF4375;animation:lspin .8s linear infinite;flex:0 0 auto}@keyframes lspin{to{transform:rotate(360deg)}}</style>
 <script>
@@ -428,11 +428,11 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
     <div style="color:var(--terracota)"><?= ico('lock','ic-xl') ?></div>
     <div style="font-family:var(--font-display);font-weight:600;font-size:22px;color:var(--ink-soft);margin:6px 0">El logo es premium</div>
     <p style="color:var(--muted);font-size:14px;max-width:430px;margin:0 auto 16px">Tu logo profesional con IA, en los formatos que necesites, se desbloquea con un plan. (Tu post de muestra sí es gratis)</p>
-    <a class="genbtn" href="/crecer/panel/precios.php?marca=<?= $marca_id ?>" style="text-decoration:none;display:inline-block">⚡ Desbloquear mi logo →</a>
+    <a class="genbtn" href="/crecer/panel/precios.php?marca=<?= $marca_id ?>" style="text-decoration:none;display:inline-block">Desbloquear mi logo →</a>
   </div>
 <?php elseif (!$final && $restantes > 0): ?>
   <div class="genbox">
-    <form method="post" onsubmit="var b=this.querySelector('.genbtn');b.textContent='✨ Creando… (~15s)';b.disabled=true;">
+    <form method="post" onsubmit="var b=this.querySelector('.genbtn');b.textContent='Creando… (~15s)';b.disabled=true;">
       <input type="hidden" name="accion" value="logo"><input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(),ENT_QUOTES) ?>">
 
       <label class="fl">Descripción del negocio <span style="color:var(--muted);font-weight:500">(edítala a tu gusto)</span></label>
@@ -524,7 +524,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
       <button type="button" onclick="dlLogo('png',400)">Perfil 400px</button>
     </div>
     <?php if (!$final): ?>
-      <div class="warn">⚠️ Al descargar, <b>este será tu logo final</b> y ya no podrás escoger otro. Descárgalo en todos los formatos que quieras.</div>
+      <div class="warn"><?= ico('bolt') ?> Al descargar, <b>este será tu logo final</b> y ya no podrás escoger otro. Descárgalo en todos los formatos que quieras.</div>
     <?php endif; ?>
   </div>
 <?php endif; ?>
@@ -554,7 +554,7 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
         document.querySelectorAll('.tile .pick').forEach(function(b){b.style.display='none';});
         document.querySelectorAll('.genbox').forEach(function(b){b.style.display='none';});
         document.querySelectorAll('.tile:not(.sel)').forEach(function(t){t.classList.add('locked');});
-        var w2=document.querySelector('.warn'); if(w2) w2.textContent='🔒 Logo finalizado. Puedes seguir descargándolo en otros formatos.';
+        var w2=document.querySelector('.warn'); if(w2) w2.textContent='Logo finalizado. Puedes seguir descargándolo en otros formatos.';
       }
     };
     img.src = document.getElementById('logoimg').src;

@@ -26,7 +26,7 @@ foreach ($c->fetchAll() as $p) {
     $lineas[] = "UID:crecer-contenido-{$p['id']}@encuentralo";
     $lineas[] = "DTSTART:$dt";
     $lineas[] = "DTEND:$end";
-    $lineas[] = "SUMMARY:" . ics_esc('📣 ' . ucfirst($p['plataforma']) . ' — ' . mb_substr($p['caption'] ?: $p['tipo'], 0, 50));
+    $lineas[] = "SUMMARY:" . ics_esc(ucfirst($p['plataforma']) . ' — ' . mb_substr($p['caption'] ?: $p['tipo'], 0, 50));
     $lineas[] = "DESCRIPTION:" . ics_esc($p['caption'] ?: '');
     $lineas[] = "END:VEVENT";
 }
@@ -40,7 +40,7 @@ foreach ($o->fetchAll() as $r) {
     $lineas[] = "UID:crecer-orden-{$r['id']}@encuentralo";
     $lineas[] = "DTSTART:$dt";
     $lineas[] = "DTEND:$end";
-    $lineas[] = "SUMMARY:" . ics_esc('📦 Orden: ' . $r['cliente_nombre'] . ($r['monto'] ? ' ($' . $r['monto'] . ')' : ''));
+    $lineas[] = "SUMMARY:" . ics_esc('Orden: ' . $r['cliente_nombre'] . ($r['monto'] ? ' ($' . $r['monto'] . ')' : ''));
     $lineas[] = "DESCRIPTION:" . ics_esc(($r['descripcion'] ?: '') . ' · Estado: ' . $r['estado']);
     $lineas[] = "END:VEVENT";
 }
@@ -54,7 +54,7 @@ foreach ($ev->fetchAll() as $r) {
     $lineas[] = "UID:crecer-evento-{$r['id']}@encuentralo";
     $lineas[] = "DTSTART:$dt";
     $lineas[] = "DTEND:$end";
-    $lineas[] = "SUMMARY:" . ics_esc('📌 ' . $r['titulo']);
+    $lineas[] = "SUMMARY:" . ics_esc($r['titulo']);
     $lineas[] = "DESCRIPTION:" . ics_esc($r['nota'] ?: '');
     $lineas[] = "BEGIN:VALARM";
     $lineas[] = "ACTION:DISPLAY";

@@ -135,7 +135,7 @@ $total_sin_leer = 0; foreach ($convs as $c) $total_sin_leer += (int)$c['sin_leer
 <?php else: ?>
   <h1>Soporte <?php if($total_sin_leer):?><span class="badge" style="font-size:13px;vertical-align:middle"><?= $total_sin_leer ?> sin leer</span><?php endif;?></h1>
   <?php if (!$convs): ?>
-    <div class="empty">📭 Todavía no hay conversaciones. Cuando un cliente te escriba desde su panel (sección <b>Soporte</b>), aparece aquí.</div>
+    <div class="empty">Todavía no hay conversaciones. Cuando un cliente te escriba desde su panel (sección <b>Soporte</b>), aparece aquí.</div>
   <?php else: foreach ($convs as $c): ?>
     <a class="conv" href="/crecer/panel/admin_soporte.php?ver=<?= (int)$c['marca_id'] ?>">
       <span class="av"><?= $h(mb_strtoupper(mb_substr($c['nombre_negocio'],0,1))) ?></span>

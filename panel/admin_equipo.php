@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && csrf_ok()) {
                 // Ya tiene cuenta → solo lo subimos a admin
                 $pdo->prepare("UPDATE usuarios SET rol='admin', activo=1 WHERE id=?")->execute([(int)$ex['id']]);
                 $uid = (int)$ex['id'];
-                $ok = "$nombre ya tenía cuenta — lo subimos a administrador. ✅";
+                $ok = "$nombre ya tenía cuenta — lo subimos a administrador.";
             } else {
                 // Crear cuenta admin con contraseña aleatoria
                 $minmun = (int)$pdo->query("SELECT MIN(id) FROM municipios")->fetchColumn() ?: 1;
@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && csrf_ok()) {
                                VALUES (?,?,?,?,?, 'admin')")
                     ->execute([$nombre, $email, password_hash(bin2hex(random_bytes(8)), PASSWORD_DEFAULT), '', $minmun]);
                 $uid = (int)$pdo->lastInsertId();
-                $ok = "Colaborador <b>$nombre</b> creado como administrador. ✅";
+                $ok = "Colaborador <b>$nombre</b> creado como administrador.";
             }
             // Link de invitación para que ponga su contraseña (reusa password_resets)
             $token = bin2hex(random_bytes(32));
@@ -49,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && csrf_ok()) {
             $invite_link = $base . '/nuevo-password.php?token=' . $token;
             // Intento de email (best-effort)
             $cuerpo = "<div style='font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#1a1a24'>"
-                . "<h2>¡Te sumaron al corillo! 🤝</h2>"
+                . "<h2>¡Te sumaron al corillo!</h2>"
                 . "<p>Te dieron acceso de administrador en Crecer. Pon tu contraseña aquí (vale 48h):</p>"
                 . "<p style='margin:24px 0'><a href='$invite_link' style='background:#e3683f;color:#fff;text-decoration:none;font-weight:bold;padding:13px 24px;border-radius:12px'>Activar mi cuenta</a></p>"
                 . "<p style='font-size:13px;color:#8a8a98'>O copia: $invite_link</p></div>";
@@ -108,18 +108,18 @@ $admins = $pdo->query("SELECT id, nombre, email, activo, created_at FROM usuario
   <h1>Equipo</h1>
   <p class="lede">Administradores con acceso a tu Centro de Operaciones.</p>
 
-  <?php if ($ok): ?><div class="msg ok">✅ <?= $ok ?></div><?php endif; ?>
-  <?php if ($err): ?><div class="msg err">⚠️ <?= $h($err) ?></div><?php endif; ?>
+  <?php if ($ok): ?><div class="msg ok"><?= $ok ?></div><?php endif; ?>
+  <?php if ($err): ?><div class="msg err"><?= $h($err) ?></div><?php endif; ?>
 
   <?php if ($invite_link): ?>
     <div class="invite">
-      🔗 <b>Link de invitación</b> (cópialo y mándaselo por WhatsApp si no le llega el email — vale 48h):<br>
+      <b>Link de invitación</b> (cópialo y mándaselo por WhatsApp si no le llega el email — vale 48h):<br>
       <span class="lk"><?= $h($invite_link) ?></span>
     </div>
   <?php endif; ?>
 
   <div class="card">
-    <h2>➕ Añadir colaborador</h2>
+    <h2>Añadir colaborador</h2>
     <form method="post">
       <?= csrf_field() ?><input type="hidden" name="accion" value="add">
       <div class="row">
@@ -132,7 +132,7 @@ $admins = $pdo->query("SELECT id, nombre, email, activo, created_at FROM usuario
   </div>
 
   <div class="card">
-    <h2>👥 Administradores (<?= count($admins) ?>)</h2>
+    <h2>Administradores (<?= count($admins) ?>)</h2>
     <table>
       <tr><th>Nombre</th><th>Email</th><th></th></tr>
       <?php foreach ($admins as $a): ?>

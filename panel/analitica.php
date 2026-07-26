@@ -61,10 +61,10 @@ $desglose = $pdo->prepare(
 $desglose->execute([$marca_id, $anio, $mes]);
 $desglose = $desglose->fetchAll();
 $nombres_agente = [
-    'planificador'=>['🗓️','Planes de contenido'], 'creador'=>['✍️','Captions escritos'],
-    'diseñador'=>['🎨','Logos diseñados'], 'intake'=>['🧠','Perfiles aprendidos'],
-    'asistente'=>['💬','Dudas resueltas'], 'retencion'=>['🤝','Mensajes a clientes'],
-    'analitica'=>['📊','Resúmenes'], 'aprendiz'=>['📚','Lecciones de voz'],
+    'planificador'=>['calendar','Planes de contenido'], 'creador'=>['pen','Captions escritos'],
+    'diseñador'=>['palette','Logos diseñados'], 'intake'=>['lightbulb','Perfiles aprendidos'],
+    'asistente'=>['chat','Dudas resueltas'], 'retencion'=>['users','Mensajes a clientes'],
+    'analitica'=>['chart','Resúmenes'], 'aprendiz'=>['bookmark','Lecciones de voz'],
 ];
 
 // Ventas últimos 6 meses (para la barra de crecimiento).
@@ -111,10 +111,10 @@ if (!$es_despegar):
 <div style="max-width:560px">
   <h1 class="page-h">Analítica</h1>
   <div style="background:var(--card);border:1px dashed var(--line);border-radius:16px;padding:30px;text-align:center;margin-top:14px">
-    <div style="font-size:42px">📊</div>
+    <div><?= ico('chart','ic ic-xl') ?></div>
     <p style="font-weight:800;color:var(--tinta);margin:10px 0 4px">Analítica viene con el plan Despegar</p>
     <p style="color:var(--muted);font-size:14px;max-width:42ch;margin:0 auto 16px">Mira tus ventas mes a mes, cuánto trabajó el corillo por ti, y recibe un resumen claro de cómo va tu negocio.</p>
-    <a href="<?= $BASE ?>/precios.php?marca=<?= $marca_id ?>" style="display:inline-block;background:linear-gradient(135deg,var(--coral,#e3683f),var(--magenta,#c0395f));color:#fff;font-weight:800;padding:12px 24px;border-radius:99px;text-decoration:none">🚀 Súbete a Despegar</a>
+    <a href="<?= $BASE ?>/precios.php?marca=<?= $marca_id ?>" style="display:inline-block;background:linear-gradient(135deg,var(--coral,#e3683f),var(--magenta,#c0395f));color:#fff;font-weight:800;padding:12px 24px;border-radius:99px;text-decoration:none"><?= ico('rocket') ?> Súbete a Despegar</a>
   </div>
 </div>
 <?php require __DIR__ . '/_shell_foot.php'; exit; endif; ?>
@@ -159,7 +159,7 @@ if (!$es_despegar):
   </div>
 
   <div class="an-card">
-    <h2>📈 Tus ventas, mes a mes</h2>
+    <h2><?= ico('chart') ?> Tus ventas, mes a mes</h2>
     <div class="bars">
       <?php foreach ($serie as $s): $hpx = (int)round(($s['total']/$max_serie)*120); ?>
         <div class="bar">
@@ -173,23 +173,23 @@ if (!$es_despegar):
   </div>
 
   <div class="an-card insight">
-    <h2>🤖 ¿Cómo voy? — pregúntale al corillo</h2>
+    <h2><?= ico('chat') ?> ¿Cómo voy? — pregúntale al corillo</h2>
     <button class="btn" id="insBtn">Dame el resumen del mes</button>
     <div class="out" id="insOut"></div>
   </div>
 
   <div class="an-card">
-    <h2>💪 Lo que hizo el corillo este mes</h2>
+    <h2><?= ico('bolt') ?> Lo que hizo el corillo este mes</h2>
     <?php if (!$desglose): ?>
       <p style="color:var(--muted);font-size:14px;margin:0">Todavía no hay actividad este mes. Pon al corillo a crear contenido y aquí verás todo lo que trabajó por ti.</p>
     <?php else: foreach ($desglose as $row):
-      [$e,$lb] = $nombres_agente[$row['agente']] ?? ['⚙️', ucfirst($row['agente'])]; ?>
-      <div class="corillo-row"><span class="e"><?= $e ?></span><span><?= $h($lb) ?></span><span class="n"><?= (int)$row['n'] ?></span></div>
+      [$e,$lb] = $nombres_agente[$row['agente']] ?? ['settings', ucfirst($row['agente'])]; ?>
+      <div class="corillo-row"><span class="e"><?= ico($e) ?></span><span><?= $h($lb) ?></span><span class="n"><?= (int)$row['n'] ?></span></div>
     <?php endforeach; endif; ?>
   </div>
 
   <div class="an-card" style="background:var(--crema,#fbf6ee)">
-    <h2>📲 Alcance de Instagram y Facebook</h2>
+    <h2><?= ico('send') ?> Alcance de Instagram y Facebook</h2>
     <p style="color:var(--muted);font-size:14px;margin:0">Cuando publiques por la app (redes conectadas), aquí traeremos los números reales de alcance y likes directo de Meta. Por ahora medimos lo que controlamos: ventas y trabajo del corillo.</p>
   </div>
 </div>
@@ -203,8 +203,8 @@ if (!$es_despegar):
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({csrf:CSRF})
     }).then(function(r){return r.json();}).then(function(d){
-      out.textContent = d.ok ? d.texto : ('⚠️ '+(d.err||'Error'));
-    }).catch(function(){ out.textContent='⚠️ Error de conexión.'; })
+      out.textContent = d.ok ? d.texto : (d.err||'Error');
+    }).catch(function(){ out.textContent='Error de conexión.'; })
       .finally(function(){ btn.disabled=false; });
   });
 </script>

@@ -47,10 +47,10 @@
   <input type="hidden" name="preset" id="t_preset" value="<?= $h($Tpreset) ?>">
 
   <div class="presets" id="tpresets">
-    <button type="button" class="preset" data-p="boricua"   data-v="85,25,55,60"><span class="em">🌴</span><span><b>Cercano · Boricua</b><small>Como hablas con tu gente</small></span></button>
-    <button type="button" class="preset" data-p="pro"       data-v="28,85,48,18"><span class="em">👔</span><span><b>Profesional</b><small>Serio y confiable</small></span></button>
-    <button type="button" class="preset" data-p="premium"   data-v="35,74,34,32"><span class="em">✨</span><span><b>Premium</b><small>Elegante, sin gritar</small></span></button>
-    <button type="button" class="preset" data-p="divertido" data-v="72,20,62,92"><span class="em">😜</span><span><b>Divertido</b><small>Con chiste y energía</small></span></button>
+    <button type="button" class="preset" data-p="boricua"   data-v="85,25,55,60"><span class="em"><?= ico('chat') ?></span><span><b>Cercano · Boricua</b><small>Como hablas con tu gente</small></span></button>
+    <button type="button" class="preset" data-p="pro"       data-v="28,85,48,18"><span class="em"><?= ico('briefcase') ?></span><span><b>Profesional</b><small>Serio y confiable</small></span></button>
+    <button type="button" class="preset" data-p="premium"   data-v="35,74,34,32"><span class="em"><?= ico('sparkles') ?></span><span><b>Premium</b><small>Elegante, sin gritar</small></span></button>
+    <button type="button" class="preset" data-p="divertido" data-v="72,20,62,92"><span class="em"><?= ico('bolt') ?></span><span><b>Divertido</b><small>Con chiste y energía</small></span></button>
   </div>
 
   <?php
@@ -69,7 +69,7 @@
   <div class="voicebar" id="tvoice"></div>
 
   <div class="acts">
-    <button type="button" class="gen" id="tgen">✨ Genera 3 ejemplos con La Creativa</button>
+    <button type="button" class="gen" id="tgen">Genera 3 ejemplos con La Creativa</button>
     <button type="submit" class="save">Guardar mi tono</button>
   </div>
   <div class="res" id="tres"></div>
@@ -112,7 +112,7 @@
 
   var gen=document.getElementById('tgen'), res=document.getElementById('tres');
   gen.addEventListener('click',function(){
-    gen.disabled=true; var old=gen.textContent; gen.textContent='✍️ La Creativa está escribiendo…'; res.innerHTML='';
+    gen.disabled=true; var old=gen.textContent; gen.textContent='La Creativa está escribiendo…'; res.innerHTML='';
     var fd=new FormData(); fd.append('accion','tono_preview'); fd.append('csrf', <?= json_encode(csrf_token()) ?>);
     ids.forEach(function(k){fd.append('t_'+k,S[k].value);});
     fetch(location.pathname+location.search,{method:'POST',body:fd})

@@ -593,54 +593,74 @@ $credito  = $has_deck
   </div>
 
   <?php else:
-    $chev = '<svg class="arw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>';
-    $lch = [
-      ['reels.php',      'camera', '#EF4375', 'Haz un reel',    'Sube clips, yo lo armo'],
-      ['propuestas.php', 'pen',    '#00A49F', 'Tus propuestas', 'Mira lo que preparé'],
-      ['sala.php',       'chat',   '#6B5AED', 'La Sala',        'Habla con tu corillo'],
-      ['biblioteca.php', 'image',  '#F59E0B', 'Sube tus fotos', 'Alimenta al corillo'],
-      ['resultados.php', 'chart',  '#22A06B', 'Resultados',     'Cómo va tu presencia'],
+    $arrow = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
+    $chev  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>';
+    $cards = [
+      ['reels.php',      'camera', '#ef4375', '#fff0f5', 'Haz un reel',    'Sube clips, yo lo armo'],
+      ['propuestas.php', 'pen',    '#00a49f', '#eafaf8', 'Tus propuestas', 'Mira lo que preparé'],
+      ['sala.php',       'chat',   '#7c58e8', '#f2edff', 'La Sala',        'Habla con tu corillo'],
+      ['biblioteca.php', 'image',  '#c78a16', '#fff7df', 'Sube fotos',     'Alimenta al corillo'],
     ];
   ?>
-  <div class="tn-launch">
-    <div class="lch-head">
-      <h2>Todo al día</h2>
+  <div class="hm">
+    <div class="hm-hero">
+      <div class="hm-blob"></div>
+      <div class="hm-eyebrow"><?= $h($negocio) ?></div>
+      <h1>Todo al día.</h1>
       <p>El corillo mantuvo tu tienda al día. ¿Qué hacemos ahora?</p>
     </div>
-    <div class="lch-list">
-      <?php foreach ($lch as $i => $c): ?>
-      <a class="lch" href="<?= $BASE ?>/<?= $c[0] ?>?<?= $mid ?>" style="--acc:<?= $c[2] ?>;--d:<?= $i * 60 ?>ms">
-        <span class="ic-wrap"><?= ico($c[1]) ?></span>
-        <span class="txt"><b><?= $h($c[3]) ?></b><small><?= $h($c[4]) ?></small></span>
-        <?= $chev ?>
+    <div class="hm-grid">
+      <?php foreach ($cards as $i => $c): ?>
+      <a class="hm-card" href="<?= $BASE ?>/<?= $c[0] ?>?<?= $mid ?>" style="--acc:<?= $c[2] ?>;--soft:<?= $c[3] ?>;--d:<?= $i*70 ?>ms">
+        <span class="hm-ic"><?= ico($c[1]) ?></span>
+        <h3><?= $h($c[4]) ?></h3>
+        <p><?= $h($c[5]) ?></p>
+        <span class="hm-arw"><?= $arrow ?></span>
       </a>
       <?php endforeach; ?>
     </div>
-    <?php if (!empty($prox_fecha)): ?><p class="lch-next"><?= ico('calendar') ?> Próximo post programado <?= $h(_fecha_humana($prox_fecha)) ?></p><?php endif; ?>
+    <a class="hm-wide" href="<?= $BASE ?>/calendario.php?<?= $mid ?>">
+      <span class="hm-wic"><?= ico('calendar') ?></span>
+      <span class="hm-wc"><strong>Tu calendario</strong><span><?= !empty($prox_fecha) ? 'Próximo post '.$h(_fecha_humana($prox_fecha)) : 'Todo organizado, sin enredos' ?></span></span>
+      <span class="hm-wchev"><?= $chev ?></span>
+    </a>
   </div>
   <style>
-    .turno:has(.tn-launch){justify-content:flex-start;overflow-y:auto;background:#fff}
-    .tn-launch{width:100%;max-width:600px;margin:0 auto;padding:9vh 22px 48px}
-    .lch-head h2{font-family:'Poppins',sans-serif;font-weight:600;font-size:27px;letter-spacing:-.01em;margin:0 0 6px;color:var(--tinta,#231F20)}
-    .lch-head p{color:var(--muted,#7a7580);font-size:15px;margin:0 0 28px;line-height:1.45}
-    .lch-list{display:flex;flex-direction:column;gap:11px}
-    .lch{display:flex;align-items:center;gap:15px;background:#fff;border:1px solid var(--line,#eceaee);border-radius:16px;
-      padding:15px 18px;text-decoration:none;color:var(--tinta,#231F20);position:relative;
-      transition:transform .22s cubic-bezier(.2,.85,.25,1),box-shadow .22s,border-color .22s;
-      opacity:0;transform:translateY(12px);animation:lchIn .5s cubic-bezier(.2,.85,.25,1) forwards;animation-delay:var(--d)}
-    @keyframes lchIn{to{opacity:1;transform:none}}
-    .lch:hover{transform:translateX(5px);border-color:transparent;box-shadow:0 14px 34px -14px color-mix(in srgb,var(--acc) 55%,transparent)}
-    .lch .ic-wrap{width:46px;height:46px;flex-shrink:0;border-radius:13px;display:flex;align-items:center;justify-content:center;
-      color:var(--acc);background:color-mix(in srgb,var(--acc) 12%,#fff);transition:.22s}
-    .lch:hover .ic-wrap{background:var(--acc);color:#fff;transform:scale(1.04)}
-    .lch .ic-wrap svg{width:22px;height:22px;stroke-width:1.9}
-    .lch .txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-    .lch .txt b{font-family:'Poppins',sans-serif;font-weight:600;font-size:16.5px;letter-spacing:-.005em}
-    .lch .txt small{color:var(--muted,#7a7580);font-size:13px}
-    .lch .arw{width:19px;height:19px;flex-shrink:0;color:#cfcad4;transition:transform .22s,color .22s}
-    .lch:hover .arw{transform:translateX(4px);color:var(--acc)}
-    .lch-next{margin-top:26px;display:flex;align-items:center;justify-content:center;gap:7px;color:var(--muted,#7a7580);font-size:13px}
-    .lch-next svg{width:15px;height:15px}
+    .turno:has(.hm){justify-content:flex-start;overflow-y:auto;overflow-x:hidden;padding:0;
+      background:radial-gradient(circle at 95% 15%, rgba(0,164,159,.10), transparent 22%),radial-gradient(circle at 104% 21%, rgba(239,67,117,.08), transparent 16%),#f6f4f1}
+    .hm{width:100%;max-width:520px;margin:0 auto;padding:20px 16px 44px}
+    .hm-hero{position:relative;padding:16px 4px 4px}
+    .hm-blob{position:absolute;right:-14px;top:0;width:120px;height:120px;border-radius:50%;pointer-events:none;
+      background:radial-gradient(circle at 62% 45%, rgba(239,67,117,.30), transparent 44%),radial-gradient(circle at 38% 64%, rgba(0,164,159,.24), transparent 48%);filter:blur(1px)}
+    .hm-eyebrow{color:#57545c;font-weight:700;font-size:13.5px;margin-bottom:10px}
+    .hm-hero h1{margin:0;font-family:'Poppins',sans-serif;font-weight:700;font-size:36px;line-height:1.03;letter-spacing:-.04em;color:#25232b;max-width:290px}
+    .hm-hero p{margin:13px 0 0;color:var(--muted,#7b7880);font-size:15.5px;line-height:1.5;max-width:320px}
+    .hm-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:24px}
+    .hm-card{position:relative;overflow:hidden;min-height:152px;display:flex;flex-direction:column;
+      background:#fff;border:1px solid #ece8e3;border-radius:22px;padding:17px;text-decoration:none;color:inherit;
+      box-shadow:0 8px 24px rgba(38,32,45,.05);
+      opacity:0;transform:translateY(14px);animation:hmIn .5s cubic-bezier(.2,.85,.25,1) forwards;animation-delay:var(--d);
+      transition:transform .2s,box-shadow .2s,border-color .2s}
+    @keyframes hmIn{to{opacity:1;transform:none}}
+    .hm-card:hover{transform:translateY(-4px);box-shadow:0 18px 40px rgba(38,32,45,.10);border-color:#ddd6d0}
+    .hm-card::after{content:"";position:absolute;right:-38px;bottom:-44px;width:92px;height:92px;border-radius:50%;background:var(--soft);opacity:.7}
+    .hm-ic{width:47px;height:47px;border-radius:15px;background:var(--soft);color:var(--acc);display:flex;align-items:center;justify-content:center;margin-bottom:15px}
+    .hm-ic svg{width:24px;height:24px;stroke-width:2}
+    .hm-card h3{margin:0;position:relative;z-index:1;font-family:'Poppins',sans-serif;font-weight:600;font-size:16.5px;letter-spacing:-.02em}
+    .hm-card p{margin:6px 0 0;position:relative;z-index:1;color:var(--muted,#7b7880);font-size:13.5px;line-height:1.35}
+    .hm-arw{position:absolute;right:14px;bottom:14px;z-index:2;width:31px;height:31px;border-radius:50%;background:#fff;color:var(--acc);
+      display:flex;align-items:center;justify-content:center;box-shadow:0 4px 13px rgba(40,35,45,.10);transition:transform .2s,background .2s,color .2s}
+    .hm-arw svg{width:16px;height:16px}
+    .hm-card:hover .hm-arw{transform:translateX(3px);background:var(--acc);color:#fff}
+    .hm-wide{display:flex;align-items:center;gap:14px;margin-top:14px;background:#fff;border:1px solid #ece8e3;border-radius:22px;padding:15px;
+      text-decoration:none;color:inherit;box-shadow:0 8px 24px rgba(38,32,45,.05);transition:transform .2s,box-shadow .2s}
+    .hm-wide:hover{transform:translateY(-2px);box-shadow:0 16px 36px rgba(38,32,45,.09)}
+    .hm-wic{width:52px;height:52px;flex-shrink:0;border-radius:16px;background:#eafaf8;color:#00a49f;display:flex;align-items:center;justify-content:center}
+    .hm-wic svg{width:26px;height:26px}
+    .hm-wc{flex:1;min-width:0}
+    .hm-wc strong{display:block;font-family:'Poppins',sans-serif;font-weight:600;font-size:16px;letter-spacing:-.02em}
+    .hm-wc span{display:block;margin-top:3px;color:var(--muted,#7b7880);font-size:13px}
+    .hm-wchev{color:#b7b2ba}.hm-wchev svg{width:19px;height:19px}
   </style>
   <?php endif; ?>
 </main>

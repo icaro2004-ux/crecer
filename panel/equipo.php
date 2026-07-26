@@ -66,7 +66,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 </div>
 
 <?php if (!empty($guardar_err)): ?>
-  <div style="background:#ffe0d6;border:1px solid #f2b3a0;color:#8a2a1a;border-radius:12px;padding:11px 15px;margin-bottom:16px;font-weight:700;font-size:13.5px">⚠️ <?= $h($guardar_err) ?></div>
+  <div style="background:#ffe0d6;border:1px solid #f2b3a0;color:#8a2a1a;border-radius:12px;padding:11px 15px;margin-bottom:16px;font-weight:700;font-size:13.5px"><?= ico('bolt') ?> <?= $h($guardar_err) ?></div>
 <?php endif; ?>
 <?php if ($guardado): ?>
   <div style="background:#e6f7f4;border:1px solid #9ad9d0;color:#0a6a5f;border-radius:12px;padding:11px 15px;margin-bottom:16px;font-weight:700;font-size:13.5px">✓ Listo — tu equipo quedó bautizado.</div>
@@ -90,7 +90,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   </div>
   <div class="eq-save">
     <button type="submit">Guardar mi equipo</button>
-    <?php if (!empty($nombres)): ?><span class="eq-ok">Tu corillo ya tiene nombres 💪</span><?php endif; ?>
+    <?php if (!empty($nombres)): ?><span class="eq-ok">Tu corillo ya tiene nombres</span><?php endif; ?>
   </div>
 </form>
 

@@ -30,7 +30,7 @@ try {
     $res = publicar_pieza($pdo, $cid, $redes);
     if (!empty($res['ok'])) {
         reels_set($pdo, $rid, ['estado' => 'publicado', 'error_msg' => null]);
-        if ($mid) notif_crear($pdo, $mid, 'reel_publicado', '¡Tu reel se publicó! 🎉', 'Ya está en tus redes (' . implode(' + ', $redes) . ').', $link, '🎬');
+        if ($mid) notif_crear($pdo, $mid, 'reel_publicado', '¡Tu reel se publicó!', 'Ya está en tus redes (' . implode(' + ', $redes) . ').', $link, 'check-circle');
     } else {
         // Mensaje claro (primer texto explicativo del publicador).
         $err = $res['motivo'] ?? 'No se pudo publicar.';
@@ -38,12 +38,12 @@ try {
             if (is_string($v) && $v !== '' && $v !== 'ya publicada') { $err = $v; break; }
         }
         reels_set($pdo, $rid, ['error_msg' => 'publicar: ' . substr($err, 0, 300)]);  // estado sigue 'listo'
-        if ($mid) notif_crear($pdo, $mid, 'reel_error', 'No pude publicar tu reel', substr($err, 0, 200), $link, '⚠️');
+        if ($mid) notif_crear($pdo, $mid, 'reel_error', 'No pude publicar tu reel', substr($err, 0, 200), $link, 'bolt');
     }
 } catch (Throwable $e) {
     error_log('reel_publicar_worker #' . $rid . ': ' . $e->getMessage());
     try {
         reels_set($pdo, $rid, ['error_msg' => 'publicar: ' . substr($e->getMessage(), 0, 300)]);
-        if ($mid) notif_crear($pdo, $mid, 'reel_error', 'No pude publicar tu reel', 'Hubo un problema técnico. Reintenta.', $link, '⚠️');
+        if ($mid) notif_crear($pdo, $mid, 'reel_error', 'No pude publicar tu reel', 'Hubo un problema técnico. Reintenta.', $link, 'bolt');
     } catch (Throwable $e2) {}
 }

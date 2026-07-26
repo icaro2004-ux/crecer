@@ -81,7 +81,7 @@ $op_active = 'problemas';
 
   <?php if ($fallos): ?>
   <div class="card">
-    <h2>🚫 No pudieron publicar (<?= count($fallos) ?>)</h2>
+    <h2><?= ico('bolt') ?> No pudieron publicar (<?= count($fallos) ?>)</h2>
     <?php foreach ($fallos as $f): ?>
       <div class="prob">
         <div class="info">
@@ -104,7 +104,7 @@ $op_active = 'problemas';
 
   <?php if ($conx): ?>
   <div class="card">
-    <h2>🔌 Conexiones con problema (<?= count($conx) ?>)</h2>
+    <h2><?= ico('bolt') ?> Conexiones con problema (<?= count($conx) ?>)</h2>
     <?php foreach ($conx as $c):
       $razon = [];
       if (($c['estado'] ?? '')!=='activa') $razon[] = 'conexión '.$c['estado'];

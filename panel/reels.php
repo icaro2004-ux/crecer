@@ -12,6 +12,7 @@
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/reels.php';
+require_once __DIR__ . '/../includes/iconos.php';
 requiere_login();
 $usuario = usuario_actual($pdo);
 $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (int)$_GET['marca'] : null);
@@ -286,6 +287,7 @@ html,body{margin:0;padding:0}
 body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:var(--tinta);background:var(--crema);-webkit-font-smoothing:antialiased}
 h1,h2,h3,.pop{font-family:'Poppins',sans-serif}
 button{font-family:inherit;cursor:pointer}
+svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
 .wrap{max-width:1080px;margin:0 auto;padding:0 18px}
 
 /* Topbar propio (chrome aislada) */
@@ -317,7 +319,7 @@ button{font-family:inherit;cursor:pointer}
 /* Dropzone */
 .drop{border:2px dashed #d9d5de;border-radius:18px;background:var(--crema);padding:34px 20px;text-align:center;transition:.2s;cursor:pointer}
 .drop.hot{border-color:var(--teal);background:#effcfb}
-.drop .big{font-size:40px;line-height:1}
+.drop .big{font-size:40px;line-height:1;color:var(--teal)}
 .drop b{display:block;margin-top:8px;font-family:'Poppins';font-size:16px}
 .drop small{color:var(--muted);display:block;margin-top:4px}
 .clips{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;margin-top:16px}
@@ -332,8 +334,7 @@ button{font-family:inherit;cursor:pointer}
 .preset{display:flex;align-items:center;gap:14px;text-align:left;width:100%;background:#fff;border:2px solid var(--line);border-radius:16px;padding:16px;transition:.18s}
 .preset:hover{border-color:#cfcad4;transform:translateY(-1px)}
 .preset.sel{border-color:var(--rosa);background:#fff5f8;box-shadow:0 6px 22px -12px rgba(239,67,117,.5)}
-.preset .em{font-size:30px;width:52px;height:52px;border-radius:14px;background:var(--crema2);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.preset.sel .em{background:#ffe3ec}
+.preset .em{width:34px;height:34px;border-radius:10px;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
 .preset .nm{font-family:'Poppins';font-weight:800;font-size:17px}
 .preset .tg{color:var(--muted);font-size:13.5px;margin-top:2px}
 .preset .tick{margin-left:auto;width:24px;height:24px;border-radius:50%;border:2px solid var(--line);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff}
@@ -426,13 +427,13 @@ button{font-family:inherit;cursor:pointer}
 
 <div class="rtop">
   <a class="back" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>">← Volver al panel</a>
-  <a href="<?= $BASE ?>/notificaciones_centro.php?marca=<?= $marca_id ?>" aria-label="Notificaciones" title="Notificaciones" style="position:relative;margin-left:auto;font-size:21px;text-decoration:none;line-height:1;display:flex;align-items:center">🔔<?php if ($notif_nl > 0): ?><span style="position:absolute;top:-6px;right:-8px;background:var(--rosa);color:#fff;font-size:10px;font-weight:800;min-width:16px;height:16px;border-radius:999px;display:flex;align-items:center;justify-content:center;padding:0 4px"><?= $notif_nl > 9 ? '9+' : $notif_nl ?></span><?php endif; ?></a>
+  <a href="<?= $BASE ?>/notificaciones_centro.php?marca=<?= $marca_id ?>" aria-label="Notificaciones" title="Notificaciones" style="position:relative;margin-left:auto;font-size:21px;text-decoration:none;line-height:1;display:flex;align-items:center"><?= ico('bell') ?><?php if ($notif_nl > 0): ?><span style="position:absolute;top:-6px;right:-8px;background:var(--rosa);color:#fff;font-size:10px;font-weight:800;min-width:16px;height:16px;border-radius:999px;display:flex;align-items:center;justify-content:center;padding:0 4px"><?= $notif_nl > 9 ? '9+' : $notif_nl ?></span><?php endif; ?></a>
   <div class="brand" style="margin-left:12px"><span class="badge">Reels</span> encuéntralo <span>crecer</span></div>
 </div>
 
 <div class="wrap">
   <div class="hero">
-    <h1>Reels Studio 🎬</h1>
+    <h1>Reels Studio</h1>
     <p>Sube tus pedacitos de video. El corillo los une, elige el mejor momento de cada uno, les pone captions con sabor y te lo entrega listo. Tú casi ni trabajas.</p>
     <div class="steps">
       <div class="st on" data-s="1"><i></i></div>
@@ -448,12 +449,12 @@ button{font-family:inherit;cursor:pointer}
       <h2 class="qh">Tira tus clips aquí</h2>
       <p class="sub">Mínimo 2. Mientras más ángulos, mejor la mezcla. (mp4/mov, máx 100 MB c/u)</p>
       <div class="drop" id="drop">
-        <div class="big">🎞️</div>
+        <div class="big"><?= ico('camera') ?></div>
         <b>Toca para escoger tus videos</b>
         <small>o arrástralos aquí</small>
       </div>
       <input type="file" id="file" accept="video/*" multiple hidden>
-      <button class="btn btn-ghost" id="openbib" style="width:100%;margin-top:12px">📚 O tira de tu Biblioteca</button>
+      <button class="btn btn-ghost" id="openbib" style="width:100%;margin-top:12px">O tira de tu Biblioteca</button>
       <div class="clips" id="clips"></div>
       <div class="row">
         <button class="btn btn-primary" id="n1" disabled>Elegir el estilo →</button>
@@ -470,12 +471,12 @@ button{font-family:inherit;cursor:pointer}
       <div class="presets" id="presets">
         <?php foreach ($presets as $slug => $p): ?>
         <button class="preset<?= $slug==='vivido'?' sel':'' ?>" data-p="<?= $h($slug) ?>">
-          <div class="em"><?= $p['emoji'] ?></div>
+          <span class="em" style="background:<?= $h($p['accent']) ?>"></span>
           <div>
             <div class="nm"><?= $h($p['nombre']) ?></div>
             <div class="tg"><?= $h($p['tagline']) ?></div>
           </div>
-          <div class="tick">✓</div>
+          <div class="tick"><?= ico('check') ?></div>
         </button>
         <?php endforeach; ?>
       </div>
@@ -494,28 +495,28 @@ button{font-family:inherit;cursor:pointer}
       <p class="sub">Una línea ayuda al corillo a escribir mejores captions. Si no, él se inventa algo con sabor.</p>
       <input type="text" class="field" id="contexto" maxlength="140" placeholder="Ej: bizcocho de guayaba para el Día de las Madres">
       <div class="msec">
-        <div class="mlbl">🎵 Música</div>
+        <div class="mlbl">Música</div>
         <div class="mrow" id="mrow">
-          <button type="button" class="mchip sel" data-m="auto"><span class="mp">⭐</span><span>El corillo elige</span></button>
+          <button type="button" class="mchip sel" data-m="auto"><span>El corillo elige</span></button>
           <?php foreach ($musica_cat as $k => $t): ?>
           <button type="button" class="mchip" data-m="<?= $h($k) ?>" data-url="<?= $h($t['url']) ?>">
-            <span class="mp" data-play>▶</span><span><?= $t['emoji'] ?> <?= $h($t['nombre']) ?></span>
+            <span class="mp" data-play>▶</span><span><?= $h($t['nombre']) ?></span>
           </button>
           <?php endforeach; ?>
-          <button type="button" class="mchip" data-m="none"><span class="mp">🔇</span><span>Sin música</span></button>
+          <button type="button" class="mchip" data-m="none"><span>Sin música</span></button>
         </div>
       </div>
       <label class="subsw" id="subsw">
         <input type="checkbox" id="subtitulos">
         <span class="knob"></span>
-        <span class="lbl"><b>🗣️ Alguien habla en los clips</b><small>Pongo subtítulos automáticos de la voz (no inventados)</small></span>
+        <span class="lbl"><b>Alguien habla en los clips</b><small>Pongo subtítulos automáticos de la voz (no inventados)</small></span>
       </label>
       <?php if (!$render_ok): ?>
-        <div class="warn">⚠️ El motor de render todavía no está configurado en este servidor. Puedes crear el reel (el corillo lo planifica), pero el mp4 final no se generará hasta poner la key de Shotstack en producción.</div>
+        <div class="warn"><?= ico('bolt') ?> El motor de render todavía no está configurado en este servidor. Puedes crear el reel (el corillo lo planifica), pero el mp4 final no se generará hasta poner la key de Shotstack en producción.</div>
       <?php endif; ?>
       <div class="row">
         <button class="btn btn-ghost" data-back="2">← Atrás</button>
-        <button class="btn btn-go" id="crear">✨ Crear mi reel</button>
+        <button class="btn btn-go" id="crear">Crear mi reel</button>
       </div>
       <div class="hint">Tarda entre 30 seg y 2 min. Te lo muestro apenas esté.</div>
     </div>
@@ -539,23 +540,23 @@ button{font-family:inherit;cursor:pointer}
         <video id="rvid" controls playsinline></video>
       </div>
       <div class="meta">
-        <div class="kick">Tu reel está listo 🎉</div>
+        <div class="kick">Tu reel está listo</div>
         <h2 class="kh" id="rhook">Quedó brutal</h2>
         <p class="rs" id="rsum"></p>
         <div id="rchips"></div>
-        <div class="savedchip" id="rsaved" style="display:none">✅ Guardado en tu Biblioteca</div>
+        <div class="savedchip" id="rsaved" style="display:none"><?= ico('check-circle') ?> Guardado en tu Biblioteca</div>
         <div class="copybox" id="copybox" style="display:none">
-          <div class="cbh"><b>📝 Texto para tu post</b><button class="mini" id="cregen">↻ Otro</button></div>
+          <div class="cbh"><b>Texto para tu post</b><button class="mini" id="cregen">Otro</button></div>
           <textarea class="copyta" id="copytext" readonly></textarea>
-          <button class="btn btn-ghost" id="ccopy" style="width:100%">📋 Copiar texto</button>
+          <button class="btn btn-ghost" id="ccopy" style="width:100%">Copiar texto</button>
         </div>
         <div class="row" style="flex-wrap:wrap">
-          <button class="btn btn-go" id="rpub" style="flex:1">📲 Publicar ahora</button>
+          <button class="btn btn-go" id="rpub" style="flex:1">Publicar ahora</button>
         </div>
         <div id="pubmsg" style="display:none;margin-top:10px"></div>
         <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:10px">
-          <a class="btn btn-ghost" id="rdl" download style="text-decoration:none;text-align:center;flex:1">⬇️ Descargar</a>
-          <button class="btn btn-ghost" id="redit" style="flex:1">✂️ Ajustar</button>
+          <a class="btn btn-ghost" id="rdl" download style="text-decoration:none;text-align:center;flex:1">Descargar</a>
+          <button class="btn btn-ghost" id="redit" style="flex:1">Ajustar</button>
           <button class="btn btn-ghost" id="ragain" style="flex:1">Hacer otro</button>
         </div>
       </div>
@@ -571,7 +572,7 @@ button{font-family:inherit;cursor:pointer}
       <div id="segs"></div>
       <div class="row">
         <button class="btn btn-ghost" id="ecancel">← Cancelar</button>
-        <button class="btn btn-go" id="esave">🔁 Volver a montar</button>
+        <button class="btn btn-go" id="esave">Volver a montar</button>
       </div>
     </div>
   </section>
@@ -770,7 +771,7 @@ function animateLoad(){
     const dots=document.querySelectorAll('.dots i'); dots.forEach((d,k)=>d.classList.toggle('on',k===dotI%dots.length)); dotI++;
   },1600);
 }
-const STATE_TITLE={borrador:'Subiendo…',analizando:'Viendo tus clips 👀',armando:'Montando el reel ✍️',renderizando:'Renderizando 🎬'};
+const STATE_TITLE={borrador:'Subiendo…',analizando:'Viendo tus clips',armando:'Montando el reel',renderizando:'Renderizando'};
 
 async function poll(rid){
   try{
@@ -793,10 +794,10 @@ function showDone(j){
   $('#rdl').href=j.video_url||'#';
   if(j.hook) $('#rhook').textContent = '“'+j.hook+'”';
   $('#rsum').textContent = j.resumen||'El corillo escogió el orden y los cortes que más enganchan.';
-  const p=<?= json_encode(array_map(fn($x)=>['nombre'=>$x['nombre'],'emoji'=>$x['emoji']], $presets)) ?>;
-  const chips=[]; if(p[preset]) chips.push(p[preset].emoji+' '+p[preset].nombre);
-  if(j.duracion) chips.push('⏱️ '+Math.round(j.duracion)+'s');
-  chips.push('📱 9:16');
+  const p=<?= json_encode(array_map(fn($x)=>['nombre'=>$x['nombre']], $presets)) ?>;
+  const chips=[]; if(p[preset]) chips.push(p[preset].nombre);
+  if(j.duracion) chips.push(Math.round(j.duracion)+'s');
+  chips.push('9:16');
   $('#rchips').innerHTML=chips.map(c=>'<span class="chip">'+c+'</span>').join('');
   // Guardado en Biblioteca + copy del post
   $('#rsaved').style.display = j.guardado ? 'inline-block' : 'none';
@@ -812,14 +813,14 @@ async function refreshCopy(){
 }
 $('#ccopy').onclick=()=>{ const t=$('#copytext'); t.select(); document.execCommand('copy');
   navigator.clipboard && navigator.clipboard.writeText(t.value).catch(()=>{});
-  $('#ccopy').textContent='✅ ¡Copiado!'; setTimeout(()=>$('#ccopy').textContent='📋 Copiar texto',1600); };
+  $('#ccopy').textContent='¡Copiado!'; setTimeout(()=>$('#ccopy').textContent='Copiar texto',1600); };
 $('#cregen').onclick=async()=>{
   $('#cregen').textContent='…'; $('#cregen').disabled=true;
   const fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion','recopy'); fd.append('reel_id',curReel);
   try{ const j=await (await fetch(HERE,{method:'POST',body:fd})).json();
     if(j.ok) $('#copytext').value=j.copy; else alert(j.err||'No pude regenerar.');
   }catch(e){ alert('Se cayó la conexión.'); }
-  $('#cregen').textContent='↻ Otro'; $('#cregen').disabled=false;
+  $('#cregen').textContent='Otro'; $('#cregen').disabled=false;
 };
 function showFail(msg){ go('fail'); $('#failmsg').textContent=msg; }
 $('#retry').onclick=()=>{ $('#crear').disabled=false; go(3); };
@@ -838,7 +839,7 @@ $('#rpub').onclick=async()=>{
       const link=j.conectar?(' <a href="/crecer/panel/conectar.php?marca='+MARCA+'" style="color:#9c2b2b;font-weight:800">Conectar mis redes →</a>'):'';
       pm.innerHTML='<div class="err">'+(j.err||'No se pudo publicar.')+link+'</div>'; return; }
     // Publicando por detrás → polling.
-    pm.style.display='block'; pm.innerHTML='<div class="pill" style="background:#fff5f8;color:var(--rosa)">📤 Subiendo a tus redes… (Meta procesa el video, aguanta ~1 min)</div>';
+    pm.style.display='block'; pm.innerHTML='<div class="pill" style="background:#fff5f8;color:var(--rosa)">Subiendo a tus redes… (Meta procesa el video, aguanta ~1 min)</div>';
     pubTries=0; pollPublish();
   }catch(e){ b.disabled=false; b.textContent=old; pm.style.display='block'; pm.innerHTML='<div class="err">Se cayó la conexión al arrancar. Reintenta.</div>'; }
 };
@@ -847,14 +848,14 @@ async function pollPublish(){
   const fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion','estado'); fd.append('reel_id',curReel);
   try{
     const j=await (await fetch(HERE,{method:'POST',body:fd})).json();
-    if(j.ok && j.estado==='publicado'){ b.textContent='✅ ¡Publicado!'; pm.innerHTML='<div class="savedchip">🎉 Tu reel se publicó en tus redes.</div>'; return; }
-    if(j.ok && j.error){ b.disabled=false; b.textContent='📲 Publicar ahora';
+    if(j.ok && j.estado==='publicado'){ b.textContent='¡Publicado!'; pm.innerHTML='<div class="savedchip">Tu reel se publicó en tus redes.</div>'; return; }
+    if(j.ok && j.error){ b.disabled=false; b.textContent='Publicar ahora';
       const link=/conect|redes/i.test(j.error)?(' <a href="/crecer/panel/conectar.php?marca='+MARCA+'" style="color:#9c2b2b;font-weight:800">Conectar mis redes →</a>'):'';
       pm.innerHTML='<div class="err">'+j.error.replace(/^publicar:\s*/,'')+link+'</div>'; return; }
-    if(++pubTries>90){ b.disabled=false; b.textContent='📲 Publicar ahora';
-      pm.innerHTML='<div class="savedchip" style="background:#fff5f8;color:var(--rosa)">📤 Sigue subiendo — te aviso en 🔔 Notificaciones cuando esté. Puedes seguir en lo tuyo.</div>'; return; }
+    if(++pubTries>90){ b.disabled=false; b.textContent='Publicar ahora';
+      pm.innerHTML='<div class="savedchip" style="background:#fff5f8;color:var(--rosa)">Sigue subiendo — te aviso en Notificaciones cuando esté. Puedes seguir en lo tuyo.</div>'; return; }
     setTimeout(pollPublish, 3000);
-  }catch(e){ if(++pubTries>90){ pm.innerHTML='<div class="savedchip" style="background:#fff5f8;color:var(--rosa)">📤 Sigue subiendo — te aviso en 🔔 Notificaciones.</div>'; return; } setTimeout(pollPublish, 4000); }
+  }catch(e){ if(++pubTries>90){ pm.innerHTML='<div class="savedchip" style="background:#fff5f8;color:var(--rosa)">Sigue subiendo — te aviso en Notificaciones.</div>'; return; } setTimeout(pollPublish, 4000); }
 }
 
 // ── EDITOR de timing/captions ──
@@ -876,7 +877,7 @@ function renderSegs(){
       <div class="body">
         <input class="cap" value="${(s.caption||'').replace(/"/g,'&quot;')}" placeholder="Caption con sabor…" maxlength="120">
         <div class="dur">
-          <span>⏱️ <b class="ln">${len.toFixed(1)}s</b></span>
+          <span><b class="ln">${len.toFixed(1)}s</b></span>
           <input type="range" min="0.8" max="${Math.min(dur, 6).toFixed(1)}" step="0.1" value="${Math.min(len,Math.min(dur,6)).toFixed(1)}">
         </div>
       </div>
@@ -896,7 +897,7 @@ function renderSegs(){
 }
 $('#ecancel').onclick=()=>go('done');
 $('#esave').onclick=async()=>{
-  go('load'); animateLoad(); loadState='armando'; $('#loadmsg').textContent='Montando de nuevo ✍️';
+  go('load'); animateLoad(); loadState='armando'; $('#loadmsg').textContent='Montando de nuevo';
   const fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion','reeditar'); fd.append('reel_id',curReel);
   fd.append('segmentos', JSON.stringify(editSegs.map(s=>({clip_id:s.clip_id, in:s.in, out:s.out, caption:s.caption}))));
   try{

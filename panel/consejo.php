@@ -24,7 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!is_array($historial)) $historial = [];
     $turnos_usuario = count(array_filter($historial, fn($h) => ($h['rol'] ?? '') === 'user'));
     if ($turnos_usuario >= $MAX_TURNOS) {
-        echo json_encode(['ok'=>true, 'respuesta'=>'Con esto tenemos suficiente por hoy, jefe. El equipo ya anotó todo y lo mete a trabajar esta semana. ¡Nos vemos en el próximo consejo! 🙌', 'aprendido'=>[], 'cerrado'=>true], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['ok'=>true, 'respuesta'=>'Con esto tenemos suficiente por hoy, jefe. El equipo ya anotó todo y lo mete a trabajar esta semana. ¡Nos vemos en el próximo consejo!', 'aprendido'=>[], 'cerrado'=>true], JSON_UNESCAPED_UNICODE);
         exit;
     }
     try {
@@ -60,7 +60,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 ?>
 <style>
   .cj-head{display:flex;align-items:center;gap:12px;margin-bottom:4px}
-  .cj-orb{width:48px;height:48px;border-radius:14px;flex:none;display:grid;place-items:center;background:linear-gradient(135deg,var(--coral),var(--magenta));font-size:26px}
+  .cj-orb{width:48px;height:48px;border-radius:14px;flex:none;display:grid;place-items:center;background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff}
   .cj-h1{font-family:'Oswald',sans-serif;font-weight:700;font-size:23px;letter-spacing:.4px;color:var(--tinta);margin:0;line-height:1.1}
   .cj-sub{font-size:13px;color:var(--muted);margin:2px 0 0;max-width:640px;line-height:1.45}
   .cj-when{display:inline-block;background:var(--crema,#F7F5F1);border:1px solid var(--line);color:var(--muted);font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:99px;margin:12px 0}
@@ -82,7 +82,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 </style>
 
 <div class="cj-head">
-  <div class="cj-orb">🗣️</div>
+  <div class="cj-orb"><?= ico('mic','ic ic-lg') ?></div>
   <div>
     <h1 class="cj-h1">El Consejo del Corillo</h1>
     <div class="cj-sub">Tu reunión de staff semanal. El equipo te trae lo que le importa y te hace preguntas — y con lo que les cuentas, <b>aprenden tu negocio</b>.</div>
@@ -93,12 +93,12 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   <!-- YA se reunieron esta semana -->
   <span class="cj-when">Próximo consejo: <?= $h(date('d/m', strtotime($disp['proximo']))) ?></span>
   <div class="cj-closed">
-    <h3>Ya nos reunimos esta semana 🙌</h3>
+    <h3>Ya nos reunimos esta semana</h3>
     <p style="margin:0 0 6px">El Consejo es una vez por semana para no quitarte tiempo. <?= $h($gerente_nombre) ?> y el equipo están trabajando con lo que hablamos.</p>
     <?php if ($aprendizajes): ?>
       <p style="margin:10px 0 4px;font-weight:800">Lo último que el corillo aprendió de ti:</p>
       <div class="cj-chips">
-        <?php foreach ($aprendizajes as $a): ?><div class="cj-chip">🧠 <?= $h($a) ?></div><?php endforeach; ?>
+        <?php foreach ($aprendizajes as $a): ?><div class="cj-chip"><?= ico('lightbulb') ?> <?= $h($a) ?></div><?php endforeach; ?>
       </div>
     <?php endif; ?>
   </div>
@@ -127,7 +127,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     function bubble(t,cls){var d=document.createElement('div');d.className='cj-m '+cls;d.textContent=t;msgs.appendChild(d);d.scrollIntoView({behavior:'smooth',block:'end'});return d;}
     function learn(items){ if(!items||!items.length) return;
       var d=document.createElement('div');d.className='cj-learn';
-      d.innerHTML='🧠 <b>El corillo aprendió:</b> '+items.map(esc).join(' · ');
+      d.innerHTML='<b>El corillo aprendió:</b> '+items.map(esc).join(' · ');
       msgs.appendChild(d);d.scrollIntoView({behavior:'smooth',block:'end'});
     }
     function cerrar(){ input.disabled=true; send.disabled=true; input.placeholder='Consejo cerrado por esta semana.'; }

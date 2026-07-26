@@ -92,7 +92,7 @@ $por_agente = $pdo->query("SELECT agente, COUNT(*) n, COALESCE(SUM(costo_usd),0)
   </div>
 
   <div class="card">
-    <h2>💵 Revenue real (MRR)</h2>
+    <h2><?= ico('dollar') ?> Revenue real (MRR)</h2>
     <div class="row"><span class="k">Clientes fríos (no allegados)</span><span><b>$<?= number_format((float)$mrr['frio'],2) ?></b>/mes</span></div>
     <div class="row"><span class="k">Allegados (related-party)</span><span>$<?= number_format((float)$mrr['allegado'],2) ?>/mes</span></div>
     <div class="row"><span class="k">Suscripciones activas</span><span><?= $pagando ?> de <?= $clientes ?> negocios</span></div>
@@ -100,7 +100,7 @@ $por_agente = $pdo->query("SELECT agente, COUNT(*) n, COALESCE(SUM(costo_usd),0)
   </div>
 
   <div class="card">
-    <h2>📈 Actividad de IA · últimos 14 días</h2>
+    <h2><?= ico('chart') ?> Actividad de IA · últimos 14 días</h2>
     <div class="bars">
       <?php foreach ($dias as $d): ?>
         <div class="bar" title="<?= $d['d'] ?>: <?= $d['n'] ?> decisiones"><span class="col" style="height:<?= max(2,(int)round($d['n']/$max*100)) ?>%"></span><small><?= (int)substr($d['d'],8,2) ?></small></div>
@@ -109,7 +109,7 @@ $por_agente = $pdo->query("SELECT agente, COUNT(*) n, COALESCE(SUM(costo_usd),0)
   </div>
 
   <div class="card">
-    <h2>🤖 Por agente</h2>
+    <h2><?= ico('sparkles') ?> Por agente</h2>
     <?php foreach ($por_agente as $a): ?>
       <div class="row"><span class="k"><?= $h($a['agente']) ?></span><span><b><?= number_format((int)$a['n']) ?></b> decisiones · $<?= number_format((float)$a['c'],2) ?></span></div>
     <?php endforeach; ?>

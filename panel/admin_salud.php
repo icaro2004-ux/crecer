@@ -95,7 +95,7 @@ $err_pub = $pdo->query("SELECT p.created_at, p.plataforma, p.error_msg, m.nombre
   <?php if ($flash): ?><div style="background:#e6f6ee;border:1px solid #b9eccf;color:#0d7a44;border-radius:12px;padding:11px 15px;margin-bottom:14px;font-weight:700;font-size:13.5px"><?= $h($flash[1]) ?></div><?php endif; ?>
 
   <div class="card">
-    <h2>🔌 Integraciones</h2>
+    <h2><?= ico('bolt') ?> Integraciones</h2>
     <?php foreach ($integraciones as $i): ?>
       <div class="row"><span class="k"><?= $h($i[0]) ?></span><span><span class="st <?= $i[1]?'ok':'bad' ?>"><?= $i[1]?'✓':'✕' ?> <?= $h($i[2]) ?></span></span></div>
     <?php endforeach; ?>
@@ -103,13 +103,13 @@ $err_pub = $pdo->query("SELECT p.created_at, p.plataforma, p.error_msg, m.nombre
 
   <div class="grid2">
     <div class="card">
-      <h2>⚙️ Publicador (cron)</h2>
+      <h2><?= ico('settings') ?> Publicador (cron)</h2>
       <div class="row"><span class="k">Última publicación</span><span class="st <?= $ult_pub?'ok':'none' ?>"><?= $h($ago($ult_pub)) ?></span></div>
       <div class="row"><span class="k">Publicados (24h)</span><span><b><?= $pub_24h ?></b></span></div>
       <div class="row"><span class="k">Fallidos (24h)</span><span><span class="st <?= $fail_24h>0?'bad':'ok' ?>"><?= $fail_24h ?></span></span></div>
     </div>
     <div class="card">
-      <h2>📊 Métricas + IA</h2>
+      <h2><?= ico('chart') ?> Métricas + IA</h2>
       <div class="row"><span class="k">Última métrica refrescada</span><span class="st <?= $ult_met?'ok':'none' ?>"><?= $h($ago($ult_met)) ?></span></div>
       <div class="row"><span class="k">Última actividad de IA</span><span class="st <?= $ult_ia?'ok':'none' ?>"><?= $h($ago($ult_ia)) ?></span></div>
       <div class="row"><span class="k">Errores de IA (24h)</span><span><span class="st <?= $ia_err_24>0?'warn':'ok' ?>"><?= $ia_err_24 ?></span></span></div>
@@ -127,16 +127,16 @@ $err_pub = $pdo->query("SELECT p.created_at, p.plataforma, p.error_msg, m.nombre
   </div>
 
   <div class="card">
-    <h2>🧨 Errores recientes — publicación</h2>
-    <?php if (!$err_pub): ?><p style="color:var(--muted);font-size:13px;margin:0">Ninguno. 👍</p>
+    <h2><?= ico('bolt') ?> Errores recientes — publicación</h2>
+    <?php if (!$err_pub): ?><p style="color:var(--muted);font-size:13px;margin:0">Ninguno.</p>
     <?php else: foreach ($err_pub as $e): ?>
       <div class="item"><span class="neg"><?= $h($e['nombre_negocio'] ?: '—') ?></span><span style="color:var(--muted)"><?= $h($e['plataforma']) ?> · <?= $h(date('d/m H:i', strtotime($e['created_at']))) ?></span><div class="err"><?= $h(mb_substr((string)$e['error_msg'],0,170)) ?></div></div>
     <?php endforeach; endif; ?>
   </div>
 
   <div class="card">
-    <h2>🧨 Errores recientes — IA</h2>
-    <?php if (!$err_ia): ?><p style="color:var(--muted);font-size:13px;margin:0">Ninguno. 👍</p>
+    <h2><?= ico('bolt') ?> Errores recientes — IA</h2>
+    <?php if (!$err_ia): ?><p style="color:var(--muted);font-size:13px;margin:0">Ninguno.</p>
     <?php else: foreach ($err_ia as $e): ?>
       <div class="item"><span class="neg"><?= $h($e['nombre_negocio'] ?: '—') ?></span><span style="color:var(--muted)"><?= $h($e['agente']) ?> · <?= $h(date('d/m H:i', strtotime($e['created_at']))) ?></span><div class="err"><?= $h(mb_substr((string)$e['error_msg'],0,170)) ?></div></div>
     <?php endforeach; endif; ?>

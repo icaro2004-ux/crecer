@@ -37,17 +37,17 @@ $ago = function($ts){
 };
 
 $nombres_agente = [
-    'planificador'=>['🗓️','El Estratega','planificó contenido'],
-    'creador'=>['✍️','La Creativa','escribió un caption'],
-    'diseñador'=>['🎨','El Diseñador','creó un arte'],
-    'intake'=>['🧠','El Intake','aprendió el negocio'],
-    'asistente'=>['💬','El Asistente','resolvió una duda'],
-    'retencion'=>['🤝','El Vendedor','escribió a un cliente'],
-    'analitica'=>['📊','El Analista','resumió el mes'],
-    'aprendiz'=>['📚','El Aprendiz','aprendió vocabulario'],
-    'editor'=>['📝','El Editor','ajustó un texto'],
+    'planificador'=>['calendar','El Estratega','planificó contenido'],
+    'creador'=>['pen','La Creativa','escribió un caption'],
+    'diseñador'=>['palette','El Diseñador','creó un arte'],
+    'intake'=>['lightbulb','El Intake','aprendió el negocio'],
+    'asistente'=>['chat','El Asistente','resolvió una duda'],
+    'retencion'=>['users','El Vendedor','escribió a un cliente'],
+    'analitica'=>['chart','El Analista','resumió el mes'],
+    'aprendiz'=>['bookmark','El Aprendiz','aprendió vocabulario'],
+    'editor'=>['pen','El Editor','ajustó un texto'],
 ];
-$agf = fn($a) => $nombres_agente[$a] ?? ['⚙️', ucfirst($a), 'ejecutó una acción'];
+$agf = fn($a) => $nombres_agente[$a] ?? ['settings', ucfirst($a), 'ejecutó una acción'];
 
 // ── Métricas reales de ESTA marca ────────────────────────────
 $tot = $pdo->prepare("SELECT COUNT(*) n, COUNT(DISTINCT agente) ag, COALESCE(SUM(costo_usd),0) costo,
@@ -111,10 +111,10 @@ require __DIR__ . '/_shell.php';
 </style>
 
 <div class="ev-wrap">
-  <h1 class="page-h" style="margin-bottom:4px">🔍 Evidencia del Corillo</h1>
+  <h1 class="page-h" style="margin-bottom:4px"><?= ico('compass') ?> Evidencia del Corillo</h1>
   <p class="ev-lede">Cada cosa que la IA decide y hace por tu negocio queda registrada. Esto es la prueba — cruda y real — de que el corillo opera, no solo asiste.</p>
 
-  <div class="ev-sys">🌎 En total, el corillo ha ejecutado <b><?= number_format((int)$sis['n']) ?></b> acciones de IA para <b><?= (int)$sis['marcas'] ?></b> negocios.</div>
+  <div class="ev-sys">En total, el corillo ha ejecutado <b><?= number_format((int)$sis['n']) ?></b> acciones de IA para <b><?= (int)$sis['marcas'] ?></b> negocios.</div>
 
   <div class="ev-grid">
     <div class="ev-kpi"><div class="v"><?= number_format((int)$T['n']) ?></div><div class="l">Acciones de IA (este negocio)</div></div>
@@ -126,7 +126,7 @@ require __DIR__ . '/_shell.php';
 
   <?php if (!empty($marca['autopilot'])): ?>
   <div class="ev-card" style="border-color:color-mix(in srgb,var(--terracota) 30%,#fff)">
-    <h2>🌙 Operación autónoma (sin humano)</h2>
+    <h2>Operación autónoma (sin humano)</h2>
     <p style="margin:0;font-size:13.5px;color:var(--tinta)">El piloto automático está <b>ON</b>: el corillo planifica y redacta posts <b>solo</b>, por cron, y se los deja al dueño para aprobar.
       <?php if (!empty($marca['autopilot_ultimo'])): ?> Última corrida autónoma: <b><?= $h(date('d/m/Y H:i', strtotime($marca['autopilot_ultimo']))) ?></b>.<?php endif; ?>
     </p>
@@ -134,11 +134,11 @@ require __DIR__ . '/_shell.php';
   <?php endif; ?>
 
   <div class="ev-card">
-    <h2>👥 Qué hizo cada agente</h2>
+    <h2><?= ico('users') ?> Qué hizo cada agente</h2>
     <?php if (!$desglose): ?><p class="ev-empty">Todavía no hay actividad registrada.</p><?php else: foreach ($desglose as $d):
       [$e,$nm,$ro] = $agf($d['agente']); ?>
       <div class="ev-ag">
-        <span class="e"><?= $e ?></span>
+        <span class="e"><?= ico($e) ?></span>
         <div><div class="nm"><?= $h($nm) ?></div><div class="ro"><?= $h($ro) ?> · activo <?= $h($ago($d['ult'])) ?></div></div>
         <div class="n"><b><?= (int)$d['n'] ?></b><span>$<?= number_format((float)$d['costo'],4) ?></span></div>
       </div>
@@ -146,12 +146,12 @@ require __DIR__ . '/_shell.php';
   </div>
 
   <div class="ev-card">
-    <h2>⚡ Lo que el corillo ejecutó (en vivo)</h2>
+    <h2><?= ico('bolt') ?> Lo que el corillo ejecutó (en vivo)</h2>
     <?php if (!$eventos): ?><p class="ev-empty">Aún no hay acciones. Pon el corillo a trabajar y aparecen aquí.</p>
     <?php else: foreach ($eventos as $ev): [$e,$nm] = $agf($ev['agente']); ?>
       <div class="ev-ev">
         <div class="top">
-          <span class="who"><?= $e ?> <?= $h($nm) ?></span>
+          <span class="who"><?= ico($e) ?> <?= $h($nm) ?></span>
           <span class="act"><?= $h($ev['accion']) ?></span>
           <span class="t"><?= $h($ago($ev['created_at'])) ?></span>
         </div>
@@ -163,12 +163,12 @@ require __DIR__ . '/_shell.php';
   </div>
 
   <div class="ev-card">
-    <h2>📲 Publicaciones a redes</h2>
+    <h2><?= ico('send') ?> Publicaciones a redes</h2>
     <?php if (!$publicaciones): ?>
       <p class="ev-empty">Cuando el corillo publique a Instagram/Facebook (redes conectadas), cada publicación queda registrada aquí con su enlace.</p>
     <?php else: foreach ($publicaciones as $pb): ?>
       <div class="ev-ag">
-        <span class="e"><?= $pb['plataforma']==='instagram'?'📸':'👍' ?></span>
+        <span class="e"><?= $pb['plataforma']==='instagram'?ico('instagram'):ico('facebook') ?></span>
         <div><div class="nm"><?= $h(ucfirst($pb['plataforma'])) ?> · <?= $pb['estado']==='ok'?'publicado':'falló' ?></div>
           <div class="ro"><?= $h($ago($pb['created_at'])) ?></div></div>
         <?php if ($pb['permalink']): ?><a class="ro" style="margin-left:auto;color:var(--terracota);font-weight:700;text-decoration:none" href="<?= $h($pb['permalink']) ?>" target="_blank" rel="noopener">ver post →</a><?php endif; ?>

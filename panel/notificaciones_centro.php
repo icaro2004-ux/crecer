@@ -12,6 +12,7 @@
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/notif.php';
+require_once __DIR__ . '/../includes/iconos.php';
 requiere_login();
 $usuario = usuario_actual($pdo);
 $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (int)$_GET['marca'] : null);
@@ -62,6 +63,7 @@ function notif_hace(string $ts): string {
 <style>
 :root{--rosa:#EF4375;--teal:#00A49F;--tinta:#231F20;--muted:#7a7580;--line:#eceaee;--crema:#faf9fb}
 *{box-sizing:border-box}body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:var(--tinta);background:var(--crema)}
+svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
 .wrap{max-width:640px;margin:0 auto;padding:18px 16px 60px}
 .top{display:flex;align-items:center;gap:10px;padding:6px 0 14px}
 .top a{color:var(--muted);text-decoration:none;font-weight:700;font-size:14px}
@@ -69,13 +71,13 @@ h1{font-family:'Poppins';font-size:26px;font-weight:900;margin:6px 0 16px}
 .n{display:flex;gap:13px;align-items:flex-start;background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 15px;margin-bottom:10px;text-decoration:none;color:inherit;transition:.15s}
 .n:hover{border-color:#d9d5de;transform:translateY(-1px)}
 .n.un{background:#fff5f8;border-color:#f6ccda}
-.n .em{font-size:24px;width:44px;height:44px;flex-shrink:0;border-radius:12px;background:var(--crema);display:flex;align-items:center;justify-content:center}
+.n .em{font-size:22px;width:44px;height:44px;flex-shrink:0;border-radius:12px;background:var(--crema);display:flex;align-items:center;justify-content:center;color:var(--rosa)}
 .n.un .em{background:#ffe3ec}
 .n .tt{font-family:'Poppins';font-weight:700;font-size:15px;line-height:1.25}
 .n .ms{color:var(--muted);font-size:13.5px;margin-top:3px;line-height:1.4}
 .n .tm{color:var(--muted);font-size:12px;margin-left:auto;flex-shrink:0;white-space:nowrap}
 .nwrap{position:relative}
-.nwrap::after{content:"🗑";position:absolute;top:0;bottom:10px;left:16px;display:flex;align-items:center;font-size:20px;opacity:.6;z-index:0}
+.nwrap::after{content:"Borrar";position:absolute;top:0;bottom:10px;left:18px;display:flex;align-items:center;font-size:14px;font-weight:700;color:var(--rosa);opacity:.85;z-index:0}
 .n{position:relative;z-index:1;cursor:pointer;touch-action:pan-y;user-select:none}
 .ndel{margin-left:6px;flex-shrink:0;background:none;border:0;cursor:pointer;font-size:16px;opacity:.35;padding:4px;transition:opacity .15s}
 .ndel:hover{opacity:1}
@@ -90,13 +92,13 @@ h1{font-family:'Poppins';font-size:26px;font-weight:900;margin:6px 0 16px}
 <div class="wrap">
   <div class="top"><a href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>">← Volver al panel</a></div>
   <div class="hbar">
-    <h1 style="margin:0">🔔 Notificaciones</h1>
+    <h1 style="margin:0;display:flex;align-items:center;gap:9px"><?= ico('bell') ?> Notificaciones</h1>
     <?php if ($items): ?><button class="clr" id="clearAll">Limpiar todo</button><?php endif; ?>
   </div>
 
   <?php if (!$items): ?>
     <div class="empty">
-      <div class="big">🌱</div>
+      <div class="big"><?= ico('inbox-empty') ?></div>
       <p><b>Todavía nada por aquí.</b><br>Cuando el corillo termine un reel o publique algo, te aviso aquí.</p>
     </div>
   <?php else: ?>
@@ -104,18 +106,18 @@ h1{font-family:'Poppins';font-size:26px;font-weight:900;margin:6px 0 16px}
     <?php foreach ($items as $n): $un = !$n['leida']; $lk = $n['link'] ?: ($BASE.'/index.php?marca='.$marca_id); ?>
       <div class="nwrap">
         <div class="n <?= $un ? 'un' : '' ?>" data-id="<?= (int)$n['id'] ?>" data-link="<?= $h($lk) ?>">
-          <div class="em"><?= $h($n['icono'] ?: '🔔') ?></div>
+          <div class="em"><?= ico($n['icono'] ?: 'bell') ?></div>
           <div style="min-width:0">
             <div class="tt"><?= $h($n['titulo']) ?></div>
             <?php if ($n['mensaje']): ?><div class="ms"><?= $h($n['mensaje']) ?></div><?php endif; ?>
           </div>
           <div class="tm"><?= $h(notif_hace($n['created_at'])) ?></div>
-          <button class="ndel" aria-label="Eliminar" title="Eliminar">🗑</button>
+          <button class="ndel" aria-label="Eliminar" title="Eliminar"><?= ico('trash') ?></button>
         </div>
       </div>
     <?php endforeach; ?>
     </div>
-    <p style="text-align:center;color:var(--muted);font-size:12.5px;margin-top:14px">Desliza a la derecha para borrar, o usa 🗑</p>
+    <p style="text-align:center;color:var(--muted);font-size:12.5px;margin-top:14px">Desliza a la derecha para borrar, o usa el bote de basura.</p>
   <?php endif; ?>
 </div>
 

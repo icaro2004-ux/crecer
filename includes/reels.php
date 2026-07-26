@@ -26,7 +26,7 @@ function reels_presets(): array {
         'vivido' => [
             'nombre'    => 'Vívido',
             'tagline'   => 'Cortes rápidos, colores que saltan, energía.',
-            'emoji'     => '🔥',
+            'accent'    => '#EF4375',
             'title_style'=> 'chunk',
             'title_color'=> '#ffffff',
             'trans_in'  => 'zoom',
@@ -43,7 +43,7 @@ function reels_presets(): array {
         'accion' => [
             'nombre'    => 'Acción',
             'tagline'   => 'Impacto, movimiento, sincronizado al beat.',
-            'emoji'     => '⚡',
+            'accent'    => '#F5A623',
             'title_style'=> 'blockbuster',
             'title_color'=> '#ffffff',
             'trans_in'  => 'slideUp',
@@ -60,7 +60,7 @@ function reels_presets(): array {
         'elegante' => [
             'nombre'    => 'Elegante',
             'tagline'   => 'Transiciones suaves, tipografía fina, clase.',
-            'emoji'     => '🕊️',
+            'accent'    => '#6B5AED',
             'title_style'=> 'vogue',
             'title_color'=> '#ffffff',
             'trans_in'  => 'fade',
@@ -77,7 +77,7 @@ function reels_presets(): array {
         'sabroso' => [
             'nombre'    => 'Apetitoso',
             'tagline'   => 'Para comida: cálido, en close-up, con antojo.',
-            'emoji'     => '🍰',
+            'accent'    => '#E8663D',
             'title_color'=> '#ffffff',
             'trans_in'  => 'fade',
             'trans_out' => 'fade',
@@ -93,7 +93,7 @@ function reels_presets(): array {
         'fiesta' => [
             'nombre'    => 'Fiesta',
             'tagline'   => 'Promos y celebración: colorido, rápido, alegre.',
-            'emoji'     => '🎉',
+            'accent'    => '#EC4899',
             'title_color'=> '#ffffff',
             'trans_in'  => 'slideLeft',
             'trans_out' => 'slideLeft',
@@ -109,7 +109,7 @@ function reels_presets(): array {
         'minimal' => [
             'nombre'    => 'Limpio',
             'tagline'   => 'Minimalista: mucho aire, poco texto, suave.',
-            'emoji'     => '🤍',
+            'accent'    => '#64748B',
             'title_color'=> '#ffffff',
             'trans_in'  => 'fade',
             'trans_out' => 'fade',
@@ -125,7 +125,7 @@ function reels_presets(): array {
         'retro' => [
             'nombre'    => 'Retro',
             'tagline'   => 'Nostálgico y cálido, sabor vintage.',
-            'emoji'     => '📼',
+            'accent'    => '#B45309',
             'title_color'=> '#ffe9c7',
             'trans_in'  => 'fade',
             'trans_out' => 'fade',
@@ -141,7 +141,7 @@ function reels_presets(): array {
         'oferta' => [
             'nombre'    => 'Oferta',
             'tagline'   => 'Anuncio directo: texto grande y vendedor.',
-            'emoji'     => '🏷️',
+            'accent'    => '#DC2626',
             'title_color'=> '#ffffff',
             'trans_in'  => 'zoom',
             'trans_out' => 'zoom',
@@ -418,10 +418,10 @@ function reels_music_catalogo(): array {
     if (defined('REELS_MUSIC_CATALOGO') && is_array(REELS_MUSIC_CATALOGO)) return REELS_MUSIC_CATALOGO;
     $b = 'https://shotstack-assets.s3.amazonaws.com/music/unminus/';
     return [
-        'palmtrees' => ['nombre' => 'Alegre',   'emoji' => '🌴', 'url' => $b . 'palmtrees.mp3'],
-        'lit'       => ['nombre' => 'Hype',     'emoji' => '🔥', 'url' => $b . 'lit.mp3'],
-        'ambisax'   => ['nombre' => 'Elegante', 'emoji' => '🎷', 'url' => $b . 'ambisax.mp3'],
-        'berlin'    => ['nombre' => 'Moderna',  'emoji' => '🎧', 'url' => $b . 'berlin.mp3'],
+        'palmtrees' => ['nombre' => 'Alegre',   'url' => $b . 'palmtrees.mp3'],
+        'lit'       => ['nombre' => 'Hype',     'url' => $b . 'lit.mp3'],
+        'ambisax'   => ['nombre' => 'Elegante', 'url' => $b . 'ambisax.mp3'],
+        'berlin'    => ['nombre' => 'Moderna',  'url' => $b . 'berlin.mp3'],
     ];
 }
 
@@ -473,7 +473,7 @@ function reels_endcard_asset(?array $marca, array $preset): ?array {
          . ".lg{max-width:360px;max-height:360px;object-fit:contain;margin-bottom:46px;border-radius:28px}"
          . ".nm{font-family:{$c['family']};font-size:78px;font-weight:{$c['weight']};color:{$preset['title_color']};line-height:1.08}"
          . ".cta{font-family:Arial,sans-serif;font-size:46px;color:{$preset['title_color']};opacity:.95;margin-top:40px;background:rgba(255,255,255,.14);padding:22px 46px;border-radius:999px}";
-    $html = '<div class="card">' . $logo_html . '<div class="nm">' . $nm . '</div><div class="cta">📲 ' . $ct . '</div></div>';
+    $html = '<div class="card">' . $logo_html . '<div class="nm">' . $nm . '</div><div class="cta">' . $ct . '</div></div>';
     return ['type'=>'html', 'html'=>$html, 'css'=>$css, 'width'=>1080, 'height'=>1920, 'background'=>$bg];
 }
 

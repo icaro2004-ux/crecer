@@ -171,12 +171,12 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   }
   function learn(items){ if(!items||!items.length) return;
     var d=document.createElement('div');d.className='sc-learn';
-    d.innerHTML='🧠 <b>El corillo aprendió:</b> '+items.map(esc).join(' · ');
+    d.innerHTML='<b>El corillo aprendió:</b> '+items.map(esc).join(' · ');
     msgs.appendChild(d); scroll(d);
   }
   function cta(){
     var d=document.createElement('div');d.className='sc-cta';
-    d.innerHTML='<a href="/crecer/panel/propuestas.php?marca='+MARCA+'">👀 Ver lo que dejó el corillo</a>';
+    d.innerHTML='<a href="/crecer/panel/propuestas.php?marca='+MARCA+'">Ver lo que dejó el corillo</a>';
     msgs.appendChild(d); scroll(d);
   }
 

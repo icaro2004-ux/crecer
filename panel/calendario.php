@@ -66,8 +66,7 @@ foreach ($e->fetchAll() as $r) $eventos[(int)$r['d']][] = ['tipo'=>'evento']+$r;
 
 $meses = [1=>'Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
-$emoji_plat = ['instagram'=>'📸','facebook'=>'👍','whatsapp'=>'💬'];
-$est_col = ['borrador'=>'#9A6A0E','aprobado'=>'#0F7A45','rechazado'=>'#C23A2E','publicado'=>'#0A7886',
+$est_col =['borrador'=>'#9A6A0E','aprobado'=>'#0F7A45','rechazado'=>'#C23A2E','publicado'=>'#0A7886',
             'recibida'=>'#9A6A0E','en_proceso'=>'#0A7886','completada'=>'#0F7A45','cancelada'=>'#C23A2E'];
 $primerDia = (int)date('N', strtotime("$anio-$mes-01"));
 $diasMes   = (int)date('t', strtotime("$anio-$mes-01"));
@@ -132,8 +131,8 @@ require __DIR__ . '/_shell.php';
 
 <h1 class="page-h">Contenido</h1>
 <div class="viewtoggle">
-  <a class="vt" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>">📋 Lista</a>
-  <a class="vt on" href="/crecer/panel/calendario.php?marca=<?= $marca_id ?>">📅 Calendario</a>
+  <a class="vt" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>"><?= ico('list') ?> Lista</a>
+  <a class="vt on" href="/crecer/panel/calendario.php?marca=<?= $marca_id ?>"><?= ico('calendar') ?> Calendario</a>
 </div>
 
 <div class="calbar">
@@ -145,10 +144,10 @@ require __DIR__ . '/_shell.php';
   <a class="today" href="?marca=<?= $marca_id ?>&anio=<?= date('Y') ?>&mes=<?= date('n') ?>">Hoy</a>
   <div class="filtros">
     <span class="ft on" data-f="todo">Todo</span>
-    <span class="ft" data-f="contenido">📸 Contenido</span>
-    <span class="ft" data-f="orden">📦 Órdenes</span>
-    <span class="ft" data-f="evento">📌 Eventos</span>
-    <button type="button" class="addbtn" onclick="abrirAdd('')">➕ Evento</button>
+    <span class="ft" data-f="contenido"><?= ico('camera') ?> Contenido</span>
+    <span class="ft" data-f="orden"><?= ico('package') ?> Órdenes</span>
+    <span class="ft" data-f="evento"><?= ico('pin') ?> Eventos</span>
+    <button type="button" class="addbtn" onclick="abrirAdd('')"><?= ico('plus') ?> Evento</button>
     <a class="ics" href="/crecer/panel/calendario_ics.php?marca=<?= $marca_id ?>">⤵ Exportar (.ics)</a>
   </div>
 </div>
@@ -162,15 +161,15 @@ require __DIR__ . '/_shell.php';
         <div class="dnum"><?= $d ?></div>
         <?php foreach ($eventos[$d] ?? [] as $ev):
           if ($ev['tipo']==='contenido') {
-            $col=$est_col[$ev['estado']]??'#888'; $ic=$emoji_plat[$ev['plataforma']]??'•';
+            $col=$est_col[$ev['estado']]??'#888';
             $titulo=mb_substr($ev['caption'] ?: $ev['tipo'],0,16);
             $data='data-tipo="contenido" data-cap="'.$h($ev['caption']).'" data-img="'.$h($ev['grafica_path']??'').'" data-meta="'.$h(ucfirst($ev['plataforma']).' · '.$ev['estado']).'"';
           } elseif ($ev['tipo']==='orden') {
-            $col=$est_col[$ev['estado']]??'#0A7886'; $ic='📦';
+            $col=$est_col[$ev['estado']]??'#0A7886';
             $titulo=mb_substr($ev['cliente_nombre'],0,16);
             $data='data-tipo="orden" data-cliente="'.$h($ev['cliente_nombre']).'" data-desc="'.$h($ev['descripcion']??'').'" data-monto="'.$h($ev['monto']??'').'" data-estado="'.$h($ev['estado']).'" data-hora="'.$h($ev['hora']??'').'"';
           } else { // evento propio
-            $col='#7A4FB5'; $ic='📌';
+            $col='#7A4FB5';
             $titulo=mb_substr($ev['titulo'],0,16);
             $data='data-tipo="evento" data-titulo="'.$h($ev['titulo']).'" data-nota="'.$h($ev['nota']??'').'" data-hora="'.$h($ev['hora']??'').'"';
           }
@@ -178,21 +177,21 @@ require __DIR__ . '/_shell.php';
         ?>
           <div class="ev ev-<?= $ev['tipo'] ?>" draggable="true" data-id="<?= $ev['id'] ?>" <?= $data ?>
                style="background:<?= $col ?>" title="<?= $h($tt) ?>">
-            <?= $ic ?> <?= $h($titulo) ?>
+            <?= $h($titulo) ?>
           </div>
         <?php endforeach; ?>
       </div>
     <?php endfor; ?>
   </div>
 </div>
-<p class="hint">🖱️ Arrastra un evento a otro día para reprogramarlo. Tócalo para ver el detalle. Filtra arriba por tipo.</p>
+<p class="hint">Arrastra un evento a otro día para reprogramarlo. Tócalo para ver el detalle. Filtra arriba por tipo.</p>
 
 <div class="ev-ov" id="evov"><div class="ev-box" id="evbox"></div></div>
 
 <div class="add-ov" id="addov">
   <form class="add-box" method="post" action="">
     <button type="button" class="x" onclick="document.getElementById('addov').classList.remove('show')">✕</button>
-    <h3>📌 Nuevo evento</h3>
+    <h3><?= ico('pin') ?> Nuevo evento</h3>
     <div style="font-size:13px;color:var(--muted)">Tu agenda de trabajo — citas, recados, reuniones. Se sincroniza con Outlook.</div>
     <?= csrf_field() ?>
     <input type="hidden" name="accion" value="crear_evento">
@@ -252,21 +251,21 @@ require __DIR__ . '/_shell.php';
         html+='<div class="cap">'+ (c.dataset.cap||'(sin caption)') +'</div>';
         html+='<a class="go" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>">Abrir en Lista →</a>';
       } else if(c.dataset.tipo==='orden'){
-        html+='<h3>📦 '+c.dataset.cliente+'</h3>';
+        html+='<h3>'+c.dataset.cliente+'</h3>';
         if(c.dataset.desc) html+='<div class="cap">'+c.dataset.desc+'</div>';
         if(c.dataset.monto) html+='<div class="kv"><b>Monto:</b> $'+c.dataset.monto+'</div>';
         html+='<div class="kv"><b>Estado:</b> '+c.dataset.estado+'</div>';
         if(c.dataset.hora) html+='<div class="kv"><b>Hora:</b> '+c.dataset.hora+'</div>';
         html+='<a class="go" href="/crecer/panel/ordenes.php?marca=<?= $marca_id ?>">Abrir en Órdenes →</a>';
       } else { // evento propio
-        html+='<h3>📌 '+c.dataset.titulo+'</h3>';
+        html+='<h3>'+c.dataset.titulo+'</h3>';
         if(c.dataset.hora) html+='<div class="kv"><b>Hora:</b> '+c.dataset.hora+'</div>';
         if(c.dataset.nota) html+='<div class="cap">'+c.dataset.nota+'</div>';
         html+='<form method="post" action="" onsubmit="return confirm(\'¿Borrar este evento?\')">'
             + '<?= csrf_field() ?>'
             + '<input type="hidden" name="accion" value="borrar_evento">'
             + '<input type="hidden" name="id" value="'+c.dataset.id+'">'
-            + '<button type="submit" class="del">🗑 Borrar evento</button></form>';
+            + '<button type="submit" class="del">Borrar evento</button></form>';
       }
       box.innerHTML=html; ov.classList.add('show');
     });

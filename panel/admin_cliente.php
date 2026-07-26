@@ -149,7 +149,7 @@ $reconectar = "/crecer/panel/conectar.php?marca={$mid}";
       else echo '<span class="st none">— (sin cobro este mes)</span>';
     ?></span></div>
     <div class="row"><span class="k">Uso esta semana</span><span><b><?= $posts_sem ?>/<?= $cupo_sem ?></b> posts · <b><?= $img_sem ?></b> imágenes IA</span></div>
-    <?php if ($rev_activo>0 && $margen<0): ?><div class="hint">⚠️ Este cliente está <b>en pérdida</b> este mes (gasta más en IA de lo que paga). Revisa si está generando imágenes de más.</div><?php endif; ?>
+    <?php if ($rev_activo>0 && $margen<0): ?><div class="hint"><?= ico('bolt') ?> Este cliente está <b>en pérdida</b> este mes (gasta más en IA de lo que paga). Revisa si está generando imágenes de más.</div><?php endif; ?>
   </div>
 
   <!-- CONEXIÓN META -->
@@ -183,7 +183,7 @@ $reconectar = "/crecer/panel/conectar.php?marca={$mid}";
   <!-- POSTS FALLIDOS + REINTENTAR -->
   <div class="card">
     <h2><?= ico('bolt') ?> Posts fallidos (<?= count($fallidos) ?>)</h2>
-    <?php if (!$fallidos): ?><p class="sub" style="margin:0">Ninguno fallido ahora mismo. 👍</p>
+    <?php if (!$fallidos): ?><p class="sub" style="margin:0">Ninguno fallido ahora mismo.</p>
     <?php else: foreach ($fallidos as $f): ?>
       <div class="item" style="display:flex;align-items:center;gap:10px;justify-content:space-between">
         <div style="min-width:0">

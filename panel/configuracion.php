@@ -218,7 +218,7 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
   <?php if ($ok): ?><div class="cfg-msg ok"><?= ico('check-circle') ?>Guardado.</div><?php endif; ?>
   <?php if ($okpass): ?><div class="cfg-msg ok"><?= ico('check-circle') ?>Contraseña actualizada.</div><?php endif; ?>
   <?php if (($corillo = $_GET['corillo'] ?? '') !== ''): ?><div class="cfg-msg ok"><?= ico('sparkles') ?><?= $h($corillo) ?></div><?php endif; ?>
-  <?php if ($error): ?><div class="cfg-msg err">⚠️ <?= $h($error) ?></div><?php endif; ?>
+  <?php if ($error): ?><div class="cfg-msg err"><?= ico('bolt') ?><?= $h($error) ?></div><?php endif; ?>
 
   <div class="cfg-view" id="cfgView"><div class="cfg-track" id="cfgTrack">
   <section class="cfg-sec" data-sec="negocio">
@@ -341,12 +341,12 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
       </div>
     </form>
 
-    <form method="post" action="<?= $turl('negocio') ?>" onsubmit="var b=this.querySelector('button');b.textContent='✨ Tu equipo está trabajando…';b.disabled=true;">
+    <form method="post" action="<?= $turl('negocio') ?>" onsubmit="var b=this.querySelector('button');b.textContent='Tu equipo está trabajando…';b.disabled=true;">
       <?= csrf_field() ?><input type="hidden" name="accion" value="corre_ahora">
       <div class="cfg-card">
         <h2><?= ico('sparkles') ?> ¿No quieres esperar?</h2>
         <p class="sub">Dispara el corillo ahora mismo: te prepara los posts que falten y los deja como borradores en Propuestas → Revisar. (Sin esperar al piloto semanal.)</p>
-        <button class="cfg-save" type="submit">⚡ Corre el corillo ahora</button>
+        <button class="cfg-save" type="submit">Corre el corillo ahora</button>
       </div>
     </form>
 

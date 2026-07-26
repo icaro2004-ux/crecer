@@ -91,7 +91,7 @@ require __DIR__ . '/_shell.php';
   .ac-pub .e{font-size:20px;flex:none}
 </style>
 
-<h1 class="ac-h1">⚡ Lo que hizo el corillo</h1>
+<h1 class="ac-h1">Lo que hizo el corillo</h1>
 <p class="ac-lede">Todo lo que la IA ha hecho por <b><?= $h($marca['nombre_negocio']) ?></b>, en cristiano. Sin tecnicismos.</p>
 
 <div class="ac-count">
@@ -101,10 +101,10 @@ require __DIR__ . '/_shell.php';
 
 <?php if ($publicaciones): ?>
 <div class="ac-card">
-  <h2>📲 Publicaciones a tus redes</h2>
+  <h2><?= ico('send') ?> Publicaciones a tus redes</h2>
   <?php foreach ($publicaciones as $pb): ?>
     <div class="ac-row ac-pub">
-      <span class="e"><?= $pb['plataforma']==='instagram'?'📸':'👍' ?></span>
+      <span class="e"><?= $pb['plataforma']==='instagram'? ico('instagram') : ico('facebook') ?></span>
       <span class="m"><b><?= $h(ucfirst($pb['plataforma'])) ?></b> · <?= $pb['estado']==='ok'?'publicado':'no se pudo publicar' ?></span>
       <?php if (!empty($pb['permalink'])): ?><a class="t" style="color:var(--terracota);text-decoration:none" href="<?= $h($pb['permalink']) ?>" target="_blank" rel="noopener">ver post →</a>
       <?php else: ?><span class="t"><?= $h($ago($pb['created_at'])) ?></span><?php endif; ?>
@@ -114,7 +114,7 @@ require __DIR__ . '/_shell.php';
 <?php endif; ?>
 
 <div class="ac-card">
-  <h2>🗒️ Línea de tiempo</h2>
+  <h2><?= ico('list') ?> Línea de tiempo</h2>
   <?php if (!$eventos): ?>
     <p class="ac-empty">El corillo está listo pa' arrancar. Pídele contenido y empieza a meter mano.</p>
   <?php else: foreach ($eventos as $e): [$fic,$fnm,$fmsg] = $hf($e['agente']); ?>

@@ -174,7 +174,7 @@ require __DIR__ . '/_shell.php';
 
 <div class="cl-wrap">
   <div class="cl-head"><h1 class="page-h" style="margin:0">Clientela</h1></div>
-  <p class="cl-sub">Tus clientes se arman solos de tus órdenes — no tienes que apuntar a nadie. 🪄</p>
+  <p class="cl-sub">Tus clientes se arman solos de tus órdenes — no tienes que apuntar a nadie.</p>
 
   <?php if (!$plan): ?>
     <div class="lock-note">Clientela viene con tu plan. <a href="<?= $BASE ?>/precios.php?marca=<?= $marca_id ?>">Activa un plan →</a></div>
@@ -182,7 +182,7 @@ require __DIR__ . '/_shell.php';
 
   <?php if (!$clientes): ?>
     <div class="cl-empty">
-      <div style="font-size:40px">👥</div>
+      <div><?= ico('users','ic ic-xl') ?></div>
       <p style="margin:10px 0 4px;font-weight:700;color:var(--tinta)">Todavía no tienes clientes registrados</p>
       <p style="margin:0;font-size:13.5px">Cuando te lleguen órdenes por tu página de pedidos (el QR), tus clientes aparecen aquí solitos.</p>
       <a class="cl-btn ghost" style="margin-top:14px" href="<?= $BASE ?>/ordenes.php?marca=<?= $marca_id ?>">Ver Órdenes →</a>
@@ -192,12 +192,12 @@ require __DIR__ . '/_shell.php';
     <?php if ($es_despegar): ?>
       <div class="cl-chips" id="chips">
         <span class="cl-chip on" data-seg="todos">Todos<span class="n"><?= count($clientes) ?></span></span>
-        <span class="cl-chip" data-seg="dormido">😴 Dormidos<span class="n"><?= (int)$cnt['dormido'] ?></span></span>
-        <span class="cl-chip" data-seg="frecuente">🔥 Frecuentes<span class="n"><?= (int)$cnt['frecuente'] ?></span></span>
-        <span class="cl-chip" data-seg="nuevo">🌱 Nuevos<span class="n"><?= (int)$cnt['nuevo'] ?></span></span>
+        <span class="cl-chip" data-seg="dormido"><?= ico('clock') ?> Dormidos<span class="n"><?= (int)$cnt['dormido'] ?></span></span>
+        <span class="cl-chip" data-seg="frecuente"><?= ico('star') ?> Frecuentes<span class="n"><?= (int)$cnt['frecuente'] ?></span></span>
+        <span class="cl-chip" data-seg="nuevo"><?= ico('leaf') ?> Nuevos<span class="n"><?= (int)$cnt['nuevo'] ?></span></span>
       </div>
     <?php else: ?>
-      <div class="lock-note">🚀 Con <b>Despegar</b>, el corillo detecta a tus clientes dormidos y les <b>escribe solo</b> el mensaje para que vuelvan. <a href="<?= $BASE ?>/precios.php?marca=<?= $marca_id ?>">Súbete →</a></div>
+      <div class="lock-note"><?= ico('rocket') ?> Con <b>Despegar</b>, el corillo detecta a tus clientes dormidos y les <b>escribe solo</b> el mensaje para que vuelvan. <a href="<?= $BASE ?>/precios.php?marca=<?= $marca_id ?>">Súbete →</a></div>
     <?php endif; ?>
 
     <div id="lista">
@@ -212,17 +212,17 @@ require __DIR__ . '/_shell.php';
             <div class="cl-nm"><?= $h($c['nombre'] ?: 'Cliente') ?></div>
             <div class="cl-meta"><?= $c['contacto'] ? $h($c['contacto']) : 'sin contacto' ?> · última compra hace <?= $c['dias']>=9999?'—':$c['dias'].'d' ?></div>
           </div>
-          <span class="cl-tag tag-<?= $h($c['seg']) ?>"><?= $c['seg']==='dormido'?'😴 dormido':($c['seg']==='nuevo'?'🌱 nuevo':'🔥 frecuente') ?></span>
+          <span class="cl-tag tag-<?= $h($c['seg']) ?>"><?= $c['seg']==='dormido'?ico('clock').' dormido':($c['seg']==='nuevo'?ico('leaf').' nuevo':ico('star').' frecuente') ?></span>
         </div>
         <div class="cl-stats">
           <span><b><?= (int)$c['n'] ?></b> pedido<?= (int)$c['n']===1?'':'s' ?></span>
           <span><b>$<?= number_format((float)$c['total'],2) ?></b> total</span>
         </div>
         <div class="cl-acts">
-          <?php if ($wa_simple): ?><a class="cl-btn wa" href="<?= $h($wa_simple) ?>" target="_blank" rel="noopener">💬 Escríbele</a><?php endif; ?>
-          <button class="cl-btn ghost" onclick="verHist(this)">📋 Ver pedidos</button>
+          <?php if ($wa_simple): ?><a class="cl-btn wa" href="<?= $h($wa_simple) ?>" target="_blank" rel="noopener"><?= ico('chat') ?> Escríbele</a><?php endif; ?>
+          <button class="cl-btn ghost" onclick="verHist(this)"><?= ico('list') ?> Ver pedidos</button>
           <?php if ($es_despegar): ?>
-            <button class="cl-btn ai" onclick="corilloEscribe(this)">✨ Que el corillo le escriba</button>
+            <button class="cl-btn ai" onclick="corilloEscribe(this)"><?= ico('sparkles') ?> Que el corillo le escriba</button>
           <?php endif; ?>
         </div>
         <div class="cl-hist"></div>
@@ -235,7 +235,7 @@ require __DIR__ . '/_shell.php';
 <!-- Modal de retención (Despegar) -->
 <div class="ret-ov" id="retOv">
   <div class="ret-box">
-    <h3>✨ Mensaje para tu cliente</h3>
+    <h3><?= ico('sparkles') ?> Mensaje para tu cliente</h3>
     <div class="who" id="retWho"></div>
     <div id="retBody"><div class="ret-load">Tu equipo está escribiendo…</div></div>
   </div>
@@ -284,8 +284,8 @@ require __DIR__ . '/_shell.php';
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({csrf:CSRF, ckey:card.dataset.ckey, segmento:card.dataset.seg})
     }).then(function(r){return r.json();}).then(function(d){
-      if(!d.ok){ retBody.innerHTML='<p style="color:#9b1c1c">⚠️ '+(d.err||'Error')+'</p>'; return; }
-      var wa = d.wa ? '<a class="cl-btn wa" href="'+d.wa+'" target="_blank" rel="noopener">💬 Abrir en WhatsApp</a>'
+      if(!d.ok){ retBody.innerHTML='<p style="color:#9b1c1c">'+(d.err||'Error')+'</p>'; return; }
+      var wa = d.wa ? '<a class="cl-btn wa" href="'+d.wa+'" target="_blank" rel="noopener">Abrir en WhatsApp</a>'
                     : '<span style="font-size:12.5px;color:var(--muted)">Este cliente no tiene WhatsApp guardado.</span>';
       retBody.innerHTML =
         '<textarea id="retTxt">'+d.mensaje.replace(/</g,'&lt;')+'</textarea>'+
@@ -299,7 +299,7 @@ require __DIR__ . '/_shell.php';
         var base=waBtn.href.split('?text=')[0];
         waBtn.href = base+'?text='+encodeURIComponent(txt.value);
       });
-    }).catch(function(){ retBody.innerHTML='<p style="color:#9b1c1c">⚠️ Error de conexión.</p>'; });
+    }).catch(function(){ retBody.innerHTML='<p style="color:#9b1c1c">Error de conexión.</p>'; });
   };
 </script>
 

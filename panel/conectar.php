@@ -94,7 +94,7 @@ if (isset($_GET['code']) || isset($_GET['error'])) {
     }
 }
 
-if (($_GET['ok'] ?? '') === 'conx') $info = '¡Conectado! El corillo ya puede publicar por ti. 🎉';
+if (($_GET['ok'] ?? '') === 'conx') $info = '¡Conectado! El corillo ya puede publicar por ti.';
 if (($_GET['ok'] ?? '') === 'desc') $info = 'Desconectaste tus redes. El corillo ya no publicará automático.';
 
 $conx = conexion_de_marca($pdo, $marca_id);

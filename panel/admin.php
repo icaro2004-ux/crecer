@@ -328,7 +328,7 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
         Cobros registrados en <code>pagos</code>: <b style="color:var(--tinta)"><?= $money($pagos_crecer) ?></b>
       </div>
       <?php if ($pagos_crecer == 0 && $mrr > 0): ?>
-        <div class="gap" style="margin-top:12px">⚠️ El MRR sale de <code>crecer_suscripciones</code>, pero <b>el webhook de Stripe no está escribiendo en <code>pagos</code></b> todavía. Para reportar revenue limpio al jurado, hay que registrar cada cobro en <code>pagos</code> (producto='crecer').</div>
+        <div class="gap" style="margin-top:12px">El MRR sale de <code>crecer_suscripciones</code>, pero <b>el webhook de Stripe no está escribiendo en <code>pagos</code></b> todavía. Para reportar revenue limpio al jurado, hay que registrar cada cobro en <code>pagos</code> (producto='crecer').</div>
       <?php endif; ?>
     </div>
     <div class="card">
@@ -376,7 +376,7 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
     <div style="background:#e6f6ee;border:1px solid #b9eccf;color:#0d7a44;border-radius:12px;padding:11px 15px;margin:14px 0 0;font-weight:700;font-size:13.5px">✓ <?= $h($dm) ?></div>
   <?php endif; ?>
   <?php if (isset($_GET['dinero_err'])): ?>
-    <div style="background:#fdeaea;border:1px solid #f5c2c0;color:#b42318;border-radius:12px;padding:11px 15px;margin:14px 0 0;font-weight:700;font-size:13.5px">⚠️ No se pudo: <?= $h($_GET['dinero_err']) ?></div>
+    <div style="background:#fdeaea;border:1px solid #f5c2c0;color:#b42318;border-radius:12px;padding:11px 15px;margin:14px 0 0;font-weight:700;font-size:13.5px">No se pudo: <?= $h($_GET['dinero_err']) ?></div>
   <?php endif; ?>
   <div class="sec" id="clientes"><h2>Clientes (<?= $total_clientes ?>)</h2></div>
   <div style="margin:0 0 10px"><input type="text" id="cliFiltro" placeholder="Filtrar negocio…" oninput="cliFiltrar()" style="width:100%;max-width:320px;font-family:inherit;font-size:14px;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px"> <span style="font-size:12px;color:var(--muted)">Toca un encabezado para ordenar.</span></div>
@@ -395,7 +395,7 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
         $real_paid = !empty($c['stripe_sub']);
         $cort = (!$real_paid && (int)$c['es_early_adopter']===1 && $c['sub_estado']==='activa'); ?>
         <tr>
-          <td><a href="/crecer/panel/index.php?marca=<?= (int)$c['id'] ?>" style="color:var(--tinta);font-weight:800;text-decoration:none" title="Abrir panel de este negocio">🔗 <?= $h($c['nombre_negocio']) ?></a><?php if (($c['dueno_rol'] ?? '') === 'admin'): ?> <span style="background:#fff4d6;border:1px solid #f2d488;color:#8a5a00;border-radius:99px;padding:1px 8px;font-size:10.5px;font-weight:800;white-space:nowrap">⭐ Tu negocio</span><?php endif; ?><?php if (($dup_nombres[mb_strtolower(trim((string)$c['nombre_negocio']))] ?? 1) > 1): ?> <span title="Hay otro negocio con este mismo nombre — posible duplicado" style="background:#fdeaea;border:1px solid #f4b8c6;color:#b3123b;border-radius:99px;padding:1px 8px;font-size:10.5px;font-weight:800;white-space:nowrap">⚠️ duplicado</span><?php endif; ?><br><a href="/crecer/panel/admin_cliente.php?marca=<?= (int)$c['id'] ?>" style="color:var(--terracota);font-weight:700;font-size:11.5px;text-decoration:none">🔍 Diagnóstico</a></td>
+          <td><a href="/crecer/panel/index.php?marca=<?= (int)$c['id'] ?>" style="color:var(--tinta);font-weight:800;text-decoration:none" title="Abrir panel de este negocio"><?= $h($c['nombre_negocio']) ?></a><?php if (($c['dueno_rol'] ?? '') === 'admin'): ?> <span style="background:#fff4d6;border:1px solid #f2d488;color:#8a5a00;border-radius:99px;padding:1px 8px;font-size:10.5px;font-weight:800;white-space:nowrap">Tu negocio</span><?php endif; ?><?php if (($dup_nombres[mb_strtolower(trim((string)$c['nombre_negocio']))] ?? 1) > 1): ?> <span title="Hay otro negocio con este mismo nombre — posible duplicado" style="background:#fdeaea;border:1px solid #f4b8c6;color:#b3123b;border-radius:99px;padding:1px 8px;font-size:10.5px;font-weight:800;white-space:nowrap">duplicado</span><?php endif; ?><br><a href="/crecer/panel/admin_cliente.php?marca=<?= (int)$c['id'] ?>" style="color:var(--terracota);font-weight:700;font-size:11.5px;text-decoration:none">Diagnóstico</a></td>
           <td><?= $h($c['dueno']) ?><br><span style="color:var(--muted);font-size:11px"><?= $h($c['email']) ?></span></td>
           <td><?php if($c['plan']): ?><span class="pill <?= $pc ?>"><?= $h($c['plan_nombre']) ?></span> <span class="pill <?= $se ?>"><?= $h($c['sub_estado']?:'—') ?></span><?php if($c['es_early_adopter']):?><span class="rel">allegado</span><?php endif;?><?php else: ?><span class="pill none">sin plan</span><?php endif; ?></td>
           <td class="num" data-v="<?= (int)$c['posts'] ?>"><?= (int)$c['posts'] ?></td>
@@ -404,10 +404,10 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
           <td class="num" data-v="<?= (int)($c['inter'] ?? 0) ?>"><?= number_format((int)($c['inter'] ?? 0)) ?></td>
           <td class="num" data-v="<?= (float)$c['ia'] ?>"><?= $money($c['ia']) ?></td>
           <td style="color:var(--muted)"><?= $ago($c['ult']) ?></td>
-          <td><?= $c['autopilot']?'🌙':'—' ?></td>
+          <td><?= $c['autopilot']?'Sí':'—' ?></td>
           <td>
             <?php if ($real_paid): ?>
-              <span class="pill act">💳 paga</span>
+              <span class="pill act">paga</span>
               <form method="post" data-n="<?= $h($c['nombre_negocio']) ?>" onsubmit="return confirm('REEMBOLSO REAL de dinero a: '+this.dataset.n+'\n\nMonto: '+(this.monto.value.trim()===''?'TOTAL del último cargo':'$'+this.monto.value.trim())+'\n\nEsto devuelve dinero en Stripe. ¿Confirmas?')" style="display:flex;gap:4px;align-items:center;margin-top:5px">
                 <?= csrf_field() ?><input type="hidden" name="accion" value="stripe_refund"><input type="hidden" name="marca_id" value="<?= (int)$c['id'] ?>">
                 <input type="text" name="monto" placeholder="$ vacío=total" style="width:82px;font-size:10.5px;border:1.5px solid var(--line);border-radius:7px;padding:3px 5px;font-family:inherit">
@@ -421,7 +421,7 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
             <?php elseif ($cort): ?>
               <form method="post" style="display:inline">
                 <?= csrf_field() ?><input type="hidden" name="accion" value="cortesia"><input type="hidden" name="marca_id" value="<?= (int)$c['id'] ?>"><input type="hidden" name="on" value="0">
-                <button type="submit" title="Quitar acceso gratis" style="border:1.5px solid var(--line);cursor:pointer;background:#fff;color:#9a5b00;font-weight:800;font-size:11px;padding:5px 9px;border-radius:8px">🎁 ✕</button>
+                <button type="submit" title="Quitar acceso gratis" style="border:1.5px solid var(--line);cursor:pointer;background:#fff;color:#9a5b00;font-weight:800;font-size:11px;padding:5px 9px;border-radius:8px">✕</button>
               </form>
             <?php else: ?>
               <form method="post" style="display:inline">
@@ -435,7 +435,7 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
                 <option value="retry">Destrabar+reintentar</option>
                 <option value="borrador">Devolver a borrador</option>
               </select>
-              <button type="submit" title="Arreglar posts de este cliente" style="border:1.5px solid var(--line);cursor:pointer;background:#fff;color:var(--tinta);font-weight:800;font-size:11px;padding:4px 8px;border-radius:8px">🔧</button>
+              <button type="submit" title="Arreglar posts de este cliente" style="border:1.5px solid var(--line);cursor:pointer;background:#fff;color:var(--tinta);font-weight:800;font-size:11px;padding:4px 8px;border-radius:8px">Aplicar</button>
             </form>
           </td>
         </tr>
@@ -467,14 +467,14 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
   </script>
 
   <!-- SOPORTE (chat interno con clientes) -->
-  <div class="sec"><h2>💬 Soporte — chat con tus clientes <?php if($soporte_sin_leer):?><span class="pill trial" style="font-size:12px"><?= $soporte_sin_leer ?> sin leer</span><?php endif;?></h2></div>
+  <div class="sec"><h2>Soporte — chat con tus clientes <?php if($soporte_sin_leer):?><span class="pill trial" style="font-size:12px"><?= $soporte_sin_leer ?> sin leer</span><?php endif;?></h2></div>
   <div class="card">
     <p style="margin:0 0 14px;font-size:13.5px;color:var(--muted)">Mensajes directos entre tú y los negocios (dudas, quejas, soporte). <?= $soporte_total ?> conversación<?= $soporte_total===1?'':'es' ?>.</p>
     <a href="/crecer/panel/admin_soporte.php" style="display:inline-block;background:var(--tinta);color:#fff;font-weight:800;font-size:14px;padding:11px 20px;border-radius:11px;text-decoration:none">Abrir bandeja de soporte →</a>
   </div>
 
   <!-- QUEJAS / MENSAJES (DMs de clientes finales) -->
-  <div class="sec"><h2>💬 Quejas & mensajes <?php if($msgs_pend):?><span class="pill trial" style="font-size:12px"><?= $msgs_pend ?> pendientes</span><?php endif;?></h2></div>
+  <div class="sec"><h2>Quejas & mensajes <?php if($msgs_pend):?><span class="pill trial" style="font-size:12px"><?= $msgs_pend ?> pendientes</span><?php endif;?></h2></div>
   <div class="card">
     <?php if ($mensajes): ?>
       <table>
@@ -486,12 +486,12 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
         <?php endforeach; ?>
       </table>
     <?php else: ?>
-      <div class="gap">📭 <b>Todavía no hay un canal de quejas/mensajes conectado.</b> La tabla <code>crecer_mensajes</code> está lista para recibir DMs de IG/FB/WhatsApp y que el agente <b>Responder</b> los conteste — pero ese canal aún no se ha integrado. <b>Es el próximo módulo de operación</b> (entra junto con la publicación a Meta).</div>
+      <div class="gap"><b>Todavía no hay un canal de quejas/mensajes conectado.</b> La tabla <code>crecer_mensajes</code> está lista para recibir DMs de IG/FB/WhatsApp y que el agente <b>Responder</b> los conteste — pero ese canal aún no se ha integrado. <b>Es el próximo módulo de operación</b> (entra junto con la publicación a Meta).</div>
     <?php endif; ?>
   </div>
 
   <!-- HERRAMIENTAS INTERNAS -->
-  <div class="sec"><h2>🧪 Herramientas internas</h2></div>
+  <div class="sec"><h2>Herramientas internas</h2></div>
   <div class="card">
     <p style="margin:0 0 14px;font-size:13.5px;color:var(--muted)">Banco de pruebas para afinar al agente creador de imágenes: mira qué escena escribe para un negocio y genera imágenes directo con gpt-image-1.</p>
     <a href="/crecer/_imgtry.php?k=crecer" style="display:inline-block;background:var(--tinta);color:#fff;font-weight:800;font-size:14px;padding:11px 20px;border-radius:11px;text-decoration:none">Abrir el Laboratorio de imágenes →</a>

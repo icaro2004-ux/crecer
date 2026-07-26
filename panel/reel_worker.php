@@ -36,7 +36,7 @@ try {
     $r = $pdo->query("SELECT marca_id, estado FROM crecer_reels WHERE id=" . (int)$id)->fetch(PDO::FETCH_ASSOC);
     if ($r) {
         $mid = (int)$r['marca_id']; $link = '/crecer/panel/reels.php?marca=' . $mid;
-        if ($r['estado'] === 'listo')       notif_crear($pdo, $mid, 'reel_listo', 'Tu reel está listo 🎬', 'El corillo lo montó. Míralo y publícalo cuando quieras.', $link, '🎬');
-        elseif ($r['estado'] === 'failed')  notif_crear($pdo, $mid, 'reel_error', 'No pude terminar tu reel', 'Algo se atravesó armando el reel. Intenta de nuevo.', $link, '⚠️');
+        if ($r['estado'] === 'listo')       notif_crear($pdo, $mid, 'reel_listo', 'Tu reel está listo', 'El corillo lo montó. Míralo y publícalo cuando quieras.', $link, 'camera');
+        elseif ($r['estado'] === 'failed')  notif_crear($pdo, $mid, 'reel_error', 'No pude terminar tu reel', 'Algo se atravesó armando el reel. Intenta de nuevo.', $link, 'bolt');
     }
 } catch (Throwable $e) {}

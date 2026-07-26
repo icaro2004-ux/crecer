@@ -328,12 +328,12 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     {k:'calido',t:'Cálido',d:'Cercano y de confianza, como un buen amigo.'},
     {k:'vendedor',t:'Vendedor',d:'Directo a la acción, con gancho de venta.'}
   ];
-  var CORILLO=[   // [emoji, nombre, texto]
-    ['🧠','El Estratega','Déjenme leer bien lo que nos contó…'],
-    ['✍️','La Creativa','Ya le voy cogiendo la forma de hablar.'],
-    ['📊','El Estratega','Estoy fijando quién es su cliente ideal.'],
-    ['🎨','El Director','Y yo el estilo visual que le va a pegar.'],
-    ['🤝','El corillo','Nos estamos poniendo de acuerdo…']
+  var CORILLO=[   // [icono, nombre, texto]
+    [FACE,'El Estratega','Déjenme leer bien lo que nos contó…'],
+    [FACE,'La Creativa','Ya le voy cogiendo la forma de hablar.'],
+    [FACE,'El Estratega','Estoy fijando quién es su cliente ideal.'],
+    [FACE,'El Director','Y yo el estilo visual que le va a pegar.'],
+    [FACE,'El corillo','Nos estamos poniendo de acuerdo…']
   ];
   var ovFeed=null, ovFoot=null;
   // Burbuja estilo messenger: sale "escribiendo…" y luego el texto hace POP.
@@ -361,13 +361,13 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       revelar(d);
     }).catch(function(){ listo=true; salirSuave(); });
   }
-  function salirSuave(){ cpSay('🤝','El corillo','Tu negocio quedó guardado — te llevo a tu post…','det'); setTimeout(function(){ location.href='/crecer/panel/gateway_post.php?marca='+MARCA+GW; }, 1900); }
+  function salirSuave(){ cpSay(FACE,'El corillo','Tu negocio quedó guardado — te llevo a tu post…','det'); setTimeout(function(){ location.href='/crecer/panel/gateway_post.php?marca='+MARCA+GW; }, 1900); }
   function revelar(d){
     var seq=[];
-    if(d.publico) seq.push(['📊','El Estratega','Tu cliente ideal: '+d.publico,'det']);
-    if(d.voz)     seq.push(['✍️','La Creativa','Tu voz: '+d.voz,'det']);
-    seq.push(['🔥','¡El corillo lo tiene!','¡Ya lo tenemos, esto va a quedar brutal!','cp-hype']);
-    if(d.resumen) seq.push(['✅','Así te entendimos', d.resumen,'det']);
+    if(d.publico) seq.push([FACE,'El Estratega','Tu cliente ideal: '+d.publico,'det']);
+    if(d.voz)     seq.push([FACE,'La Creativa','Tu voz: '+d.voz,'det']);
+    seq.push([FACE,'¡El corillo lo tiene!','¡Ya lo tenemos, esto va a quedar brutal!','cp-hype']);
+    if(d.resumen) seq.push([FACE,'Así te entendimos', d.resumen,'det']);
     var head=document.querySelector('.cp-head');
     var k=0; (function step(){
       if(k>=seq.length){ setTimeout(function(){ pedirTono(d.preset||'boricua'); }, 1000); return; }
@@ -389,24 +389,24 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   function crearPost(){
     ovFoot.style.display='none';
     var head=document.querySelector('.cp-head'); if(head) head.innerHTML='<span class="cp-dot"></span>Montando tu primer post…';
-    cpSay('🎨','El Director','Dame unos segundos… lo bueno no se apura. Estoy montando tu primer post con calma.');
+    cpSay(FACE,'El Director','Dame unos segundos… lo bueno no se apura. Estoy montando tu primer post con calma.');
     // Burbuja "cocinando" que rota mensajes cool mientras trabaja (el arte tarda 30-40s):
     // así se siente VIVO y con paciencia, no trancado.
     var frases=[
-      'Esto toma unos segundos, pero vale cada uno. 🎨',
-      'Buscando la toma perfecta para tu negocio… 📸',
-      'Ajustando la luz como un fotógrafo de verdad… 💡',
-      'Aquí no salimos con cualquier cosa — puliendo detalles… ✨',
-      'Cocinando algo que va a parar el scroll… 🔥',
-      'Casi, casi… esto va a quedar brutal. 🌶️'
+      'Esto toma unos segundos, pero vale cada uno.',
+      'Buscando la toma perfecta para tu negocio…',
+      'Ajustando la luz como un fotógrafo de verdad…',
+      'Aquí no salimos con cualquier cosa — puliendo detalles…',
+      'Cocinando algo que va a parar el scroll…',
+      'Casi, casi… esto va a quedar brutal.'
     ];
     var row=document.createElement('div'); row.className='cp-line'; var txEl=null, fi=0, rot=null;
-    row.innerHTML='<div class="av">🍳</div><div class="bub"><div class="nm">El corillo</div><div class="tx pop"></div></div>';
+    row.innerHTML='<div class="av">'+FACE+'</div><div class="bub"><div class="nm">El corillo</div><div class="tx pop"></div></div>';
     setTimeout(function(){
       ovFeed.appendChild(row); txEl=row.querySelector('.tx'); txEl.textContent=frases[0]; ovFeed.scrollTop=ovFeed.scrollHeight;
       rot=setInterval(function(){ if(!txEl) return; fi=(fi+1)%frases.length; txEl.classList.remove('pop'); void txEl.offsetWidth; txEl.classList.add('pop'); txEl.textContent=frases[fi]; }, 4500);
     }, 720);
-    function ir(url){ if(rot) clearInterval(rot); if(row.parentNode) row.remove(); cpSay('✅','Listo','¡Tu primer post está montado!','det'); setTimeout(function(){ location.href=url; }, 1200); }
+    function ir(url){ if(rot) clearInterval(rot); if(row.parentNode) row.remove(); cpSay(FACE,'Listo','¡Tu primer post está montado!','det'); setTimeout(function(){ location.href=url; }, 1200); }
     post({accion:'post_muestra'}, 95000).then(function(d2){ ir((d2&&d2.redirect)||('/crecer/panel/gateway_post.php?marca='+MARCA+GW)); }).catch(function(){ ir('/crecer/panel/gateway_post.php?marca='+MARCA+GW); });
   }
   form.addEventListener('submit',function(e){ e.preventDefault(); enviar(input.value); });

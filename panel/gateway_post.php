@@ -15,6 +15,7 @@ require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/agentes.php';
 require __DIR__ . '/../includes/suscripcion.php';
 require __DIR__ . '/../includes/gateway.php';
+require_once __DIR__ . '/../includes/iconos.php';
 requiere_login();
 
 $usuario = usuario_actual($pdo);
@@ -315,7 +316,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   </style>
 
   <div class="cel">
-    <div style="font-size:46px">🎉</div>
+    <div><?= ico('check-circle','ic ic-xl') ?></div>
     <div class="big">¡Tu post está publicado!</div>
     <p class="gw-sub" style="margin-bottom:0">Lo hizo tu equipo por ti, en tu voz. Ahora imagínate esto <b>todos los días</b>.</p>
   </div>
@@ -329,7 +330,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       <span class="ig-more">•••</span>
     </div>
     <?php if ($grafica): ?><img class="img" src="<?= $h($grafica) ?>" alt="">
-    <div class="ig-actions"><span>♡</span><span>💬</span><span>➤</span><span class="sp"></span><span>🔖</span></div><?php endif; ?>
+    <div class="ig-actions"><span><?= ico('heart') ?></span><span><?= ico('chat') ?></span><span><?= ico('send') ?></span><span class="sp"></span><span><?= ico('bookmark') ?></span></div><?php endif; ?>
     <?php if ($caption !== ''): ?><div class="cap"><?= $h($caption) ?></div><?php endif; ?>
     <?php if ($firma_txt !== ''): ?><div class="cap" style="opacity:.6;font-size:13px;padding-top:0"><?= $h($firma_txt) ?></div><?php endif; ?>
   </div>
@@ -337,12 +338,12 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
   <div class="sell">
     <div class="sell-track" id="sellTrack">
-      <div class="slide"><div class="ico">🎨</div><h3>Tu marketing, hecho</h3><p>El corillo crea los posts, el arte y los captions en tu voz. Tú solo apruebas.</p></div>
-      <div class="slide"><div class="ico">📅</div><h3>Contenido todo el mes</h3><p>Nunca más quedarte en blanco. Un calendario listo, mes tras mes.</p></div>
-      <div class="slide"><div class="ico">🇵🇷</div><h3>Suena a ti, no a robot</h3><p>Boricua de verdad, con tu sabor. Cero "AI slop".</p></div>
-      <div class="slide"><div class="ico">📲</div><h3>Apruebas desde el celular</h3><p>En segundos, donde estés. Tu equipo hace el resto.</p></div>
-      <div class="slide"><div class="ico">🚀</div><h3>Publica y responde solo</h3><p>Auto-publica a tus redes y contesta los DMs por ti.</p></div>
-      <div class="slide"><div class="ico">🏷️</div><h3>Tus posts, 100% tuyos</h3><p>La firma de Crecer desaparece. Tu marca y tu crédito, nada de firmas ajenas.</p></div>
+      <div class="slide"><div class="ico"><?= ico('palette','ic ic-xl') ?></div><h3>Tu marketing, hecho</h3><p>El corillo crea los posts, el arte y los captions en tu voz. Tú solo apruebas.</p></div>
+      <div class="slide"><div class="ico"><?= ico('calendar','ic ic-xl') ?></div><h3>Contenido todo el mes</h3><p>Nunca más quedarte en blanco. Un calendario listo, mes tras mes.</p></div>
+      <div class="slide"><div class="ico"><?= ico('mic','ic ic-xl') ?></div><h3>Suena a ti, no a robot</h3><p>Boricua de verdad, con tu sabor. Cero "AI slop".</p></div>
+      <div class="slide"><div class="ico"><?= ico('send','ic ic-xl') ?></div><h3>Apruebas desde el celular</h3><p>En segundos, donde estés. Tu equipo hace el resto.</p></div>
+      <div class="slide"><div class="ico"><?= ico('rocket','ic ic-xl') ?></div><h3>Publica y responde solo</h3><p>Auto-publica a tus redes y contesta los DMs por ti.</p></div>
+      <div class="slide"><div class="ico"><?= ico('check-circle','ic ic-xl') ?></div><h3>Tus posts, 100% tuyos</h3><p>La firma de Crecer desaparece. Tu marca y tu crédito, nada de firmas ajenas.</p></div>
     </div>
     <div class="sell-nav">
       <button class="sell-arrow" id="sellPrev" aria-label="Anterior">‹</button>
@@ -352,11 +353,11 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   </div>
 
   <!-- Deck rotativo de persuasión (lo económico + las bondades) -->
-  <div class="vsell"><div class="vsell-card"><div class="vs-emoji" id="vsEmoji">☕</div><div class="vs-text" id="vsText">…</div></div></div>
+  <div class="vsell"><div class="vsell-card"><div class="vs-emoji" id="vsEmoji"></div><div class="vs-text" id="vsText">…</div></div></div>
 
   <div class="sell-cta">
     <div class="price">$<?= number_format((float)$plan_venta['precio_mensual'], 0) ?><span>/mes</span></div>
-    <div class="price-hook">☕ Menos de $<?= number_format((float)$plan_venta['precio_mensual']/30, 2) ?> al día — más barato que tu cafecito.</div>
+    <div class="price-hook">Menos de $<?= number_format((float)$plan_venta['precio_mensual']/30, 2) ?> al día — más barato que tu cafecito.</div>
     <div class="price-sub">Una agencia cobra cientos al mes por esto · Cancela cuando quieras · 100% tuyos</div>
     <form method="post" action="/crecer/panel/crear_checkout.php" id="ventaForm">
       <?= csrf_field() ?>
@@ -368,7 +369,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
 <?php else: /* ── ESTADO POST (borrador/aprobado) ── */ ?>
   <?php if ($aprobado): ?>
-    <h1 class="gw-kick">¡Aprobado! Ahora publícalo 🚀</h1>
+    <h1 class="gw-kick">¡Aprobado! Ahora publícalo</h1>
     <p class="gw-sub">Publícalo en tus redes o WhatsApp. Como tú lo quieras: te lo conectamos y publica solo, o lo bajas y lo subes tú.</p>
   <?php else: ?>
     <h1 class="gw-kick">Tu primer post está listo</h1>
@@ -388,17 +389,17 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       <div class="wait" id="wait">
         <div class="wait-top"><span class="spin"></span><span id="waitStatus">Preparando el concepto…</span></div>
         <div class="wait-card" id="waitCard">
-          <div class="wc-emoji" id="wcEmoji">🎨</div>
+          <div class="wc-emoji" id="wcEmoji"></div>
           <div class="wc-kind" id="wcKind">EL CORILLO</div>
           <div class="wc-text" id="wcText">Tu anuncio se está cocinando…</div>
         </div>
         <button class="wait-next" id="waitNext" type="button">Otra ▸</button>
-        <div class="wait-foot">Toma un par de minutos — tu arte aparece solo. Mientras, ajusta el texto abajo. 👇</div>
+        <div class="wait-foot">Toma un par de minutos — tu arte aparece solo. Mientras, ajusta el texto abajo.</div>
       </div>
     <?php else: ?>
       <div class="noimg">Preparando tu arte…</div>
     <?php endif; ?>
-    <?php if ($grafica): ?><div class="ig-actions"><span>♡</span><span>💬</span><span>➤</span><span class="sp"></span><span>🔖</span></div><?php endif; ?>
+    <?php if ($grafica): ?><div class="ig-actions"><span><?= ico('heart') ?></span><span><?= ico('chat') ?></span><span><?= ico('send') ?></span><span class="sp"></span><span><?= ico('bookmark') ?></span></div><?php endif; ?>
     <div class="cap" id="capBox"><?= $caption !== '' ? $h($caption) : '<span style="color:var(--muted)">Sin texto todavía.</span>' ?></div>
     <?php if ($firma_txt !== ''): ?><div class="cap" style="opacity:.55;font-size:13px;padding-top:0"><?= $h($firma_txt) ?></div><?php endif; ?>
     <textarea class="cap-edit" id="capEdit" style="display:none;margin:0 15px 15px"><?= $h($caption) ?></textarea>
@@ -406,16 +407,16 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
   <?php if ($grafica): ?>
   <div class="imgmode" style="text-align:center">
-    <button type="button" class="btn gho" id="btnRegen">🔄 Hacer otra imagen</button>
+    <button type="button" class="btn gho" id="btnRegen"><?= ico('refresh') ?> Hacer otra imagen</button>
     <div class="lbl" style="margin-top:6px">¿No te convence? Tu equipo te diseña otra al momento.</div>
   </div>
   <?php endif; ?>
 
   <div class="acts" id="actsBorrador" style="<?= $aprobado ? 'display:none' : '' ?>">
-    <button class="btn ok" id="btnAprobar">✓ Aprobar este post</button>
-    <button class="btn gho" id="btnSugerir">✨ Sugiéreme otra versión</button>
-    <button class="btn gho" id="btnCambio">💬 Pedir un cambio</button>
-    <button class="btn gho" id="btnAjustar">✎ Editar el texto yo mismo</button>
+    <button class="btn ok" id="btnAprobar"><?= ico('check') ?> Aprobar este post</button>
+    <button class="btn gho" id="btnSugerir"><?= ico('sparkles') ?> Sugiéreme otra versión</button>
+    <button class="btn gho" id="btnCambio"><?= ico('chat') ?> Pedir un cambio</button>
+    <button class="btn gho" id="btnAjustar"><?= ico('edit') ?> Editar el texto yo mismo</button>
   </div>
   <div class="acts" id="actsCambio" style="display:none">
     <input class="cambio-in" id="cambioNota" placeholder="Ej. más corto · menciona el descuento · más divertido" maxlength="160">
@@ -428,15 +429,15 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   </div>
 
   <div class="acts" id="actsPublicar" style="<?= $aprobado ? '' : 'display:none' ?>">
-    <button class="btn pri" id="btnRedes">📲 Publicar en mis redes</button>
+    <button class="btn pri" id="btnRedes"><?= ico('send') ?> Publicar en mis redes</button>
     <button class="btn gho" id="btnManual">Descargar y publicar yo mismo</button>
     <div class="hint">Gratis. Solo te pedimos confirmar tu celular una vez (que eres humano).</div>
   </div>
   <div class="acts" id="actsManual" style="display:none">
-    <a class="btn ok" id="btnBajar" href="<?= $h($grafica) ?>" download>⬇ Bajar la imagen</a>
+    <a class="btn ok" id="btnBajar" href="<?= $h($grafica) ?>" download><?= ico('download') ?> Bajar la imagen</a>
     <button class="btn gho" id="btnCopiar">Copiar el texto</button>
     <div class="hint">Baja la imagen, copia el texto, y súbelo a tu Instagram, Facebook o WhatsApp. Cuando lo publiques, dale al botón de abajo.</div>
-    <div class="hint" style="opacity:.85">🌱 Tu post gratis lleva una pequeña firma de Crecer. Al suscribirte, tus posts salen <b>100% tuyos</b>, sin firma.</div>
+    <div class="hint" style="opacity:.85"><?= ico('leaf') ?> Tu post gratis lleva una pequeña firma de Crecer. Al suscribirte, tus posts salen <b>100% tuyos</b>, sin firma.</div>
     <button class="btn pri" id="btnYaPubli">Ya lo publiqué →</button>
   </div>
 <?php endif; ?>
@@ -479,44 +480,44 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     var STATUS=['Preparando el concepto…','Escribiendo tu titular…','Eligiendo los colores…','Buscando la idea que detiene el scroll…','Dándole el toque boricua…','Componiendo la escena…','Puliendo los detalles…'];
     var DECK=[
       // 🇵🇷 Orgullo / datos de Puerto Rico
-      {e:'🌊',k:'ORGULLO PR',t:'La Bahía Bioluminiscente de Vieques es la más brillante del mundo — récord Guinness. Aquí hasta el mar brilla.'},
-      {e:'🌴',k:'¿SABÍAS QUE…',t:'El Yunque es el único bosque tropical lluvioso del sistema forestal de Estados Unidos. Y está aquí, en la isla.'},
-      {e:'☕',k:'ORGULLO PR',t:'Puerto Rico produce café de altura premiado a nivel mundial. Si vendes café, presúmelo sin pena.'},
-      {e:'🎶',k:'PA’L MUNDO',t:'La música boricua está sonando en todo el planeta. Lo de aquí llega lejos — tu negocio también puede.'},
-      {e:'🏅',k:'CAMPEONES',t:'Mónica Puig (2016) y Jasmine Camacho-Quinn (2020) trajeron oro olímpico a la isla. Aquí se echa pa’lante.'},
-      {e:'🗺️',k:'DATO BORICUA',t:'Puerto Rico tiene 78 municipios, cada uno con su sabor. Tu negocio es parte de esa historia.'},
-      {e:'🍢',k:'TRIVIA',t:'El pastelillo y la empanadilla son primos, no gemelos: la empanadilla es más grande y jugosa. Guerra eterna.'},
-      {e:'🐸',k:'¿SABÍAS QUE…',t:'El coquí solo canta de noche — el macho pone el "co" para marcar territorio y el "quí" para enamorar.'},
-      {e:'🥁',k:'CULTURA',t:'La bomba y la plena nacieron aquí. Ese ritmo de resistencia y celebración es el mismo con el que se levanta un negocio.'},
+      {e:'',k:'ORGULLO PR',t:'La Bahía Bioluminiscente de Vieques es la más brillante del mundo — récord Guinness. Aquí hasta el mar brilla.'},
+      {e:'',k:'¿SABÍAS QUE…',t:'El Yunque es el único bosque tropical lluvioso del sistema forestal de Estados Unidos. Y está aquí, en la isla.'},
+      {e:'',k:'ORGULLO PR',t:'Puerto Rico produce café de altura premiado a nivel mundial. Si vendes café, presúmelo sin pena.'},
+      {e:'',k:'PA’L MUNDO',t:'La música boricua está sonando en todo el planeta. Lo de aquí llega lejos — tu negocio también puede.'},
+      {e:'',k:'CAMPEONES',t:'Mónica Puig (2016) y Jasmine Camacho-Quinn (2020) trajeron oro olímpico a la isla. Aquí se echa pa’lante.'},
+      {e:'',k:'DATO BORICUA',t:'Puerto Rico tiene 78 municipios, cada uno con su sabor. Tu negocio es parte de esa historia.'},
+      {e:'',k:'TRIVIA',t:'El pastelillo y la empanadilla son primos, no gemelos: la empanadilla es más grande y jugosa. Guerra eterna.'},
+      {e:'',k:'¿SABÍAS QUE…',t:'El coquí solo canta de noche — el macho pone el "co" para marcar territorio y el "quí" para enamorar.'},
+      {e:'',k:'CULTURA',t:'La bomba y la plena nacieron aquí. Ese ritmo de resistencia y celebración es el mismo con el que se levanta un negocio.'},
 
       // 💪 Negocios que echan pa’lante (historias que inspiran)
-      {e:'💪',k:'ECHA PA’LANTE',t:'Muchas marcas boricuas grandes empezaron en una cocina, un garaje o un kiosco. El tuyo también puede.'},
-      {e:'🏪',k:'DATO REAL',t:'Los pequeños negocios son la columna de la economía boricua: la mayoría de los empleos salen de ellos. Tú mueves la isla.'},
-      {e:'🚀',k:'HISTORIA',t:'La repostera que empezó vendiendo por WhatsApp los domingos… hoy tiene fila. Todo empieza con un buen post.'},
-      {e:'🔁',k:'LA CLAVE',t:'Consistencia le gana a perfección: quien postea todas las semanas crece más que quien postea "cuando puede".'},
-      {e:'🌱',k:'ECHA PA’LANTE',t:'No necesitas ser experto en redes. Necesitas aparecer. De eso nos encargamos nosotros.'},
+      {e:'',k:'ECHA PA’LANTE',t:'Muchas marcas boricuas grandes empezaron en una cocina, un garaje o un kiosco. El tuyo también puede.'},
+      {e:'',k:'DATO REAL',t:'Los pequeños negocios son la columna de la economía boricua: la mayoría de los empleos salen de ellos. Tú mueves la isla.'},
+      {e:'',k:'HISTORIA',t:'La repostera que empezó vendiendo por WhatsApp los domingos… hoy tiene fila. Todo empieza con un buen post.'},
+      {e:'',k:'LA CLAVE',t:'Consistencia le gana a perfección: quien postea todas las semanas crece más que quien postea "cuando puede".'},
+      {e:'',k:'ECHA PA’LANTE',t:'No necesitas ser experto en redes. Necesitas aparecer. De eso nos encargamos nosotros.'},
 
       // 🌱 Crecer + XPRIZE
-      {e:'🏆',k:'CRECER VA AL XPRIZE',t:'Crecer compite en el Build with Gemini XPRIZE: IA que levanta al micronegocio boricua. Tú eres parte de esa historia.'},
-      {e:'🌱',k:'QUÉ ES CRECER',t:'Un departamento de marketing con IA para el negocio boricua — sin pagar una agencia cara. Tú apruebas, la IA hace el resto.'},
-      {e:'🤖',k:'TU VENTAJA',t:'Tu contenido lo crea IA de última generación — la misma tecnología de las grandes marcas, ahora de tu lado.'},
-      {e:'🇵🇷',k:'DE AQUÍ',t:'Crecer es hecho en Puerto Rico, para Puerto Rico. Entendemos tu mercado porque es el nuestro.'},
-      {e:'📲',k:'LA META',t:'Que tú solo apruebes desde el celular y tu equipo de IA corra el marketing del mes. Así de fácil.'},
+      {e:'',k:'CRECER VA AL XPRIZE',t:'Crecer compite en el Build with Gemini XPRIZE: IA que levanta al micronegocio boricua. Tú eres parte de esa historia.'},
+      {e:'',k:'QUÉ ES CRECER',t:'Un departamento de marketing con IA para el negocio boricua — sin pagar una agencia cara. Tú apruebas, la IA hace el resto.'},
+      {e:'',k:'TU VENTAJA',t:'Tu contenido lo crea IA de última generación — la misma tecnología de las grandes marcas, ahora de tu lado.'},
+      {e:'',k:'DE AQUÍ',t:'Crecer es hecho en Puerto Rico, para Puerto Rico. Entendemos tu mercado porque es el nuestro.'},
+      {e:'',k:'LA META',t:'Que tú solo apruebes desde el celular y tu equipo de IA corra el marketing del mes. Así de fácil.'},
 
       // 🔥 Tips de marketing / redes
-      {e:'🔥',k:'TIP',t:'Un post con imagen detiene el scroll muchísimo más que uno de solo texto. Por eso cuidamos tanto tu arte.'},
-      {e:'📸',k:'TIP',t:'¿Tienes fotos reales de tu producto? Súbelas y tu equipo las realza. Lo real siempre gana.'},
-      {e:'⏰',k:'DATO',t:'Las mejores horas para postear comida en PR: 11am (antojo de almuerzo) y 6pm (¿qué como hoy?).'},
-      {e:'🗣️',k:'POR QUÉ FUNCIONA',t:'Mostrar a las personas detrás del negocio vende: la gente compra de gente, no de logos.'},
-      {e:'🎯',k:'TIP',t:'Un solo mensaje claro por post gana. No metas cinco ideas en uno.'},
-      {e:'📍',k:'NO FALLES',t:'Pon SIEMPRE cómo comprar: WhatsApp, link o dirección. Que nadie tenga que adivinar.'},
-      {e:'💬',k:'TIP',t:'Contesta los comentarios y DMs rápido: el algoritmo premia la conversación.'},
-      {e:'🎬',k:'TIP',t:'Los videos cortos (Reels) llegan a más gente nueva que las fotos. Prueba uno esta semana.'},
-      {e:'🔗',k:'TIP',t:'Conecta tu Instagram y Facebook una sola vez y tu equipo publica por ti.'},
-      {e:'📅',k:'NOVEDAD',t:'Con tu plan, tu equipo te arma el calendario del mes completo. Nunca más quedarte en blanco.'},
-      {e:'🧠',k:'TIP',t:'Mientras más le cuentes a tu equipo sobre tu negocio, mejores te salen los posts.'},
-      {e:'💡',k:'IDEA',t:'Cuenta el "por qué" de tu negocio de vez en cuando. La historia conecta más que el precio.'},
-      {e:'⭐',k:'TIP',t:'Comparte reseñas y fotos de clientes felices. La prueba social vende sola.'}
+      {e:'',k:'TIP',t:'Un post con imagen detiene el scroll muchísimo más que uno de solo texto. Por eso cuidamos tanto tu arte.'},
+      {e:'',k:'TIP',t:'¿Tienes fotos reales de tu producto? Súbelas y tu equipo las realza. Lo real siempre gana.'},
+      {e:'',k:'DATO',t:'Las mejores horas para postear comida en PR: 11am (antojo de almuerzo) y 6pm (¿qué como hoy?).'},
+      {e:'',k:'POR QUÉ FUNCIONA',t:'Mostrar a las personas detrás del negocio vende: la gente compra de gente, no de logos.'},
+      {e:'',k:'TIP',t:'Un solo mensaje claro por post gana. No metas cinco ideas en uno.'},
+      {e:'',k:'NO FALLES',t:'Pon SIEMPRE cómo comprar: WhatsApp, link o dirección. Que nadie tenga que adivinar.'},
+      {e:'',k:'TIP',t:'Contesta los comentarios y DMs rápido: el algoritmo premia la conversación.'},
+      {e:'',k:'TIP',t:'Los videos cortos (Reels) llegan a más gente nueva que las fotos. Prueba uno esta semana.'},
+      {e:'',k:'TIP',t:'Conecta tu Instagram y Facebook una sola vez y tu equipo publica por ti.'},
+      {e:'',k:'NOVEDAD',t:'Con tu plan, tu equipo te arma el calendario del mes completo. Nunca más quedarte en blanco.'},
+      {e:'',k:'TIP',t:'Mientras más le cuentes a tu equipo sobre tu negocio, mejores te salen los posts.'},
+      {e:'',k:'IDEA',t:'Cuenta el "por qué" de tu negocio de vez en cuando. La historia conecta más que el precio.'},
+      {e:'',k:'TIP',t:'Comparte reseñas y fotos de clientes felices. La prueba social vende sola.'}
     ];
     for(var i=DECK.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var tmp=DECK[i]; DECK[i]=DECK[j]; DECK[j]=tmp; }
     var si=0, ci=0, st=document.getElementById('waitStatus');
@@ -554,7 +555,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   function aiRewrite(accion, extra){
     var prev=capBox.textContent;
     actsB.style.display='none'; actsC.style.display='none';
-    capBox.innerHTML='<span style="color:var(--muted)">✍️ Tu equipo está escribiendo…</span>';
+    capBox.innerHTML='<span style="color:var(--muted)">Tu equipo está escribiendo…</span>';
     self(accion, extra).then(function(d){
       if(d&&d.ok&&d.caption){ capBox.textContent=d.caption; if(capEdit) capEdit.value=d.caption; T('Nueva versión ✓'); }
       else { capBox.textContent=prev; T((d&&d.err)||'No se pudo ahora.'); }
@@ -642,12 +643,12 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     var stage=document.getElementById('promoStage'), x=document.getElementById('promoX'), dotsBox=document.getElementById('promoDots');
     var IMG=<?= json_encode($grafica) ?>, PRICE=<?= json_encode(number_format((float)$plan_venta['precio_mensual'],0)) ?>, DIA=<?= json_encode(number_format((float)$plan_venta['precio_mensual']/30,2)) ?>;
     var S=[
-      '<div class="ps-emoji">🎉</div><div class="ps-title">¡Tu post ya está en tus redes!</div>',
-      (IMG?'<img class="ps-img" src="'+IMG+'">':'<div class="ps-emoji">📲</div>')+'<div class="ps-sub">Y esto es apenas el comienzo…</div>',
-      '<div class="ps-emoji">🎨</div><div class="ps-title">Tu marketing, hecho</div><div class="ps-sub">Posts, arte y captions en tu voz. Tú solo apruebas.</div>',
-      '<div class="ps-emoji">📅</div><div class="ps-title">Contenido todo el mes</div><div class="ps-sub">Nunca más quedarte en blanco.</div>',
-      '<div class="ps-emoji">🚀</div><div class="ps-title">Publica y responde solo</div><div class="ps-sub">Auto-publica a tus redes y contesta los DMs por ti.</div>',
-      '<div class="ps-emoji">☕</div><div class="ps-title">¿El costo?</div><div class="ps-sub">Menos de $'+DIA+' al día. Más barato que tu cafecito. Una agencia cobra cientos.</div>',
+      '<div class="ps-title">¡Tu post ya está en tus redes!</div>',
+      (IMG?'<img class="ps-img" src="'+IMG+'">':'')+'<div class="ps-sub">Y esto es apenas el comienzo…</div>',
+      '<div class="ps-title">Tu marketing, hecho</div><div class="ps-sub">Posts, arte y captions en tu voz. Tú solo apruebas.</div>',
+      '<div class="ps-title">Contenido todo el mes</div><div class="ps-sub">Nunca más quedarte en blanco.</div>',
+      '<div class="ps-title">Publica y responde solo</div><div class="ps-sub">Auto-publica a tus redes y contesta los DMs por ti.</div>',
+      '<div class="ps-title">¿El costo?</div><div class="ps-sub">Menos de $'+DIA+' al día. Más barato que tu cafecito. Una agencia cobra cientos.</div>',
       '<div class="ps-price">$'+PRICE+'<span>/mes</span></div><div class="ps-sub">Cancela cuando quieras · tus posts 100% tuyos</div><button class="ps-cta" id="promoCta">Activar mi corillo →</button>'
     ];
     S.forEach(function(_,i){ var d=document.createElement('i'); if(i===0)d.className='on'; dotsBox.appendChild(d); });
@@ -680,17 +681,17 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   (function(){
     var el=document.getElementById('vsText'), em=document.getElementById('vsEmoji'); if(!el) return;
     var V=[
-      {e:'☕',t:'Menos que un cafecito al día por tu marketing completo. Hazte la cuenta.'},
-      {e:'💸',t:'Una agencia de marketing cobra cientos de dólares al mes. Crecer hace el trabajo por una fracción.'},
-      {e:'🕒',t:'Deja de perder horas pensando qué postear. Tu equipo lo hace por ti, cada semana.'},
-      {e:'🌱',t:'Crecer es la herramienta del que echa pa\'lante desde abajo — hecha para el negocio pequeño, no para la corporación.'},
-      {e:'✅',t:'Cancela cuando quieras. Sin contratos, sin amarres, sin letra chiquita.'},
-      {e:'🎨',t:'Diseñador, redactor y estratega — todo en uno, por menos de lo que pagas por el internet del negocio.'},
-      {e:'📈',t:'Postear consistente hace crecer las ventas. Crecer te lo mantiene sin que tengas que acordarte.'},
-      {e:'📲',t:'Tú apruebas desde el celular en segundos. La IA corre el resto, día y noche.'},
-      {e:'💪',t:'Tu competencia ya está en redes. Con Crecer apareces mejor y más seguido, sin sudar.'},
-      {e:'🏷️',t:'Al suscribirte, tus posts salen 100% tuyos — sin firma de nadie.'},
-      {e:'🇵🇷',t:'Hecho en Puerto Rico para el negocio boricua. Entendemos tu mercado porque es el nuestro.'}
+      {e:'',t:'Menos que un cafecito al día por tu marketing completo. Hazte la cuenta.'},
+      {e:'',t:'Una agencia de marketing cobra cientos de dólares al mes. Crecer hace el trabajo por una fracción.'},
+      {e:'',t:'Deja de perder horas pensando qué postear. Tu equipo lo hace por ti, cada semana.'},
+      {e:'',t:'Crecer es la herramienta del que echa pa\'lante desde abajo — hecha para el negocio pequeño, no para la corporación.'},
+      {e:'',t:'Cancela cuando quieras. Sin contratos, sin amarres, sin letra chiquita.'},
+      {e:'',t:'Diseñador, redactor y estratega — todo en uno, por menos de lo que pagas por el internet del negocio.'},
+      {e:'',t:'Postear consistente hace crecer las ventas. Crecer te lo mantiene sin que tengas que acordarte.'},
+      {e:'',t:'Tú apruebas desde el celular en segundos. La IA corre el resto, día y noche.'},
+      {e:'',t:'Tu competencia ya está en redes. Con Crecer apareces mejor y más seguido, sin sudar.'},
+      {e:'',t:'Al suscribirte, tus posts salen 100% tuyos — sin firma de nadie.'},
+      {e:'',t:'Hecho en Puerto Rico para el negocio boricua. Entendemos tu mercado porque es el nuestro.'}
     ];
     for(var i=V.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=V[i]; V[i]=V[j]; V[j]=t; }
     var k=0; function show(){ var c=V[k%V.length]; el.style.opacity=0; em.style.opacity=0; setTimeout(function(){ el.textContent=c.t; em.textContent=c.e; el.style.opacity=1; em.style.opacity=1; },280); }
