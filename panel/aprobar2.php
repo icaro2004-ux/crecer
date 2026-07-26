@@ -568,7 +568,10 @@ try {
     require_once __DIR__ . '/../includes/img_responses.php';
     $pend = $pdo->prepare("SELECT id FROM crecer_contenido WHERE marca_id=? AND img_estado='queued' AND img_job IS NOT NULL ORDER BY id DESC LIMIT 4");
     $pend->execute([$marca_id]);
-    foreach ($pend->fetchAll(PDO::FETCH_COLUMN) as $pid) { img_resp_completar($pdo, $marca_id, (int)$pid); }
+    foreach ($pend->fetchAll(PDO::FETCH_COLUMN) as $pid) {
+        $rr = img_resp_completar($pdo, $marca_id, (int)$pid);
+        if (($rr['estado'] ?? '') === 'error') arte_disparar($marca_id, (int)$pid, null, null, true);   // gpt cayó → Gemini en background
+    }
 } catch (Throwable $e) {}
 $wk = $pdo->prepare("SELECT COUNT(*) c, MIN(created_at) oldest FROM crecer_graficas WHERE marca_id=? AND created_at >= (NOW() - INTERVAL 7 DAY)");
 $wk->execute([$marca_id]); $w = $wk->fetch();

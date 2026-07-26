@@ -23,10 +23,11 @@ function img_resp_activo(): bool {
  * background hasta que la imagen esté y AVISA por notificación (campanita). Así el
  * dueño encola y sigue editando / se va; la notificación lo lleva al post listo.
  */
-function arte_disparar(int $marca_id, int $post_id, ?bool $con_texto = null, ?string $extra = null): void {
+function arte_disparar(int $marca_id, int $post_id, ?bool $con_texto = null, ?string $extra = null, bool $fb = false): void {
     $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
     $q = '&ct=' . ($con_texto === null ? 'x' : ($con_texto ? '1' : '0'));
     if ($extra !== null && trim($extra) !== '') $q .= '&extra=' . rawurlencode(mb_substr(trim($extra), 0, 300));
+    if ($fb) $q .= '&fb=1';   // re-disparo: ir DIRECTO a Gemini (gpt no pudo)
     $url  = 'https://' . $host . '/crecer/panel/arte_worker.php?marca=' . $marca_id . '&id=' . $post_id . '&key=' . ARTE_WORKER_KEY . $q;
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -105,6 +106,38 @@ function img_resp_encolar(PDO $pdo, int $marca_id, int $post_id, string $copy, ?
         } catch (Throwable $e) { /* log best-effort */ }
         return $bg['id'];
     } catch (Throwable $e) { error_log('img_resp_encolar: ' . $e->getMessage()); return ''; }
+}
+
+/**
+ * RESPALDO: si gpt-image-2 (Responses) no pudo, genera con GEMINI (Nano Banana Pro,
+ * gemini-3-pro-image) y guarda en la pieza. Usa el logo real si hay. Devuelve la URL o ''.
+ * Corre donde haya tiempo (worker), NUNCA en la pantalla del dueño.
+ */
+function img_gemini_fallback(PDO $pdo, int $marca_id, int $post_id, string $copy): string {
+    try {
+        $m = function_exists('leer_marca') ? leer_marca($pdo, $marca_id)
+           : $pdo->query("SELECT * FROM crecer_marca WHERE id=" . (int)$marca_id)->fetch(PDO::FETCH_ASSOC);
+        if (!$m) return '';
+        $imgs = [];
+        if (!empty($m['logo_path'])) {
+            $labs = rtrim(UPLOADS_PATH, '/\\') . '/' . ltrim(str_replace(rtrim(UPLOADS_URL, '/'), '', (string)$m['logo_path']), '/');
+            if (is_file($labs)) { $mime = (function_exists('mime_content_type') ? mime_content_type($labs) : '') ?: 'image/png';
+                $imgs[] = ['data' => base64_encode((string)file_get_contents($labs)), 'mime' => $mime]; }
+        }
+        $brief = img_resp_brief($m, $copy, null, !empty($imgs));
+        $r = gemini_imagen($brief, ['modelo' => 'gemini-3-pro-image', 'aspect' => '1:1'] + ($imgs ? ['imagenes' => $imgs] : []));
+        $bin = $r['data'] ?? '';
+        if ($bin === '') return '';
+        $rel = "marca_{$marca_id}/graficas/gem_{$post_id}_" . substr(md5((string)microtime(true)), 0, 6) . '.png';
+        $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+        @mkdir(dirname($abs), 0775, true); @file_put_contents($abs, $bin);
+        $url = rtrim(UPLOADS_URL, '/') . '/' . $rel;
+        $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, img_estado='ok', img_job=NULL, updated_at=NOW() WHERE id=? AND marca_id=?")
+            ->execute([$url, $post_id, $marca_id]);
+        try { $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,estado) VALUES (?,?,?,?,?,?, 'ok')")
+            ->execute([$marca_id, 'director_imagen', 'Respaldo Gemini (gpt no pudo)', 'gemini-3-pro-image', $brief, $url]); } catch (Throwable $e) {}
+        return $url;
+    } catch (Throwable $e) { error_log('img_gemini_fallback: ' . $e->getMessage()); return ''; }
 }
 
 /**

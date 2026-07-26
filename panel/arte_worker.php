@@ -28,29 +28,40 @@ if (function_exists('fastcgi_finish_request')) { fastcgi_finish_request(); }
 $ct_raw = (string)($_GET['ct'] ?? 'x');
 $con_texto = ($ct_raw === 'x' ? null : ($ct_raw === '1'));
 $extra = trim((string)($_GET['extra'] ?? ''));
-try {
-    $row = $pdo->query("SELECT img_job, caption FROM crecer_contenido WHERE id=" . $pid)->fetch(PDO::FETCH_ASSOC);
-    if ($row && trim((string)($row['img_job'] ?? '')) === '') {
-        img_resp_encolar($pdo, $mid, $pid, (string)($row['caption'] ?? ''), $con_texto, $extra !== '' ? $extra : null);
-    }
-} catch (Throwable $e) { error_log("arte_worker #{$pid} crear: " . $e->getMessage()); }
-
 $link = '/crecer/panel/propuestas.php?marca=' . $mid;
+$row  = $pdo->query("SELECT img_job, caption FROM crecer_contenido WHERE id=" . $pid)->fetch(PDO::FETCH_ASSOC);
+$copy = (string)($row['caption'] ?? '');
+
+// avisa ok/respaldo/error por notificación
+$notif_ok = function () use ($pdo, $mid, $link) {
+    notif_crear($pdo, $mid, 'arte', 'Tu arte ya está listo', 'El corillo terminó la imagen de tu post — dale un vistazo.', $link, 'image');
+};
+// RESPALDO Gemini (Nano Banana Pro) cuando gpt no puede → avisa ok o error.
+$respaldo_gemini = function () use ($pdo, $mid, $pid, $copy, $link, $notif_ok) {
+    $u = img_gemini_fallback($pdo, $mid, $pid, $copy);
+    if ($u !== '') { $notif_ok(); }
+    else { notif_crear($pdo, $mid, 'arte', 'No se pudo crear el arte', 'Vuelve a tu post e intenta otra vez.', $link, 'bolt'); }
+    exit;
+};
+
+// Re-disparo desde el sweep: ir DIRECTO a Gemini (gpt ya falló antes).
+if (($_GET['fb'] ?? '') === '1') { error_log("arte_worker #{$pid}: re-disparo → Gemini directo"); $respaldo_gemini(); }
+
+// 1) CREAR el job de gpt-image-2. Si NO se pudo crear (ej. 429/rate limit) → respaldo Gemini.
+if ($row && trim((string)($row['img_job'] ?? '')) === '') {
+    $jid = img_resp_encolar($pdo, $mid, $pid, $copy, $con_texto, $extra !== '' ? $extra : null);
+    if ($jid === '') { error_log("arte_worker #{$pid}: gpt no creó → Gemini"); $respaldo_gemini(); }
+}
+
+// 2) Sondea gpt-image-2. ok → avisa. error → Gemini. sigue en progreso → espera.
 $estado = 'queued';
-for ($i = 0; $i < 60; $i++) {                 // ~3 min máx (gpt-image-1 suele < 1 min)
+for ($i = 0; $i < 80; $i++) {                 // ~4 min de ventana (gpt-image-2 tarda ~3)
     try { $r = img_resp_completar($pdo, $mid, $pid); $estado = (string)($r['estado'] ?? 'queued'); }
     catch (Throwable $e) { $estado = 'queued'; }
-    if ($estado === 'ok') {
-        notif_crear($pdo, $mid, 'arte', 'Tu arte ya está listo',
-            'El corillo terminó la imagen de tu post — dale un vistazo.', $link, 'image');
-        exit;
-    }
-    if ($estado === 'error') {
-        notif_crear($pdo, $mid, 'arte', 'No se pudo crear el arte',
-            'Vuelve a tu post e intenta otra vez.', $link, 'bolt');
-        exit;
-    }
+    if ($estado === 'ok') { $notif_ok(); exit; }
+    if ($estado === 'error') { error_log("arte_worker #{$pid}: gpt error → Gemini"); $respaldo_gemini(); }
     sleep(3);
 }
-// Timeout del worker: el job queda vivo; un poll futuro (o el usuario al volver) lo cierra.
-error_log("arte_worker #{$pid}: timeout tras ~3min (job sigue vivo)");
+// 3) Timeout: gpt tardó demasiado (si el worker sobrevivió hasta aquí) → respaldo Gemini.
+error_log("arte_worker #{$pid}: gpt timeout → Gemini");
+$respaldo_gemini();
