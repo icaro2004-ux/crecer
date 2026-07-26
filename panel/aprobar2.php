@@ -572,7 +572,7 @@ require __DIR__ . '/_shell.php';
   .feedwrap .post{margin-top:14px}
   .viewtoggle{display:flex;gap:6px;margin:6px 0 10px}
   .vt{font-weight:700;font-size:13.5px;text-decoration:none;color:var(--muted);padding:8px 16px;border-radius:99px;border:1.5px solid var(--line)}
-  .vt.on{color:#fff;background:linear-gradient(135deg,var(--teal),var(--teal-700));border-color:transparent}
+  .vt.on{color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));border-color:transparent}
   .subtabs{display:flex;gap:8px;max-width:600px;margin:14px 0 4px;border-bottom:1.5px solid var(--line);padding-bottom:0;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none;-webkit-overflow-scrolling:touch}
   .subtabs::-webkit-scrollbar{display:none}
   .st{display:flex;align-items:center;gap:7px;font-weight:800;font-size:14px;text-decoration:none;color:var(--muted);padding:10px 14px;border-bottom:3px solid transparent;margin-bottom:-1.5px;white-space:nowrap;flex:none}
@@ -897,13 +897,8 @@ $cf = [
   'biblioteca' => ['Historial',             'Todo lo que ya publicaste, mes por mes.'],
 ][$tab] ?? ['La Creativa · Ideando', ''];
 ?>
-<div class="cfhead">
-  <div class="cf-orb"><img src="/crecer/assets/icons/creativa.svg" alt="La Creativa"></div>
-  <div class="cf-body">
-    <div class="cf-top"><h1>Contenido</h1><span class="cf-pill"><?= $h($cf[0]) ?></span></div>
-    <p><?= $h($cf[1]) ?></p>
-  </div>
-</div>
+<!-- Header COHERENTE con el modo Calendario: mismo h1 limpio + mismo viewtoggle. -->
+<h1 class="page-h">Contenido</h1>
 <div class="viewtoggle">
   <a class="vt on" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=<?= $h($tab) ?>"><?= ico('list') ?> Lista</a>
   <a class="vt" href="/crecer/panel/calendario.php?marca=<?= $marca_id ?>"><?= ico('calendar') ?> Calendario</a>
