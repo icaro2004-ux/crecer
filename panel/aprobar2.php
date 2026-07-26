@@ -562,17 +562,9 @@ $dir_fotos = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/fotos";
 $url_fotos = rtrim(UPLOADS_URL, '/') . "/marca_{$marca_id}/fotos";
 $fotos = is_dir($dir_fotos) ? array_values(array_filter(scandir($dir_fotos), fn($x)=>$x[0]!=='.')) : [];
 $tiene_logo = !empty($marca['logo_path']);
-// Al VOLVER al estudio, recoge los jobs de imagen que ya terminaron en OpenAI (el worker
+// Al VOLVER al estudio, recoge los jobs que ya terminaron en OpenAI + notifica (el worker
 // muere en Hostinger antes de que gpt-image-2 acabe ~170s). Así la imagen aparece sola.
-try {
-    require_once __DIR__ . '/../includes/img_responses.php';
-    $pend = $pdo->prepare("SELECT id FROM crecer_contenido WHERE marca_id=? AND img_estado='queued' AND img_job IS NOT NULL ORDER BY id DESC LIMIT 4");
-    $pend->execute([$marca_id]);
-    foreach ($pend->fetchAll(PDO::FETCH_COLUMN) as $pid) {
-        $rr = img_resp_completar($pdo, $marca_id, (int)$pid);
-        if (($rr['estado'] ?? '') === 'error') arte_disparar($marca_id, (int)$pid, null, null, true);   // gpt cayó → Gemini en background
-    }
-} catch (Throwable $e) {}
+try { require_once __DIR__ . '/../includes/img_responses.php'; img_sweep_pendientes($pdo, $marca_id); } catch (Throwable $e) {}
 $wk = $pdo->prepare("SELECT COUNT(*) c, MIN(created_at) oldest FROM crecer_graficas WHERE marca_id=? AND created_at >= (NOW() - INTERVAL 7 DAY)");
 $wk->execute([$marca_id]); $w = $wk->fetch();
 $sin_limite_img = img_generacion_ilimitada($pdo, $marca_id);   // fundador/prueba → sin tope
@@ -1972,7 +1964,12 @@ $cf = [
       } else {
         ponerImagen(card,d.img,thenApprove);
       }
-    }).catch(function(){ go.disabled=false; go.textContent='✨ Crear el arte'; toast('Error de conexión.'); });
+    }).catch(function(){
+      // La petición pudo tardar, pero el arte se está generando en background igual.
+      go.disabled=false; go.textContent='✨ Crear el arte';
+      cerrarArte(); if(artCard) marcarGenerando(artCard);
+      toast('Se está generando en background — te avisamos en Notificaciones cuando esté.');
+    });
   });
   // Reusar un arte ya creado (clic en miniatura)
   artform.addEventListener('click', function(e){

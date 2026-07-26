@@ -21,6 +21,8 @@ $BASE = '/crecer/panel';
 $mid  = "marca={$marca_id}";
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 $negocio = $marca['nombre_negocio'] ?? 'tu negocio';
+// Recoge imágenes que terminaron en background + notifica (el worker muere en Hostinger).
+if ($_SERVER['REQUEST_METHOD'] === 'GET') { try { require_once __DIR__ . '/../includes/img_responses.php'; img_sweep_pendientes($pdo, $marca_id); } catch (Throwable $e) {} }
 
 // ── El corillo mira PRIMERO la Biblioteca: atar una foto que ya existe a una
 //    propuesta (en vez de generar). Sin IA, sin match inteligente — solo pone la

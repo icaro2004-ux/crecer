@@ -22,6 +22,9 @@ $BASE = '/crecer/panel';
 $mid  = "marca={$marca_id}";
 
 // ── AJAX: Idea del día (async; el front la pide al cargar) ──
+// Recoge imágenes que terminaron en background + notifica (el worker muere en Hostinger).
+if ($_SERVER['REQUEST_METHOD'] === 'GET') { try { require_once __DIR__ . '/../includes/img_responses.php'; img_sweep_pendientes($pdo, $marca_id); } catch (Throwable $e) {} }
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'idea') {
     require_once __DIR__ . '/../includes/agentes.php';
     header('Content-Type: application/json; charset=utf-8');

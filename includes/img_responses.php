@@ -141,6 +141,33 @@ function img_gemini_fallback(PDO $pdo, int $marca_id, int $post_id, string $copy
 }
 
 /**
+ * SWEEP: al volver a cualquier pantalla, recoge los jobs de imagen que ya terminaron en
+ * OpenAI (el worker muere en Hostinger antes de que gpt-image-2 acabe) → guarda la imagen
+ * Y CREA la notificación (el worker no alcanzó). Si gpt cayó → re-dispara Gemini. No bloquea:
+ * cada job es un GET corto; tope de 4. Llamar en GET de las pantallas principales.
+ */
+function img_sweep_pendientes(PDO $pdo, int $marca_id): void {
+    try {
+        $pend = $pdo->prepare("SELECT id FROM crecer_contenido WHERE marca_id=? AND img_estado='queued' AND img_job IS NOT NULL ORDER BY id DESC LIMIT 4");
+        $pend->execute([$marca_id]);
+        $ids = $pend->fetchAll(PDO::FETCH_COLUMN);
+        if (!$ids) return;
+        if (!function_exists('notif_crear')) { @require_once __DIR__ . '/notif.php'; }
+        $link = '/crecer/panel/propuestas.php?marca=' . $marca_id;
+        foreach ($ids as $pid) {
+            $r = img_resp_completar($pdo, $marca_id, (int)$pid);
+            $est = $r['estado'] ?? '';
+            if ($est === 'ok' && function_exists('notif_crear')) {
+                notif_crear($pdo, $marca_id, 'arte', 'Tu arte ya está listo',
+                    'El corillo terminó la imagen de tu post — dale un vistazo.', $link, 'image');
+            } elseif ($est === 'error' && function_exists('arte_disparar')) {
+                arte_disparar($marca_id, (int)$pid, null, null, true);   // gpt cayó → Gemini en background
+            }
+        }
+    } catch (Throwable $e) {}
+}
+
+/**
  * Consulta el trabajo pendiente de una pieza; si completó, GUARDA la imagen y
  * actualiza crecer_contenido. Devuelve ['estado'=>ok|queued|error|none, 'img'=>url|null].
  * Idempotente: si ya no hay job pendiente, reporta el estado actual.
