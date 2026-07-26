@@ -627,6 +627,16 @@ $credito  = $has_deck
   .hz-fc .fc-n{font-family:var(--font-display);font-weight:800;font-size:46px;letter-spacing:-.03em;color:var(--teal-700,#00827e);line-height:1}
   .hz-fc .fc-l{font-size:13.5px;color:var(--ink-soft,#4a444c);line-height:1.4}
   .hz-fc .fc-l small{color:var(--muted)}
+  /* DESKTOP: aprovecha el ancho — grid de 2 columnas, no una tira vertical */
+  @media(min-width:861px){
+    .hz{max-width:1040px;display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;padding:26px 26px 48px}
+    .hz-hi{grid-column:1 / -1;padding:2px 2px 2px}
+    .hz-hello{font-size:34px}
+    .hz-card{margin-top:0}
+    .hz{grid-auto-flow:row dense}
+    .hz-card:has(.hz-next){grid-column:1 / -1}       /* Próximo post = hero ancho */
+    .hz-card:has(.hz-next) .hz-next .im{width:200px}
+  }
 </style>
 <main class="hz">
   <div class="hz-hi">
