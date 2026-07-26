@@ -160,6 +160,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($accion === 'bloquear' && !$final) {
         $pdo->prepare("UPDATE crecer_marca SET logo_final=1 WHERE id=?")->execute([$marca_id]);
         http_response_code(204); exit; // para el fetch del download
+    } elseif ($accion === 'eliminar_logo') {
+        // Borrar un logo que NO se va a usar. Nunca borra el ELEGIDO (para no
+        // romper el logo activo/final). Best-effort: quita archivo + fila.
+        $lid = (int)($_POST['logo_id'] ?? 0);
+        $row = $pdo->prepare("SELECT archivo, elegido FROM crecer_logos WHERE id=? AND marca_id=?");
+        $row->execute([$lid, $marca_id]); $row = $row->fetch(PDO::FETCH_ASSOC);
+        if ($row && (int)$row['elegido'] !== 1) {
+            $arch = (string)$row['archivo'];
+            if (strpos($arch, '/uploads/') !== false && defined('UPLOADS_PATH')) {
+                $rel = substr($arch, strpos($arch, '/uploads/') + 9);
+                $abs = rtrim(UPLOADS_PATH, '/\\') . '/' . ltrim($rel, '/');
+                if (is_file($abs)) @unlink($abs);
+            }
+            $pdo->prepare("DELETE FROM crecer_logos WHERE id=? AND marca_id=?")->execute([$lid, $marca_id]);
+        }
+        header("Location: /crecer/panel/marca.php?marca={$marca_id}#identidad"); exit;
     }
 }
 
@@ -473,8 +489,18 @@ function cerCancel(id){var f=document.getElementById('cerf-'+id);if(f)f.style.di
       $es = $l['elegido'];
       $oculto = $final && !$es; // si ya finalizó, atenúa los no elegidos
     ?>
-      <div class="tile <?= $es?'sel':'' ?> <?= $oculto?'locked':'' ?>">
+      <div class="tile <?= $es?'sel':'' ?> <?= $oculto?'locked':'' ?>" style="position:relative">
         <img class="zoomable" src="<?= $h($l['archivo']) ?>" alt="logo">
+        <?php if (!$es): ?>
+          <form method="post" style="position:absolute;top:6px;right:6px;margin:0;z-index:3" onsubmit="return confirm('¿Eliminar este logo? No se puede deshacer.')">
+            <input type="hidden" name="accion" value="eliminar_logo">
+            <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(),ENT_QUOTES) ?>">
+            <input type="hidden" name="logo_id" value="<?= $l['id'] ?>">
+            <button type="submit" aria-label="Eliminar logo" title="Eliminar" style="width:30px;height:30px;border-radius:50%;border:0;cursor:pointer;background:rgba(20,10,22,.55);color:#fff;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px)">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </button>
+          </form>
+        <?php endif; ?>
         <?php if ($es): ?>
           <div class="badge">✓ Tu logo</div>
         <?php elseif (!$final): ?>

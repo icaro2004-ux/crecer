@@ -37,3 +37,15 @@ function notif_marcar_leidas(PDO $pdo, int $marca_id): void {
     try { $pdo->prepare("UPDATE crecer_notificaciones SET leida=1 WHERE marca_id=? AND leida=0")->execute([$marca_id]); }
     catch (Throwable $e) {}
 }
+
+/** Borra UNA notificación (del dueño). */
+function notif_borrar(PDO $pdo, int $marca_id, int $id): void {
+    try { $pdo->prepare("DELETE FROM crecer_notificaciones WHERE id=? AND marca_id=?")->execute([$id, $marca_id]); }
+    catch (Throwable $e) {}
+}
+
+/** Limpia TODAS las notificaciones de la marca. */
+function notif_borrar_todas(PDO $pdo, int $marca_id): void {
+    try { $pdo->prepare("DELETE FROM crecer_notificaciones WHERE marca_id=?")->execute([$marca_id]); }
+    catch (Throwable $e) {}
+}

@@ -154,6 +154,11 @@ require __DIR__ . '/_shell.php';
   .bib-tile .play{position:absolute;inset:0;display:grid;place-items:center;background:rgba(20,10,22,.16);color:#fff}
   .bib-tile .play span{width:44px;height:44px;border-radius:50%;background:rgba(0,0,0,.45);display:grid;place-items:center;backdrop-filter:blur(2px)}
   .bib-tile .play span::after{content:"";margin-left:3px;border-style:solid;border-width:9px 0 9px 14px;border-color:transparent transparent transparent #fff}
+  .bib-del{position:absolute;top:8px;right:8px;z-index:4;width:32px;height:32px;border-radius:50%;border:0;cursor:pointer;
+    background:rgba(20,10,22,.55);color:#fff;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s,background .15s;backdrop-filter:blur(2px)}
+  .bib-tile:hover .bib-del{opacity:1}
+  .bib-del:hover{background:#e0384f}
+  @media(hover:none){.bib-del{opacity:.92}}
 
   .bib-empty{text-align:center;padding:8vh 10px 2vh;color:var(--muted)}
   .bib-empty p{font-size:15px;line-height:1.6;margin:0 auto;max-width:34ch}
@@ -213,6 +218,9 @@ require __DIR__ . '/_shell.php';
           <video src="<?= $h($url) ?>" preload="metadata" muted playsinline></video>
           <span class="play"><span></span></span>
         <?php endif; ?>
+        <button type="button" class="bib-del" data-del="<?= (int)$a['id'] ?>" aria-label="Eliminar" title="Eliminar">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
       </figure>
     <?php endforeach; ?>
   </div>
@@ -281,6 +289,19 @@ require __DIR__ . '/_shell.php';
     return { id: t.getAttribute('data-id'), tipo: t.getAttribute('data-tipo'), url: t.getAttribute('data-url'),
              nombre: t.getAttribute('data-nombre') || '', nota: t.getAttribute('data-nota') || '', fecha: t.getAttribute('data-fecha') || '' };
   });
+  // Botón de basura en cada tile: borra sin abrir el visor.
+  [].slice.call(grid.querySelectorAll('.bib-del')).forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation(); e.preventDefault();
+      if (!confirm('¿Eliminar esto de tu biblioteca? No se puede deshacer.')) return;
+      btn.disabled = true;
+      post('eliminar', { id: btn.getAttribute('data-del') }).then(function (d) {
+        if (d && d.ok) location.reload();
+        else { btn.disabled = false; alert((d && d.err) || 'No se pudo eliminar.'); }
+      }).catch(function () { btn.disabled = false; alert('Se cayó la conexión.'); });
+    });
+  });
+
   var lb = document.getElementById('lb'), track = document.getElementById('lbTrack'), stage = document.getElementById('lbStage'),
       countEl = document.getElementById('lbCount'), nameEl = document.getElementById('lbName'), dateEl = document.getElementById('lbDate'),
       noteEl = document.getElementById('lbNote'), noteBtn = document.getElementById('lbNoteBtn'), delEl = document.getElementById('lbDel');
