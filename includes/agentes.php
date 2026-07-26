@@ -18,8 +18,8 @@ if (!defined('CRECER_COPILOTO_GLOBAL_DIA')) define('CRECER_COPILOTO_GLOBAL_DIA',
 if (!defined('CRECER_COPILOTO_MODEL'))      define('CRECER_COPILOTO_MODEL', 'gemini-2.5-flash-lite');
 
 // Límites de generación de imágenes (control de costos)
-if (!defined('CRECER_IMG_SEMANA')) define('CRECER_IMG_SEMANA', 10); // máximo por semana (ventana 7 días)
-if (!defined('CRECER_IMG_POST'))   define('CRECER_IMG_POST', 2);    // máximo de generaciones IA por post
+if (!defined('CRECER_IMG_SEMANA')) define('CRECER_IMG_SEMANA', 15); // máximo por semana (ventana 7 días) = 5 posts × 3
+if (!defined('CRECER_IMG_POST'))   define('CRECER_IMG_POST', 3);    // máximo de generaciones IA por post
 
 /** Convierte "El Palo Dulce" → "el-palo-dulce" (para links públicos). */
 function slugify(string $s): string {

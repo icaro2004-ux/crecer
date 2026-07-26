@@ -163,7 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'paywall']); exit;
         }
         $dir_fotos = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/fotos";
-        // Tope por post: 2 generaciones IA — SIEMPRE.
+        // Tope por post: 3 generaciones IA — SIEMPRE.
         $ai = $pdo->prepare("SELECT arte_intentos FROM crecer_contenido WHERE id=? AND marca_id=?");
         $ai->execute([$id, $marca_id]); $intentos = (int)$ai->fetchColumn();
         if ($intentos >= CRECER_IMG_POST) { header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'post_limite']); exit; }
@@ -1845,7 +1845,7 @@ $cf = [
       .catch(function(){ if(btn) btn.disabled=false; ta.placeholder=oldph; });
   }
   function actualizarLimitePost(card){
-    var rest=parseInt(card.dataset.intentos||'2',10);
+    var rest=parseInt(card.dataset.intentos||'<?= CRECER_IMG_POST ?>',10);
     var go=document.getElementById('art-go'), note=document.getElementById('art-postnote');
     if(rest<=0){
       go.disabled=true; go.textContent='Se acabaron las generaciones de este post';
