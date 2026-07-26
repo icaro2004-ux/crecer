@@ -597,7 +597,7 @@ $credito  = $has_deck
     $chev  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>';
     $cards = [
       ['reels.php',      'camera', '#ef4375', '#fff0f5', 'Haz un reel',    'Sube clips, yo lo armo'],
-      ['propuestas.php', 'pen',    '#00a49f', '#eafaf8', 'Tus Posts', 'Mira lo que preparé'],
+      ['propuestas.php', 'list',   '#00a49f', '#eafaf8', 'Tus Posts', 'Mira lo que preparé'],
       ['sala.php',       'chat',   '#7c58e8', '#f2edff', 'La Sala',        'Habla con tu corillo'],
       ['biblioteca.php', 'image',  '#c78a16', '#fff7df', 'Sube fotos',     'Alimenta al corillo'],
     ];
