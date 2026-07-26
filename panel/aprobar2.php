@@ -897,8 +897,8 @@ $cf = [
   'biblioteca' => ['Historial',             'Todo lo que ya publicaste, mes por mes.'],
 ][$tab] ?? ['La Creativa · Ideando', ''];
 ?>
-<!-- Header COHERENTE con el modo Calendario: mismo h1 limpio + mismo viewtoggle. -->
-<h1 class="page-h">Contenido</h1>
+<!-- Header COHERENTE con el modo Calendario: mismo h1 limpio (page-h, bold) + mismo viewtoggle. -->
+<h1 class="page-h">Tus Posts</h1>
 <div class="viewtoggle">
   <a class="vt on" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=<?= $h($tab) ?>"><?= ico('list') ?> Lista</a>
   <a class="vt" href="/crecer/panel/calendario.php?marca=<?= $marca_id ?>"><?= ico('calendar') ?> Calendario</a>

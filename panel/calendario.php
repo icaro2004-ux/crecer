@@ -244,7 +244,7 @@ $icoMes='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="cur
   .add-box .x{position:absolute;top:12px;right:14px;border:0;background:none;font-size:20px;cursor:pointer;color:var(--muted)}
 </style>
 
-<h1 class="page-h">Contenido</h1>
+<h1 class="page-h">Tus Posts</h1>
 <div class="viewtoggle">
   <a class="vt" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>"><?= ico('list') ?> Lista</a>
   <a class="vt on" href="/crecer/panel/calendario.php?marca=<?= $marca_id ?>"><?= ico('calendar') ?> Calendario</a>
