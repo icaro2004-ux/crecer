@@ -142,8 +142,23 @@ require __DIR__ . '/_shell.php';
 
   /* lo que salió: galería visual (misma lengua que Biblioteca) */
   .rz-galt{font-family:var(--font-display);font-size:16px;font-weight:600;color:var(--ink-soft);margin:34px 0 16px}
-  .rz-gal{display:flex;gap:12px;overflow-x:auto;padding:2px 2px 12px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
+  .rz-galwrap{position:relative}
+  .rz-gal{display:flex;gap:12px;overflow-x:auto;padding:2px 2px 12px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;scroll-behavior:smooth}
   .rz-gal::-webkit-scrollbar{height:0}
+  /* Flechas: solo desktop (en móvil se desliza con el dedo) */
+  .rz-arw{display:none}
+  @media(min-width:861px){
+    .rz-arw{position:absolute;top:calc(50% - 6px);transform:translateY(-50%);z-index:5;width:44px;height:44px;border-radius:50%;
+      border:1px solid var(--line);background:#fff;color:var(--ink,#231f20);cursor:pointer;align-items:center;justify-content:center;
+      box-shadow:0 10px 26px -10px rgba(40,22,28,.4);transition:transform .12s,opacity .15s,box-shadow .12s}
+    .rz-arw{display:flex}
+    .rz-arw:hover{transform:translateY(-50%) scale(1.06);box-shadow:0 14px 32px -10px rgba(40,22,28,.5)}
+    .rz-arw:active{transform:translateY(-50%) scale(.94)}
+    .rz-arw .ic{width:22px;height:22px}
+    .rz-arw-l{left:-10px}
+    .rz-arw-r{right:-10px}
+    .rz-arw[disabled]{opacity:0;pointer-events:none}
+  }
   .rz-shot{position:relative;flex:0 0 140px;width:140px;aspect-ratio:4/5;scroll-snap-align:start;display:block;border-radius:16px;overflow:hidden;background:var(--crema-2);
     box-shadow:0 1px 3px rgba(40,22,28,.06);transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease);text-decoration:none}
   .rz-shot:hover{transform:translateY(-3px);box-shadow:0 18px 40px -16px rgba(40,22,28,.3)}
@@ -199,7 +214,9 @@ require __DIR__ . '/_shell.php';
 
   <?php if ($pubs): ?>
     <div class="rz-galt">Lo que salió</div>
-    <div class="rz-gal">
+    <div class="rz-galwrap">
+    <button type="button" class="rz-arw rz-arw-l" id="rzArwL" aria-label="Anterior"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <div class="rz-gal" id="rzGal">
       <?php foreach ($pubs as $p):
         $rp = $redes[(int)$p['id']] ?? [];
         $link = ''; foreach ($rp as $inf) { if (($inf['estado'] ?? '') === 'ok' && !empty($inf['permalink'])) { $link = (string)$inf['permalink']; break; } }
@@ -218,9 +235,29 @@ require __DIR__ . '/_shell.php';
       </<?= $tag ?>>
       <?php endforeach; ?>
     </div>
+    <button type="button" class="rz-arw rz-arw-r" id="rzArwR" aria-label="Siguiente"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+    </div>
   <?php else: ?>
     <p class="rz-empty">Todavía no ha salido nada. Cuando publiques, tus posts viven aquí.</p>
   <?php endif; ?>
 </main>
+
+<script>
+(function(){
+  var gal=document.getElementById('rzGal'), l=document.getElementById('rzArwL'), r=document.getElementById('rzArwR');
+  if(!gal||!l||!r) return;
+  function paso(){ var s=gal.querySelector('.rz-shot'); return (s? s.offsetWidth+12 : 160)*2; } // ~2 cards
+  function upd(){
+    var max=gal.scrollWidth-gal.clientWidth-1;
+    l.disabled = gal.scrollLeft<=2;
+    r.disabled = gal.scrollLeft>=max;
+  }
+  l.addEventListener('click',function(){ gal.scrollBy({left:-paso(),behavior:'smooth'}); });
+  r.addEventListener('click',function(){ gal.scrollBy({left: paso(),behavior:'smooth'}); });
+  gal.addEventListener('scroll',upd,{passive:true});
+  window.addEventListener('resize',upd);
+  upd();
+})();
+</script>
 
 <?php require __DIR__ . '/_shell_foot.php'; ?>
