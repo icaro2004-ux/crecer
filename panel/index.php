@@ -646,7 +646,7 @@ $credito  = $has_deck
     .hm-ic{width:47px;height:47px;border-radius:15px;background:var(--soft);color:var(--acc);display:flex;align-items:center;justify-content:center;margin-bottom:15px}
     .hm-ic svg{width:24px;height:24px;stroke-width:2}
     .hm-card h3{margin:0;position:relative;z-index:1;font-family:'Poppins',sans-serif;font-weight:600;font-size:16.5px;letter-spacing:-.02em}
-    .hm-card p{margin:6px 0 0;position:relative;z-index:1;color:var(--muted,#7b7880);font-size:13.5px;line-height:1.35}
+    .hm-card p{margin:6px 0 0;position:relative;z-index:1;color:var(--muted,#7b7880);font-size:13.5px;line-height:1.35;padding-right:36px;padding-bottom:6px}
     .hm-arw{position:absolute;right:14px;bottom:14px;z-index:2;width:31px;height:31px;border-radius:50%;background:#fff;color:var(--acc);
       display:flex;align-items:center;justify-content:center;box-shadow:0 4px 13px rgba(40,35,45,.10);transition:transform .2s,background .2s,color .2s}
     .hm-arw svg{width:16px;height:16px}
