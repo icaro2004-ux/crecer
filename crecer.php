@@ -167,7 +167,7 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <body class="<?= $has_name ? 'revealed' : '' ?>">
 
 <nav class="nav">
-  <a class="brand" href="/crecer/crecer.php">encuéntralo <i>crecer</i></a>
+  <a class="brand" href="/crecer/crecer.php" style="display:inline-flex;align-items:center;gap:8px"><img src="/crecer/assets/brand/crecer-icon.png" alt="" style="height:30px;width:auto"><b style="display:inline-flex;flex-direction:column;line-height:1;gap:0;font-weight:700"><span style="color:var(--teal)">Crecer</span><span style="font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.02em;margin-top:1px">by Encuéntralo</span></b></a>
   <a class="entrar" href="/crecer/login.php">Entrar</a>
 </nav>
 
@@ -227,7 +227,7 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   </section>
 
   <footer class="foot">
-    <a class="brand" href="/crecer/crecer.php" style="font-size:14px">encuéntralo <i style="color:var(--teal);font-style:normal">crecer</i></a>
+    <a class="brand" href="/crecer/crecer.php" style="display:inline-flex;align-items:center;gap:7px;font-size:14px"><img src="/crecer/assets/brand/crecer-icon.png" alt="" style="height:24px;width:auto"><b style="display:inline-flex;flex-direction:column;line-height:1;gap:0;font-weight:700"><span style="color:var(--teal)">Crecer</span><span style="font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.02em;margin-top:1px">by Encuéntralo</span></b></a>
     · <a href="/crecer/terminos.php">Términos</a> · <a href="/crecer/privacidad.php">Privacidad</a>
   </footer>
 </main>
