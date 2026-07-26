@@ -291,12 +291,27 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
 .wrap{max-width:1080px;margin:0 auto;padding:0 18px}
 
 /* Topbar propio (chrome aislada) */
-.rtop{display:flex;align-items:center;gap:12px;padding:14px 18px;max-width:1080px;margin:0 auto}
-.rtop a.back{display:inline-flex;align-items:center;gap:7px;color:var(--muted);text-decoration:none;font-weight:700;font-size:14px}
-.rtop a.back:hover{color:var(--tinta)}
-.rtop .brand{margin-left:auto;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px}
-.rtop .brand span{color:var(--teal)}
-.badge{font-size:11px;font-weight:800;letter-spacing:.02em;text-transform:uppercase;background:var(--rosa);color:#fff;padding:3px 9px;border-radius:999px}
+.rtop{display:flex;align-items:center;gap:10px;padding:13px 16px;max-width:1080px;margin:0 auto}
+.rbrand{display:flex;align-items:center;gap:9px;text-decoration:none;color:inherit}
+.rbrand img{width:33px;height:33px}
+.rbrand b{display:inline-flex;flex-direction:column;line-height:1;font-family:'Poppins',sans-serif;font-size:17px}
+.rbrand .c1{color:var(--teal);font-weight:700}
+.rbrand .c2{font-size:.5em;font-weight:500;color:var(--muted);margin-top:1px;letter-spacing:.02em}
+.rbadge{font-size:10px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;background:#fff0f5;color:var(--rosa);padding:3px 8px;border-radius:999px;margin-left:2px}
+.rbell{position:relative;margin-left:auto;color:var(--teal);font-size:22px;display:flex;align-items:center;text-decoration:none;line-height:1}
+.rdot{position:absolute;top:-5px;right:-7px;background:var(--rosa);color:#fff;font-size:10px;font-weight:800;min-width:16px;height:16px;border-radius:999px;display:flex;align-items:center;justify-content:center;padding:0 4px}
+.botnav{display:none}
+@media(max-width:860px){
+  .botnav{display:grid;grid-template-columns:repeat(4,1fr);position:fixed;left:10px;right:10px;bottom:10px;z-index:60;
+    background:rgba(255,255,255,.96);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    border:1px solid var(--line);border-radius:22px;box-shadow:0 14px 34px rgba(34,29,38,.14);
+    padding:8px 6px calc(8px + env(safe-area-inset-bottom))}
+  .botnav .bn{display:flex;flex-direction:column;align-items:center;gap:3px;text-decoration:none;color:#8b8790;
+    font-size:10.5px;font-weight:700;padding:7px 2px;border-radius:15px}
+  .botnav .bn svg.ic{width:22px;height:22px}
+  .botnav .bn.on{color:var(--rosa);background:#fff0f5}
+  .wrap{padding-bottom:96px}
+}
 
 /* Hero + progreso de pasos */
 .hero{padding:6px 0 14px}
@@ -426,9 +441,12 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
 <body>
 
 <div class="rtop">
-  <a class="back" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>">← Volver al panel</a>
-  <a href="<?= $BASE ?>/notificaciones_centro.php?marca=<?= $marca_id ?>" aria-label="Notificaciones" title="Notificaciones" style="position:relative;margin-left:auto;font-size:21px;text-decoration:none;line-height:1;display:flex;align-items:center"><?= ico('bell-solid') ?><?php if ($notif_nl > 0): ?><span style="position:absolute;top:-6px;right:-8px;background:var(--rosa);color:#fff;font-size:10px;font-weight:800;min-width:16px;height:16px;border-radius:999px;display:flex;align-items:center;justify-content:center;padding:0 4px"><?= $notif_nl > 9 ? '9+' : $notif_nl ?></span><?php endif; ?></a>
-  <div class="brand" style="margin-left:12px"><span class="badge">Reels</span> <b style="display:inline-flex;flex-direction:column;line-height:1;gap:0"><span style="color:var(--teal)">Crecer</span><span style="font-size:.62em;font-weight:500;color:var(--muted);margin-top:1px">by Encuéntralo</span></b></div>
+  <a class="rbrand" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>">
+    <img src="/crecer/assets/brand/crecer-icon.png" alt="Inicio">
+    <b><span class="c1">Crecer</span><span class="c2">by Encuéntralo</span></b>
+    <span class="rbadge">Reels</span>
+  </a>
+  <a class="rbell" href="<?= $BASE ?>/notificaciones_centro.php?marca=<?= $marca_id ?>" aria-label="Notificaciones"><?= ico('bell-solid') ?><?php if ($notif_nl > 0): ?><span class="rdot"><?= $notif_nl > 9 ? '9+' : $notif_nl ?></span><?php endif; ?></a>
 </div>
 
 <div class="wrap">
@@ -936,5 +954,11 @@ $('#bibadd').onclick=()=>{
   addLib(picked); bibModal.style.display='none';
 };
 </script>
+<nav class="botnav">
+  <a class="bn" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>"><?= ico('home') ?><span>Inicio</span></a>
+  <a class="bn" href="<?= $BASE ?>/propuestas.php?marca=<?= $marca_id ?>"><?= ico('list') ?><span>Propuestas</span></a>
+  <a class="bn" href="<?= $BASE ?>/resultados.php?marca=<?= $marca_id ?>"><?= ico('chart') ?><span>Resultados</span></a>
+  <a class="bn" href="<?= $BASE ?>/marca.php?marca=<?= $marca_id ?>"><?= ico('palette') ?><span>Mi marca</span></a>
+</nav>
 </body>
 </html>
