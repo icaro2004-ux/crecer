@@ -87,6 +87,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo json_encode(['ok'=>false,'err'=>'No encontrado.']); exit;
     }
 
+    // Eliminar VARIOS (selección múltiple).
+    if ($accion === 'eliminar_varios') {
+        $ids = json_decode((string)($_POST['ids'] ?? '[]'), true);
+        $n = 0;
+        if (is_array($ids)) foreach ($ids as $id) {
+            $id = (int)$id; if (!$id) continue;
+            $r = $pdo->prepare("SELECT archivo FROM crecer_activos WHERE id=? AND marca_id=?");
+            $r->execute([$id, $marca_id]); $arch = $r->fetchColumn();
+            if ($arch) {
+                $abs = (defined('UPLOADS_PATH') ? UPLOADS_PATH : dirname(__DIR__) . '/uploads') . '/' . $arch;
+                if (is_file($abs)) @unlink($abs);
+                $pdo->prepare("DELETE FROM crecer_activos WHERE id=? AND marca_id=?")->execute([$id, $marca_id]);
+                $n++;
+            }
+        }
+        echo json_encode(['ok'=>true, 'borrados'=>$n]); exit;
+    }
+
     // Renombrar.
     if ($accion === 'renombrar') {
         $id = (int)($_POST['id'] ?? 0); $nombre = mb_substr(trim((string)($_POST['nombre'] ?? '')), 0, 180);
@@ -159,6 +177,24 @@ require __DIR__ . '/_shell.php';
   .bib-tile:hover .bib-del{opacity:1}
   .bib-del:hover{background:#e0384f}
   @media(hover:none){.bib-del{opacity:.92}}
+  /* Selección múltiple */
+  .bib-selbtn{margin-left:auto;background:#fff;border:1px solid var(--line);border-radius:10px;padding:7px 14px;font-weight:700;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit}
+  .bib-selbtn:hover{color:var(--tinta)}
+  .bib-selbtn.on{background:var(--tinta);color:#fff;border-color:var(--tinta)}
+  .bib-ck{position:absolute;top:8px;left:8px;z-index:4;width:26px;height:26px;border-radius:50%;border:2px solid #fff;background:rgba(20,10,22,.35);display:none;align-items:center;justify-content:center;color:#fff;font-size:14px;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+  .bib-grid.selecting .bib-ck{display:flex}
+  .bib-grid.selecting .bib-del{display:none}
+  .bib-grid.selecting .bib-add{opacity:.4;pointer-events:none}
+  .bib-tile.sel{outline:3px solid var(--teal);outline-offset:-3px}
+  .bib-tile.sel .bib-ck{background:var(--teal);border-color:var(--teal)}
+  .bib-tile.sel img,.bib-tile.sel video{opacity:.82}
+  .bib-selbar{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:60;background:var(--tinta,#231F20);color:#fff;border-radius:16px;padding:9px 10px 9px 18px;display:none;align-items:center;gap:10px;box-shadow:0 14px 40px -12px rgba(0,0,0,.5)}
+  .bib-selbar.show{display:flex}
+  .bib-selbar .cnt{font-weight:700;font-size:14px;white-space:nowrap}
+  .bib-selbar button{border:0;border-radius:10px;padding:9px 14px;font-weight:700;font-size:13.5px;cursor:pointer;font-family:inherit}
+  .bib-selbar .all{background:rgba(255,255,255,.14);color:#fff}
+  .bib-selbar .del{background:#e0384f;color:#fff}
+  .bib-selbar .cancel{background:transparent;color:rgba(255,255,255,.7)}
 
   .bib-empty{text-align:center;padding:8vh 10px 2vh;color:var(--muted)}
   .bib-empty p{font-size:15px;line-height:1.6;margin:0 auto;max-width:34ch}
@@ -199,7 +235,8 @@ require __DIR__ . '/_shell.php';
 <main class="bib">
   <div class="bib-top">
     <span class="bib-neg">Biblioteca</span>
-    <?php if ($activos): ?><span class="bib-cred"><?= count($activos) ?> <?= count($activos) === 1 ? 'recuerdo' : 'recuerdos' ?></span><?php endif; ?>
+    <?php if ($activos): ?><span class="bib-cred"><?= count($activos) ?> <?= count($activos) === 1 ? 'recuerdo' : 'recuerdos' ?></span>
+      <button type="button" class="bib-selbtn" id="bibSelBtn">Seleccionar</button><?php endif; ?>
   </div>
 
   <input type="file" id="bibFile" accept="image/*,video/*" multiple hidden>
@@ -221,6 +258,7 @@ require __DIR__ . '/_shell.php';
         <button type="button" class="bib-del" data-del="<?= (int)$a['id'] ?>" aria-label="Eliminar" title="Eliminar">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
         </button>
+        <span class="bib-ck">✓</span>
       </figure>
     <?php endforeach; ?>
   </div>
@@ -230,6 +268,13 @@ require __DIR__ . '/_shell.php';
   <?php endif; ?>
 
   <div class="bib-up" id="bibUp">Guardando…</div>
+
+  <div class="bib-selbar" id="bibSelBar">
+    <span class="cnt" id="bibSelCnt">0 seleccionados</span>
+    <button type="button" class="all" id="bibSelAll">Todos</button>
+    <button type="button" class="del" id="bibSelDel">🗑 Eliminar</button>
+    <button type="button" class="cancel" id="bibSelCancel">Cancelar</button>
+  </div>
 </main>
 
 <!-- Fullscreen: la foto crece a toda la pantalla, swipe, cerrar y vuelves -->
@@ -333,7 +378,31 @@ require __DIR__ . '/_shell.php';
   }
   function close() { lb.classList.remove('show'); lb.setAttribute('aria-hidden', 'true'); document.body.style.overflow = ''; track.innerHTML = ''; }
 
-  tiles.forEach(function (t, i) { t.addEventListener('click', function () { open(i); }); });
+  tiles.forEach(function (t, i) { t.addEventListener('click', function (e) {
+    if (selecting) { e.preventDefault(); e.stopPropagation(); toggleSel(t); return; }
+    open(i);
+  }); });
+
+  // ── Selección múltiple + borrar en bloque ──
+  var selecting = false, selected = {};
+  var selBtn = document.getElementById('bibSelBtn'), selBar = document.getElementById('bibSelBar'),
+      selCnt = document.getElementById('bibSelCnt'), selDel = document.getElementById('bibSelDel'),
+      selAll = document.getElementById('bibSelAll'), selCancel = document.getElementById('bibSelCancel');
+  function updSel(){ var n = Object.keys(selected).length; selCnt.textContent = n + (n === 1 ? ' seleccionado' : ' seleccionados'); if (selDel) selDel.style.visibility = n ? 'visible' : 'hidden'; }
+  function toggleSel(t){ var id = t.getAttribute('data-id'); if (selected[id]) { delete selected[id]; t.classList.remove('sel'); } else { selected[id] = 1; t.classList.add('sel'); } updSel(); }
+  function enterSel(){ selecting = true; selected = {}; grid.classList.add('selecting'); if (selBar) selBar.classList.add('show'); if (selBtn){ selBtn.classList.add('on'); selBtn.textContent = 'Listo'; } updSel(); }
+  function exitSel(){ selecting = false; selected = {}; grid.classList.remove('selecting'); if (selBar) selBar.classList.remove('show'); if (selBtn){ selBtn.classList.remove('on'); selBtn.textContent = 'Seleccionar'; } tiles.forEach(function (t){ t.classList.remove('sel'); }); }
+  if (selBtn) selBtn.addEventListener('click', function () { selecting ? exitSel() : enterSel(); });
+  if (selCancel) selCancel.addEventListener('click', exitSel);
+  if (selAll) selAll.addEventListener('click', function () { tiles.forEach(function (t){ selected[t.getAttribute('data-id')] = 1; t.classList.add('sel'); }); updSel(); });
+  if (selDel) selDel.addEventListener('click', function () {
+    var ids = Object.keys(selected); if (!ids.length) return;
+    if (!confirm('¿Eliminar ' + ids.length + (ids.length === 1 ? ' cosa?' : ' cosas?') + ' No se puede deshacer.')) return;
+    selDel.disabled = true;
+    post('eliminar_varios', { ids: JSON.stringify(ids) }).then(function (d) {
+      if (d && d.ok) location.reload(); else { selDel.disabled = false; alert('No se pudo eliminar.'); }
+    }).catch(function () { selDel.disabled = false; alert('Se cayó la conexión.'); });
+  });
   document.getElementById('lbClose').addEventListener('click', close);
   document.addEventListener('keydown', function (e) {
     if (!lb.classList.contains('show')) return;
