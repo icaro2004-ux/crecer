@@ -100,6 +100,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // 🎨 Regenerar la IMAGEN. Motor Responses (background) → encola y el frontend hace
     // polling; si no, motor viejo síncrono. El dueño decide con/sin texto (motor viejo).
     if ($accion === 'regenerar_imagen') {
+        // Free (gateway sin acceso): regenerar es del app pagado → a la venta, nunca al loop.
+        if (!$acceso_full) { echo json_encode(['ok'=>false, 'venta'=>true]); exit; }
         @set_time_limit(0);
         require_once __DIR__ . '/../includes/img_responses.php';
         // con_texto: '1'=con texto · '0'=sin texto · ausente=null (el modelo decide, mejor enfoque).
@@ -171,6 +173,10 @@ $grafica = (string)($post['grafica_path'] ?? '');
 $img_pending = (empty($grafica) && (($post['img_estado'] ?? '') === 'queued'));   // Responses generando en background
 $aprobado = in_array(($post['estado'] ?? ''), ['aprobado','fallido','publicando'], true);   // ya pasó del borrador → listo para (re)publicar
 $publicado = ($post['estado'] ?? '') === 'publicado';
+// El free (sin acceso) puede caer en la VENTA antes de publicar: al tocar "Hacer otra imagen"
+// (regenerar es del app pagado) → lo agarramos con la venta, con salida a seguir con su post gratis.
+$ver_venta = (!$publicado && !$acceso_full && ($_GET['venta'] ?? '') === '1');
+$es_venta  = $publicado || $ver_venta;
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 ?>
 <!DOCTYPE html>
@@ -290,7 +296,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <span class="step"><?= $publicado ? '¡Listo!' : ($aprobado ? 'Paso 3 de 3' : 'Paso 2 de 3') ?></span>
   </div>
 
-<?php if ($publicado): /* ── VENTA: PROMO animada (se corre sola → X para cerrar) sobre el preview + precio ── */ ?>
+<?php if ($es_venta): /* ── VENTA: PROMO animada (se corre sola → X para cerrar) sobre el preview + precio ── */ ?>
   <!-- PROMO: corre sola con fade-ins; al terminar sale la X para cerrar y quedarte en el post + precio -->
   <div class="promo" id="promo">
     <button class="promo-x" id="promoX" aria-label="Cerrar">×</button>
@@ -317,8 +323,10 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
   <div class="cel">
     <div><?= ico('check-circle','ic ic-xl') ?></div>
-    <div class="big">¡Tu post está publicado!</div>
-    <p class="gw-sub" style="margin-bottom:0">Lo hizo tu equipo por ti, en tu voz. Ahora imagínate esto <b>todos los días</b>.</p>
+    <div class="big"><?= $publicado ? '¡Tu post está publicado!' : 'Esto es solo tu primer post' ?></div>
+    <p class="gw-sub" style="margin-bottom:0"><?= $publicado
+        ? 'Lo hizo tu equipo por ti, en tu voz. Ahora imagínate esto <b>todos los días</b>.'
+        : 'El corillo te lo hizo en tu voz. Imagínate esto <b>todos los días</b> — sin que tú muevas un dedo.' ?></p>
   </div>
 
   <!-- SU POST (preview read-only — ya publicado, nada que ajustar) -->
@@ -365,6 +373,9 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       <input type="hidden" name="plan" value="<?= $h($plan_venta['slug']) ?>">
       <button class="btn pri" type="submit">Activar mi corillo →</button>
     </form>
+    <?php if ($ver_venta): ?>
+      <a class="btn gho" style="margin-top:12px" href="/crecer/panel/gateway_post.php?marca=<?= (int)$marca_id . $gwq ?>">← Seguir con mi post gratis</a>
+    <?php endif; ?>
   </div>
 
 <?php else: /* ── ESTADO POST (borrador/aprobado) ── */ ?>
@@ -452,6 +463,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 (function(){
   var CSRF=<?= json_encode(csrf_token()) ?>, MARCA=<?= (int)$marca_id ?>, PID=<?= (int)$post_id ?>, GW=<?= json_encode($gwq) ?>, PLATS=<?= json_encode(implode(',', $redes_conectadas)) ?>;
   var IMG_PENDING=<?= $img_pending ? 'true' : 'false' ?>;
+  var FREE=<?= $acceso_full ? 'false' : 'true' ?>;   // free (sin acceso): "otra imagen" → venta, no re-roll
   var NEEDS_PHONE=<?= $necesita_telefono ? 'true' : 'false' ?>;   // aún no verificó su celular → gate para bajar/copiar/publicar
   var toast=document.getElementById('toast');
   function T(m){ toast.textContent=m; toast.classList.add('on'); setTimeout(function(){toast.classList.remove('on');},2200); }
@@ -574,9 +586,12 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   // 🎨 Hacer otra imagen — el modelo (gpt-image-2) decide el mejor enfoque (flyer con texto, etc.).
   var btnRegen=document.getElementById('btnRegen');
   if(btnRegen) btnRegen.addEventListener('click',function(){
+    // Free: regenerar es del app pagado → lo agarramos con la venta (sin loop, sin regalar re-rolls).
+    if(FREE){ location.href='/crecer/panel/gateway_post.php?marca='+MARCA+'&venta=1'+GW; return; }
     btnRegen.disabled=true;
     showLoad('Tu equipo está diseñando otra imagen…');
     self('regenerar_imagen',{}).then(function(d){   // sin con_texto → el modelo decide
+      if(d&&d.venta){ location.href='/crecer/panel/gateway_post.php?marca='+MARCA+'&venta=1'+GW; return; }
       if(d&&d.job){   // Responses en background → polling
         pollImg(function(url){ hideLoad(); btnRegen.disabled=false;
           if(url){ swapImg(url); T('Nueva imagen ✓'); } else T('No se pudo esta vez.'); });
@@ -633,7 +648,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     }).catch(function(){ location.href='/crecer/panel/gateway_post.php?marca='+MARCA+'&venta=1'+GW; });
   });
 <?php endif; ?>
-<?php if ($publicado): /* carrusel de venta: swipe (móvil) + flechas + dots */ ?>
+<?php if ($es_venta): /* carrusel de venta: swipe (móvil) + flechas + dots */ ?>
   // PROMO animada: corre sola (fade-ins) → al terminar sale la X para cerrar y ver el post + precio.
   (function(){
     var promo=document.getElementById('promo'); if(!promo) return;
