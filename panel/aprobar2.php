@@ -1549,6 +1549,18 @@ $cf = [
     wizCargarIdeas();
   };
   window.wizCerrar=function(){ document.getElementById('wizov').classList.remove('show'); };
+  // ── Entrada directa a CREAR: ?crear=1 abre el wizard; &idea=… lo prellena ──
+  // (desde el FAB "Crear", el botón de Propuestas o la "Idea del día" del Inicio)
+  (function(){
+    var qs=new URLSearchParams(location.search);
+    if(qs.get('crear')!=='1') return;
+    function go(){
+      try{ wizAbrir(); }catch(_){ return; }
+      var idea=qs.get('idea');
+      if(idea){ var t=document.getElementById('wiz-tema'); if(t){ t.value=idea; try{t.focus();}catch(e){} } }
+    }
+    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', go); else go();
+  })();
   // Caché de sugerencias durante la página: se reusan al cerrar/reabrir el wizard.
   // Solo "Dame otras ideas" (force=true) fuerza una llamada nueva a Gemini.
   var wizIdeasCache=null;

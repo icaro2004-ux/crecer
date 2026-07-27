@@ -193,10 +193,18 @@ require __DIR__ . '/_shell.php';
   .est-listos b{font-weight:800}
   .est-listos .sub{font-size:12.5px;font-weight:500;opacity:.92}
   .est-listos .arr{margin-left:auto;font-size:20px;font-weight:800}
+  /* Crear post desde cero — el disparador que faltaba en el área CREAR */
+  .est-crear{display:inline-flex;align-items:center;gap:8px;margin:0 0 20px;background:var(--btn-grad);color:#fff;
+    text-decoration:none;font-family:'Poppins',sans-serif;font-weight:600;font-size:14.5px;padding:13px 20px;border-radius:14px;
+    box-shadow:var(--btn-glow);transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+  .est-crear svg{width:17px;height:17px}
+  .est-crear:hover{transform:translateY(-2px);box-shadow:var(--btn-glow-hover)}
+  .est-crear:active{transform:translateY(0);box-shadow:var(--btn-glow-active)}
 </style>
 
 <main class="est" id="est">
   <p class="est-owner">El estudio de <b><?= $h($negocio) ?></b></p>
+  <a class="est-crear" href="<?= $BASE ?>/aprobar2.php?<?= $mid ?>&crear=1"><?= ico('plus') ?> Crear post desde cero</a>
 
   <?php if ($n_listos > 0): ?>
   <a class="est-listos" href="<?= $BASE ?>/aprobar2.php?marca=<?= $marca_id ?>&tab=listos">
@@ -212,7 +220,7 @@ require __DIR__ . '/_shell.php';
       <h2>Nada que revisar por ahora.</h2>
       <p>Tu equipo está preparando lo próximo. Vuelve en un rato.</p>
       <div class="acts">
-        <a href="<?= $BASE ?>/aprobar2.php?<?= $mid ?>">Pídeles algo nuevo</a>
+        <a href="<?= $BASE ?>/aprobar2.php?<?= $mid ?>&crear=1">Crear un post nuevo</a>
         <a href="<?= $BASE ?>/resultados.php?marca=<?= $marca_id ?>">Ver lo publicado</a>
       </div>
     </div>
@@ -294,7 +302,7 @@ require __DIR__ . '/_shell.php';
       <h2>Ya revisaste todo lo que el corillo preparó.</h2>
       <p>El corillo sigue trabajando por <?= $h($negocio) ?>.</p>
       <div class="acts">
-        <a href="<?= $BASE ?>/aprobar2.php?<?= $mid ?>">Pídeles algo nuevo</a>
+        <a href="<?= $BASE ?>/aprobar2.php?<?= $mid ?>&crear=1">Crear un post nuevo</a>
         <a href="<?= $BASE ?>/resultados.php?marca=<?= $marca_id ?>">Ver lo publicado</a>
       </div>
     </div>

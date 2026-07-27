@@ -608,6 +608,10 @@ $credito  = $has_deck
   .hz-next .cap{font-size:15px;line-height:1.45;color:var(--tinta);margin:7px 0 13px;font-weight:600;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
   .hz-approve{margin-top:auto;align-self:flex-start;background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:11px 18px;border-radius:12px;display:inline-flex;align-items:center;gap:8px;box-shadow:0 10px 22px -10px rgba(239,67,117,.5)}
   .hz-approve svg{width:16px;height:16px}
+  .hz-idea-go{margin-top:14px;align-self:flex-start;background:linear-gradient(135deg,var(--teal),#0a7d76);color:#fff;text-decoration:none;font-weight:700;font-size:13.5px;padding:10px 16px;border-radius:12px;display:inline-flex;align-items:center;gap:7px;box-shadow:0 10px 22px -12px rgba(0,164,159,.55);transition:transform .15s ease,box-shadow .15s ease}
+  .hz-idea-go svg{width:15px;height:15px}
+  .hz-idea-go:hover{transform:translateY(-2px);box-shadow:0 16px 30px -12px rgba(0,164,159,.6)}
+  .hz-idea-go:active{transform:translateY(0)}
   .hz-when{margin-top:auto;font-size:13px;color:var(--muted);font-weight:600}
   .hz-when a{color:var(--teal-700,#00827e);font-weight:700;text-decoration:none;margin-left:6px}
   .hz-next .im{width:110px;flex:none;border-radius:14px;overflow:hidden;background:var(--crema-2);border:1px solid var(--line);display:grid;place-items:center;color:var(--muted);aspect-ratio:4/5}
@@ -812,6 +816,7 @@ $credito  = $has_deck
   <section class="hz-card" id="hzIdea">
     <div class="hz-ch"><b>Idea del día</b></div>
     <div class="hz-tip"><span class="ic pur"><?= ico('sparkles') ?></span><p id="hzIdeaTxt" style="color:var(--muted);font-style:italic">El corillo está pensando una idea para hoy…</p></div>
+    <a id="hzIdeaGo" class="hz-idea-go" hidden href="#"><?= ico('plus') ?> Crear este post</a>
   </section>
 </main>
 
@@ -843,7 +848,12 @@ $credito  = $has_deck
   if(it){
     var fdi=new FormData(); fdi.append('accion','idea'); fdi.append('csrf',<?= json_encode(csrf_token()) ?>);
     fetch(location.pathname+location.search,{method:'POST',body:fdi}).then(function(r){return r.json();}).then(function(d){
-      if(d&&d.ok&&d.idea){ it.textContent=d.idea; it.style.color=''; it.style.fontStyle=''; }
+      if(d&&d.ok&&d.idea){
+        it.textContent=d.idea; it.style.color=''; it.style.fontStyle='';
+        // Convierte la idea en acción: abre el wizard de Crear con esta idea ya escrita.
+        var go=document.getElementById('hzIdeaGo');
+        if(go){ go.href=<?= json_encode($BASE.'/aprobar2.php?marca='.(int)$marca_id.'&crear=1&idea=') ?>+encodeURIComponent(d.idea); go.hidden=false; }
+      }
       else { var c=document.getElementById('hzIdea'); if(c)c.remove(); }
     }).catch(function(){ var c=document.getElementById('hzIdea'); if(c)c.remove(); });
   }
