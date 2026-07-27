@@ -194,8 +194,8 @@ require __DIR__ . '/_shell.php';
   .est-listos .sub{font-size:12.5px;font-weight:500;opacity:.92}
   .est-listos .arr{margin-left:auto;font-size:20px;font-weight:800}
   /* Crear post desde cero — el disparador que faltaba en el área CREAR */
-  .est-crear{display:inline-flex;align-items:center;gap:8px;margin:0 0 20px;background:var(--btn-grad);color:#fff;
-    text-decoration:none;font-family:'Poppins',sans-serif;font-weight:600;font-size:14.5px;padding:13px 20px;border-radius:14px;
+  .est-crear{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 0 20px;background:var(--btn-grad);color:#fff;
+    text-decoration:none;font-family:'Poppins',sans-serif;font-weight:600;font-size:15px;padding:15px 20px;border-radius:14px;
     box-shadow:var(--btn-glow);transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
   .est-crear svg{width:17px;height:17px}
   .est-crear:hover{transform:translateY(-2px);box-shadow:var(--btn-glow-hover)}
