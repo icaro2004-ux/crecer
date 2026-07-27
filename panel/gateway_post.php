@@ -190,7 +190,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link href="/crecer/assets/encuentralo-ui.css?v=22" rel="stylesheet">
 <style>
-  body{background:var(--crema,#F7F5F1);min-height:100vh}
+  body{background:#fff;min-height:100vh}
   .gw{max-width:560px;margin:0 auto;padding:22px 18px 60px}
   .gw-top{display:flex;align-items:center;gap:9px;margin-bottom:16px}
   .gw-top img{height:28px}.gw-top b{font-weight:800;font-size:18px;color:var(--tinta)}
@@ -250,35 +250,42 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .gload .sp{width:52px;height:52px;border-radius:50%;border:4px solid rgba(255,255,255,.35);border-top-color:#fff;animation:gspin .8s linear infinite}
   @keyframes gspin{to{transform:rotate(360deg)}}
   .gload .msg{color:#fff;font-family:var(--font-display,'Poppins');font-weight:700;font-size:17px;max-width:300px;line-height:1.4;text-shadow:0 1px 12px rgba(0,0,0,.35)}
-  /* Venta (placeholder Fase 1 — el carrusel pleno llega en Fase 4) */
-  .cel{text-align:center;padding:8px 0 4px}
-  .cel .big{font-family:var(--font-display,'Poppins');font-weight:800;font-size:26px;color:var(--tinta);margin:14px 0 6px}
-  .pitch{margin-top:22px;background:linear-gradient(135deg,color-mix(in srgb,var(--magenta) 8%,#fff),color-mix(in srgb,var(--palma) 8%,#fff));border:1px solid var(--line);border-radius:18px;padding:20px 18px;text-align:center}
-  .pitch h3{font-family:var(--font-display,'Poppins');font-weight:700;font-size:18px;color:var(--tinta);margin:0 0 6px}
-  .pitch p{font-size:14px;color:var(--muted);line-height:1.55;margin:0 0 14px}
-  /* Carrusel de venta — móvil: swipe con el dedo · desktop: flechas */
-  .sell{margin-top:22px}
-  .sell-track{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:2px}
-  .sell-track::-webkit-scrollbar{display:none}
-  .slide{flex:0 0 100%;scroll-snap-align:center;box-sizing:border-box;background:var(--card,#fff);border:1px solid var(--line);border-radius:20px;padding:34px 24px;text-align:center;box-shadow:var(--shadow-sm)}
-  .slide .ico{font-size:46px;margin-bottom:14px;line-height:1}
-  .slide h3{font-family:var(--font-display,'Poppins');font-weight:700;font-size:21px;color:var(--tinta);margin:0 0 8px;letter-spacing:-.01em}
-  .slide p{font-size:14.5px;color:var(--muted);line-height:1.55;margin:0 auto;max-width:32ch}
-  .sell-nav{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:16px}
-  .sell-dots{display:flex;gap:7px}
-  .sell-dots i{width:8px;height:8px;border-radius:50%;background:var(--line);transition:.25s;cursor:pointer}
-  .sell-dots i.on{background:var(--magenta,#EF4375);width:22px;border-radius:4px}
-  .sell-arrow{width:40px;height:40px;border-radius:50%;border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-size:22px;line-height:1;cursor:pointer;display:grid;place-items:center;transition:.15s;flex:none}
-  .sell-arrow:hover{border-color:var(--magenta,#EF4375);color:var(--magenta,#EF4375)}
-  .sell-cta{margin-top:20px;text-align:center;position:sticky;bottom:0;background:linear-gradient(to top,var(--crema,#F7F5F1) 72%,transparent);padding:14px 0 8px}
-  .price{font-family:var(--font-display,'Poppins');font-weight:800;font-size:40px;color:var(--tinta);line-height:1}
-  .price span{font-size:16px;font-weight:600;color:var(--muted)}
-  .price-sub{font-size:13px;color:var(--muted);margin:5px 0 13px}
-  .price-hook{font-size:14.5px;font-weight:800;color:var(--magenta,#EF4375);margin:3px 0 1px}
-  .vsell{margin:8px 0 2px}
-  .vsell-card{background:#fff;border:1px solid rgba(0,0,0,.06);border-radius:14px;padding:14px 15px;box-shadow:0 6px 20px rgba(35,31,32,.07);text-align:center}
-  .vs-emoji{font-size:24px;margin-bottom:5px}
-  .vs-text{font-size:14px;line-height:1.5;color:#3a3436;font-weight:600;transition:opacity .28s}
+  /* ── VENTA (rediseño blanco/bold 2026-07) ── */
+  .vhero{text-align:center;padding:4px 2px 0}
+  .vk{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-display,'Poppins');font-weight:800;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--teal,#00A49F);background:color-mix(in srgb,var(--teal) 10%,#fff);border:1px solid color-mix(in srgb,var(--teal) 22%,#fff);padding:6px 13px;border-radius:99px;margin-bottom:14px}
+  .vk svg{width:14px;height:14px}
+  .vhero h1{font-family:var(--font-display,'Poppins');font-weight:800;font-size:clamp(28px,7.4vw,40px);line-height:1.08;letter-spacing:-.025em;color:var(--tinta,#231F20);margin:0 0 10px;text-wrap:balance}
+  .vhero h1 .mg{color:var(--magenta,#EF4375)}
+  .vhero .vp{color:var(--muted,#6E6A67);font-size:16px;line-height:1.5;margin:0 auto;max-width:30ch}
+  /* El post — protagonista, con glow de marca */
+  .vproof{position:relative;margin:24px auto 0;max-width:430px}
+  .vproof::before{content:"";position:absolute;inset:-8% -5%;z-index:0;filter:blur(26px);border-radius:40px;
+    background:radial-gradient(58% 48% at 50% 42%,color-mix(in srgb,var(--magenta,#EF4375) 26%,transparent),transparent 72%)}
+  .vproof .card{position:relative;z-index:1;box-shadow:0 24px 64px -22px rgba(239,67,117,.42),0 10px 26px -14px rgba(35,31,32,.22)}
+  .vproof .vtag{position:absolute;z-index:2;top:-11px;left:50%;transform:translateX(-50%);background:var(--btn-grad,linear-gradient(135deg,#FF6B3D,#EF4375));color:#fff;font-family:var(--font-display,'Poppins');font-weight:800;font-size:11px;letter-spacing:.05em;text-transform:uppercase;padding:5px 15px;border-radius:99px;box-shadow:0 10px 22px -8px rgba(239,67,117,.6)}
+  /* Transición */
+  .vlead{text-align:center;font-family:var(--font-display,'Poppins');font-weight:800;font-size:clamp(21px,5.2vw,27px);color:var(--tinta,#231F20);letter-spacing:-.015em;margin:34px 0 5px;text-wrap:balance}
+  .vlead-sub{text-align:center;color:var(--muted);font-size:14.5px;line-height:1.5;margin:0 auto 4px;max-width:34ch}
+  /* 3 beneficios */
+  .vbens{display:flex;flex-direction:column;gap:11px;margin-top:18px}
+  .vben{display:flex;align-items:flex-start;gap:13px;background:#fff;border:1px solid var(--line,#ECEAE7);border-radius:16px;padding:15px 16px;box-shadow:0 2px 7px rgba(35,31,32,.045)}
+  .vben .vb-ic{flex:0 0 auto;width:44px;height:44px;border-radius:13px;display:grid;place-items:center;color:#fff}
+  .vben .vb-ic svg{width:22px;height:22px}
+  .vben:nth-child(1) .vb-ic{background:linear-gradient(135deg,#FF6B3D,#EF4375)}
+  .vben:nth-child(2) .vb-ic{background:linear-gradient(135deg,#00A49F,#00827e)}
+  .vben:nth-child(3) .vb-ic{background:linear-gradient(135deg,#EF4375,#8B5CF6)}
+  .vben h3{font-family:var(--font-display,'Poppins');font-weight:700;font-size:16px;color:var(--tinta);margin:0 0 2px;letter-spacing:-.01em}
+  .vben p{font-size:13.5px;color:var(--muted);line-height:1.45;margin:0}
+  /* Precio */
+  .vprice{text-align:center;margin-top:32px}
+  .vprice .amt{font-family:var(--font-display,'Poppins');font-weight:800;font-size:54px;line-height:1;color:var(--tinta)}
+  .vprice .amt span{font-size:19px;font-weight:600;color:var(--muted)}
+  .vprice .hook{font-size:15px;font-weight:800;color:var(--magenta,#EF4375);margin:9px 0 4px}
+  .vprice .sub{font-size:12.5px;color:var(--muted);margin:0 auto;max-width:36ch;line-height:1.5}
+  /* CTA pegajoso */
+  .vcta{position:sticky;bottom:0;margin-top:20px;padding:16px 0 12px;background:linear-gradient(to top,#fff 76%,transparent)}
+  .vcta .btn.pri{font-size:17px;padding:17px}
+  .vback{margin-top:11px;font-size:14px}
   /* Selector segmentado: la imagen con o sin texto (lo decide el dueño) */
   .imgmode{margin-top:14px}
   .imgmode .lbl{font-size:12.5px;font-weight:700;color:var(--muted);margin:0 2px 7px}
@@ -293,45 +300,23 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <div class="gw">
   <div class="gw-top">
     <img src="/crecer/assets/brand/crecer-icon.png" alt=""><b style="display:inline-flex;flex-direction:column;line-height:1;gap:1px"><span style="color:var(--teal)">Crecer</span><span style="font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.02em;margin-top:1px">by Encuéntralo</span></b>
-    <span class="step"><?= $publicado ? '¡Listo!' : ($aprobado ? 'Paso 3 de 3' : 'Paso 2 de 3') ?></span>
+    <span class="step"><?= $publicado ? '¡Listo!' : ($ver_venta ? '' : ($aprobado ? 'Paso 3 de 3' : 'Paso 2 de 3')) ?></span>
   </div>
 
 <?php if ($es_venta): /* ── VENTA: PROMO animada (se corre sola → X para cerrar) sobre el preview + precio ── */ ?>
-  <!-- PROMO: corre sola con fade-ins; al terminar sale la X para cerrar y quedarte en el post + precio -->
-  <div class="promo" id="promo">
-    <button class="promo-x" id="promoX" aria-label="Cerrar">×</button>
-    <div class="promo-stage" id="promoStage"></div>
-    <div class="promo-dots" id="promoDots"></div>
-  </div>
-  <style>
-  .promo{position:fixed;inset:0;z-index:600;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:34px 26px;text-align:center;background:linear-gradient(160deg,#231F20 0%,#3a2030 52%,#EF4375 155%);color:#fff}
-  .promo.hide{opacity:0;pointer-events:none;transition:opacity .5s}
-  .promo-x{position:absolute;top:16px;right:18px;width:42px;height:42px;border-radius:50%;border:0;background:rgba(255,255,255,.16);color:#fff;font-size:26px;line-height:1;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .45s}
-  .promo-x.show{opacity:1;pointer-events:auto}
-  .promo-stage{max-width:340px;transition:opacity .5s ease,transform .5s ease;opacity:0;transform:translateY(14px)}
-  .promo-stage .ps-emoji{font-size:56px;line-height:1;margin-bottom:14px}
-  .promo-stage .ps-title{font-family:var(--font-display,'Poppins');font-weight:800;font-size:27px;line-height:1.15;margin-bottom:10px}
-  .promo-stage .ps-sub{font-size:16px;line-height:1.5;opacity:.92}
-  .promo-stage .ps-img{width:208px;height:208px;object-fit:cover;border-radius:18px;box-shadow:0 16px 44px rgba(0,0,0,.45);margin-bottom:16px}
-  .promo-stage .ps-price{font-family:var(--font-display,'Poppins');font-weight:800;font-size:60px;line-height:1}
-  .promo-stage .ps-price span{font-size:22px;font-weight:600;opacity:.8}
-  .promo-stage .ps-cta{margin-top:20px;background:#fff;color:#EF4375;font-weight:800;font-size:17px;padding:14px 30px;border-radius:99px;border:0;cursor:pointer;box-shadow:0 12px 34px rgba(0,0,0,.35)}
-  .promo-dots{position:absolute;bottom:22px;display:flex;gap:6px}
-  .promo-dots i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.32);transition:all .3s}
-  .promo-dots i.on{background:#fff;width:18px;border-radius:3px}
-  </style>
-
-  <div class="cel">
-    <div><?= ico('check-circle','ic ic-xl') ?></div>
-    <div class="big"><?= $publicado ? '¡Tu post está publicado!' : 'Esto es solo tu primer post' ?></div>
-    <p class="gw-sub" style="margin-bottom:0"><?= $publicado
-        ? 'Lo hizo tu equipo por ti, en tu voz. Ahora imagínate esto <b>todos los días</b>.'
-        : 'El corillo te lo hizo en tu voz. Imagínate esto <b>todos los días</b> — sin que tú muevas un dedo.' ?></p>
+  <div class="vhero">
+    <span class="vk"><?= ico('check-circle') ?> <?= $publicado ? 'Publicado' : 'Tu primer post, listo' ?></span>
+    <h1><?= $publicado ? '¡Ya estás <span class="mg">en la calle</span>!' : 'Esto es <span class="mg">solo el comienzo</span>' ?></h1>
+    <p class="vp"><?= $publicado
+        ? 'Tu equipo lo hizo por ti, en tu voz. Y esto puede pasar <b>todos los días</b>.'
+        : 'El corillo te hizo este post en tu voz. Imagínate uno así <b>cada día</b>, sin mover un dedo.' ?></p>
   </div>
 
-  <!-- SU POST (preview read-only — ya publicado, nada que ajustar) -->
+  <!-- SU POST — protagonista de la venta -->
   <?php $av_logo_v = trim((string)($marca['logo_path'] ?? '')); ?>
-  <div class="card" style="margin-top:16px">
+  <div class="vproof">
+  <span class="vtag">Tu post</span>
+  <div class="card">
     <div class="ig-top">
       <span class="ig-av"><?php if ($av_logo_v): ?><img src="<?= $h($av_logo_v) ?>" alt=""><?php else: ?><?= $h(mb_strtoupper(mb_substr($nombre, 0, 1))) ?><?php endif; ?></span>
       <span class="ig-name"><?= $h($nombre) ?></span>
@@ -342,31 +327,23 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <?php if ($caption !== ''): ?><div class="cap"><?= $h($caption) ?></div><?php endif; ?>
     <?php if ($firma_txt !== ''): ?><div class="cap" style="opacity:.6;font-size:13px;padding-top:0"><?= $h($firma_txt) ?></div><?php endif; ?>
   </div>
-  <?php if ($ver_url !== ''): ?><a class="btn gho" style="margin-top:14px" href="<?= $h($ver_url) ?>" target="_blank" rel="noopener">Ver mi post en vivo →</a><?php endif; ?>
+  </div>
+  <?php if ($ver_url !== ''): ?><a class="btn gho" style="margin-top:16px" href="<?= $h($ver_url) ?>" target="_blank" rel="noopener">Ver mi post en vivo →</a><?php endif; ?>
 
-  <div class="sell">
-    <div class="sell-track" id="sellTrack">
-      <div class="slide"><div class="ico"><?= ico('palette','ic ic-xl') ?></div><h3>Tu marketing, hecho</h3><p>El corillo crea los posts, el arte y los captions en tu voz. Tú solo apruebas.</p></div>
-      <div class="slide"><div class="ico"><?= ico('calendar','ic ic-xl') ?></div><h3>Contenido todo el mes</h3><p>Nunca más quedarte en blanco. Un calendario listo, mes tras mes.</p></div>
-      <div class="slide"><div class="ico"><?= ico('mic','ic ic-xl') ?></div><h3>Suena a ti, no a robot</h3><p>Boricua de verdad, con tu sabor. Cero "AI slop".</p></div>
-      <div class="slide"><div class="ico"><?= ico('send','ic ic-xl') ?></div><h3>Apruebas desde el celular</h3><p>En segundos, donde estés. Tu equipo hace el resto.</p></div>
-      <div class="slide"><div class="ico"><?= ico('rocket','ic ic-xl') ?></div><h3>Publica y responde solo</h3><p>Auto-publica a tus redes y contesta los DMs por ti.</p></div>
-      <div class="slide"><div class="ico"><?= ico('check-circle','ic ic-xl') ?></div><h3>Tus posts, 100% tuyos</h3><p>La firma de Crecer desaparece. Tu marca y tu crédito, nada de firmas ajenas.</p></div>
-    </div>
-    <div class="sell-nav">
-      <button class="sell-arrow" id="sellPrev" aria-label="Anterior">‹</button>
-      <div class="sell-dots" id="sellDots"></div>
-      <button class="sell-arrow" id="sellNext" aria-label="Siguiente">›</button>
-    </div>
+  <div class="vlead">Imagínate esto todos los días</div>
+  <p class="vlead-sub">Sin quedarte en blanco, sin pelear con el diseño, sin acordarte de postear.</p>
+  <div class="vbens">
+    <div class="vben"><span class="vb-ic"><?= ico('palette') ?></span><div><h3>Tu marketing, hecho</h3><p>Posts, arte y captions en tu voz. Tú solo apruebas desde el celular.</p></div></div>
+    <div class="vben"><span class="vb-ic"><?= ico('calendar') ?></span><div><h3>Contenido todo el mes</h3><p>Un calendario listo, mes tras mes. Nunca más quedarte en blanco.</p></div></div>
+    <div class="vben"><span class="vb-ic"><?= ico('rocket') ?></span><div><h3>Publica y responde solo</h3><p>Auto-publica a tus redes y contesta los DMs por ti.</p></div></div>
   </div>
 
-  <!-- Deck rotativo de persuasión (lo económico + las bondades) -->
-  <div class="vsell"><div class="vsell-card"><div class="vs-emoji" id="vsEmoji"></div><div class="vs-text" id="vsText">…</div></div></div>
-
-  <div class="sell-cta">
-    <div class="price">$<?= number_format((float)$plan_venta['precio_mensual'], 0) ?><span>/mes</span></div>
-    <div class="price-hook">Menos de $<?= number_format((float)$plan_venta['precio_mensual']/30, 2) ?> al día — más barato que tu cafecito.</div>
-    <div class="price-sub">Una agencia cobra cientos al mes por esto · Cancela cuando quieras · 100% tuyos</div>
+  <div class="vprice">
+    <div class="amt">$<?= number_format((float)$plan_venta['precio_mensual'], 0) ?><span>/mes</span></div>
+    <div class="hook">Menos de $<?= number_format((float)$plan_venta['precio_mensual']/30, 2) ?> al día — más barato que tu cafecito.</div>
+    <div class="sub">Una agencia cobra cientos al mes por esto · Cancela cuando quieras · Tus posts 100% tuyos</div>
+  </div>
+  <div class="vcta">
     <form method="post" action="/crecer/panel/crear_checkout.php" id="ventaForm">
       <?= csrf_field() ?>
       <input type="hidden" name="marca" value="<?= (int)$marca_id ?>">
@@ -374,7 +351,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       <button class="btn pri" type="submit">Activar mi corillo →</button>
     </form>
     <?php if ($ver_venta): ?>
-      <a class="btn gho" style="margin-top:12px" href="/crecer/panel/gateway_post.php?marca=<?= (int)$marca_id . $gwq ?>">← Seguir con mi post gratis</a>
+      <a class="vback btn gho" href="/crecer/panel/gateway_post.php?marca=<?= (int)$marca_id . $gwq ?>">← Seguir con mi post gratis</a>
     <?php endif; ?>
   </div>
 
@@ -542,7 +519,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     document.getElementById('waitNext').addEventListener('click',function(){ clearInterval(auto); next(); auto=setInterval(next,7000); });
   })();
 
-<?php if (!$publicado): ?>
+<?php if (!$es_venta): ?>
   var actsB=document.getElementById('actsBorrador'), actsE=document.getElementById('actsEdit'),
       actsP=document.getElementById('actsPublicar'), actsM=document.getElementById('actsManual'),
       capBox=document.getElementById('capBox'), capEdit=document.getElementById('capEdit');
