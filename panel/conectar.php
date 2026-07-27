@@ -147,6 +147,8 @@ $paginas = $_SESSION['meta_paginas'][$marca_id] ?? [];
   .btn.fb.loading .fb-ico{display:none}
   .btn.fb.loading .fb-spin{display:inline-block}
   @keyframes fbspin{to{transform:rotate(360deg)}}
+  .fb-note{margin:12px 4px 0;font-size:13px;line-height:1.45;color:var(--muted);text-align:center}
+  .fb-note b{color:var(--ink-soft);font-weight:600}
   .quiet{display:block;width:100%;text-align:center;background:0;border:0;cursor:pointer;font-family:var(--font-display);font-weight:500;font-size:14px;color:var(--muted);padding:14px 0 2px;margin-top:6px}
   .quiet:hover{color:var(--ink-soft)}
   .need{display:block;width:100%;text-align:center;background:0;border:0;cursor:pointer;font-family:var(--font-display);font-weight:500;font-size:14px;color:var(--teal-dark,#00827e);padding:16px 0 0}
@@ -258,7 +260,8 @@ $paginas = $_SESSION['meta_paginas'][$marca_id] ?? [];
       <?php if (!meta_configurado()): ?>
         <div class="msg err" style="margin:0"><?= $warn ?><span>La app de Meta todavía no está configurada en el servidor (META_APP_ID / META_APP_SECRET + App Review de Meta).</span></div>
       <?php else: ?>
-        <a class="btn fb" id="fbBtn" href="?action=iniciar&marca=<?= $marca_id ?>"><span class="fb-ico"><?= $fb_svg ?></span><span class="fb-spin" aria-hidden="true"></span><span class="fb-label">Conectar con Facebook</span></a>
+        <a class="btn fb" id="fbBtn" href="?action=iniciar&marca=<?= $marca_id ?>"><span class="fb-ico"><?= $fb_svg ?></span><span class="fb-spin" aria-hidden="true"></span><span class="fb-label">Conectar Facebook + Instagram</span></a>
+        <p class="fb-note">Tu <b>Instagram</b> se conecta a través de tu <b>Página de Facebook</b> — un solo paso los deja listos.</p>
         <button class="need" type="button" id="needBtn">¿Qué necesito para conectar?</button>
       <?php endif; ?>
     </div>
