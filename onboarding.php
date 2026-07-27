@@ -241,7 +241,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 </head>
 <body>
 <div class="wrap">
-  <div class="top"><img src="/crecer/assets/brand/crecer-icon.png" alt=""><b>encuéntralo <span style="color:var(--teal)">crecer</span></b></div>
+  <div class="top"><img src="/crecer/assets/brand/crecer-icon.png" alt=""><b style="display:inline-flex;flex-direction:column;line-height:1;gap:1px"><span style="color:var(--teal)">Crecer</span><span style="font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.02em;margin-top:1px">by Encuéntralo</span></b></div>
   <h1>Háblame de <span>tu negocio</span></h1>
   <p class="lede">No llenes formularios largos. Grábate 40 segundos contándome de tu negocio y el corillo arma tu primer post — en tu propia voz boricua.</p>
 

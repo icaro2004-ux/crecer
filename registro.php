@@ -160,7 +160,7 @@ $plan_lbl = ['crecer'=>'Crecer','despegar'=>'Despegar'][$plan_intent] ?? '';
 
 <nav class="cnav">
   <div class="in wrap">
-    <a class="cbrand" href="/crecer/crecer.php"><img src="/crecer/assets/brand/crecer-icon.png" alt=""><b>encuéntralo <span class="teal">crecer</span></b></a>
+    <a class="cbrand" href="/crecer/crecer.php"><img src="/crecer/assets/brand/crecer-icon.png" alt=""><b style="display:inline-flex;flex-direction:column;line-height:1;gap:1px"><span style="color:var(--teal)">Crecer</span><span style="font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.02em;margin-top:1px">by Encuéntralo</span></b></a>
     <span class="sp"></span>
     <a class="lg" href="/crecer/login.php">¿Ya tienes cuenta? Entra →</a>
   </div>

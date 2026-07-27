@@ -140,7 +140,7 @@ $A = '/crecer/assets/encuentralo-hero';
 
 <header class="ec-navbar">
   <nav class="ec-nav">
-    <a class="brand" href="/crecer/index.php"><img src="/crecer/assets/brand/crecer-icon.png" alt=""><b>encuéntralo <span style="color:var(--teal)">crecer</span></b></a>
+    <a class="brand" href="/crecer/index.php"><img src="/crecer/assets/brand/crecer-icon.png" alt=""><b style="display:inline-flex;flex-direction:column;line-height:1;gap:1px"><span style="color:var(--teal)">Crecer</span><span style="font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.02em;margin-top:1px">by Encuéntralo</span></b></a>
     <span class="sp"></span>
     <a class="enter" href="/crecer/login.php">Entrar</a>
   </nav>

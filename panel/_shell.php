@@ -52,6 +52,9 @@ $nav_perfil = [
 <style>
   /* Fondo blanco unificado (el bottom-nav lo renderiza _shell_foot.php, uno solo) */
   .main{background:#fff}
+  /* Logo del app 25% más grande para que el ícono resalte (override del CSS compartido) */
+  .side .sbrand img{height:38px}
+  .ptop img{height:35px}
   @media(max-width:860px){
     .botnav a.on{color:var(--magenta)}
     /* Botón central "Crear" (estilo del arte): ícono elevado en teal */

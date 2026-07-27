@@ -251,7 +251,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <body>
 <div class="en-bar">
   <img src="/crecer/assets/brand/crecer-icon.png" alt="">
-  <b>encuéntralo <span class="t">crecer</span></b>
+  <b style="display:inline-flex;flex-direction:column;line-height:1;gap:1px"><span style="color:var(--teal)">Crecer</span><span style="font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.02em;margin-top:1px">by Encuéntralo</span></b>
   <span class="live"><i></i>El corillo · en línea</span>
 </div>
 <div class="content">
