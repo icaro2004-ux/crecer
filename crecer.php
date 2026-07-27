@@ -73,11 +73,16 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .demo{display:inline-block;font-family:var(--disp);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;
     color:var(--muted);background:color-mix(in srgb,var(--muted) 8%,#fff);border:1px solid var(--line);padding:4px 10px;border-radius:999px}
 
-  /* ── 1 · HERO: solo la pregunta ── */
-  #ask{min-height:calc(100dvh - 64px);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 22px 12vh}
-  .ask-hi{font-family:var(--body);font-weight:600;font-size:clamp(14px,3.6vw,16px);color:var(--pink);letter-spacing:.01em;margin:0 0 12px;text-wrap:balance}
-  .ask-q{font-family:var(--disp);font-weight:600;font-size:clamp(30px,6.6vw,48px);line-height:1.12;letter-spacing:-.025em;color:var(--ink);text-wrap:balance;max-width:14ch}
-  .namebox{display:flex;align-items:center;gap:10px;margin-top:34px;width:min(440px,100%);
+  /* ── 1 · HERO: "Tu equipo ya adelantó trabajo por ti" (rediseño 2026-07) ── */
+  #ask{min-height:calc(100dvh - 64px);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 22px 14vh;
+    background:url('/crecer/assets/landing/bg-desktop.svg') center/cover no-repeat}
+  .ask-icon{display:block;width:78px;height:auto;margin:0 auto 18px}
+  .ask-q{font-family:var(--disp);font-weight:700;font-size:clamp(40px,6.4vw,72px);line-height:1.02;letter-spacing:-.045em;color:var(--tinta);text-wrap:balance;max-width:12ch}
+  .ask-q .accent{display:block;color:var(--magenta)}
+  .ask-underline{width:150px;height:7px;margin:21px 0 20px;border-radius:999px;
+    background:linear-gradient(90deg,var(--teal) 0 45%,#f3a3aa 45% 58%,var(--magenta) 58%);transform:rotate(-1deg)}
+  .ask-intro{margin:0 0 28px;color:var(--muted);font-size:clamp(16px,1.3vw,20px);line-height:1.55;text-wrap:balance;max-width:34ch}
+  .namebox{display:flex;align-items:center;gap:10px;width:min(500px,calc(100vw - 44px));
     background:var(--card);border:1px solid var(--line);border-radius:18px;padding:8px 8px 8px 20px;
     box-shadow:0 2px 6px rgba(40,22,28,.05),0 24px 50px -26px rgba(40,22,28,.22);transition:box-shadow .2s var(--ease)}
   .namebox:focus-within{box-shadow:0 2px 6px rgba(40,22,28,.05),0 26px 56px -24px rgba(239,67,117,.3)}
@@ -85,10 +90,17 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   @keyframes shake{10%,90%{transform:translateX(-2px)}30%,70%{transform:translateX(5px)}50%{transform:translateX(-7px)}}
   .namebox input{flex:1;border:0;outline:0;background:0;font-family:var(--body);font-size:17px;color:var(--tinta);min-width:0}
   .namebox input::placeholder{color:#b8b2ad}
-  .namebox button{flex:none;width:52px;height:52px;border:0;border-radius:14px;background:var(--grad);color:#fff;
-    box-shadow:var(--glow);font-size:22px;cursor:pointer;display:grid;place-items:center;line-height:1;transition:transform .2s var(--ease),box-shadow .2s var(--ease)}
+  .namebox button{flex:none;width:56px;height:56px;border:0;border-radius:14px;background:var(--grad);color:#fff;
+    box-shadow:var(--glow);font-size:26px;cursor:pointer;display:grid;place-items:center;line-height:1;transition:transform .2s var(--ease),box-shadow .2s var(--ease)}
   .namebox button:active{transform:translateY(1px);box-shadow:var(--glow-active)}
-  .whisper{margin-top:22px;font-size:14px;color:var(--muted)}
+  .whisper{margin-top:20px;font-size:14px;color:#8A9099;display:inline-flex;align-items:center;gap:7px}
+  .whisper svg{width:14px;height:14px;flex:none}
+  @media(max-width:700px){
+    #ask{background-image:url('/crecer/assets/landing/bg-mobile.svg');padding-top:8vh}
+    .ask-icon{width:66px}
+    .ask-q{font-size:clamp(30px,8.6vw,46px);line-height:1.06;max-width:92vw}
+    .ask-intro{font-size:17px;max-width:24ch}
+  }
 
   /* Estados: por defecto se ve el hero; al fichar (o con ?negocio) se ve #exp */
   #exp{display:none}
@@ -174,16 +186,21 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
 <!-- ── 1 · HERO — solo la pregunta ── -->
 <header id="ask">
-  <p class="ask-hi">¡Hola! Qué bueno tenerte por aquí.</p>
-  <h1 class="ask-q">¿Cómo se llama tu negocio?</h1>
+  <svg class="ask-icon" viewBox="0 0 160 120" fill="none" aria-hidden="true"><g stroke="#20B6AE" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><circle cx="80" cy="43" r="17"/><path d="M49 99c0-19 14-31 31-31s31 12 31 31"/><circle cx="35" cy="58" r="12"/><path d="M15 99c0-14 9-24 22-24 7 0 13 2 18 7"/><circle cx="125" cy="58" r="12"/><path d="M105 82c5-5 11-7 18-7 13 0 22 10 22 24"/></g><g stroke="#EF4375" stroke-width="5" stroke-linecap="round"><path d="M80 12V1"/><path d="M57 18l-8-8"/><path d="M103 18l8-8"/></g></svg>
+  <h1 class="ask-q">Tu equipo<span class="accent">ya adelantó</span>trabajo por ti.</h1>
+  <div class="ask-underline" aria-hidden="true"></div>
+  <p class="ask-intro">Solo dinos cómo se llama tu negocio y empezamos.</p>
   <form class="namebox" id="fiche" method="get" action="/crecer/crecer.php" autocomplete="off">
     <input id="negInput" name="negocio" maxlength="60" required
            value="<?= $has_name ? $h($negocio) : '' ?>"
-           placeholder="Ej. Repostería La Bendición" aria-label="Nombre de tu negocio"
-           enterkeyhint="go" autocapitalize="words" spellcheck="false">
-    <button type="submit" aria-label="Entrar">→</button>
+           placeholder="Escribe el nombre de tu negocio…" aria-label="Nombre de tu negocio"
+           autocomplete="organization" enterkeyhint="go" autocapitalize="words" spellcheck="false">
+    <button type="submit" aria-label="Comenzar">→</button>
   </form>
-  <p class="whisper">Con el nombre basta para empezar. Tu corillo se encarga del resto.</p>
+  <p class="whisper">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2h1.5A1.5 1.5 0 0 1 20 11.5v8A1.5 1.5 0 0 1 18.5 21h-13A1.5 1.5 0 0 1 4 19.5v-8A1.5 1.5 0 0 1 5.5 10H7Zm2 0h6V8a3 3 0 0 0-6 0v2Z"/></svg>
+    Es rápido, gratis y sin tarjeta.
+  </p>
 </header>
 
 <!-- ── 2–5 · LA EXPERIENCIA (se revela al fichar) ── -->
