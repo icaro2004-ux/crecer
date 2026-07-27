@@ -141,6 +141,12 @@ $paginas = $_SESSION['meta_paginas'][$marca_id] ?? [];
   .btn:active{transform:translateY(1px);box-shadow:var(--btn-glow-active)}
   .btn.fb{background:#1877F2;box-shadow:0 12px 26px -12px rgba(24,119,242,.6)}
   .btn.fb svg{width:20px;height:20px}
+  .btn.fb .fb-ico{display:inline-flex}
+  .btn.fb .fb-spin{display:none;width:20px;height:20px;border:2.5px solid rgba(255,255,255,.45);border-top-color:#fff;border-radius:50%;animation:fbspin .7s linear infinite}
+  .btn.fb.loading{opacity:.9;pointer-events:none;cursor:progress}
+  .btn.fb.loading .fb-ico{display:none}
+  .btn.fb.loading .fb-spin{display:inline-block}
+  @keyframes fbspin{to{transform:rotate(360deg)}}
   .quiet{display:block;width:100%;text-align:center;background:0;border:0;cursor:pointer;font-family:var(--font-display);font-weight:500;font-size:14px;color:var(--muted);padding:14px 0 2px;margin-top:6px}
   .quiet:hover{color:var(--ink-soft)}
   .need{display:block;width:100%;text-align:center;background:0;border:0;cursor:pointer;font-family:var(--font-display);font-weight:500;font-size:14px;color:var(--teal-dark,#00827e);padding:16px 0 0}
@@ -252,7 +258,7 @@ $paginas = $_SESSION['meta_paginas'][$marca_id] ?? [];
       <?php if (!meta_configurado()): ?>
         <div class="msg err" style="margin:0"><?= $warn ?><span>La app de Meta todavía no está configurada en el servidor (META_APP_ID / META_APP_SECRET + App Review de Meta).</span></div>
       <?php else: ?>
-        <a class="btn fb" href="?action=iniciar&marca=<?= $marca_id ?>"><?= $fb_svg ?> Conectar con Facebook</a>
+        <a class="btn fb" id="fbBtn" href="?action=iniciar&marca=<?= $marca_id ?>"><span class="fb-ico"><?= $fb_svg ?></span><span class="fb-spin" aria-hidden="true"></span><span class="fb-label">Conectar con Facebook</span></a>
         <button class="need" type="button" id="needBtn">¿Qué necesito para conectar?</button>
       <?php endif; ?>
     </div>
@@ -280,6 +286,20 @@ $paginas = $_SESSION['meta_paginas'][$marca_id] ?? [];
     btn.addEventListener('click', open);
     ov.addEventListener('click', close);
     document.addEventListener('keydown', function(e){ if(e.key==='Escape') close(); });
+  })();
+  // Loader del botón "Conectar con Facebook": 1er clic muestra spinner + "Conectando…",
+  // deja seguir la navegación y BLOQUEA clics repetidos (el redirect a Meta tarda).
+  (function(){
+    var fb=document.getElementById('fbBtn'); if(!fb) return;
+    var lbl=fb.querySelector('.fb-label'), locked=false;
+    fb.addEventListener('click', function(e){
+      if(locked){ e.preventDefault(); return; }   // ya está conectando → ignora
+      locked=true; fb.classList.add('loading'); if(lbl) lbl.textContent='Conectando…';
+    });
+    // Si vuelve atrás (bfcache), resetear para que no quede pegado en "Conectando…".
+    window.addEventListener('pageshow', function(ev){
+      if(ev.persisted){ locked=false; fb.classList.remove('loading'); if(lbl) lbl.textContent='Conectar con Facebook'; }
+    });
   })();
 </script>
 <?php endif; ?>
