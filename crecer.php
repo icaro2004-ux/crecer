@@ -44,7 +44,7 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <style>
   /* Hereda el lenguaje visual del producto (encuentralo-ui.css), aquí autónomo. */
   :root{
-    --crema:#F7F5F1; --card:#fff; --tinta:#231F20; --ink:#4A434F; --muted:#6E6A67; --line:#E9E7E4;
+    --crema:#FFFFFF; --card:#fff; --tinta:#231F20; --ink:#4A434F; --muted:#6E6A67; --line:#ECEAE7;
     --magenta:#EF4375; --coral:#FF6B3D; --teal:#00A49F; --palma:#16b86a;
     --disp:'Poppins',sans-serif; --body:'Plus Jakarta Sans',system-ui,sans-serif;
     --grad:linear-gradient(135deg,var(--coral),var(--magenta));
@@ -54,8 +54,7 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html{scroll-behavior:smooth}
-  body{font-family:var(--body);color:var(--tinta);background:var(--crema);line-height:1.5;
-    background-image:radial-gradient(110% 40% at 100% 0%,rgba(239,67,117,.045),transparent 60%),radial-gradient(80% 38% at 0% 2%,rgba(0,164,159,.035),transparent 58%);
+  body{font-family:var(--body);color:var(--tinta);background:#fff;line-height:1.5;
     -webkit-font-smoothing:antialiased;overflow-x:hidden}
   .wrap{width:min(600px,calc(100% - 40px));margin-inline:auto}
   a{color:inherit}
@@ -74,8 +73,7 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     color:var(--muted);background:color-mix(in srgb,var(--muted) 8%,#fff);border:1px solid var(--line);padding:4px 10px;border-radius:999px}
 
   /* ── 1 · HERO: "Tu equipo ya adelantó trabajo por ti" (rediseño 2026-07) ── */
-  #ask{min-height:calc(100dvh - 64px);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 22px 14vh;
-    background:url('/crecer/assets/landing/bg-desktop.svg') center/cover no-repeat}
+  #ask{min-height:calc(100dvh - 64px);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 22px 14vh;background:#fff}
   .ask-icon{display:block;width:78px;height:auto;margin:0 auto 18px}
   .ask-q{font-family:var(--disp);font-weight:700;font-size:clamp(40px,6.4vw,72px);line-height:1.02;letter-spacing:-.045em;color:var(--tinta);text-wrap:balance;max-width:12ch}
   .ask-q .accent{display:block;color:var(--magenta)}
@@ -96,7 +94,7 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .whisper{margin-top:20px;font-size:14px;color:#8A9099;display:inline-flex;align-items:center;gap:7px}
   .whisper svg{width:14px;height:14px;flex:none}
   @media(max-width:700px){
-    #ask{background-image:url('/crecer/assets/landing/bg-mobile.svg');padding-top:8vh}
+    #ask{padding-top:8vh}
     .ask-icon{width:66px}
     .ask-q{font-size:clamp(30px,8.6vw,46px);line-height:1.06;max-width:92vw}
     .ask-intro{font-size:17px;max-width:24ch}
@@ -180,7 +178,7 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <body class="<?= $has_name ? 'revealed' : '' ?>">
 
 <nav class="nav">
-  <a class="brand" href="/crecer/crecer.php" style="display:inline-flex;align-items:center;gap:8px"><img src="/crecer/assets/brand/crecer-icon.png" alt="" style="height:30px;width:auto"><b style="display:inline-flex;flex-direction:column;line-height:1;gap:0;font-weight:700"><span style="color:var(--teal)">Crecer</span><span style="font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.02em;margin-top:1px">by Encuéntralo</span></b></a>
+  <a class="brand" href="/crecer/crecer.php" style="display:inline-flex;align-items:center;gap:11px"><img src="/crecer/assets/brand/crecer-icon.png" alt="Crecer" style="height:46px;width:auto"><b style="display:inline-flex;flex-direction:column;line-height:1;gap:2px;font-weight:700"><span style="font-size:23px;color:var(--teal)">Crecer</span><span style="font-size:11px;font-weight:500;color:var(--muted);letter-spacing:.02em">by Encuéntralo</span></b></a>
   <a class="entrar" href="/crecer/login.php">Entrar</a>
 </nav>
 

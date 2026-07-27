@@ -7,7 +7,7 @@
    ============================================================ */
 :root{
   --paper:#fff;
-  --crema:#F7F5F1;
+  --crema:#FFFFFF;
   --ink:#231F20;          /* texto principal */
   --ink-soft:#4A434F;     /* títulos grandes + párrafos fuertes */
   --tinta:#231F20;
@@ -27,9 +27,7 @@
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth;overflow-x:hidden}
-body{margin:0;background:var(--crema);color:var(--ink);font-family:var(--body);line-height:1.55;overflow-x:hidden;-webkit-font-smoothing:antialiased;
-  background-image:radial-gradient(110% 40% at 100% 0%,rgba(239,67,117,.045),transparent 60%),radial-gradient(80% 38% at 0% 2%,rgba(0,164,159,.035),transparent 58%);
-  background-attachment:fixed}
+body{margin:0;background:#fff;color:var(--ink);font-family:var(--body);line-height:1.55;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 :where(a,button,input,textarea,select):focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--magenta) 32%,transparent)}
 ::selection{background:color-mix(in srgb,var(--magenta) 20%,#fff)}
 
