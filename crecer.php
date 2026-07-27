@@ -65,8 +65,9 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .nav{display:flex;align-items:center;justify-content:space-between;padding:20px 22px;position:relative;z-index:5}
   .brand{font-family:var(--disp);font-weight:600;font-size:16px;letter-spacing:-.02em;color:var(--tinta);text-decoration:none}
   .brand i{color:var(--teal);font-style:normal}
-  .nav .entrar{font-family:var(--disp);font-weight:500;font-size:14px;color:var(--muted);text-decoration:none}
-  .nav .entrar:hover{color:var(--tinta)}
+  .nav .entrar{font-family:var(--disp);font-weight:600;font-size:14px;color:var(--tinta);text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+  .nav .entrar .ent-arrow{color:var(--magenta);font-weight:700;display:inline-block;transition:transform .2s var(--ease)}
+  .nav .entrar:hover .ent-arrow{transform:translateX(3px)}
 
   /* chip de honestidad */
   .demo{display:inline-block;font-family:var(--disp);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;
@@ -187,7 +188,7 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
 <nav class="nav">
   <a class="brand" href="/crecer/crecer.php" style="display:inline-flex;align-items:center;gap:11px"><img src="/crecer/assets/brand/crecer-icon.png" alt="Crecer" style="height:46px;width:auto"><b style="display:inline-flex;flex-direction:column;line-height:1;gap:2px;font-weight:700"><span style="font-size:23px;color:var(--teal)">Crecer</span><span style="font-size:11px;font-weight:500;color:var(--muted);letter-spacing:.02em">by Encuéntralo</span></b></a>
-  <a class="entrar" href="/crecer/login.php">Entrar</a>
+  <a class="entrar" href="/crecer/login.php">Entrar <span class="ent-arrow" aria-hidden="true">&rarr;</span></a>
 </nav>
 
 <!-- ── 1 · HERO — solo la pregunta ── -->
