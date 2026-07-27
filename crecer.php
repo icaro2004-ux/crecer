@@ -76,6 +76,8 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   #ask{position:relative;overflow:hidden;min-height:calc(100dvh - 64px);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 22px 14vh;background:#fff}
   /* logo translúcido de marca de agua (fondo) */
   .ask-wm{position:absolute;z-index:0;top:-7%;right:-16%;width:min(600px,92vw);opacity:.06;pointer-events:none;user-select:none}
+  /* Desktop: el watermark se salía casi todo → traerlo visible arriba-derecha (móvil se queda igual) */
+  @media(min-width:701px){ .ask-wm{width:min(700px,46vw);top:-7%;right:-5%} }
   /* ola inferior */
   .ask-wave{position:absolute;z-index:1;left:0;bottom:0;width:100%;height:clamp(100px,16vh,200px);pointer-events:none}
   /* contenido por encima del fondo */
