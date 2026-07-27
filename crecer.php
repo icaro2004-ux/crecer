@@ -75,7 +75,7 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   /* ── 1 · HERO: "Tu equipo ya adelantó trabajo por ti" (rediseño 2026-07) ── */
   #ask{position:relative;overflow:hidden;min-height:calc(100dvh - 64px);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 22px 14vh;background:#fff}
   /* logo translúcido de marca de agua (fondo) */
-  .ask-wm{position:absolute;z-index:0;top:50%;left:50%;width:min(640px,88vw);transform:translate(-50%,-58%);opacity:.055;pointer-events:none;user-select:none}
+  .ask-wm{position:absolute;z-index:0;top:-7%;right:-16%;width:min(600px,92vw);opacity:.06;pointer-events:none;user-select:none}
   /* ola inferior */
   .ask-wave{position:absolute;z-index:1;left:0;bottom:0;width:100%;height:clamp(100px,16vh,200px);pointer-events:none}
   /* contenido por encima del fondo */
