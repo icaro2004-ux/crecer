@@ -82,12 +82,10 @@ $por_agente = $pdo->query("SELECT agente, COUNT(*) n, COALESCE(SUM(costo_usd),0)
 </style></head><body>
 <?php $op_active='evidencia'; require __DIR__.'/_ops_top.php'; ?>
 <div class="wrap">
-  <h1>Evidencia del criterio #2</h1>
+  <h1>Evidencia del criterio #2 <span style="font-size:12px;color:#c0392b;font-weight:800">· BUILD v3 · demo_marca=<?= (int)$demo_marca ?></span></h1>
   <p class="sub">La IA operando el negocio, con datos reales de la BD. Nada inventado.</p>
 
-  <?php if ($demo_marca): ?>
-  <a href="/crecer/panel/evidencia.php?marca=<?= $demo_marca ?>" style="display:inline-flex;align-items:center;gap:9px;margin:2px 0 22px;background:linear-gradient(135deg,#f0c85a,#ec7a4d);color:#1a1030;font-weight:800;text-decoration:none;padding:14px 24px;border-radius:13px;box-shadow:0 12px 30px -12px rgba(240,160,80,.7)"><?= ico('play') ?> Ver el corillo EN VIVO &rarr;</a>
-  <?php endif; ?>
+  <a href="/crecer/panel/evidencia.php<?= $demo_marca ? '?marca='.(int)$demo_marca : '' ?>" style="display:inline-flex;align-items:center;gap:9px;margin:2px 0 22px;background:linear-gradient(135deg,#f0c85a,#ec7a4d);color:#1a1030;font-weight:800;text-decoration:none;padding:14px 24px;border-radius:13px;box-shadow:0 12px 30px -12px rgba(240,160,80,.7)"><?= ico('play') ?> Ver el corillo EN VIVO &rarr;</a>
 
   <div class="kpis">
     <div class="kpi hot"><div class="l">Decisiones de IA</div><div class="v"><?= number_format($dec_ia) ?></div></div>
