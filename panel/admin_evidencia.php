@@ -39,6 +39,8 @@ $posts_mes  = (int)$val("SELECT COUNT(*) FROM crecer_contenido WHERE estado='pub
 $clientes   = (int)$val("SELECT COUNT(*) FROM crecer_marca");
 $pagando    = (int)$val("SELECT COUNT(*) FROM crecer_suscripciones WHERE estado='activa'");
 $costo_ia   = (float)$val("SELECT COALESCE(SUM(costo_usd),0) FROM crecer_ia_log");
+// Marca más activa → destino de la DEMO EN VIVO (el corillo trabajando en cámara).
+$demo_marca = (int)$val("SELECT marca_id FROM crecer_ia_log GROUP BY marca_id ORDER BY COUNT(*) DESC LIMIT 1");
 // MRR real, separando clientes fríos de allegados (related-party).
 $mrr = $pdo->query("SELECT COALESCE(SUM(CASE WHEN s.es_early_adopter=0 THEN p.precio_mensual ELSE 0 END),0) frio,
                            COALESCE(SUM(CASE WHEN s.es_early_adopter=1 THEN p.precio_mensual ELSE 0 END),0) allegado
@@ -82,6 +84,10 @@ $por_agente = $pdo->query("SELECT agente, COUNT(*) n, COALESCE(SUM(costo_usd),0)
 <div class="wrap">
   <h1>Evidencia del criterio #2</h1>
   <p class="sub">La IA operando el negocio, con datos reales de la BD. Nada inventado.</p>
+
+  <?php if ($demo_marca): ?>
+  <a href="/crecer/panel/evidencia.php?marca=<?= $demo_marca ?>" style="display:inline-flex;align-items:center;gap:9px;margin:2px 0 22px;background:linear-gradient(135deg,#f0c85a,#ec7a4d);color:#1a1030;font-weight:800;text-decoration:none;padding:14px 24px;border-radius:13px;box-shadow:0 12px 30px -12px rgba(240,160,80,.7)"><?= ico('play') ?> Ver el corillo EN VIVO &rarr;</a>
+  <?php endif; ?>
 
   <div class="kpis">
     <div class="kpi hot"><div class="l">Decisiones de IA</div><div class="v"><?= number_format($dec_ia) ?></div></div>

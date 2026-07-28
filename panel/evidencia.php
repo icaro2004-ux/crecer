@@ -16,14 +16,20 @@ requiere_login();
 
 $usuario = usuario_actual($pdo);
 $USUARIO_ID = (int)$usuario['id'];
-$marca = marca_del_usuario($pdo, $USUARIO_ID, isset($_GET['marca']) ? (int)$_GET['marca'] : null);
+$es_admin  = (($usuario['rol'] ?? '') === 'admin');
+$req_marca = isset($_GET['marca']) ? (int)$_GET['marca'] : null;
+// EVIDENCIA TÉCNICA — protegida (tokens, costos, modelos). Es la prueba del
+// criterio #2 del XPRIZE, para admin/jurado. El cliente ve la versión humana
+// en actividad.php. El ADMIN puede inspeccionar CUALQUIER marca (para grabar
+// la demo en vivo); el cliente solo la suya.
+if ($es_admin && $req_marca) {
+    $marca = $pdo->query("SELECT * FROM crecer_marca WHERE id=" . $req_marca)->fetch(PDO::FETCH_ASSOC) ?: null;
+} else {
+    $marca = marca_del_usuario($pdo, $USUARIO_ID, $req_marca);
+}
 if (!$marca) { header('Location: /crecer/onboarding.php'); exit; }
 $marca_id = (int)$marca['id'];
-
-// EVIDENCIA TÉCNICA — protegida (tokens, costos, modelos, agregados del
-// sistema). Es la prueba del criterio #2 del XPRIZE, para admin/jurado.
-// El cliente ve la versión humana en actividad.php.
-if (($usuario['rol'] ?? '') !== 'admin') {
+if (!$es_admin) {
     header('Location: /crecer/panel/actividad.php?marca=' . $marca_id);
     exit;
 }
