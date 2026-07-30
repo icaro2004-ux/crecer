@@ -193,18 +193,24 @@ require __DIR__ . '/_shell.php';
   .est-listos b{font-weight:800}
   .est-listos .sub{font-size:12.5px;font-weight:500;opacity:.92}
   .est-listos .arr{margin-left:auto;font-size:20px;font-weight:800}
-  /* Crear post desde cero — el disparador que faltaba en el área CREAR */
-  .est-crear{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 0 20px;background:var(--btn-grad);color:#fff;
-    text-decoration:none;font-family:'Poppins',sans-serif;font-weight:600;font-size:15px;padding:15px 20px;border-radius:14px;
+  /* Crear desde cero — los disparadores del área CREAR (post + reel) */
+  .est-crear-row{display:flex;gap:10px;margin:0 0 20px}
+  .est-crear{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-grad);color:#fff;
+    text-decoration:none;font-family:'Poppins',sans-serif;font-weight:600;font-size:14.5px;padding:15px 14px;border-radius:14px;
     box-shadow:var(--btn-glow);transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
   .est-crear svg{width:17px;height:17px}
+  .est-crear.alt{background:linear-gradient(135deg,var(--teal),#0a7d76);box-shadow:0 12px 30px -14px rgba(0,164,159,.6)}
   .est-crear:hover{transform:translateY(-2px);box-shadow:var(--btn-glow-hover)}
-  .est-crear:active{transform:translateY(0);box-shadow:var(--btn-glow-active)}
+  .est-crear.alt:hover{box-shadow:0 16px 34px -14px rgba(0,164,159,.65)}
+  .est-crear:active{transform:translateY(0)}
 </style>
 
 <main class="est" id="est">
   <p class="est-owner">El estudio de <b><?= $h($negocio) ?></b></p>
-  <a class="est-crear" href="<?= $BASE ?>/aprobar2.php?<?= $mid ?>&crear=1"><?= ico('plus') ?> Crear post desde cero</a>
+  <div class="est-crear-row">
+    <a class="est-crear" href="<?= $BASE ?>/aprobar2.php?<?= $mid ?>&crear=1"><?= ico('plus') ?> Crear post</a>
+    <a class="est-crear alt" href="<?= $BASE ?>/reels.php?marca=<?= $marca_id ?>"><?= ico('camera') ?> Crear Reel</a>
+  </div>
 
   <?php if ($n_listos > 0): ?>
   <a class="est-listos" href="<?= $BASE ?>/aprobar2.php?marca=<?= $marca_id ?>&tab=listos">
