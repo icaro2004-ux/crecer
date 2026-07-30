@@ -240,7 +240,8 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
   .cr-txon{font-size:12.5px;color:var(--tinta);line-height:1.4;margin:0 0 10px;font-style:italic}
   .cr-txon .lbl{display:inline-flex;align-items:center;gap:4px;font-style:normal;font-weight:700;color:var(--magenta);font-size:11px}
   .cr-txon .lbl svg{width:12px;height:12px}
-  .cr-track.no-txt .cr-txon{display:none}
+  .cr-track.no-txt .cr-txon .lbl{color:var(--muted)}
+  .cr-track.no-txt .cr-txon{opacity:.6}
   .cr-up{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:var(--teal);cursor:pointer}
   .cr-up svg{width:15px;height:15px}
   .cr-up input{display:none}
@@ -295,7 +296,7 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
   <?php endif; ?>
 <?php else: ?>
   <!-- ══ EDITAR / PREVIEW ══ -->
-  <h1 class="cr-h"><?= ico('list') ?> Tu carrusel</h1>
+  <h1 class="cr-h"><?= ico('list') ?> Tu carrusel <span style="font-size:11px;color:#c0392b;font-weight:800">· BUILD C5</span></h1>
   <p class="cr-sub">Desliza para ver los slides. La IA puede crear el arte de todos, o sube tus propias fotos. Al aprobar, entra a Tus Posts para publicar.</p>
 
   <div class="cr-cap">
@@ -322,9 +323,7 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
       </div>
       <div class="cr-body">
         <?php if ($v['visual'] !== ''): ?><div class="cr-tit"><?= $h($v['visual']) ?></div><?php endif; ?>
-        <?php if ($v['copy'] !== ''): ?>
-          <p class="cr-txon" data-txon><span class="lbl"><?= ico('pen') ?> Texto en la imagen:</span> «<span data-txcopy><?= $h($v['copy']) ?></span>»</p>
-        <?php endif; ?>
+        <p class="cr-txon" data-txon><span class="lbl"><?= ico('pen') ?> Texto en la imagen:</span> <?php if ($v['copy'] !== ''): ?>«<span data-txcopy><?= $h($v['copy']) ?></span>»<?php else: ?><span data-txcopy style="color:var(--muted)">(el Guionista no puso texto en este slide)</span><?php endif; ?></p>
         <label class="cr-up"><?= ico('image') ?> Subir mi foto
           <input type="file" accept="image/png,image/jpeg,image/webp" data-slide="<?= (int)$s['id'] ?>">
         </label>
