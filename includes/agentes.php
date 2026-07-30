@@ -871,7 +871,8 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
     //    FOTO REAL del cliente → Gemini (realce fiel, abajo). Si Responses falla o tarda
     //    de más → cae a Gemini para no trabar la fábrica. ──
     if (!$tiene_foto && function_exists('img_resp_activo') && img_resp_activo()) {
-        $rr = generar_grafica_responses($pdo, $marca_id, $m, $copy, $con_texto, ($con_logo && $logo_abs) ? $logo_abs : null, $fname);
+        $estilo_raw = (trim($opts['estilo_arte'] ?? 'realista') ?: 'realista');
+        $rr = generar_grafica_responses($pdo, $marca_id, $m, $copy, $con_texto, ($con_logo && $logo_abs) ? $logo_abs : null, $fname, $estilo_raw, $instr);
         if ($rr) {
             $pdo->prepare("INSERT INTO crecer_graficas (marca_id, archivo, copy_text) VALUES (?,?,?)")
                 ->execute([$marca_id, $rr['archivo'], $copy]);
@@ -899,7 +900,7 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
  * suele completar en 20-45s). Soporta el LOGO real. Devuelve ['archivo','costo','modelo']
  * o null → el llamador cae a Gemini (nunca se traba la fábrica). Loguea en crecer_ia_log.
  */
-function generar_grafica_responses(PDO $pdo, int $marca_id, array $m, string $copy, bool $con_texto, ?string $logo_abs, string $fname): ?array {
+function generar_grafica_responses(PDO $pdo, int $marca_id, array $m, string $copy, bool $con_texto, ?string $logo_abs, string $fname, string $estilo = 'realista', string $extra = ''): ?array {
     require_once __DIR__ . '/img_responses.php';
     if (!function_exists('openai_configurado') || !openai_configurado()) return null;
     $logo = null;
@@ -907,7 +908,7 @@ function generar_grafica_responses(PDO $pdo, int $marca_id, array $m, string $co
         $mime = (function_exists('mime_content_type') ? mime_content_type($logo_abs) : '') ?: 'image/png';
         $logo = ['data' => base64_encode((string)file_get_contents($logo_abs)), 'mime' => $mime];
     }
-    $brief = img_resp_brief($m, $copy, $con_texto, $logo !== null);
+    $brief = img_resp_brief($m, $copy, $con_texto, $logo !== null, ($extra !== '' ? $extra : null), $estilo);
     $t0 = microtime(true);
     try {
         $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1'] + ($logo ? ['logo' => $logo] : []));

@@ -23,10 +23,11 @@ function img_resp_activo(): bool {
  * background hasta que la imagen esté y AVISA por notificación (campanita). Así el
  * dueño encola y sigue editando / se va; la notificación lo lleva al post listo.
  */
-function arte_disparar(int $marca_id, int $post_id, ?bool $con_texto = null, ?string $extra = null, bool $fb = false): void {
+function arte_disparar(int $marca_id, int $post_id, ?bool $con_texto = null, ?string $extra = null, bool $fb = false, string $estilo = 'realista'): void {
     $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
     $q = '&ct=' . ($con_texto === null ? 'x' : ($con_texto ? '1' : '0'));
     if ($extra !== null && trim($extra) !== '') $q .= '&extra=' . rawurlencode(mb_substr(trim($extra), 0, 300));
+    if (trim($estilo) !== '' && $estilo !== 'realista') $q .= '&est=' . rawurlencode(mb_substr(trim($estilo), 0, 60));
     if ($fb) $q .= '&fb=1';   // re-disparo: ir DIRECTO a Gemini (gpt no pudo)
     $url  = 'https://' . $host . '/crecer/panel/arte_worker.php?marca=' . $marca_id . '&id=' . $post_id . '&key=' . ARTE_WORKER_KEY . $q;
     $ch = curl_init($url);
@@ -41,11 +42,31 @@ function arte_disparar(int $marca_id, int $post_id, ?bool $con_texto = null, ?st
 }
 
 /**
- * Brief natural (el que ganó en el lab) + reglas de marca.
- * @param $con_texto  true = anuncio con texto · false = foto SIN texto · null = el modelo decide (variedad)
- * @param $tiene_logo true = se adjunta el logo REAL del negocio (úsalo, no inventes)
+ * Dirección de arte según el estilo elegido por el dueño (realista/creativo/
+ * fantasia/ilustracion, combinables con '+'). Devuelve ['medio'=>..., 'dir'=>...].
+ * Local aquí para no acoplar el worker a agentes.php.
  */
-function img_resp_brief(array $m, string $copy, ?bool $con_texto = null, bool $tiene_logo = false, ?string $extra = null): string {
+function img_estilo_dir(string $estilo): array {
+    $map = [
+        'realista'    => ['medio' => 'fotografía',  'dir' => 'Estilo FOTOGRÁFICO realista: luz natural, foto publicitaria nítida, apetecible y creíble.'],
+        'creativo'    => ['medio' => 'imagen',       'dir' => 'Estilo CREATIVO y llamativo: composición audaz, color vibrante, un concepto con gancho — nunca la toma obvia.'],
+        'fantasia'    => ['medio' => 'imagen',       'dir' => 'Estilo FANTÁSTICO / de ensueño: atmósfera mágica y surrealista, luz dramática, paleta rica y saturada.'],
+        'ilustracion' => ['medio' => 'ilustración',  'dir' => 'Estilo ILUSTRACIÓN / arte digital: formas limpias, trazo definido, paleta plana o degradados suaves, composición moderna. NO es fotografía — es una ILUSTRACIÓN con carácter.'],
+    ];
+    $claves = array_values(array_filter(array_map('trim', explode('+', strtolower(trim($estilo))))));
+    if (count($claves) <= 1) return $map[$claves[0] ?? 'realista'] ?? $map['realista'];
+    $dirs = []; $medio = 'imagen';
+    foreach ($claves as $k) { if (isset($map[$k])) { $dirs[] = $map[$k]['dir']; if ($k !== 'realista' && $medio === 'imagen') $medio = $map[$k]['medio']; } }
+    return ['medio' => $medio ?: 'imagen', 'dir' => $dirs ? implode(' + ', $dirs) : $map['realista']['dir']];
+}
+
+/**
+ * Brief natural (el que ganó en el lab) + reglas de marca + ESTILO elegido.
+ * @param $con_texto  true = anuncio con texto · false = imagen SIN texto · null = el modelo decide (variedad)
+ * @param $tiene_logo true = se adjunta el logo REAL del negocio (úsalo, no inventes)
+ * @param $estilo     realista|creativo|fantasia|ilustracion (combinable con '+')
+ */
+function img_resp_brief(array $m, string $copy, ?bool $con_texto = null, bool $tiene_logo = false, ?string $extra = null, string $estilo = 'realista'): string {
     $nombre  = trim((string)($m['nombre_negocio'] ?? ''));
     $desc    = trim((string)($m['descripcion'] ?? ''));
     $publico = trim((string)($m['publico_objetivo'] ?? ''));
@@ -55,16 +76,20 @@ function img_resp_brief(array $m, string $copy, ?bool $con_texto = null, bool $t
     foreach ((array)$prods_raw as $p) { $n = is_array($p) ? trim((string)($p['nombre'] ?? '')) : trim((string)$p); if ($n !== '') $plist[] = $n; }
     $prods = implode(', ', $plist);
 
-    // Regla de TEXTO (que no SIEMPRE meta letras).
+    $ed = img_estilo_dir($estilo);
+    $medio = $ed['medio'];
+
+    // Regla de TEXTO (que no SIEMPRE meta letras) — respeta el MEDIO del estilo (no fuerza "fotografía").
     if ($con_texto === true)       $regla_texto = "Esta pieza SÍ lleva texto de anuncio: titular corto y potente, y un CTA breve. Poco texto, bien jerarquizado y sin errores de ortografía en español.";
-    elseif ($con_texto === false)  $regla_texto = "NO pongas texto ni letras dentro de la imagen: una fotografía publicitaria potente y limpia que hable por sí sola.";
-    else                           $regla_texto = "Tú decides si la pieza lleva algo de texto de anuncio o si es una foto limpia sin texto — elige lo que MEJOR detenga el scroll para este negocio; no metas texto por meterlo.";
+    elseif ($con_texto === false)  $regla_texto = "NO pongas texto ni letras dentro de la imagen: una {$medio} publicitaria potente y limpia que hable por sí sola.";
+    else                           $regla_texto = "Tú decides si la pieza lleva algo de texto de anuncio o si va limpia sin texto — elige lo que MEJOR detenga el scroll; no metas texto por meterlo.";
 
     // Regla de LOGO/MARCA (que no invente).
     if ($tiene_logo) $regla_logo = "Se adjunta el LOGO REAL del negocio: úsalo EXACTAMENTE ese (intégralo con buen gusto, en una esquina o como marca discreta). NO inventes ni dibujes otro logo.";
     else             $regla_logo = "NO inventes un logotipo ni una marca gráfica falsa. Si muestras el nombre del negocio, escríbelo como texto limpio y correcto: \"{$nombre}\" — nunca un logo ficticio.";
 
-    return "Crea una imagen publicitaria profesional para redes sociales (Facebook e Instagram) para este negocio puertorriqueño.\n\n"
+    return "Crea una pieza publicitaria profesional para redes sociales (Facebook e Instagram) para este negocio puertorriqueño.\n\n"
+         . "ESTILO OBLIGATORIO (respétalo al pie de la letra): {$ed['dir']}\n\n"
          . "Negocio (nombre EXACTO, escríbelo sin errores): {$nombre}\nQué hace: {$desc}\n"
          . ($prods !== '' ? "Productos: {$prods}\n" : '')
          . ($publico !== '' ? "Público: {$publico}\n" : '')
@@ -72,7 +97,7 @@ function img_resp_brief(array $m, string $copy, ?bool $con_texto = null, bool $t
          . "{$regla_texto}\n{$regla_logo}\n"
          . (($extra !== null && trim($extra) !== '') ? "Indicación extra del dueño (respétala con buen gusto): " . trim($extra) . "\n" : '')
          . "No inventes datos, precios ni promociones que no estén aquí.\n\n"
-         . "La imagen debe detener el scroll y dar ganas de comprar. Genera la mejor imagen publicitaria posible.";
+         . "La pieza debe detener el scroll y dar ganas de comprar, SIEMPRE en el estilo indicado arriba. Genera la mejor pieza posible.";
 }
 
 /**
@@ -80,7 +105,7 @@ function img_resp_brief(array $m, string $copy, ?bool $con_texto = null, bool $t
  * en crecer_contenido.img_job (estado 'queued'). Devuelve el id, o '' si falla
  * (el llamador cae al motor viejo). Loguea en crecer_ia_log (evidencia XPRIZE #2).
  */
-function img_resp_encolar(PDO $pdo, int $marca_id, int $post_id, string $copy, ?bool $con_texto = null, ?string $extra = null): string {
+function img_resp_encolar(PDO $pdo, int $marca_id, int $post_id, string $copy, ?bool $con_texto = null, ?string $extra = null, string $estilo = 'realista'): string {
     try {
         $m = function_exists('leer_marca') ? leer_marca($pdo, $marca_id)
            : $pdo->query("SELECT * FROM crecer_marca WHERE id=" . (int)$marca_id)->fetch(PDO::FETCH_ASSOC);
@@ -94,7 +119,7 @@ function img_resp_encolar(PDO $pdo, int $marca_id, int $post_id, string $copy, ?
                 $logo = ['data' => base64_encode((string)file_get_contents($labs)), 'mime' => $mime];
             }
         }
-        $brief = img_resp_brief($m, $copy, $con_texto, $logo !== null, $extra);
+        $brief = img_resp_brief($m, $copy, $con_texto, $logo !== null, $extra, $estilo);
         $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1'] + ($logo ? ['logo' => $logo] : []));
         $pdo->prepare("UPDATE crecer_contenido SET img_job=?, img_estado='queued' WHERE id=? AND marca_id=?")
             ->execute([$bg['id'], $post_id, $marca_id]);

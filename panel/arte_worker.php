@@ -28,6 +28,7 @@ if (function_exists('fastcgi_finish_request')) { fastcgi_finish_request(); }
 $ct_raw = (string)($_GET['ct'] ?? 'x');
 $con_texto = ($ct_raw === 'x' ? null : ($ct_raw === '1'));
 $extra = trim((string)($_GET['extra'] ?? ''));
+$estilo = trim((string)($_GET['est'] ?? 'realista')) ?: 'realista';
 $link = '/crecer/panel/propuestas.php?marca=' . $mid;
 $row  = $pdo->query("SELECT img_job, caption FROM crecer_contenido WHERE id=" . $pid)->fetch(PDO::FETCH_ASSOC);
 $copy = (string)($row['caption'] ?? '');
@@ -49,7 +50,7 @@ if (($_GET['fb'] ?? '') === '1') { error_log("arte_worker #{$pid}: re-disparo �
 
 // 1) CREAR el job de gpt-image-2. Si NO se pudo crear (ej. 429/rate limit) → respaldo Gemini.
 if ($row && trim((string)($row['img_job'] ?? '')) === '') {
-    $jid = img_resp_encolar($pdo, $mid, $pid, $copy, $con_texto, $extra !== '' ? $extra : null);
+    $jid = img_resp_encolar($pdo, $mid, $pid, $copy, $con_texto, $extra !== '' ? $extra : null, $estilo);
     if ($jid === '') { error_log("arte_worker #{$pid}: gpt no creó → Gemini"); $respaldo_gemini(); }
 }
 

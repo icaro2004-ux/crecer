@@ -202,10 +202,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($src) && function_exists('img_resp_activo') && img_resp_activo()) {
             $con_txt = ($_POST['con_texto'] ?? '') === '1';
             $extra   = trim($_POST['instrucciones'] ?? '');
+            $est_arte = (is_array($_POST['estilo_arte'] ?? null)
+                          ? implode('+', array_map('strval', $_POST['estilo_arte']))
+                          : ($_POST['estilo_arte'] ?? 'realista')) ?: 'realista';
             // NO se llama a OpenAI aquí (eso colgaba la pantalla → timeout/"error de conexión").
             // Marcamos 'queued' y el WORKER crea el job + sondea + avisa por notificación.
             $pdo->prepare("UPDATE crecer_contenido SET img_estado='queued', img_job=NULL, arte_intentos=arte_intentos+1, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$id, $marca_id]);
-            arte_disparar($marca_id, $id, $con_txt, $extra !== '' ? $extra : null);
+            arte_disparar($marca_id, $id, $con_txt, $extra !== '' ? $extra : null, false, $est_arte);
             header('Content-Type: application/json');
             echo json_encode(['ok'=>true, 'async'=>true, 'id'=>$id,
                 'restantes'=>max(0, CRECER_IMG_SEMANA - ($usados+1)),
