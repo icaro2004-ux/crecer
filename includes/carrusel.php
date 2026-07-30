@@ -97,6 +97,13 @@ function carrusel_generar(PDO $pdo, int $marca_id, string $tema, int $n = 5): ar
     return ['ok' => true, 'contenido_id' => $cid, 'caption' => $caption, 'estilo' => $estilo, 'slides' => $out];
 }
 
+/** Cambia SOLO el modo texto ([txt]) en la idea de un slide (conserva lo demás). */
+function carrusel_idea_set_texto(string $idea, int $con_texto): string {
+    $v = ($con_texto ? 1 : 0);
+    if (preg_match('/\[txt\]\s*[01]/', $idea)) return (string)preg_replace('/\[txt\]\s*[01]/', "[txt] {$v}", $idea);
+    return rtrim($idea) . "\n[txt] {$v}";
+}
+
 /** Serializa los datos de un slide en el campo idea (con marcadores). */
 function carrusel_idea_serializar(string $titulo, string $texto, string $visual, string $estilo, int $con_texto): string {
     $copy = trim($titulo . ($texto !== '' ? " — {$texto}" : ''));

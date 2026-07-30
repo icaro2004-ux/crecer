@@ -113,6 +113,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // worker muera, el SWEEP completa las imágenes al volver y avisa por la campanita.
     if ($accion === 'arte_ia' && $cid) {
         @set_time_limit(0); @ignore_user_abort(true);
+        // Aplica el modo "texto en las imágenes" elegido en el editor (antes de generar).
+        if (isset($_POST['con_texto'])) {
+            $ct = ($_POST['con_texto'] === '1') ? 1 : 0;
+            $ss = $pdo->prepare("SELECT id, idea FROM crecer_carrusel WHERE contenido_id=? AND marca_id=?");
+            $ss->execute([$cid, $marca_id]);
+            $uu = $pdo->prepare("UPDATE crecer_carrusel SET idea=?, updated_at=NOW() WHERE id=?");
+            foreach ($ss->fetchAll(PDO::FETCH_ASSOC) as $row) { $uu->execute([carrusel_idea_set_texto((string)$row['idea'], $ct), (int)$row['id']]); }
+        }
         // "Rehacer": borra el arte actual (generado por IA) para volver a crearlo desde cero.
         if (!empty($_POST['rehacer'])) {
             $pdo->prepare("UPDATE crecer_carrusel SET grafica_path=NULL, img_job=NULL, img_estado=NULL, updated_at=NOW() WHERE contenido_id=? AND marca_id=?")
@@ -188,6 +196,8 @@ $slides = $cid ? carrusel_slides($pdo, $cid) : [];
 $prep = false;
 foreach ($slides as $s) { if (($s['img_estado'] ?? '') === 'queued') { $prep = true; break; } }
 $caption = $cid ? (string)($carr['caption'] ?? '') : '';
+$edit_con_texto = 1;
+if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_con_texto = (int)$v0['con_texto']; }
 ?>
 <style>
   .cr{max-width:720px;margin:0 auto}
@@ -227,6 +237,10 @@ $caption = $cid ? (string)($carr['caption'] ?? '') : '';
   .cr-body{padding:13px 14px 15px}
   .cr-tit{font-family:'Poppins',sans-serif;font-weight:800;font-size:15px;color:var(--tinta);margin:0 0 4px}
   .cr-txt{font-size:13px;color:var(--muted);line-height:1.45;margin:0 0 10px}
+  .cr-txon{font-size:12.5px;color:var(--tinta);line-height:1.4;margin:0 0 10px;font-style:italic}
+  .cr-txon .lbl{display:inline-flex;align-items:center;gap:4px;font-style:normal;font-weight:700;color:var(--magenta);font-size:11px}
+  .cr-txon .lbl svg{width:12px;height:12px}
+  .cr-track.no-txt .cr-txon{display:none}
   .cr-up{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:var(--teal);cursor:pointer}
   .cr-up svg{width:15px;height:15px}
   .cr-up input{display:none}
@@ -289,7 +303,7 @@ $caption = $cid ? (string)($carr['caption'] ?? '') : '';
     <textarea id="crCap" data-cid="<?= $cid ?>" placeholder="El texto que acompaña el carrusel…"><?= $h($caption) ?></textarea>
   </div>
 
-  <div class="cr-track" id="crTrack">
+  <div class="cr-track<?= $edit_con_texto ? '' : ' no-txt' ?>" id="crTrack">
     <?php foreach ($slides as $s):
       $v = carrusel_slide_visual((string)$s['idea']);
       $img = trim((string)$s['grafica_path']);
@@ -307,8 +321,10 @@ $caption = $cid ? (string)($carr['caption'] ?? '') : '';
         <?php endif; ?>
       </div>
       <div class="cr-body">
-        <div class="cr-tit"><?= $h($v['copy'] !== '' ? $v['copy'] : ('Slide ' . (int)$s['orden'])) ?></div>
-        <?php if ($v['visual'] !== ''): ?><p class="cr-txt"><?= $h($v['visual']) ?></p><?php endif; ?>
+        <?php if ($v['visual'] !== ''): ?><div class="cr-tit"><?= $h($v['visual']) ?></div><?php endif; ?>
+        <?php if ($v['copy'] !== ''): ?>
+          <p class="cr-txon" data-txon><span class="lbl"><?= ico('pen') ?> Texto en la imagen:</span> «<span data-txcopy><?= $h($v['copy']) ?></span>»</p>
+        <?php endif; ?>
         <label class="cr-up"><?= ico('image') ?> Subir mi foto
           <input type="file" accept="image/png,image/jpeg,image/webp" data-slide="<?= (int)$s['id'] ?>">
         </label>
@@ -323,6 +339,8 @@ $caption = $cid ? (string)($carr['caption'] ?? '') : '';
     <textarea id="crFb" placeholder="Ej: hazlo más corto · empieza con una pregunta · menciona que hacemos delivery · más atrevido…"></textarea>
     <button type="button" class="cr-fbgo" id="crFbGo"><?= ico('sparkles') ?> Ajustar con el Guionista</button>
   </div>
+
+  <label class="cr-txt-toggle" style="margin:0 0 14px"><input type="checkbox" id="crTxt2" <?= $edit_con_texto ? 'checked' : '' ?>> <span>Texto en las imágenes <small>(cada slide muestra su titular — aplica al crear el arte)</small></span></label>
 
   <div class="cr-acts">
     <button type="button" class="cr-b ia" id="crIA"><?= ico('sparkles') ?> Que la IA cree el arte</button>
@@ -438,9 +456,13 @@ $caption = $cid ? (string)($carr['caption'] ?? '') : '';
         else if(polling){ setTimeout(poll,3500); }
       }).catch(function(){ if(polling) setTimeout(poll,5000); });
     }
+    // Toggle "Texto en las imágenes" del editor: muestra/oculta los rótulos en vivo.
+    var txt2=document.getElementById('crTxt2');
+    if(txt2) txt2.addEventListener('change',function(){ track.classList.toggle('no-txt', !txt2.checked); });
     function lanzarArte(rehacer){
       if(iaBtn) iaBtn.disabled=true;
       var fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion','arte_ia'); fd.append('ajax','1');
+      fd.append('con_texto', (txt2 && txt2.checked) ? '1' : '0');
       if(rehacer) fd.append('rehacer','1');
       // Marca TODOS (rehacer) o los sin imagen como "preparando".
       track.querySelectorAll('.cr-slide').forEach(function(sl){ var cell=sl.querySelector('.cr-img'); if(rehacer || !cell.querySelector('img')){ var num=cell.querySelector('.cr-num'); cell.innerHTML=(num?num.outerHTML:'')+'<div class="cr-prep" data-prep><div class="sp"></div>Preparando el arte…</div>'; } });
