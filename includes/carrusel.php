@@ -191,6 +191,118 @@ function carrusel_arte_slide(PDO $pdo, int $marca_id, int $slide_id): bool {
     return false;
 }
 
+/**
+ * Encola un job Responses (background) por cada slide SIN imagen. RÁPIDO (crea→id
+ * en <2s cada uno) y RESILIENTE: el job vive en OpenAI, así que aunque el worker
+ * se muera en Hostinger, el sweep lo completa después. Guarda el job en
+ * crecer_carrusel.img_job (estado 'queued'). Devuelve cuántos encoló, o -1 si el
+ * motor Responses no está activo (→ el llamador cae al worker/Gemini sync).
+ */
+function carrusel_encolar_arte(PDO $pdo, int $marca_id, int $contenido_id): int {
+    require_once __DIR__ . '/img_responses.php';
+    if (!function_exists('img_resp_activo') || !img_resp_activo()) return -1;
+    $m = leer_marca($pdo, $marca_id);
+    if (!$m) return 0;
+    // Logo real del negocio (para no inventar marca), igual que el post sencillo.
+    $logo = null;
+    if (!empty($m['logo_path'])) {
+        $labs = rtrim(UPLOADS_PATH, '/\\') . '/' . ltrim(str_replace(rtrim(UPLOADS_URL, '/'), '', (string)$m['logo_path']), '/');
+        if (is_file($labs)) {
+            $mime = (function_exists('mime_content_type') ? mime_content_type($labs) : '') ?: 'image/png';
+            $logo = ['data' => base64_encode((string)file_get_contents($labs)), 'mime' => $mime];
+        }
+    }
+    $n = 0;
+    foreach (carrusel_slides($pdo, $contenido_id) as $s) {
+        if (trim((string)$s['grafica_path']) !== '') continue;         // ya tiene imagen (cliente subió o listo)
+        if (trim((string)($s['img_job'] ?? '')) !== '') { $n++; continue; }  // ya encolado
+        $v = carrusel_slide_visual((string)$s['idea']);
+        try {
+            $brief = img_resp_brief($m, $v['copy'], false, $logo !== null, $v['visual']);
+            $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1'] + ($logo ? ['logo' => $logo] : []));
+            $pdo->prepare("UPDATE crecer_carrusel SET img_job=?, img_estado='queued', updated_at=NOW() WHERE id=?")->execute([$bg['id'], (int)$s['id']]);
+            try { $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,estado) VALUES (?,?,?,?,?,?, 'ok')")
+                ->execute([$marca_id, 'director_imagen', 'Encolar slide de carrusel (Responses)', 'responses', $brief, $bg['id']]); } catch (Throwable $e) {}
+            $n++;
+        } catch (Throwable $e) { error_log('carrusel_encolar_arte slide ' . $s['id'] . ': ' . $e->getMessage()); }
+    }
+    return $n;
+}
+
+/**
+ * Completa el job de UN slide: si el job de OpenAI terminó, guarda la imagen.
+ * Idempotente. Devuelve 'ok' | 'queued' | 'error' | 'none'.
+ */
+function carrusel_completar_slide(PDO $pdo, int $marca_id, int $slide_id): string {
+    require_once __DIR__ . '/img_responses.php';
+    $row = $pdo->query("SELECT img_job, grafica_path FROM crecer_carrusel WHERE id=" . (int)$slide_id)->fetch(PDO::FETCH_ASSOC);
+    if (!$row) return 'none';
+    if (trim((string)$row['grafica_path']) !== '') return 'ok';
+    $rid = trim((string)($row['img_job'] ?? ''));
+    if ($rid === '') return 'none';
+    try {
+        $st = openai_responses_estado($rid);
+        if (($st['status'] ?? '') === 'completed' && ($st['b64'] ?? '') !== '') {
+            $bin = base64_decode($st['b64']);
+            $rel = "marca_{$marca_id}/graficas/carr_{$slide_id}_" . substr(md5((string)microtime(true)), 0, 6) . '.png';
+            $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+            @mkdir(dirname($abs), 0775, true); @file_put_contents($abs, $bin);
+            $url = rtrim(UPLOADS_URL, '/') . '/' . $rel;
+            $pdo->prepare("UPDATE crecer_carrusel SET grafica_path=?, img_estado='ok', img_job=NULL, updated_at=NOW() WHERE id=?")->execute([$url, $slide_id]);
+            return 'ok';
+        }
+        if (in_array($st['status'] ?? '', ['failed', 'cancelled', 'incomplete'], true)) {
+            // gpt no pudo con este slide → respaldo Gemini sync (hay tiempo: es 1 slide).
+            if (carrusel_arte_slide_gemini($pdo, $marca_id, $slide_id)) return 'ok';
+            $pdo->prepare("UPDATE crecer_carrusel SET img_estado='error', img_job=NULL WHERE id=?")->execute([$slide_id]);
+            return 'error';
+        }
+        return 'queued';
+    } catch (Throwable $e) { return 'queued'; }
+}
+
+/**
+ * SWEEP: al volver a cualquier pantalla, completa los slides cuyos jobs ya
+ * terminaron en OpenAI (el worker muere en Hostinger) y, cuando un carrusel
+ * queda COMPLETO en esta pasada, AVISA por notificación (una sola vez — los
+ * slides completados sueltan su job, así no reaparecen). No bloquea: cada job
+ * es un GET corto; tope de 8 slides por pasada.
+ */
+function carrusel_sweep_pendientes(PDO $pdo, int $marca_id): void {
+    try {
+        $q = $pdo->prepare("SELECT id, contenido_id FROM crecer_carrusel WHERE marca_id=? AND img_estado='queued' AND img_job IS NOT NULL ORDER BY id ASC LIMIT 8");
+        $q->execute([$marca_id]);
+        $rows = $q->fetchAll(PDO::FETCH_ASSOC);
+        if (!$rows) return;
+        $tocados = [];
+        foreach ($rows as $r) { carrusel_completar_slide($pdo, $marca_id, (int)$r['id']); $tocados[(int)$r['contenido_id']] = true; }
+        if (!function_exists('notif_crear')) @require_once __DIR__ . '/notif.php';
+        foreach (array_keys($tocados) as $cidc) {
+            $est = carrusel_estado($pdo, $cidc);
+            if (!empty($est['completo']) && function_exists('notif_crear')) {
+                notif_crear($pdo, $marca_id, 'carrusel', 'Tu carrusel ya está listo',
+                    'El corillo terminó el arte de tu carrusel — dale un vistazo y publícalo.',
+                    '/crecer/panel/carrusel.php?marca=' . $marca_id . '&id=' . $cidc, 'image');
+            }
+        }
+    } catch (Throwable $e) { error_log('carrusel_sweep: ' . $e->getMessage()); }
+}
+
+/** Respaldo Gemini SYNC para un slide (cuando gpt no pudo). Devuelve true si guardó. */
+function carrusel_arte_slide_gemini(PDO $pdo, int $marca_id, int $slide_id): bool {
+    $s = $pdo->query("SELECT idea FROM crecer_carrusel WHERE id=" . (int)$slide_id)->fetch(PDO::FETCH_ASSOC);
+    if (!$s) return false;
+    $v = carrusel_slide_visual((string)$s['idea']);
+    try {
+        $g = generar_grafica($pdo, $marca_id, null, ['copy' => $v['copy'], 'con_texto' => false, 'con_logo' => true, 'instrucciones' => $v['visual']]);
+        if (!empty($g['archivo'])) {
+            $pdo->prepare("UPDATE crecer_carrusel SET grafica_path=?, img_estado='ok', img_job=NULL, updated_at=NOW() WHERE id=?")->execute([$g['archivo'], $slide_id]);
+            return true;
+        }
+    } catch (Throwable $e) { error_log('carrusel_arte_slide_gemini #' . $slide_id . ': ' . $e->getMessage()); }
+    return false;
+}
+
 /** Dispara el worker que genera el arte de TODOS los slides en background + avisa. */
 function carrusel_disparar(int $marca_id, int $contenido_id): void {
     $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';

@@ -36,6 +36,8 @@ if ($cid) {
 // ── AJAX: estado del arte (poll de "preparando" → "listo") ──
 if (($_GET['ajax'] ?? '') === 'estado' && $cid) {
     header('Content-Type: application/json; charset=utf-8');
+    // Completa los jobs que ya terminaron en OpenAI (sobrevive la muerte del worker).
+    if ($carr_ok) { try { carrusel_sweep_pendientes($pdo, $marca_id); } catch (Throwable $e) {} }
     $slides = carrusel_slides($pdo, $cid);
     $out = array_map(fn($s) => [
         'id' => (int)$s['id'], 'orden' => (int)$s['orden'],
@@ -59,6 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Crear: el Guionista arma la historia.
     if ($accion === 'generar') {
         if (!$carr_ok) $jout(['ok' => false, 'err' => 'El carrusel aún no está activo (falta correr la migración en la base de datos).']);
+        @ignore_user_abort(true);
         // Límite: 1 carrusel por semana (ventana móvil de 7 días) por marca. Admin exento (pruebas/demo).
         if (($usuario['rol'] ?? '') !== 'admin') {
             $w = $pdo->prepare("SELECT COUNT(*) n, MIN(created_at) f FROM crecer_contenido
@@ -105,11 +108,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // La IA crea el arte de TODO el carrusel (async → notificación al terminar).
+    // Encola un job Responses por slide (rápido + resiliente): aunque salgas o el
+    // worker muera, el SWEEP completa las imágenes al volver y avisa por la campanita.
     if ($accion === 'arte_ia' && $cid) {
-        $pdo->prepare("UPDATE crecer_carrusel SET img_estado='queued', updated_at=NOW()
-                       WHERE contenido_id=? AND marca_id=? AND (grafica_path IS NULL OR grafica_path='')")
-            ->execute([$cid, $marca_id]);
-        carrusel_disparar($marca_id, $cid);
+        @set_time_limit(0); @ignore_user_abort(true);
+        $n = carrusel_encolar_arte($pdo, $marca_id, $cid);
+        if ($n < 0) {   // motor Responses apagado → worker sync (Gemini) como respaldo
+            $pdo->prepare("UPDATE crecer_carrusel SET img_estado='queued', updated_at=NOW()
+                           WHERE contenido_id=? AND marca_id=? AND (grafica_path IS NULL OR grafica_path='')")
+                ->execute([$cid, $marca_id]);
+            carrusel_disparar($marca_id, $cid);
+        }
         $jout(['ok' => true, 'async' => true]);
     }
 
@@ -155,6 +164,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $jout(['ok' => false, 'err' => 'Acción no reconocida.']);
 }
+
+// Al cargar el carrusel, completa lo que ya terminó en background (sobrevive worker muerto).
+if ($cid && $carr_ok) { try { carrusel_sweep_pendientes($pdo, $marca_id); } catch (Throwable $e) {} }
 
 $active = '';
 $page_title = 'Carrusel';
