@@ -22,8 +22,9 @@ if (function_exists('fastcgi_finish_request')) { fastcgi_finish_request(); }
 @set_time_limit(0);
 
 $link = '/crecer/panel/resultados.php?marca=' . $mid;
+$plats = array_values(array_intersect(['instagram', 'facebook'], array_filter(explode(',', (string)($_GET['pl'] ?? '')))));
 try {
-    $r = publicar_pieza($pdo, $cid);
+    $r = publicar_pieza($pdo, $cid, $plats);
     if (!empty($r['ok'])) {
         notif_crear($pdo, $mid, 'publicado', '¡Tu carrusel está publicado!',
             'El corillo lo soltó a tus redes. Míralo en Resultados.', $link, 'check-circle');

@@ -28,9 +28,11 @@ const PUBLICAR_WORKER_KEY = 'crpub_6t1q';
  * contenido lento (carrusel = N contenedores con polling ~1-3 min) que colgaría
  * la pantalla / daría 504. El worker publica y avisa por notificación.
  */
-function publicar_disparar(int $marca_id, int $contenido_id): void {
+function publicar_disparar(int $marca_id, int $contenido_id, array $plataformas = []): void {
     $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
-    $url  = 'https://' . $host . '/crecer/panel/publicar_worker.php?marca=' . $marca_id . '&id=' . $contenido_id . '&key=' . PUBLICAR_WORKER_KEY;
+    $pl = array_values(array_intersect(['instagram', 'facebook'], $plataformas));
+    $url  = 'https://' . $host . '/crecer/panel/publicar_worker.php?marca=' . $marca_id . '&id=' . $contenido_id . '&key=' . PUBLICAR_WORKER_KEY
+          . ($pl ? '&pl=' . implode(',', $pl) : '');
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT_MS => 1500, CURLOPT_TIMEOUT_MS => 3000,
