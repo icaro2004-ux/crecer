@@ -126,12 +126,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $_mes = [1=>'ene',2=>'feb',3=>'mar',4=>'abr',5=>'may',6=>'jun',7=>'jul',8=>'ago',9=>'sep',10=>'oct',11=>'nov',12=>'dic'];
 $fecha_larga = function ($ts) use ($_mes) { $d = strtotime((string)$ts); return $d ? ((int)date('j',$d).' '.$_mes[(int)date('n',$d)].' '.date('Y',$d)) : ''; };
 $es_vid = fn($p) => (bool)preg_match('#\.(mp4|mov|webm|m4v)(\?.*)?$#i', (string)$p);
-$url_media = function($p) use ($UP_URL, $marca_id) {
+// El grafica_path del contenido publicado YA es un src usable (así lo usan las
+// vistas de post). Solo falta anteponer base si viniera como ruta relativa suelta.
+$url_media = function($p) {
     $p = trim((string)$p);
     if ($p === '') return '';
-    if (preg_match('#^https?://#i', $p)) return $p;                 // ya es URL absoluta
-    if (strpos($p, '/') !== false) return (defined('UPLOADS_URL')?UPLOADS_URL:'/crecer/uploads') . '/' . ltrim($p, '/'); // ruta relativa
-    return $UP_URL . '/' . $p;                                       // solo nombre → carpeta biblioteca
+    if (preg_match('#^(https?:)?/#i', $p)) return $p;   // http(s)://… o /crecer/… → tal cual
+    return (defined('UPLOADS_URL') ? rtrim(UPLOADS_URL, '/') : '/crecer/uploads') . '/' . $p;  // relativa suelta
 };
 
 // ── Subidas del negocio (Memoria Visual) ──
