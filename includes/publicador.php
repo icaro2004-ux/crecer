@@ -21,6 +21,24 @@
 require_once __DIR__ . '/meta.php';
 require_once __DIR__ . '/suscripcion.php';   // cupo_registrar_publicacion()
 
+const PUBLICAR_WORKER_KEY = 'crpub_6t1q';
+
+/**
+ * Dispara la publicación de una pieza en BACKGROUND (fire-and-forget). Para
+ * contenido lento (carrusel = N contenedores con polling ~1-3 min) que colgaría
+ * la pantalla / daría 504. El worker publica y avisa por notificación.
+ */
+function publicar_disparar(int $marca_id, int $contenido_id): void {
+    $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
+    $url  = 'https://' . $host . '/crecer/panel/publicar_worker.php?marca=' . $marca_id . '&id=' . $contenido_id . '&key=' . PUBLICAR_WORKER_KEY;
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT_MS => 1500, CURLOPT_TIMEOUT_MS => 3000,
+        CURLOPT_NOSIGNAL => 1, CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    curl_exec($ch); curl_close($ch);
+}
+
 /** ¿El media adjunto es un VIDEO subido por el dueño? (por extensión). */
 function es_video_path(?string $p): bool {
     return (bool)preg_match('#\.(mp4|mov|m4v)(\?.*)?$#i', trim((string)$p));
@@ -179,6 +197,20 @@ function publicar_pieza(PDO $pdo, int $contenido_id, array $override_plataformas
     $marca_id = (int)$pieza['marca_id'];
     $intento  = (int)$pieza['pub_intentos'];
 
+    // CARRUSEL: junta las imágenes de los slides (en orden) → IG swipe / FB álbum.
+    $es_carrusel = (($pieza['tipo'] ?? '') === 'carrusel');
+    $slide_urls  = [];
+    if ($es_carrusel) {
+        $sl = $pdo->prepare("SELECT grafica_path FROM crecer_carrusel
+                             WHERE contenido_id=? AND grafica_path IS NOT NULL AND grafica_path<>''
+                             ORDER BY orden ASC, id ASC");
+        $sl->execute([$contenido_id]);
+        foreach ($sl->fetchAll(PDO::FETCH_COLUMN) as $gp) {
+            $u = imagen_url_publica(asegurar_jpeg_publicable($gp));
+            if ($u !== '') $slide_urls[] = $u;
+        }
+    }
+
     // 3) Conexión de Meta de la marca.
     $conx = conexion_de_marca($pdo, $marca_id);
     if (!$conx || $conx['estado'] !== 'activa' || empty($conx['page_access_token'])) {
@@ -192,24 +224,30 @@ function publicar_pieza(PDO $pdo, int $contenido_id, array $override_plataformas
     if (function_exists('firma_publicar')) $caption = firma_publicar($pdo, $marca_id, $caption);
     // Si el post tiene gráfica pero el ARCHIVO no está en el servidor, avisar claro
     // (evita quemar intentos con el error críptico de Meta "Missing/invalid image").
-    $es_video = es_video_path($pieza['grafica_path'] ?? null);
-    $g_abs = grafica_ruta_abs($pieza['grafica_path'] ?? null);
-    if ($g_abs !== null && !is_file($g_abs)) {
-        return finalizar_pieza($pdo, $contenido_id, $tok, false,
-            ['_media' => $es_video
-                ? 'El video de este post no está en el servidor. Vuelve a subirlo y publica de nuevo.'
-                : 'La imagen de este post no está en el servidor. Regenera el arte ("Cambiar arte") y vuelve a publicar.'], []);
-    }
-    if ($es_video) {
-        // Video subido por el dueño: se publica como Reel (IG) / video (FB).
-        // No hay conversión a JPEG; se usa la URL pública del .mp4 tal cual.
-        $media_url = imagen_url_publica($pieza['grafica_path'] ?? null);
-        $image_url = '';
+    $es_video = false; $image_url = ''; $media_url = '';
+    if ($es_carrusel) {
+        // El carrusel no usa grafica_path del padre; valida que haya slides listos.
+        if (!$slide_urls) {
+            return finalizar_pieza($pdo, $contenido_id, $tok, false,
+                ['_media' => 'El carrusel no tiene imágenes listas. Genera o sube el arte de los slides y publica de nuevo.'], []);
+        }
     } else {
-        // IG solo acepta JPEG → convertir la gráfica (png/webp) a jpg antes de publicar.
-        $grafica_pub = asegurar_jpeg_publicable($pieza['grafica_path'] ?? null);
-        $image_url = imagen_url_publica($grafica_pub);
-        $media_url = $image_url;
+        $es_video = es_video_path($pieza['grafica_path'] ?? null);
+        $g_abs = grafica_ruta_abs($pieza['grafica_path'] ?? null);
+        if ($g_abs !== null && !is_file($g_abs)) {
+            return finalizar_pieza($pdo, $contenido_id, $tok, false,
+                ['_media' => $es_video
+                    ? 'El video de este post no está en el servidor. Vuelve a subirlo y publica de nuevo.'
+                    : 'La imagen de este post no está en el servidor. Regenera el arte ("Cambiar arte") y vuelve a publicar.'], []);
+        }
+        if ($es_video) {
+            // Video subido por el dueño: se publica como Reel (IG) / video (FB).
+            $media_url = imagen_url_publica($pieza['grafica_path'] ?? null);
+        } else {
+            // IG solo acepta JPEG → convertir la gráfica (png/webp) a jpg antes de publicar.
+            $image_url = imagen_url_publica(asegurar_jpeg_publicable($pieza['grafica_path'] ?? null));
+            $media_url = $image_url;
+        }
     }
     // Plataformas: el override (elegido por el dueño en el preview: IG/FB/ambas)
     // manda; si no viene, se usan las de la pieza.
@@ -258,7 +296,10 @@ function publicar_pieza(PDO $pdo, int $contenido_id, array $override_plataformas
         try {
             if ($pl === 'instagram') {
                 if (empty($conx['ig_user_id'])) throw new MetaError('No hay cuenta de IG Business conectada.');
-                if ($es_video) {
+                if ($es_carrusel) {
+                    if (count($slide_urls) < 2) throw new MetaError('Instagram necesita al menos 2 imágenes para un carrusel.');
+                    $r = meta_publicar_ig_carrusel($conx['ig_user_id'], $conx['page_access_token'], $slide_urls, $caption);
+                } elseif ($es_video) {
                     if ($media_url === '') throw new MetaError('El Reel necesita el video (URL pública).');
                     $r = meta_publicar_ig_reel($conx['ig_user_id'], $conx['page_access_token'], $media_url, $caption);
                 } else {
@@ -267,7 +308,10 @@ function publicar_pieza(PDO $pdo, int $contenido_id, array $override_plataformas
                 }
             } else { // facebook
                 if (empty($conx['fb_page_id'])) throw new MetaError('No hay Página de Facebook conectada.');
-                if ($es_video) {
+                if ($es_carrusel) {
+                    // FB no tiene swipe-carrusel orgánico → se publica como ÁLBUM (galería).
+                    $r = meta_publicar_fb_album($conx['fb_page_id'], $conx['page_access_token'], $caption, $slide_urls);
+                } elseif ($es_video) {
                     $r = meta_publicar_fb_video($conx['fb_page_id'], $conx['page_access_token'], $caption, $media_url);
                 } else {
                     $r = meta_publicar_fb($conx['fb_page_id'], $conx['page_access_token'], $caption, $image_url);

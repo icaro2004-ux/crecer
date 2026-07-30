@@ -278,6 +278,106 @@ function meta_publicar_fb(string $page_id, string $page_token, string $caption, 
     return ['id' => $post_id, 'permalink' => 'https://www.facebook.com/' . $post_id];
 }
 
+/**
+ * Publica un CARRUSEL en Instagram (2..10 imágenes que cuentan una historia,
+ * swipe horizontal). Flujo oficial: 1) un contenedor HIJO por imagen
+ * (is_carousel_item=true), 2) un contenedor CAROUSEL con los hijos + caption,
+ * 3) publicar. Poll de status en cada paso (Meta procesa async).
+ *
+ * @param string[] $image_urls  URLs públicas JPEG, EN ORDEN (2..10).
+ * @return array ['id'=>media_id, 'permalink'=>url]
+ */
+function meta_publicar_ig_carrusel(string $ig_user_id, string $page_token, array $image_urls, string $caption): array {
+    $urls = array_values(array_filter(array_map('strval', $image_urls), fn($u) => trim($u) !== ''));
+    if (count($urls) < 2)  throw new MetaError('Un carrusel necesita al menos 2 imágenes.');
+    if (count($urls) > 10) $urls = array_slice($urls, 0, 10);   // IG tope 10
+
+    $poll = function (string $id) use ($page_token) {
+        for ($i = 0; $i < 12; $i++) {
+            $st = meta_api('GET', $id, ['fields' => 'status_code', 'access_token' => $page_token]);
+            $sc = $st['status_code'] ?? '';
+            if ($sc === 'FINISHED') return;
+            if ($sc === 'ERROR' || $sc === 'EXPIRED') throw new MetaError("IG contenedor en estado $sc.");
+            sleep(3);
+        }
+        throw new MetaError('IG no terminó de procesar un contenedor a tiempo.');
+    };
+
+    // 1) Un contenedor hijo por imagen.
+    $children = [];
+    foreach ($urls as $u) {
+        $c = meta_api('POST', "$ig_user_id/media", [
+            'image_url'        => $u,
+            'is_carousel_item' => 'true',
+            'access_token'     => $page_token,
+        ]);
+        $cid = $c['id'] ?? '';
+        if ($cid === '') throw new MetaError('IG no devolvió id de un slide del carrusel.');
+        $poll($cid);
+        $children[] = $cid;
+    }
+
+    // 2) Contenedor CAROUSEL (padre) con los hijos + el caption.
+    $p = meta_api('POST', "$ig_user_id/media", [
+        'media_type'   => 'CAROUSEL',
+        'children'     => implode(',', $children),
+        'caption'      => $caption,
+        'access_token' => $page_token,
+    ]);
+    $creation_id = $p['id'] ?? '';
+    if ($creation_id === '') throw new MetaError('IG no devolvió creation_id del carrusel.');
+    $poll($creation_id);
+
+    // 3) Publicar.
+    $r = meta_api('POST', "$ig_user_id/media_publish", [
+        'creation_id'  => $creation_id,
+        'access_token' => $page_token,
+    ]);
+    $media_id = $r['id'] ?? '';
+    if ($media_id === '') throw new MetaError('IG no devolvió media_id al publicar el carrusel.');
+
+    $permalink = '';
+    try {
+        $pl = meta_api('GET', $media_id, ['fields' => 'permalink', 'access_token' => $page_token]);
+        $permalink = $pl['permalink'] ?? '';
+    } catch (MetaError $e) { /* el post ya salió; el permalink es opcional */ }
+    return ['id' => $media_id, 'permalink' => $permalink];
+}
+
+/**
+ * Publica un ÁLBUM en una Página de Facebook (varias fotos en un post). OJO: FB
+ * NO tiene el swipe-carrusel orgánico de IG — esto se ve como galería/álbum.
+ * Flujo: subir cada foto con published=false → recoger media_fbid → post al feed
+ * con attached_media[].
+ *
+ * @param string[] $image_urls  URLs públicas, EN ORDEN.
+ * @return array ['id'=>post_id, 'permalink'=>url]
+ */
+function meta_publicar_fb_album(string $page_id, string $page_token, string $caption, array $image_urls): array {
+    $urls = array_values(array_filter(array_map('strval', $image_urls), fn($u) => trim($u) !== ''));
+    if (!$urls) throw new MetaError('El álbum necesita al menos una imagen.');
+
+    $params = ['message' => $caption, 'access_token' => $page_token];
+    $n = 0;
+    foreach ($urls as $u) {
+        try {
+            $r = meta_api('POST', "$page_id/photos", [
+                'url'          => $u,
+                'published'    => 'false',
+                'access_token' => $page_token,
+            ]);
+            $fbid = $r['id'] ?? '';
+            if ($fbid !== '') { $params["attached_media[$n]"] = json_encode(['media_fbid' => $fbid]); $n++; }
+        } catch (MetaError $e) { error_log('fb_album foto: ' . $e->getMessage()); }
+    }
+    if ($n === 0) throw new MetaError('FB no aceptó ninguna foto del álbum.');
+
+    $r = meta_api('POST', "$page_id/feed", $params);
+    $post_id = $r['id'] ?? '';
+    if ($post_id === '') throw new MetaError('FB no devolvió el id del álbum.');
+    return ['id' => $post_id, 'permalink' => 'https://www.facebook.com/' . $post_id];
+}
+
 // ── INSIGHTS (alcance / interacciones de un post ya publicado) ─
 //  Solo lectura. Para la PROPIA cuenta del dueño esto funciona
 //  aun con la app de Meta en modo desarrollo (App Review solo hace

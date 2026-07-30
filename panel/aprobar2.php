@@ -549,11 +549,11 @@ if ($tab === 'biblioteca') {
     // Aprobados/programados/fallidos que necesitan acción (publicar/reintentar).
     $pq = $pdo->prepare("SELECT c.*, {$permsub}
                           FROM crecer_contenido c
-                          WHERE c.marca_id=? AND c.estado IN ('aprobado','programado','fallido')
+                          WHERE c.marca_id=? AND c.estado IN ('aprobado','programado','fallido') AND c.tipo<>'carrusel'
                           ORDER BY FIELD(c.estado,'fallido','aprobado','programado'), c.fecha_programada");
     $pq->execute([$marca_id]); $piezas = $pq->fetchAll();
-} else { // revisar (cola de borradores)
-    $pq = $pdo->prepare("SELECT * FROM crecer_contenido WHERE marca_id=? AND estado='borrador' ORDER BY fecha_programada");
+} else { // revisar (cola de borradores) — los carruseles se editan en carrusel.php
+    $pq = $pdo->prepare("SELECT * FROM crecer_contenido WHERE marca_id=? AND estado='borrador' AND tipo<>'carrusel' ORDER BY fecha_programada");
     $pq->execute([$marca_id]); $piezas = $pq->fetchAll();
 }
 

@@ -1015,6 +1015,7 @@ function equipo_roster(): array {
         'escritor'   => ['rol' => 'El Escritor',   'ico' => 'pen',       'hace' => 'Escribe los posts en tu voz boricua.',          'log' => 'creador'],
         'disenador'  => ['rol' => 'El Diseñador',  'ico' => 'palette',   'hace' => 'Crea el arte de cada post.',                    'log' => 'diseñador'],
         'analista'   => ['rol' => 'El Analista',   'ico' => 'chart',     'hace' => 'Revisa los números y qué está funcionando.',    'log' => 'analitica'],
+        'guionista'  => ['rol' => 'El Guionista',  'ico' => 'list',      'hace' => 'Arma carruseles que cuentan una historia slide a slide.', 'log' => 'carruselista'],
     ];
 }
 

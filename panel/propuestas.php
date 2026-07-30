@@ -57,7 +57,7 @@ try {
     $q = $pdo->prepare(
         "SELECT id, caption, plataforma, tipo, fecha_programada, grafica_path
          FROM crecer_contenido
-         WHERE marca_id=? AND estado='borrador'
+         WHERE marca_id=? AND estado='borrador' AND tipo<>'carrusel'
          ORDER BY COALESCE(fecha_programada, created_at) ASC, id ASC");
     $q->execute([$marca_id]);
     $props = $q->fetchAll(PDO::FETCH_ASSOC);
@@ -193,23 +193,26 @@ require __DIR__ . '/_shell.php';
   .est-listos b{font-weight:800}
   .est-listos .sub{font-size:12.5px;font-weight:500;opacity:.92}
   .est-listos .arr{margin-left:auto;font-size:20px;font-weight:800}
-  /* Crear desde cero — los disparadores del área CREAR (post + reel) */
-  .est-crear-row{display:flex;gap:10px;margin:0 0 20px}
-  .est-crear{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-grad);color:#fff;
-    text-decoration:none;font-family:'Poppins',sans-serif;font-weight:600;font-size:14.5px;padding:15px 14px;border-radius:14px;
+  /* Crear desde cero — los disparadores del área CREAR (post · reel · carrusel) */
+  .est-crear-row{display:flex;gap:9px;margin:0 0 20px;flex-wrap:wrap}
+  .est-crear{flex:1 1 30%;min-width:96px;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--btn-grad);color:#fff;
+    text-decoration:none;font-family:'Poppins',sans-serif;font-weight:700;font-size:14px;padding:15px 10px;border-radius:14px;
     box-shadow:var(--btn-glow);transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
-  .est-crear svg{width:17px;height:17px}
+  .est-crear svg{width:16px;height:16px}
   .est-crear.alt{background:linear-gradient(135deg,var(--teal),#0a7d76);box-shadow:0 12px 30px -14px rgba(0,164,159,.6)}
+  .est-crear.car{background:linear-gradient(135deg,#8b5cf6,#6d28d9);box-shadow:0 12px 30px -14px rgba(124,58,237,.6)}
   .est-crear:hover{transform:translateY(-2px);box-shadow:var(--btn-glow-hover)}
   .est-crear.alt:hover{box-shadow:0 16px 34px -14px rgba(0,164,159,.65)}
+  .est-crear.car:hover{box-shadow:0 16px 34px -14px rgba(124,58,237,.7)}
   .est-crear:active{transform:translateY(0)}
 </style>
 
 <main class="est" id="est">
   <p class="est-owner">El estudio de <b><?= $h($negocio) ?></b></p>
   <div class="est-crear-row">
-    <a class="est-crear" href="<?= $BASE ?>/aprobar2.php?<?= $mid ?>&crear=1"><?= ico('plus') ?> Crear post</a>
-    <a class="est-crear alt" href="<?= $BASE ?>/reels.php?marca=<?= $marca_id ?>"><?= ico('camera') ?> Crear Reel</a>
+    <a class="est-crear" href="<?= $BASE ?>/aprobar2.php?<?= $mid ?>&crear=1"><?= ico('plus') ?> Post</a>
+    <a class="est-crear alt" href="<?= $BASE ?>/reels.php?marca=<?= $marca_id ?>"><?= ico('camera') ?> Reel</a>
+    <a class="est-crear car" href="<?= $BASE ?>/carrusel.php?marca=<?= $marca_id ?>"><?= ico('list') ?> Carrusel</a>
   </div>
 
   <?php if ($n_listos > 0): ?>
