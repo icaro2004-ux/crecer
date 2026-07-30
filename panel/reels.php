@@ -849,7 +849,7 @@ const reelLb=$('#reelLb');
 function reelClose(){ reelLb.classList.remove('on'); const v=$('#rvid'); v.pause(); }
 $('#reelOpen').onclick=()=>{ reelLb.classList.add('on'); const v=$('#rvid'); v.currentTime=0; v.play().catch(()=>{}); };
 $('#reelLbX').onclick=reelClose;
-reelLb.onclick=e=>{ if(e.target===reelLb) reelClose(); };
+// Cierra SOLO con la X (no al tocar fuera del reel).
 
 // Popup tras publicar: despacha al usuario (recomendación o ir al inicio; ellos escogen).
 // Handlers perezosos: el modal está más abajo en el DOM, se enlaza al abrir.
