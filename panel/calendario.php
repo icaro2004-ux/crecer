@@ -190,27 +190,47 @@ $icoMes='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="cur
   .ft.on{color:#fff;background:var(--tinta);border-color:transparent}
   .ics{font-size:12.5px;font-weight:700;color:var(--teal);text-decoration:none;border:1.5px solid var(--line);padding:6px 13px;border-radius:99px}
 
-  .calwrap{overflow-x:auto;padding-bottom:8px}
-  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;min-width:720px}
-  .dow{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;text-align:center;padding:4px}
-  .cell{background:var(--card);border:1px solid var(--line);border-radius:12px;min-height:104px;padding:6px;transition:background .12s}
-  .cell.empty{background:transparent;border:0}
-  .cell.over{background:var(--okk-bg);border-color:var(--palma)}
-  .cell.hoy{border-color:var(--terracota);box-shadow:0 0 0 1.5px var(--terracota) inset}
-  .dnum{font-size:11px;font-weight:800;color:var(--muted)}
+  /* Calendario NATIVO: mes compacto (sin scroll lateral) + agenda del día */
+  .calnative{max-width:560px}
+  .mcal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+  .mcal .dow{font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;text-align:center;padding:2px 0}
+  .mcell{position:relative;aspect-ratio:1/1;background:var(--card);border:1px solid var(--line);border-radius:11px;
+    display:flex;flex-direction:column;align-items:center;padding:5px 2px 4px;cursor:pointer;transition:background .12s,border-color .12s}
+  .mcell.empty{background:transparent;border:0;cursor:default}
+  .mcell .dn{font-size:13px;font-weight:700;color:var(--tinta);line-height:1}
+  .mcell.hoy{border-color:var(--terracota)}
+  .mcell.hoy .dn{color:var(--terracota);font-weight:800}
+  .mcell.sel{background:linear-gradient(135deg,var(--coral),var(--magenta));border-color:transparent}
+  .mcell.sel .dn{color:#fff}
+  .mdots{display:flex;gap:3px;margin-top:auto;flex-wrap:wrap;justify-content:center;max-width:100%}
+  .mdot{width:6px;height:6px;border-radius:50%}
+  .mcell.sel .mdot{box-shadow:0 0 0 1px rgba(255,255,255,.7)}
+  .mcount{font-size:8.5px;font-weight:800;color:var(--muted);line-height:1}
+  .mcell.sel .mcount{color:#fff}
+  /* Semana: tira de 7 días */
+  .wstrip{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+  .wday{position:relative;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:9px 2px 8px;text-align:center;cursor:pointer}
+  .wday .wd{display:block;font-size:9.5px;font-weight:800;color:var(--muted);text-transform:uppercase}
+  .wday .dn{display:block;font-size:18px;font-weight:800;color:var(--tinta);line-height:1.1;margin-top:2px}
+  .wday.hoy{border-color:var(--terracota)} .wday.hoy .dn{color:var(--terracota)}
+  .wday.sel{background:linear-gradient(135deg,var(--coral),var(--magenta));border-color:transparent}
+  .wday.sel .wd,.wday.sel .dn{color:#fff}
+  .wday .mdots{margin-top:6px}
+  /* Agenda del día seleccionado (por horas) */
+  .daypanel{margin-top:18px;max-width:560px}
+  .dayblock{display:none} .dayblock.on{display:block}
+  .dp-h{font-family:var(--font-display);font-weight:800;font-size:16px;color:var(--tinta);margin:0 0 8px;text-transform:capitalize}
+  .dayrow{display:flex;gap:12px;align-items:flex-start;padding:10px 2px;border-bottom:1px solid var(--line)}
+  .dayrow:last-child{border-bottom:0}
+  .dayrow .tcol{width:52px;flex:0 0 52px;font-weight:800;color:var(--muted);font-size:12.5px;padding-top:11px;text-align:right}
+  .dayrow .ev{margin-top:0;flex:1;white-space:normal;font-size:14px;padding:11px 14px;border-radius:12px}
+  .dp-empty{color:var(--muted);font-size:14px;padding:24px 0;text-align:center}
+  .dp-empty .addbtn{margin-top:12px}
   .ev{margin-top:4px;border-radius:8px;padding:4px 6px;font-size:11px;font-weight:600;cursor:pointer;color:#fff;
     display:flex;gap:4px;align-items:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
   .ev .evh{font-weight:800;opacity:.9}
   .ev[draggable=true]:active{cursor:grabbing}
   .hint{font-size:12.5px;color:var(--muted);margin-top:12px}
-
-  /* Vista semana */
-  .cal.week .cell{min-height:340px;overflow:auto}
-  .cal.week .dhead{display:flex;flex-direction:column;line-height:1.05;margin-bottom:8px}
-  .cal.week .dhead .wd{font-size:10.5px;font-weight:800;color:var(--muted);text-transform:uppercase}
-  .cal.week .dhead .dn{font-size:20px;font-weight:800;font-family:var(--font-display);color:var(--tinta)}
-  .cal.week .cell.hoy .dhead .dn{color:var(--terracota)}
-  .cal.week .ev{white-space:normal;font-size:11.5px;padding:6px 8px}
 
   /* Vista día */
   .dayagenda{max-width:640px}
@@ -273,37 +293,44 @@ $icoMes='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="cur
   </div>
 </div>
 
+<?php
+// Color de un evento por tipo/estado (para los puntitos).
+$evColor = fn($ev) => $ev['tipo']==='contenido' ? ($est_col[$ev['estado']] ?? '#888')
+                    : ($ev['tipo']==='orden' ? '#0A7886' : '#7A4FB5');
+// Etiqueta humana de un día.
+$diaLabel = function($fk) use ($diasSem,$meses){ $t=strtotime($fk); return $diasSem[(int)date('N',$t)].' '.(int)date('j',$t).' de '.mb_strtolower($meses[(int)date('n',$t)],'UTF-8'); };
+?>
 <?php if ($vista === 'mes'): ?>
-<div class="calwrap">
-  <div class="cal">
+<div class="calnative">
+  <div class="mcal">
     <?php foreach (['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'] as $d): ?><div class="dow"><?= $d ?></div><?php endforeach; ?>
-    <?php for ($i=1; $i<$primerDia; $i++): ?><div class="cell empty"></div><?php endfor; ?>
+    <?php for ($i=1; $i<$primerDia; $i++): ?><div class="mcell empty"></div><?php endfor; ?>
     <?php for ($d=1; $d<=$diasMes; $d++):
-      $fk = sprintf('%04d-%02d-%02d', $anio, $mes, $d); ?>
-      <div class="cell <?= $fk===$hoyStr?'hoy':'' ?>" data-fecha="<?= $fk ?>">
-        <div class="dnum"><?= $d ?></div>
-        <?php foreach ($eventos[$fk] ?? [] as $ev) echo $chip($ev); ?>
+      $fk = sprintf('%04d-%02d-%02d', $anio, $mes, $d); $evs = $eventos[$fk] ?? []; ?>
+      <div class="mcell <?= $fk===$hoyStr?'hoy':'' ?>" data-fecha="<?= $fk ?>">
+        <span class="dn"><?= $d ?></span>
+        <?php if ($evs): ?>
+          <div class="mdots"><?php foreach (array_slice($evs,0,4) as $ev): ?><span class="mdot" style="background:<?= $evColor($ev) ?>"></span><?php endforeach; ?></div>
+          <?php if (count($evs) > 4): ?><span class="mcount">+<?= count($evs)-4 ?></span><?php endif; ?>
+        <?php endif; ?>
       </div>
     <?php endfor; ?>
   </div>
 </div>
-<p class="hint">Arrastra un evento a otro día para reprogramarlo. Tócalo para ver el detalle. Filtra arriba por tipo.</p>
 
 <?php elseif ($vista === 'semana'): ?>
-<div class="calwrap">
-  <div class="cal week">
+<div class="calnative">
+  <div class="wstrip">
     <?php for ($i=0; $i<7; $i++):
-      $ts = strtotime("+$i day", $weekStartTs); $fk = date('Y-m-d', $ts);
-      $lista = $eventos[$fk] ?? [];
-      usort($lista, fn($a,$b)=>strcmp($a['hora']??'',$b['hora']??'')); ?>
-      <div class="cell <?= $fk===$hoyStr?'hoy':'' ?>" data-fecha="<?= $fk ?>">
-        <div class="dhead"><span class="wd"><?= ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'][$i] ?></span><span class="dn"><?= (int)date('j',$ts) ?></span></div>
-        <?php foreach ($lista as $ev) echo $chip($ev, true); ?>
+      $ts = strtotime("+$i day", $weekStartTs); $fk = date('Y-m-d', $ts); $evs = $eventos[$fk] ?? []; ?>
+      <div class="wday <?= $fk===$hoyStr?'hoy':'' ?>" data-fecha="<?= $fk ?>">
+        <span class="wd"><?= ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'][$i] ?></span>
+        <span class="dn"><?= (int)date('j',$ts) ?></span>
+        <?php if ($evs): ?><div class="mdots"><?php foreach (array_slice($evs,0,3) as $ev): ?><span class="mdot" style="background:<?= $evColor($ev) ?>"></span><?php endforeach; ?></div><?php endif; ?>
       </div>
     <?php endfor; ?>
   </div>
 </div>
-<p class="hint">Arrastra entre días para reprogramar. Toca un evento para el detalle, o un día vacío para agendar.</p>
 
 <?php else: // dia
   $lista = $eventos[$refDate] ?? [];
@@ -322,6 +349,28 @@ $icoMes='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="cur
   <?php endforeach; endif; ?>
 </div>
 <p class="hint">Toca un evento para ver el detalle. Usa “+ Evento” para agendar en este día.</p>
+<?php endif; ?>
+
+<?php if ($vista !== 'dia'):
+  // Bloques de agenda por día (uno por día del rango); el JS muestra el seleccionado.
+  if ($vista === 'mes') { $bd = []; for ($d=1;$d<=$diasMes;$d++) $bd[] = sprintf('%04d-%02d-%02d',$anio,$mes,$d); }
+  else { $bd = []; for ($i=0;$i<7;$i++) $bd[] = date('Y-m-d', strtotime("+$i day",$weekStartTs)); }
+?>
+<div class="daypanel" id="daypanel">
+  <?php foreach ($bd as $fk):
+    $lista = $eventos[$fk] ?? [];
+    usort($lista, fn($a,$b)=>strcmp($a['hora']??'',$b['hora']??'')); ?>
+    <div class="dayblock" data-block="<?= $fk ?>">
+      <div class="dp-h"><?= $h($diaLabel($fk)) ?></div>
+      <?php if (!$lista): ?>
+        <div class="dp-empty">Nada para este día.<br><button type="button" class="addbtn" onclick="abrirAdd('<?= $fk ?>')"><?= ico('plus') ?> Agendar algo</button></div>
+      <?php else: foreach ($lista as $ev): ?>
+        <div class="dayrow"><div class="tcol"><?= $ev['hora'] ? $h($ev['hora']) : '—' ?></div><?= $chip($ev) ?></div>
+      <?php endforeach; endif; ?>
+    </div>
+  <?php endforeach; ?>
+</div>
+<p class="hint">Toca un día para ver sus tareas por hora. Los puntitos marcan los días con trabajo.</p>
 <?php endif; ?>
 
 <div class="ev-ov" id="evov"><div class="ev-box" id="evbox"></div></div>
@@ -347,6 +396,26 @@ $icoMes='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="cur
 
 <script>
   var REFDATE = '<?= $refDate ?>';
+  // ── Selección de día → muestra su agenda por horas debajo ──
+  (function(){
+    var days = document.querySelectorAll('.mcell[data-fecha], .wday[data-fecha]');
+    if(!days.length) return;
+    function selDay(fk){
+      document.querySelectorAll('.mcell.sel, .wday.sel').forEach(function(e){ e.classList.remove('sel'); });
+      var c = document.querySelector('.mcell[data-fecha="'+fk+'"], .wday[data-fecha="'+fk+'"]'); if(c) c.classList.add('sel');
+      document.querySelectorAll('.dayblock').forEach(function(b){ b.classList.toggle('on', b.dataset.block===fk); });
+    }
+    days.forEach(function(c){ c.addEventListener('click', function(){ selDay(c.dataset.fecha); }); });
+    // Default: hoy si está en el rango; si no, el primer día CON tareas; si no, el primero.
+    var today='<?= $hoyStr ?>';
+    if(document.querySelector('.dayblock[data-block="'+today+'"]')) selDay(today);
+    else {
+      var withEv=null;
+      document.querySelectorAll('.mcell[data-fecha] .mdots, .wday[data-fecha] .mdots').forEach(function(m){ if(!withEv){ var d=m.closest('[data-fecha]'); if(d) withEv=d.dataset.fecha; } });
+      var first=document.querySelector('.dayblock');
+      selDay(withEv || (first?first.dataset.block:today));
+    }
+  })();
   function abrirAdd(fecha){
     var f=document.getElementById('ev-fecha');
     f.value = fecha || REFDATE;
