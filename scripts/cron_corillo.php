@@ -29,6 +29,13 @@ if (!$es_cli) {
 $inicio = microtime(true);
 try {
     $res = correr_corillo($pdo);
+    // ADR-0004: el Analista vigila cada marca procesada y deja señales accionables (autónomo).
+    try {
+        require_once __DIR__ . '/../includes/analista.php';
+        $an_total = 0;
+        foreach (($res['detalle'] ?? []) as $d) { $an_total += analista_vigilar($pdo, (int)$d['marca_id']); }
+        $res['analista_senales'] = $an_total;
+    } catch (Throwable $e) { error_log('cron analista: ' . $e->getMessage()); }
     $res['ms'] = (int)round((microtime(true) - $inicio) * 1000);
     if ($es_cli) {
         echo "[" . date('Y-m-d H:i:s') . "] corillo autónomo: "

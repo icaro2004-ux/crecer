@@ -26,6 +26,16 @@ $mid  = "marca={$marca_id}";
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     try { require_once __DIR__ . '/../includes/img_responses.php'; img_sweep_pendientes($pdo, $marca_id); } catch (Throwable $e) {}
     try { require_once __DIR__ . '/../includes/carrusel.php'; if (function_exists('carrusel_sweep_pendientes')) carrusel_sweep_pendientes($pdo, $marca_id); } catch (Throwable $e) {}
+    try { require_once __DIR__ . '/../includes/analista.php'; analista_vigilar($pdo, $marca_id); } catch (Throwable $e) {}   // ADR-0004: el Analista vigila los KPIs y detecta señales
+}
+
+// Marcar una señal del Analista (aceptada al ir a la acción · descartada al "Ahora no").
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'analista_marcar') {
+    require_once __DIR__ . '/../includes/analista.php';
+    header('Content-Type: application/json; charset=utf-8');
+    if (function_exists('csrf_ok') && !csrf_ok()) { echo json_encode(['ok'=>false]); exit; }
+    analista_marcar($pdo, (int)($_POST['id'] ?? 0), $marca_id, (string)($_POST['estado'] ?? ''));
+    echo json_encode(['ok'=>true]); exit;
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'idea') {
@@ -382,6 +392,10 @@ try {
 $hz_hay_serie = array_sum($hz_serie) > 0;
 $hz_creciendo = $racha >= 2 || ($hz_hay_serie && end($hz_serie) >= reset($hz_serie));
 
+require_once __DIR__ . '/../includes/analista.php';  // ADR-0004: señal proactiva para la tarjeta del Analista
+$an_top     = analista_senal_top($pdo, $marca_id);
+$an_nombre  = analista_nombre($marca);
+$an_racha   = $racha ?? 0;
 require_once __DIR__ . '/../includes/agentes.php';   // para crecer_sin_emoji()
 $_noemo = function_exists('crecer_sin_emoji') ? 'crecer_sin_emoji' : function ($x) { return $x; };
 // Tip del Analista (lee el CACHE de Resultados — no llama a Gemini)
@@ -641,6 +655,24 @@ $credito  = $has_deck
   .hz-tip p{margin:0;font-size:14px;line-height:1.5;color:var(--tinta)}
   .hz-reco{margin-top:11px;background:color-mix(in srgb,var(--teal) 8%,#fff);border:1px solid color-mix(in srgb,var(--teal) 22%,#fff);border-radius:12px;padding:10px 12px;font-size:13px;color:var(--ink-soft,#4a444c);line-height:1.45;display:flex;gap:8px;align-items:flex-start}
   .hz-reco svg{width:15px;height:15px;color:var(--teal);flex:none;margin-top:2px}
+  /* ADR-0004 · Tarjeta del Analista (proactivo) */
+  .an-card{background:linear-gradient(180deg,color-mix(in srgb,var(--teal) 6%,#fff),#fff)}
+  .an-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .an-av{width:36px;height:36px;border-radius:11px;flex:none;display:grid;place-items:center;background:linear-gradient(135deg,var(--teal),var(--teal-700,#00827e));color:#fff}
+  .an-av svg{width:19px;height:19px}
+  .an-who{display:flex;flex-direction:column;line-height:1.15;min-width:0}
+  .an-who b{font-family:var(--font-display);font-weight:700;font-size:15px;color:var(--ink-soft,#4a444c)}
+  .an-who .live{font-size:11px;font-weight:700;color:var(--teal);display:inline-flex;align-items:center;gap:6px}
+  .an-dot{width:7px;height:7px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 0 color-mix(in srgb,var(--teal) 55%,transparent);animation:anbeat 2s infinite;flex:none}
+  @keyframes anbeat{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--teal) 55%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+  .an-title{font-family:var(--font-display);font-weight:800;font-size:16.5px;color:var(--tinta);letter-spacing:-.01em;margin:0 0 5px}
+  .an-msg{margin:0;font-size:14px;line-height:1.5;color:var(--ink-soft,#4a444c)}
+  .an-acts{display:flex;gap:8px;margin-top:14px;align-items:center}
+  .an-go{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;background:var(--btn-grad,linear-gradient(135deg,#FF6B3D,#EF4375));color:#fff;font-family:var(--font-display);font-weight:700;font-size:14.5px;padding:12px 14px;border-radius:13px;text-decoration:none;box-shadow:var(--btn-glow)}
+  .an-skip{background:0;border:0;color:var(--muted);font-weight:600;font-size:13px;padding:11px 8px;cursor:pointer;flex:none}
+  .an-ok{color:var(--teal-dark,#00827e);font-weight:700;font-size:14.5px;display:inline-flex;align-items:center;gap:8px;margin-bottom:5px}
+  .an-ok svg{width:18px;height:18px;flex:none}
+  .an-sub{color:var(--muted);font-size:13px}
   .hz-notlist{display:flex;flex-direction:column}
   .hz-not{display:flex;gap:11px;align-items:center;padding:10px 2px;text-decoration:none;color:inherit;border-top:1px solid var(--line)}
   .hz-not:first-child{border-top:0}
@@ -750,6 +782,36 @@ $credito  = $has_deck
   <?php else: ?>
   <section class="hz-card"><p class="hz-empty">Todo al día. El corillo está preparando lo próximo — te aviso cuando haya algo para tu OK.</p></section>
   <?php endif; ?>
+
+  <!-- ADR-0004 · El Analista proactivo: habla cuando algo merece atención -->
+  <section class="hz-card an-card">
+    <div class="an-head">
+      <span class="an-av"><?= ico('chart') ?></span>
+      <span class="an-who"><b><?= $h($an_nombre) ?></b><span class="live"><span class="an-dot"></span> Vigilando tus números</span></span>
+    </div>
+    <?php if ($an_top): ?>
+      <p class="an-title"><?= $h($an_top['titulo']) ?></p>
+      <p class="an-msg"><?= $h($an_top['mensaje']) ?></p>
+      <div class="an-acts" id="anActs" data-id="<?= (int)$an_top['id'] ?>">
+        <a class="an-go" id="anGo" href="<?= $h($an_top['accion_url']) ?>"><?= $h($an_top['accion_label']) ?> &rarr;</a>
+        <button class="an-skip" id="anSkip" type="button">Ahora no</button>
+      </div>
+    <?php else: ?>
+      <div class="an-ok"><?= ico('check-circle') ?> No cambiaría nada esta semana. Sigue así.</div>
+      <p class="an-msg an-sub">Estoy pendiente de tu alcance, tus formatos y tus horarios. Apenas vea una oportunidad, te la traigo aquí.</p>
+    <?php endif; ?>
+  </section>
+  <script>
+  (function(){
+    var acts=document.getElementById('anActs'); if(!acts) return;
+    var id=acts.getAttribute('data-id'), CSRF=<?= json_encode(csrf_token()) ?>;
+    function mark(estado){ var fd=new FormData(); fd.append('accion','analista_marcar'); fd.append('id',id); fd.append('estado',estado); fd.append('csrf',CSRF); return fetch(location.pathname+location.search,{method:'POST',body:fd}).catch(function(){}); }
+    var go=document.getElementById('anGo');
+    if(go) go.addEventListener('click',function(e){ e.preventDefault(); var href=go.getAttribute('href'); mark('aceptada').finally(function(){ location.href=href; }); });
+    var skip=document.getElementById('anSkip');
+    if(skip) skip.addEventListener('click',function(){ mark('descartada'); var card=acts.closest('.an-card'); if(card) card.style.display='none'; });
+  })();
+  </script>
 
   <section class="hz-card">
     <div class="hz-ch"><b>Calendario</b><a href="<?= $BASE ?>/calendario.php?<?= $mid ?>">Ver todo →</a></div>
