@@ -14,7 +14,7 @@ require_once __DIR__ . '/notif.php';
 
 const CARRUSEL_WORKER_KEY = 'crcarr_8w3z';
 const CARRUSEL_MIN = 3;   // mínimo útil
-const CARRUSEL_MAX = 10;  // tope de Instagram
+const CARRUSEL_MAX = 5;   // tope del producto (IG permite 10; nosotros 5, no exagerar)
 
 /**
  * EL GUIONISTA escribe el carrusel: caption + N slides (1=gancho … último=CTA),
@@ -34,9 +34,10 @@ function carrusel_generar(PDO $pdo, int $marca_id, string $tema, int $n = 5): ar
     $nombre = equipo_nombre($m, 'guionista');
 
     $sys = "Eres {$nombre}, EL GUIONISTA DE CARRUSELES del corillo de Crecer: experto en storytelling para "
-        . "redes que arma CARRUSELES de Instagram que la gente DESLIZA hasta el final. Dominas la estructura:\n"
+        . "redes que arma CARRUSELES de Instagram que la gente DESLIZA hasta el final. Un carrusel es UNA HISTORIA "
+        . "contada slide por slide: CADA IMAGEN cuenta una PARTE de la historia, EN ORDEN. Dominas la estructura:\n"
         . "• SLIDE 1 = gancho que frena el scroll y promete valor.\n"
-        . "• SLIDES DEL MEDIO = un beat por slide (un paso, un tip, una parte de la historia); cada uno deja ganas de deslizar.\n"
+        . "• SLIDES DEL MEDIO = un beat por slide (un paso, un dato, una parte); cada uno deja ganas de deslizar y CONECTA con el anterior.\n"
         . "• ÚLTIMO SLIDE = cierre + llamada a la acción CLARA.\n"
         . "Texto CORTÍSIMO por slide (una idea, se lee de un vistazo).\n\n"
         . "VOZ Y PERSONALIDAD DE LA MARCA (respétala SIEMPRE — esta es tu voz):\n"
@@ -46,19 +47,20 @@ function carrusel_generar(PDO $pdo, int $marca_id, string $tema, int $n = 5): ar
 
     $prompt = "Negocio:\n{$ctx}\n\n"
         . "Tema del carrusel: \"" . ($tema !== '' ? $tema : 'elige TÚ el mejor ángulo para este negocio y su público') . "\"\n"
-        . "Cantidad de slides: {$n} (en orden, 1=gancho … último=CTA).\n\n"
+        . "Cantidad de slides: {$n} (en orden, 1=gancho … último=CTA). CADA slide cuenta una PARTE de la historia.\n\n"
         . 'Devuelve JSON EXACTO: '
         . '{"caption":"el pie de foto del post — hook al inicio, valor, y CTA; hashtags al final si aplican",'
-        . '"slides":[{"titulo":"3-6 palabras que van GRANDES en el slide","texto":"1 frase corta de apoyo (o vacío)",'
-        . '"visual":"qué se VE en la imagen del slide: escena, encuadre y mood, concreto y atractivo — NO la foto obvia"}]}'
-        . " con EXACTAMENTE {$n} slides.";
+        . '"estilo_visual":"la DIRECCIÓN DE ARTE que comparten TODOS los slides para verse como UNA serie coherente: paleta concreta, estilo de foto/ilustración, tipografía y composición (ej: fondo crema, acentos magenta, fotografía cálida, tipografía sans bold). UNA sola frase, se repetirá idéntica en cada slide.",'
+        . '"slides":[{"titulo":"3-6 palabras que van GRANDES como texto en la imagen del slide","texto":"1 frase corta de apoyo (o vacío)",'
+        . '"visual":"qué se VE en ESTE slide como PARTE de la historia: escena/encuadre/mood, CONECTADO con el slide anterior y el siguiente — concreto, NO la foto obvia"}]}'
+        . " con EXACTAMENTE {$n} slides que, EN ORDEN, cuentan la historia completa.";
 
     try {
         $r = ia_ejecutar($pdo, 'carruselista', 'Guion de carrusel', $prompt, [
             'marca_id' => $marca_id, 'sistema' => $sys, 'json' => true,
             'modelo' => defined('CRECER_COPILOTO_MODEL') ? CRECER_COPILOTO_MODEL : null,
-            'temperatura' => 0.9, 'max_tokens' => 1300, 'thinking_budget' => 0,
-            'mock_texto' => '{"caption":"Desliza 👉 te lo cuento completo","slides":[{"titulo":"Mira esto","texto":"","visual":"primer plano llamativo del producto"},{"titulo":"El secreto","texto":"","visual":"detalle del proceso, luz cálida"},{"titulo":"Te toca a ti","texto":"","visual":"llamada a la accion, fondo de color de marca"}]}',
+            'temperatura' => 0.9, 'max_tokens' => 1500, 'thinking_budget' => 0,
+            'mock_texto' => '{"caption":"Desliza 👉 te lo cuento completo","estilo_visual":"fondo crema, acentos magenta, fotografia calida, tipografia sans bold","slides":[{"titulo":"Mira esto","texto":"","visual":"primer plano llamativo del producto, parte 1"},{"titulo":"El secreto","texto":"","visual":"detalle del proceso, misma luz calida, parte 2"},{"titulo":"Te toca a ti","texto":"","visual":"llamada a la accion, mismo estilo, parte 3"}]}',
         ]);
         $d = json_decode((string)$r['texto'], true) ?: [];
     } catch (Throwable $e) {
@@ -70,6 +72,8 @@ function carrusel_generar(PDO $pdo, int $marca_id, string $tema, int $n = 5): ar
     if (!is_array($slides) || count($slides) < 2) return ['ok' => false, 'err' => 'sin_slides'];
     $slides  = array_slice($slides, 0, CARRUSEL_MAX);
     $caption = trim((string)($d['caption'] ?? ''));
+    $estilo  = trim((string)($d['estilo_visual'] ?? ''));
+    $txt     = $con_texto ? 1 : 0;
 
     // Crear el post carrusel dentro del calendario del mes.
     $ca = (int)date('Y'); $cm = (int)date('n');
@@ -85,12 +89,21 @@ function carrusel_generar(PDO $pdo, int $marca_id, string $tema, int $n = 5): ar
         $titulo = trim((string)($s['titulo'] ?? ''));
         $texto  = trim((string)($s['texto'] ?? ''));
         $visual = trim((string)($s['visual'] ?? ''));
-        $idea   = trim($titulo . ($texto !== '' ? " — {$texto}" : '') . ($visual !== '' ? "\n[visual] {$visual}" : ''));
+        $idea   = carrusel_idea_serializar($titulo, $texto, $visual, $estilo, $txt);
         $ins->execute([$cid, $marca_id, $orden, $idea]);
         $out[] = ['id' => (int)$pdo->lastInsertId(), 'orden' => $orden, 'titulo' => $titulo, 'texto' => $texto, 'visual' => $visual];
         $orden++;
     }
-    return ['ok' => true, 'contenido_id' => $cid, 'caption' => $caption, 'slides' => $out];
+    return ['ok' => true, 'contenido_id' => $cid, 'caption' => $caption, 'estilo' => $estilo, 'slides' => $out];
+}
+
+/** Serializa los datos de un slide en el campo idea (con marcadores). */
+function carrusel_idea_serializar(string $titulo, string $texto, string $visual, string $estilo, int $con_texto): string {
+    $copy = trim($titulo . ($texto !== '' ? " — {$texto}" : ''));
+    return $copy
+         . ($visual !== '' ? "\n[visual] {$visual}" : '')
+         . ($estilo !== '' ? "\n[estilo] {$estilo}" : '')
+         . "\n[txt] " . ($con_texto ? 1 : 0);
 }
 
 /**
@@ -148,20 +161,54 @@ function carrusel_ajustar(PDO $pdo, int $marca_id, int $contenido_id, string $fe
             $titulo = trim((string)($sd['titulo'] ?? ''));
             $texto  = trim((string)($sd['texto'] ?? ''));
             $visual = trim((string)($sd['visual'] ?? ''));
-            $idea   = trim($titulo . ($texto !== '' ? " — {$texto}" : '') . ($visual !== '' ? "\n[visual] {$visual}" : ''));
-            if ($idea !== '') $upd->execute([$idea, (int)$s['id'], $contenido_id]);
+            $prev   = carrusel_slide_visual((string)$s['idea']);   // conserva estilo compartido + modo texto
+            $idea   = carrusel_idea_serializar($titulo, $texto, $visual, $prev['estilo'], (int)$prev['con_texto']);
+            if (trim($titulo . $texto . $visual) !== '') $upd->execute([$idea, (int)$s['id'], $contenido_id]);
             $out[] = ['id' => (int)$s['id'], 'orden' => (int)$s['orden'], 'titulo' => $titulo, 'texto' => $texto, 'visual' => $visual];
         }
     }
     return ['ok' => true, 'caption' => $newCap !== '' ? $newCap : $cap, 'slides' => $out];
 }
 
-/** Separa el brief VISUAL del texto de la idea de un slide. */
+/** Separa copy / visual / estilo compartido / modo-texto de la idea de un slide. */
 function carrusel_slide_visual(string $idea): array {
-    $visual = '';
-    if (preg_match('/\[visual\]\s*(.+)$/s', $idea, $mm)) $visual = trim($mm[1]);
-    $copy = trim((string)preg_replace('/\n?\[visual\].*/s', '', $idea));
-    return ['copy' => $copy, 'visual' => $visual];
+    $visual = ''; $estilo = ''; $con_texto = 1;
+    if (preg_match('/\[visual\]\s*(.+?)(?=\n\[|$)/s', $idea, $mm)) $visual = trim($mm[1]);
+    if (preg_match('/\[estilo\]\s*(.+?)(?=\n\[|$)/s', $idea, $mm)) $estilo = trim($mm[1]);
+    if (preg_match('/\[txt\]\s*([01])/', $idea, $mm)) $con_texto = (int)$mm[1];
+    $copy = trim((string)preg_replace('/\n?\[(visual|estilo|txt)\].*/s', '', $idea));
+    return ['copy' => $copy, 'visual' => $visual, 'estilo' => $estilo, 'con_texto' => $con_texto];
+}
+
+/**
+ * Brief de UN slide como PARTE de una serie coherente que cuenta una historia.
+ * - Inyecta el ESTILO compartido → los {total} slides se ven como un conjunto.
+ * - Dice que es la parte {orden} de {total} → continuidad visual.
+ * - Si con_texto: la imagen MUESTRA el titular como texto de diseño (narrativa).
+ */
+function carrusel_slide_brief(array $m, array $v, int $orden, int $total): string {
+    $nombre = trim((string)($m['nombre_negocio'] ?? ''));
+    $prods_raw = $m['productos'] ?? []; if (is_string($prods_raw)) $prods_raw = json_decode($prods_raw, true) ?: [];
+    $plist = []; foreach ((array)$prods_raw as $p) { $nn = is_array($p) ? trim((string)($p['nombre'] ?? '')) : trim((string)$p); if ($nn !== '') $plist[] = $nn; }
+    $que = $plist ? implode(', ', array_slice($plist, 0, 8)) : trim((string)($m['descripcion'] ?? ''));
+
+    $b = "Diseña el SLIDE {$orden} de {$total} de un CARRUSEL de Instagram (imagen cuadrada 1:1) para el negocio puertorriqueño"
+       . ($nombre !== '' ? " \"{$nombre}\"" : '') . ". Los {$total} slides son UNA SOLA SERIE que cuenta una historia: TODOS deben verse "
+       . "como un conjunto coherente — misma paleta, mismo estilo de arte, misma tipografía y composición — cambiando solo el contenido.\n";
+    if (trim((string)$v['estilo']) !== '') $b .= "ESTILO DE LA SERIE (idéntico en todos los slides): {$v['estilo']}\n";
+    if ($que !== '') $b .= "El negocio hace/vende: {$que}. Ancla la imagen a ese mundo; jamás muestres productos de otra industria.\n";
+    if (!empty($v['con_texto'])) {
+        $b .= "Es una IMAGEN CREATIVA CON TEXTO INTEGRADO (NO una tarjeta de puro texto ni un fondo plano con letras): una escena "
+            . "visual atractiva Y, encima, el titular como TEXTO DE DISEÑO grande, legible y bien compuesto (perfecto en español, SIN "
+            . "errores): «{$v['copy']}». Texto e imagen trabajan juntos, con jerarquía clara.\n";
+    } else {
+        $b .= "Sin texto dentro de la imagen: una escena visual limpia que hable por sí sola.\n";
+    }
+    if (trim((string)$v['visual']) !== '') $b .= "Escena de ESTE slide (la parte {$orden} de la historia): {$v['visual']}\n";
+    $b .= "ESTÉTICA: creativa, moderna y con los TRENDS DEL MOMENTO en redes — que frene el scroll, nunca aburrida ni corporativa tiesa. "
+        . "Debe CONECTAR visualmente con el slide anterior y el siguiente (es una secuencia). "
+        . "No inventes precios ni promesas. Haz la mejor pieza publicitaria posible.";
+    return $b;
 }
 
 /**
@@ -177,9 +224,12 @@ function carrusel_arte_slide(PDO $pdo, int $marca_id, int $slide_id): bool {
     if (trim((string)$row['grafica_path']) !== '') return true;   // ya tiene (cliente subió o ya se generó)
 
     $v = carrusel_slide_visual((string)$row['idea']);
+    $total = (int)$pdo->query("SELECT COUNT(*) FROM crecer_carrusel WHERE contenido_id=" . (int)$row['contenido_id'])->fetchColumn();
+    $m = leer_marca($pdo, $marca_id);
     try {
+        $brief = carrusel_slide_brief($m ?: [], $v, (int)$row['orden'], max(1, $total));
         $g = generar_grafica($pdo, $marca_id, null, [
-            'copy' => $v['copy'], 'con_texto' => false, 'con_logo' => true, 'instrucciones' => $v['visual'],
+            'copy' => $v['copy'], 'con_texto' => !empty($v['con_texto']), 'con_logo' => true, 'instrucciones' => $brief,
         ]);
         if (!empty($g['archivo'])) {
             $pdo->prepare("UPDATE crecer_carrusel SET grafica_path=?, img_estado='ok', updated_at=NOW() WHERE id=?")
@@ -212,13 +262,15 @@ function carrusel_encolar_arte(PDO $pdo, int $marca_id, int $contenido_id): int 
             $logo = ['data' => base64_encode((string)file_get_contents($labs)), 'mime' => $mime];
         }
     }
+    $slides = carrusel_slides($pdo, $contenido_id);
+    $total = count($slides);
     $n = 0;
-    foreach (carrusel_slides($pdo, $contenido_id) as $s) {
+    foreach ($slides as $s) {
         if (trim((string)$s['grafica_path']) !== '') continue;         // ya tiene imagen (cliente subió o listo)
         if (trim((string)($s['img_job'] ?? '')) !== '') { $n++; continue; }  // ya encolado
         $v = carrusel_slide_visual((string)$s['idea']);
         try {
-            $brief = img_resp_brief($m, $v['copy'], false, $logo !== null, $v['visual']);
+            $brief = carrusel_slide_brief($m, $v, (int)$s['orden'], $total);
             $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1'] + ($logo ? ['logo' => $logo] : []));
             $pdo->prepare("UPDATE crecer_carrusel SET img_job=?, img_estado='queued', updated_at=NOW() WHERE id=?")->execute([$bg['id'], (int)$s['id']]);
             try { $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,estado) VALUES (?,?,?,?,?,?, 'ok')")
@@ -290,11 +342,14 @@ function carrusel_sweep_pendientes(PDO $pdo, int $marca_id): void {
 
 /** Respaldo Gemini SYNC para un slide (cuando gpt no pudo). Devuelve true si guardó. */
 function carrusel_arte_slide_gemini(PDO $pdo, int $marca_id, int $slide_id): bool {
-    $s = $pdo->query("SELECT idea FROM crecer_carrusel WHERE id=" . (int)$slide_id)->fetch(PDO::FETCH_ASSOC);
+    $s = $pdo->query("SELECT idea, orden, contenido_id FROM crecer_carrusel WHERE id=" . (int)$slide_id)->fetch(PDO::FETCH_ASSOC);
     if (!$s) return false;
     $v = carrusel_slide_visual((string)$s['idea']);
+    $total = (int)$pdo->query("SELECT COUNT(*) FROM crecer_carrusel WHERE contenido_id=" . (int)$s['contenido_id'])->fetchColumn();
+    $m = leer_marca($pdo, $marca_id);
     try {
-        $g = generar_grafica($pdo, $marca_id, null, ['copy' => $v['copy'], 'con_texto' => false, 'con_logo' => true, 'instrucciones' => $v['visual']]);
+        $brief = carrusel_slide_brief($m ?: [], $v, (int)$s['orden'], max(1, $total));
+        $g = generar_grafica($pdo, $marca_id, null, ['copy' => $v['copy'], 'con_texto' => !empty($v['con_texto']), 'con_logo' => true, 'instrucciones' => $brief]);
         if (!empty($g['archivo'])) {
             $pdo->prepare("UPDATE crecer_carrusel SET grafica_path=?, img_estado='ok', img_job=NULL, updated_at=NOW() WHERE id=?")->execute([$g['archivo'], $slide_id]);
             return true;

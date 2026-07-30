@@ -75,7 +75,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         @set_time_limit(0);
         $tema = trim($_POST['tema'] ?? '');
         $n    = max(CARRUSEL_MIN, min(CARRUSEL_MAX, (int)($_POST['n'] ?? 5)));
-        $r = carrusel_generar($pdo, $marca_id, $tema, $n);
+        $con_texto = ($_POST['con_texto'] ?? '1') !== '0';   // texto+imagen (narrativa) por defecto
+        $r = carrusel_generar($pdo, $marca_id, $tema, $n, $con_texto);
         if (empty($r['ok'])) $jout(['ok' => false, 'err' => 'El Guionista no pudo ahora. Intenta otra vez.']);
         $jout(['ok' => true, 'id' => (int)$r['contenido_id'], 'url' => "{$BASE}/carrusel.php?marca={$marca_id}&id=" . (int)$r['contenido_id']]);
     }
@@ -112,6 +113,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // worker muera, el SWEEP completa las imágenes al volver y avisa por la campanita.
     if ($accion === 'arte_ia' && $cid) {
         @set_time_limit(0); @ignore_user_abort(true);
+        // "Rehacer": borra el arte actual (generado por IA) para volver a crearlo desde cero.
+        if (!empty($_POST['rehacer'])) {
+            $pdo->prepare("UPDATE crecer_carrusel SET grafica_path=NULL, img_job=NULL, img_estado=NULL, updated_at=NOW() WHERE contenido_id=? AND marca_id=?")
+                ->execute([$cid, $marca_id]);
+        }
         $n = carrusel_encolar_arte($pdo, $marca_id, $cid);
         if ($n < 0) {   // motor Responses apagado → worker sync (Gemini) como respaldo
             $pdo->prepare("UPDATE crecer_carrusel SET img_estado='queued', updated_at=NOW()
@@ -190,6 +196,11 @@ $caption = $cid ? (string)($carr['caption'] ?? '') : '';
   .cr-nrow{display:flex;align-items:center;gap:10px;margin:16px 0 4px;flex-wrap:wrap}
   .cr-npill{border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:9px 15px;font-weight:700;font-size:14px;color:var(--tinta);cursor:pointer}
   .cr-npill.on{border-color:var(--magenta);background:color-mix(in srgb,var(--magenta) 8%,#fff);color:var(--magenta)}
+  .cr-txt-toggle{display:flex;align-items:flex-start;gap:9px;margin:16px 0 2px;font-size:13.5px;color:var(--tinta);cursor:pointer;font-weight:600}
+  .cr-txt-toggle input{width:20px;height:20px;margin-top:1px;accent-color:var(--magenta);flex:none}
+  .cr-txt-toggle small{display:block;font-weight:500;color:var(--muted);font-size:12px}
+  .cr-rehacer{display:inline-flex;align-items:center;gap:6px;margin:12px auto 0;background:0;border:0;cursor:pointer;color:var(--muted);font-family:'Poppins',sans-serif;font-weight:600;font-size:13px;text-decoration:underline}
+  .cr-rehacer svg{width:14px;height:14px}
   .cr-go{width:100%;margin-top:18px;border:0;cursor:pointer;font-family:'Poppins',sans-serif;font-weight:700;font-size:16px;color:#fff;padding:16px;border-radius:14px;background:var(--btn-grad);box-shadow:var(--btn-glow);display:flex;align-items:center;justify-content:center;gap:9px}
   .cr-go svg{width:18px;height:18px}
   .cr-go:disabled{opacity:.6;cursor:default}
@@ -254,10 +265,11 @@ $caption = $cid ? (string)($carr['caption'] ?? '') : '';
     <textarea id="crTema" class="cr-ta" placeholder="Ej: 3 razones para pedir tu bizcocho con nosotros · el paso a paso de un pedido · antes y después…"></textarea>
     <div class="cr-nrow">
       <span class="cr-lbl" style="margin:0">Slides:</span>
-      <?php foreach ([3,4,5,6,7] as $i): ?>
+      <?php foreach ([3,4,5] as $i): ?>
         <button type="button" class="cr-npill<?= $i===5?' on':'' ?>" data-n="<?= $i ?>"><?= $i ?></button>
       <?php endforeach; ?>
     </div>
+    <label class="cr-txt-toggle"><input type="checkbox" id="crTxt" checked> <span>Texto en las imágenes <small>(cada slide muestra su titular — narrativa)</small></span></label>
     <button type="button" class="cr-go" id="crGo"><?= ico('sparkles') ?> Que el Guionista lo arme</button>
     <p class="cr-note">Deja el tema vacío y el Guionista elige el mejor ángulo para tu negocio.</p>
   </div>
@@ -311,6 +323,7 @@ $caption = $cid ? (string)($carr['caption'] ?? '') : '';
     <button type="button" class="cr-b ia" id="crIA"><?= ico('sparkles') ?> Que la IA cree el arte</button>
     <button type="button" class="cr-b ok" id="crOK"><?= ico('send') ?> Publicar carrusel</button>
   </div>
+  <div style="text-align:center"><button type="button" class="cr-rehacer" id="crRehacer"><?= ico('refresh') ?> Rehacer el arte desde cero</button></div>
   <div class="cr-fbnote"><b>Nota:</b> en Instagram sale como carrusel deslizable; en Facebook, como álbum de fotos (FB no tiene el swipe de IG).</div>
   <p class="cr-note">Cuando la IA crea el arte, puede tardar — te avisamos por la <b>campanita</b> cuando esté listo. Si subes tus fotos, quedan al instante.</p>
 <?php endif; ?>
@@ -342,6 +355,7 @@ $caption = $cid ? (string)($carr['caption'] ?? '') : '';
       ovShow('El Guionista está escribiendo…','Arma la historia slide a slide en tu voz.');
       var fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion','generar'); fd.append('ajax','1');
       fd.append('tema',document.getElementById('crTema').value); fd.append('n',nSel);
+      var txt=document.getElementById('crTxt'); fd.append('con_texto', (txt && txt.checked) ? '1' : '0');
       post(fd).then(function(d){
         if(d&&d.ok&&d.url){ location.href=d.url; }
         else { ovHide(); go.disabled=false; say((d&&d.err)||'No se pudo crear.'); }
@@ -419,22 +433,27 @@ $caption = $cid ? (string)($carr['caption'] ?? '') : '';
         else if(polling){ setTimeout(poll,3500); }
       }).catch(function(){ if(polling) setTimeout(poll,5000); });
     }
+    function lanzarArte(rehacer){
+      if(iaBtn) iaBtn.disabled=true;
+      var fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion','arte_ia'); fd.append('ajax','1');
+      if(rehacer) fd.append('rehacer','1');
+      // Marca TODOS (rehacer) o los sin imagen como "preparando".
+      track.querySelectorAll('.cr-slide').forEach(function(sl){ var cell=sl.querySelector('.cr-img'); if(rehacer || !cell.querySelector('img')){ var num=cell.querySelector('.cr-num'); cell.innerHTML=(num?num.outerHTML:'')+'<div class="cr-prep" data-prep><div class="sp"></div>Preparando el arte…</div>'; } });
+      post(fd).then(function(d){
+        if(d&&d.ok){ say('El corillo está creando tu carrusel — te aviso por la campanita.'); polling=true; setTimeout(poll,3500); }
+        else { if(iaBtn) iaBtn.disabled=false; say((d&&d.err)||'No se pudo.'); }
+      }).catch(function(){ if(iaBtn) iaBtn.disabled=false; say('Error de conexión.'); });
+    }
     if(iaBtn){
       // Si ya hay slides "preparando" al cargar, arranca el poll.
       if(track.querySelector('[data-prep] .sp')){ polling=true; poll(); }
-      iaBtn.addEventListener('click',function(){
-        iaBtn.disabled=true;
-        var fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion','arte_ia'); fd.append('ajax','1');
-        post(fd).then(function(d){
-          if(d&&d.ok){
-            // Marca visualmente los slides sin imagen como "preparando".
-            track.querySelectorAll('.cr-slide').forEach(function(sl){ var cell=sl.querySelector('.cr-img'); if(!cell.querySelector('img')){ var num=cell.querySelector('.cr-num'); cell.innerHTML=(num?num.outerHTML:'')+'<div class="cr-prep" data-prep><div class="sp"></div>Preparando el arte…</div>'; } });
-            say('El corillo está creando tu carrusel — te aviso por la campanita.');
-            polling=true; setTimeout(poll,3500);
-          } else { iaBtn.disabled=false; say((d&&d.err)||'No se pudo.'); }
-        }).catch(function(){ iaBtn.disabled=false; say('Error de conexión.'); });
-      });
+      iaBtn.addEventListener('click',function(){ lanzarArte(false); });
     }
+    var reBtn=document.getElementById('crRehacer');
+    if(reBtn) reBtn.addEventListener('click',function(){
+      if(!confirm('¿Rehacer el arte de todos los slides desde cero? Se reemplaza el arte actual.')) return;
+      lanzarArte(true);
+    });
 
     // Publicar (background + notificación)
     var okBtn=document.getElementById('crOK');
