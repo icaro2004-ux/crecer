@@ -59,6 +59,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Crear: el Guionista arma la historia.
     if ($accion === 'generar') {
         if (!$carr_ok) $jout(['ok' => false, 'err' => 'El carrusel aún no está activo (falta correr la migración en la base de datos).']);
+        // Límite: 1 carrusel por semana (ventana móvil de 7 días) por marca. Admin exento (pruebas/demo).
+        if (($usuario['rol'] ?? '') !== 'admin') {
+            $w = $pdo->prepare("SELECT COUNT(*) n, MIN(created_at) f FROM crecer_contenido
+                                WHERE marca_id=? AND tipo='carrusel' AND created_at >= (NOW() - INTERVAL 7 DAY)");
+            $w->execute([$marca_id]); $wr = $w->fetch(PDO::FETCH_ASSOC);
+            if ((int)($wr['n'] ?? 0) >= 1) {
+                $reset = !empty($wr['f']) ? date('d/m', strtotime($wr['f'] . ' +7 day')) : '';
+                $jout(['ok' => false, 'err' => 'Puedes crear 1 carrusel por semana.' . ($reset ? " Vuelve el {$reset}." : ''), 'limite' => true]);
+            }
+        }
         @set_time_limit(0);
         $tema = trim($_POST['tema'] ?? '');
         $n    = max(CARRUSEL_MIN, min(CARRUSEL_MAX, (int)($_POST['n'] ?? 5)));
@@ -72,6 +82,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $cap = trim($_POST['caption'] ?? '');
         $pdo->prepare("UPDATE crecer_contenido SET caption=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$cap, $cid, $marca_id]);
         $jout(['ok' => true]);
+    }
+
+    // El dueño le da su parecer → el Guionista reescribe el carrusel.
+    if ($accion === 'ajustar' && $cid) {
+        @set_time_limit(0);
+        $fb = trim($_POST['feedback'] ?? '');
+        $r = carrusel_ajustar($pdo, $marca_id, $cid, $fb);
+        if (empty($r['ok'])) {
+            $msg = ($r['err'] ?? '') === 'vacio' ? 'Escribe tu comentario primero.' : 'El Guionista no pudo ajustar ahora. Intenta otra vez.';
+            $jout(['ok' => false, 'err' => $msg]);
+        }
+        $jout(['ok' => true, 'caption' => $r['caption'], 'slides' => $r['slides']]);
     }
 
     // Editar el brief (idea) de un slide.
@@ -183,6 +205,12 @@ $caption = $cid ? (string)($carr['caption'] ?? '') : '';
   .cr-dots{display:flex;gap:6px;justify-content:center;margin:2px 0 18px}
   .cr-dots i{width:7px;height:7px;border-radius:50%;background:var(--line);transition:background .2s,width .2s}
   .cr-dots i.on{background:var(--magenta);width:20px;border-radius:99px}
+  .cr-fb{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin:0 0 16px}
+  .cr-fb textarea{width:100%;box-sizing:border-box;border:1.5px solid var(--line);border-radius:12px;resize:vertical;min-height:64px;padding:11px;font-family:var(--font-body,'Plus Jakarta Sans');font-size:14px;line-height:1.5;color:var(--tinta);background:#fff}
+  .cr-fb textarea:focus{outline:2px solid color-mix(in srgb,var(--magenta) 34%,transparent);border-color:transparent}
+  .cr-fbgo{margin-top:10px;border:0;cursor:pointer;font-family:'Poppins',sans-serif;font-weight:700;font-size:13.5px;color:#fff;background:linear-gradient(135deg,#8b5cf6,#6d28d9);padding:11px 16px;border-radius:12px;display:inline-flex;align-items:center;gap:7px;box-shadow:0 10px 24px -12px rgba(124,58,237,.6)}
+  .cr-fbgo svg{width:15px;height:15px}
+  .cr-fbgo:disabled{opacity:.6;cursor:default}
   .cr-acts{display:flex;gap:10px;flex-wrap:wrap}
   .cr-b{flex:1;min-width:150px;border:0;cursor:pointer;font-family:'Poppins',sans-serif;font-weight:700;font-size:14.5px;padding:15px;border-radius:14px;display:flex;align-items:center;justify-content:center;gap:8px}
   .cr-b svg{width:17px;height:17px}
@@ -261,6 +289,12 @@ $caption = $cid ? (string)($carr['caption'] ?? '') : '';
   </div>
   <div class="cr-dots" id="crDots"></div>
 
+  <div class="cr-fb">
+    <div class="cc-h">¿Qué le cambiarías? — dile al Guionista</div>
+    <textarea id="crFb" placeholder="Ej: hazlo más corto · empieza con una pregunta · menciona que hacemos delivery · más atrevido…"></textarea>
+    <button type="button" class="cr-fbgo" id="crFbGo"><?= ico('sparkles') ?> Ajustar con el Guionista</button>
+  </div>
+
   <div class="cr-acts">
     <button type="button" class="cr-b ia" id="crIA"><?= ico('sparkles') ?> Que la IA cree el arte</button>
     <button type="button" class="cr-b ok" id="crOK"><?= ico('send') ?> Publicar carrusel</button>
@@ -335,6 +369,28 @@ $caption = $cid ? (string)($carr['caption'] ?? '') : '';
           else say((d&&d.err)||'No se pudo subir.');
         }).catch(function(){ say('Error al subir.'); });
       });
+    });
+
+    // El parecer del dueño → el Guionista reescribe
+    var fbGo=document.getElementById('crFbGo'), fbTa=document.getElementById('crFb');
+    if(fbGo) fbGo.addEventListener('click',function(){
+      var msg=(fbTa.value||'').trim(); if(!msg){ say('Escribe tu comentario primero.'); return; }
+      fbGo.disabled=true;
+      ovShow('El Guionista está ajustando…','Reescribe el carrusel con tu parecer, en tu voz.');
+      var fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion','ajustar'); fd.append('ajax','1'); fd.append('feedback',msg);
+      post(fd).then(function(d){
+        ovHide(); fbGo.disabled=false;
+        if(d&&d.ok){
+          if(cap && typeof d.caption==='string') cap.value=d.caption;
+          (d.slides||[]).forEach(function(s){
+            var sl=track.querySelector('.cr-slide[data-slide="'+s.id+'"]'); if(!sl) return;
+            var t=sl.querySelector('.cr-tit'); if(t) t.textContent=s.titulo||('Slide '+s.orden);
+            var x=sl.querySelector('.cr-txt');
+            if(s.visual){ if(x) x.textContent=s.visual; else { var p=document.createElement('p'); p.className='cr-txt'; p.textContent=s.visual; sl.querySelector('.cr-body').insertBefore(p, sl.querySelector('.cr-up')); } }
+          });
+          fbTa.value=''; say('Listo — el Guionista lo ajustó. Si cambió mucho, regenera el arte.');
+        } else say((d&&d.err)||'No se pudo ajustar.');
+      }).catch(function(){ ovHide(); fbGo.disabled=false; say('Error de conexión.'); });
     });
 
     // La IA crea el arte de todo (async + poll)

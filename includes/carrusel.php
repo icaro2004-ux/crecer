@@ -93,6 +93,69 @@ function carrusel_generar(PDO $pdo, int $marca_id, string $tema, int $n = 5): ar
     return ['ok' => true, 'contenido_id' => $cid, 'caption' => $caption, 'slides' => $out];
 }
 
+/**
+ * El GUIONISTA AJUSTA el carrusel según el parecer del dueño (chat de revisión).
+ * Reescribe caption + los slides MANTENIENDO la cantidad, en la voz del cliente.
+ * Actualiza el texto de los slides (no borra las imágenes que ya tengan).
+ *
+ * @return array ['ok'=>bool, 'caption'=>string, 'slides'=>array]
+ */
+function carrusel_ajustar(PDO $pdo, int $marca_id, int $contenido_id, string $feedback): array {
+    $feedback = trim($feedback);
+    if ($feedback === '') return ['ok' => false, 'err' => 'vacio'];
+    $m = leer_marca($pdo, $marca_id);
+    if (!$m) return ['ok' => false, 'err' => 'marca'];
+    $cap = (string)$pdo->query("SELECT caption FROM crecer_contenido WHERE id=" . (int)$contenido_id . " AND marca_id=" . (int)$marca_id)->fetchColumn();
+    $slides = carrusel_slides($pdo, $contenido_id);
+    if (!$slides) return ['ok' => false, 'err' => 'sin_slides'];
+    $n = count($slides);
+
+    $actual = "Pie de foto actual: \"{$cap}\"\nSlides actuales (en orden):\n";
+    foreach ($slides as $i => $s) {
+        $v = carrusel_slide_visual((string)$s['idea']);
+        $actual .= ($i + 1) . '. ' . $v['copy'] . ($v['visual'] !== '' ? " [visual: {$v['visual']}]" : '') . "\n";
+    }
+    $ctx    = cerebro_negocio($pdo, $marca_id, $m);
+    $nombre = equipo_nombre($m, 'guionista');
+    $sys = "Eres {$nombre}, EL GUIONISTA DE CARRUSELES del corillo de Crecer. Ajustas un carrusel EXISTENTE según lo "
+        . "que pide el dueño, manteniendo la estructura (1=gancho … último=CTA) y el texto CORTÍSIMO por slide.\n"
+        . "VOZ Y PERSONALIDAD DE LA MARCA (respétala SIEMPRE):\n" . tono_instruccion($m) . "\n" . reglas_idioma($m) . "\n"
+        . "REGLA DE ORO: atrevido en la forma, HONESTO en el fondo — no inventes precios, productos ni promesas. Responde SOLO JSON.";
+    $prompt = "Negocio:\n{$ctx}\n\nCarrusel ACTUAL:\n{$actual}\n\nEl dueño pide este AJUSTE:\n\"{$feedback}\"\n\n"
+        . "Reescribe el carrusel aplicando el ajuste, MANTENIENDO EXACTAMENTE {$n} slides en orden. "
+        . 'Devuelve JSON EXACTO: {"caption":"…","slides":[{"titulo":"…","texto":"…","visual":"…"}]} con ' . $n . ' slides.';
+    try {
+        $r = ia_ejecutar($pdo, 'carruselista', 'Ajustar carrusel', $prompt, [
+            'marca_id' => $marca_id, 'sistema' => $sys, 'json' => true,
+            'modelo' => defined('CRECER_COPILOTO_MODEL') ? CRECER_COPILOTO_MODEL : null,
+            'temperatura' => 0.85, 'max_tokens' => 1300, 'thinking_budget' => 0,
+            'mock_texto' => '{"caption":"' . addslashes($cap) . '","slides":[]}',
+        ]);
+        $d = json_decode((string)$r['texto'], true) ?: [];
+    } catch (Throwable $e) { error_log('carrusel_ajustar: ' . $e->getMessage()); return ['ok' => false, 'err' => 'ia']; }
+
+    $ns = $d['slides'] ?? [];
+    if (!is_array($ns) || count($ns) < 2) return ['ok' => false, 'err' => 'sin_slides'];
+    $newCap = trim((string)($d['caption'] ?? $cap));
+    if ($newCap !== '') $pdo->prepare("UPDATE crecer_contenido SET caption=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$newCap, $contenido_id, $marca_id]);
+
+    // Actualiza el texto de cada slide por posición (no toca las imágenes).
+    $out = [];
+    $upd = $pdo->prepare("UPDATE crecer_carrusel SET idea=?, updated_at=NOW() WHERE id=? AND contenido_id=?");
+    foreach ($slides as $i => $s) {
+        $sd = $ns[$i] ?? null;
+        if ($sd) {
+            $titulo = trim((string)($sd['titulo'] ?? ''));
+            $texto  = trim((string)($sd['texto'] ?? ''));
+            $visual = trim((string)($sd['visual'] ?? ''));
+            $idea   = trim($titulo . ($texto !== '' ? " — {$texto}" : '') . ($visual !== '' ? "\n[visual] {$visual}" : ''));
+            if ($idea !== '') $upd->execute([$idea, (int)$s['id'], $contenido_id]);
+            $out[] = ['id' => (int)$s['id'], 'orden' => (int)$s['orden'], 'titulo' => $titulo, 'texto' => $texto, 'visual' => $visual];
+        }
+    }
+    return ['ok' => true, 'caption' => $newCap !== '' ? $newCap : $cap, 'slides' => $out];
+}
+
 /** Separa el brief VISUAL del texto de la idea de un slide. */
 function carrusel_slide_visual(string $idea): array {
     $visual = '';
