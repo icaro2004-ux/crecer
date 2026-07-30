@@ -25,7 +25,7 @@ if (function_exists('fastcgi_finish_request')) { fastcgi_finish_request(); }
 @set_time_limit(0);
 
 $mid = (int)($pdo->query("SELECT marca_id FROM crecer_reels WHERE id=" . (int)$rid)->fetchColumn() ?: 0);
-$link = '/crecer/panel/reels.php?marca=' . $mid;
+$link = '/crecer/panel/reels.php?marca=' . $mid . '&reel=' . (int)$rid;
 try {
     $res = publicar_pieza($pdo, $cid, $redes);
     if (!empty($res['ok'])) {

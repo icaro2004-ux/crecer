@@ -970,6 +970,15 @@ $('#bibadd').onclick=()=>{
   const picked=[...$('#bibgrid').children].filter(d=>d._v && bibSel.includes(d._v.id)).map(d=>d._v);
   addLib(picked); bibModal.style.display='none';
 };
+
+// ── Abrir un reel específico desde una notificación (?reel=<id>) ──
+(function(){
+  const m = location.search.match(/[?&]reel=(\d+)/);
+  if(!m) return;
+  curReel = +m[1];
+  go('load');
+  poll(curReel);
+})();
 </script>
 <!-- Popup: despachar al usuario tras publicar -->
 <div class="pub-modal" id="pubModal">
