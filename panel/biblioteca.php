@@ -124,7 +124,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $_mes = [1=>'ene',2=>'feb',3=>'mar',4=>'abr',5=>'may',6=>'jun',7=>'jul',8=>'ago',9=>'sep',10=>'oct',11=>'nov',12=>'dic'];
+$_mesL = [1=>'Enero',2=>'Febrero',3=>'Marzo',4=>'Abril',5=>'Mayo',6=>'Junio',7=>'Julio',8=>'Agosto',9=>'Septiembre',10=>'Octubre',11=>'Noviembre',12=>'Diciembre'];
 $fecha_larga = function ($ts) use ($_mes) { $d = strtotime((string)$ts); return $d ? ((int)date('j',$d).' '.$_mes[(int)date('n',$d)].' '.date('Y',$d)) : ''; };
+$fecha_corta = function ($ts) use ($_mes) { $d = strtotime((string)$ts); return $d ? ((int)date('j',$d).' '.$_mes[(int)date('n',$d)]) : ''; };
+$mes_titulo  = function ($ym) use ($_mesL) { $p = explode('-', $ym); return ($_mesL[(int)($p[1] ?? 1)] ?? '') . ' ' . ($p[0] ?? ''); };
 $es_vid = fn($p) => (bool)preg_match('#\.(mp4|mov|webm|m4v)(\?.*)?$#i', (string)$p);
 // El grafica_path del contenido publicado YA es un src usable (así lo usan las
 // vistas de post). Solo falta anteponer base si viniera como ruta relativa suelta.
@@ -142,41 +145,69 @@ try {
     $q->execute([$marca_id]); $activos = $q->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) { $activos = []; }
 
-// ── Contenido PUBLICADO (posts, reels, carruseles) = el portafolio, por fecha ──
+// ── Posts y reels PUBLICADOS (los carruseles van aparte, en cualquier estado) ──
 $publicados = [];
 try {
     $q = $pdo->prepare("SELECT id, tipo, caption, grafica_path, plataforma, COALESCE(publicado_at, updated_at, created_at) f
-                        FROM crecer_contenido WHERE marca_id=? AND estado='publicado' ORDER BY f DESC");
+                        FROM crecer_contenido WHERE marca_id=? AND estado='publicado' AND tipo<>'carrusel' ORDER BY f DESC");
     $q->execute([$marca_id]); $publicados = $q->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) { $publicados = []; }
+
+// ── CARRUSELES (cualquier estado): portada = cover o 1er slide; se abren en su editor ──
+$carruseles = [];
+try {
+    $q = $pdo->prepare("SELECT c.id, c.caption, c.grafica_path, c.estado, COALESCE(c.publicado_at, c.updated_at, c.created_at) f,
+                               (SELECT cs.grafica_path FROM crecer_carrusel cs WHERE cs.contenido_id=c.id AND cs.grafica_path IS NOT NULL AND cs.grafica_path<>'' ORDER BY cs.orden ASC, cs.id ASC LIMIT 1) cover,
+                               (SELECT COUNT(*) FROM crecer_carrusel cs2 WHERE cs2.contenido_id=c.id) nslides
+                        FROM crecer_contenido c WHERE c.marca_id=? AND c.tipo='carrusel' ORDER BY f DESC");
+    $q->execute([$marca_id]); $carruseles = $q->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) { $carruseles = []; }   // tabla aún no migrada → sin carruseles
 
 // ── Lista unificada, ordenada por fecha (lo más nuevo primero) ──
 $items = [];
 foreach ($publicados as $p) {
     $tipo = (string)$p['tipo'];
-    $filtro = in_array($tipo, ['post','reel','carrusel'], true) ? ($tipo === 'post' ? 'posts' : ($tipo === 'reel' ? 'reels' : 'carruseles')) : 'posts';
     $url = $url_media($p['grafica_path']);
     if ($url === '') continue;   // sin media que mostrar
+    $ts = strtotime((string)$p['f']) ?: 0;
     $items[] = [
-        'kind' => 'pub', 'filtro' => $filtro, 'id' => (int)$p['id'],
+        'kind' => 'pub', 'filtro' => ($tipo === 'reel' ? 'reels' : 'posts'), 'id' => (int)$p['id'],
         'url' => $url, 'video' => ($es_vid($p['grafica_path']) || $tipo === 'reel'),
         'titulo' => trim((string)$p['caption']) ?: ucfirst($tipo),
-        'badge' => $tipo === 'reel' ? 'Reel' : ($tipo === 'carrusel' ? 'Carrusel' : ''),
-        'ts' => strtotime((string)$p['f']) ?: 0, 'fecha' => 'Publicado el ' . $fecha_larga($p['f']),
+        'badge' => $tipo === 'reel' ? 'Reel' : '',
+        'ts' => $ts, 'ym' => date('Y-m', $ts), 'corta' => $fecha_corta($p['f']), 'fecha' => 'Publicado el ' . $fecha_larga($p['f']),
+    ];
+}
+foreach ($carruseles as $c) {
+    $url = $url_media($c['grafica_path'] ?: $c['cover']);
+    if ($url === '') continue;   // aún sin arte → nada que mostrar
+    $ts = strtotime((string)$c['f']) ?: 0;
+    $ns = (int)$c['nslides'];
+    $items[] = [
+        'kind' => 'carrusel', 'filtro' => 'carruseles', 'id' => (int)$c['id'],
+        'url' => $url, 'video' => false,
+        'href' => $BASE . '/carrusel.php?marca=' . $marca_id . '&id=' . (int)$c['id'],
+        'titulo' => trim((string)$c['caption']) ?: 'Carrusel',
+        'badge' => 'Carrusel' . ($ns ? ' · ' . $ns : ''),
+        'ts' => $ts, 'ym' => date('Y-m', $ts), 'corta' => $fecha_corta($c['f']), 'fecha' => 'Creado el ' . $fecha_larga($c['f']),
     ];
 }
 foreach ($activos as $a) {
+    $ts = strtotime((string)$a['created_at']) ?: 0;
     $items[] = [
         'kind' => 'subida', 'filtro' => 'subidas', 'id' => (int)$a['id'],
         'url' => $UP_URL . '/' . basename($a['archivo']), 'video' => ($a['tipo'] === 'video'),
         'titulo' => (string)$a['nombre'], 'nota' => (string)$a['nota'], 'badge' => '',
-        'ts' => strtotime((string)$a['created_at']) ?: 0, 'fecha' => 'Subido el ' . $fecha_larga($a['created_at']),
+        'ts' => $ts, 'ym' => date('Y-m', $ts), 'corta' => $fecha_corta($a['created_at']), 'fecha' => 'Subido el ' . $fecha_larga($a['created_at']),
     ];
 }
 usort($items, fn($x, $y) => $y['ts'] <=> $x['ts']);
 // Conteos por filtro (para los chips).
 $fc = ['posts'=>0,'reels'=>0,'carruseles'=>0,'subidas'=>0];
 foreach ($items as $it) { if (isset($fc[$it['filtro']])) $fc[$it['filtro']]++; }
+// Agrupar por mes (ya vienen ordenados desc).
+$porMes = [];
+foreach ($items as $it) { $porMes[$it['ym']][] = $it; }
 
 $active = 'biblioteca';
 $page_title = 'Biblioteca';
@@ -207,6 +238,14 @@ require __DIR__ . '/_shell.php';
   .bib-badge{position:absolute;top:8px;left:8px;z-index:3;background:rgba(20,10,22,.62);color:#fff;font-size:10.5px;font-weight:800;
     letter-spacing:.03em;text-transform:uppercase;padding:3px 9px;border-radius:99px;backdrop-filter:blur(2px)}
   .bib-tile.hide,.bib-add.hide{display:none}
+  /* Secciones por mes + fecha en cada pieza */
+  .bib-month{font-family:var(--font-display);font-weight:700;font-size:14.5px;color:var(--ink-soft);margin:20px 2px 11px;text-transform:capitalize;display:flex;align-items:center;gap:9px}
+  .bib-month .ln{flex:1;height:1px;background:var(--line)}
+  .bib-mes.hide{display:none}
+  .bib-fecha{position:absolute;left:8px;bottom:8px;z-index:3;background:rgba(20,10,22,.6);color:#fff;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:99px;backdrop-filter:blur(2px);text-transform:capitalize}
+  .bib-addbar{display:flex;justify-content:flex-end;margin:0 2px 8px}
+  .bib-addnew{display:inline-flex;align-items:center;gap:7px;background:linear-gradient(135deg,var(--teal),#0a7d76);color:#fff;border:0;cursor:pointer;font-family:'Poppins',sans-serif;font-weight:700;font-size:13.5px;padding:10px 16px;border-radius:12px;box-shadow:0 10px 24px -12px rgba(0,164,159,.55)}
+  .bib-addnew .p{font-size:18px;font-weight:400;line-height:1}
 
   /* masonry por columnas: alturas naturales, las fotos respiran */
   .bib-grid{column-count:2;column-gap:12px}
@@ -315,34 +354,41 @@ require __DIR__ . '/_shell.php';
   </div>
 
   <input type="file" id="bibFile" accept="image/*,video/*" multiple hidden>
+  <div class="bib-addbar"><button type="button" class="bib-addnew" id="bibAdd"><span class="p">＋</span> Agregar foto o video</button></div>
 
-  <div class="bib-grid" id="bibGrid">
-    <button type="button" class="bib-add" id="bibAdd" data-filtro="subidas"><span class="p">＋</span>Agregar</button>
-    <?php foreach ($items as $it):
-      $pub = ($it['kind'] === 'pub');
-    ?>
-      <figure class="bib-tile<?= $pub ? ' pub' : '' ?>" data-filtro="<?= $h($it['filtro']) ?>" data-kind="<?= $h($it['kind']) ?>"
-        data-id="<?= (int)$it['id'] ?>" data-url="<?= $h($it['url']) ?>" data-nombre="<?= $h($it['titulo']) ?>"
-        data-nota="<?= $h($it['nota'] ?? '') ?>" data-fecha="<?= $h($it['fecha']) ?>">
-        <?php if (!empty($it['badge'])): ?><span class="bib-badge"><?= $h($it['badge']) ?></span><?php endif; ?>
-        <?php if (!$it['video']): ?>
-          <img src="<?= $h($it['url']) ?>" alt="" loading="lazy">
-        <?php else: ?>
-          <video src="<?= $h($it['url']) ?>" preload="metadata" muted playsinline></video>
-          <span class="play"><span></span></span>
-        <?php endif; ?>
-        <?php if (!$pub): ?>
-          <button type="button" class="bib-del" data-del="<?= (int)$it['id'] ?>" aria-label="Eliminar" title="Eliminar">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-          </button>
-          <span class="bib-ck">✓</span>
-        <?php endif; ?>
-      </figure>
-    <?php endforeach; ?>
-  </div>
+  <?php foreach ($porMes as $ym => $lista): ?>
+  <section class="bib-mes" data-mes="<?= $h($ym) ?>">
+    <div class="bib-month"><span><?= $h($mes_titulo($ym)) ?></span><span class="ln"></span></div>
+    <div class="bib-grid">
+      <?php foreach ($lista as $it):
+        $sub = ($it['kind'] === 'subida');
+        $car = ($it['kind'] === 'carrusel');
+      ?>
+        <figure class="bib-tile<?= $sub ? '' : ' pub' ?>" data-filtro="<?= $h($it['filtro']) ?>" data-kind="<?= $h($it['kind']) ?>"
+          data-id="<?= (int)$it['id'] ?>" data-url="<?= $h($it['url']) ?>" data-nombre="<?= $h($it['titulo']) ?>"
+          data-nota="<?= $h($it['nota'] ?? '') ?>" data-fecha="<?= $h($it['fecha']) ?>"<?= $car ? ' data-href="'.$h($it['href']).'"' : '' ?>>
+          <?php if (!empty($it['badge'])): ?><span class="bib-badge"><?= $h($it['badge']) ?></span><?php endif; ?>
+          <?php if (!$it['video']): ?>
+            <img src="<?= $h($it['url']) ?>" alt="" loading="lazy">
+          <?php else: ?>
+            <video src="<?= $h($it['url']) ?>" preload="metadata" muted playsinline></video>
+            <span class="play"><span></span></span>
+          <?php endif; ?>
+          <?php if (!empty($it['corta'])): ?><span class="bib-fecha"><?= $h($it['corta']) ?></span><?php endif; ?>
+          <?php if ($sub): ?>
+            <button type="button" class="bib-del" data-del="<?= (int)$it['id'] ?>" aria-label="Eliminar" title="Eliminar">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </button>
+            <span class="bib-ck">✓</span>
+          <?php endif; ?>
+        </figure>
+      <?php endforeach; ?>
+    </div>
+  </section>
+  <?php endforeach; ?>
 
   <?php if (!$items): ?>
-    <div class="bib-empty"><p>Todavía no hay nada. Cuando publiques posts, reels y carruseles aparecen aquí por fecha — y puedes subir tus propias fotos y videos con <b>Agregar</b>.</p></div>
+    <div class="bib-empty"><p>Todavía no hay nada. Cuando publiques posts, reels y carruseles aparecen aquí por mes — y puedes subir tus propias fotos y videos con <b>Agregar</b>.</p></div>
   <?php endif; ?>
 
   <div class="bib-up" id="bibUp">Guardando…</div>
@@ -379,8 +425,8 @@ require __DIR__ . '/_shell.php';
 <script>
 (function () {
   var CSRF = <?= json_encode(csrf_token()) ?>, HERE = location.pathname + '?<?= $h($mid) ?>';
-  var grid = document.getElementById('bibGrid'), input = document.getElementById('bibFile'),
-      add = document.getElementById('bibAdd'), up = document.getElementById('bibUp');
+  var input = document.getElementById('bibFile'), add = document.getElementById('bibAdd'),
+      up = document.getElementById('bibUp'), main = document.querySelector('main.bib');
 
   function post(accion, data) {
     var fd = new FormData(); fd.append('csrf', CSRF); fd.append('accion', accion);
@@ -389,10 +435,11 @@ require __DIR__ . '/_shell.php';
   }
 
   // ── Filtros: Todo · Posts · Reels · Carruseles · Subidas ──
-  var chips = document.querySelectorAll('.bib-chip'), addBtn = document.getElementById('bibAdd');
+  var chips = document.querySelectorAll('.bib-chip');
   function aplicaFiltro(f) {
     document.querySelectorAll('.bib-tile').forEach(function (t) { t.classList.toggle('hide', !(f === 'todo' || t.getAttribute('data-filtro') === f)); });
-    if (addBtn) addBtn.classList.toggle('hide', !(f === 'todo' || f === 'subidas'));
+    // Oculta las secciones de mes que quedaron sin piezas visibles.
+    document.querySelectorAll('.bib-mes').forEach(function (sec) { sec.classList.toggle('hide', !sec.querySelector('.bib-tile:not(.hide)')); });
   }
   chips.forEach(function (c) { c.addEventListener('click', function () {
     chips.forEach(function (x) { x.classList.remove('on'); }); c.classList.add('on');
@@ -413,19 +460,22 @@ require __DIR__ . '/_shell.php';
   add.addEventListener('click', function () { input.click(); });
   input.addEventListener('change', function () { subir(input.files); input.value = ''; });
 
-  ['dragenter', 'dragover'].forEach(function (ev) { grid.addEventListener(ev, function (e) { e.preventDefault(); grid.classList.add('drag'); }); });
-  ['dragleave', 'drop'].forEach(function (ev) { grid.addEventListener(ev, function (e) { e.preventDefault(); if (ev !== 'drop' && e.target !== grid && grid.contains(e.relatedTarget)) return; grid.classList.remove('drag'); }); });
-  grid.addEventListener('drop', function (e) { e.preventDefault(); if (e.dataTransfer && e.dataTransfer.files) subir(e.dataTransfer.files); });
+  ['dragenter', 'dragover'].forEach(function (ev) { main.addEventListener(ev, function (e) { e.preventDefault(); main.classList.add('drag'); }); });
+  ['dragleave', 'drop'].forEach(function (ev) { main.addEventListener(ev, function (e) { e.preventDefault(); if (ev !== 'drop' && e.target !== main && main.contains(e.relatedTarget)) return; main.classList.remove('drag'); }); });
+  main.addEventListener('drop', function (e) { e.preventDefault(); if (e.dataTransfer && e.dataTransfer.files) subir(e.dataTransfer.files); });
 
-  // ── Galería fullscreen con swipe ──
-  var tiles = [].slice.call(grid.querySelectorAll('.bib-tile'));
-  var assets = tiles.map(function (t) {
-    return { id: t.getAttribute('data-id'), kind: t.getAttribute('data-kind') || 'subida',
+  // ── Galería fullscreen con swipe (los carruseles NO van al visor: abren su editor) ──
+  var tiles = [].slice.call(document.querySelectorAll('.bib-tile'));
+  var assets = [];
+  tiles.forEach(function (t) {
+    if (t.getAttribute('data-kind') === 'carrusel') { t._ai = -1; return; }
+    t._ai = assets.length;
+    assets.push({ id: t.getAttribute('data-id'), kind: t.getAttribute('data-kind') || 'subida',
              tipo: t.querySelector('video') ? 'video' : 'imagen', url: t.getAttribute('data-url'),
-             nombre: t.getAttribute('data-nombre') || '', nota: t.getAttribute('data-nota') || '', fecha: t.getAttribute('data-fecha') || '' };
+             nombre: t.getAttribute('data-nombre') || '', nota: t.getAttribute('data-nota') || '', fecha: t.getAttribute('data-fecha') || '' });
   });
   // Botón de basura en cada tile: borra sin abrir el visor.
-  [].slice.call(grid.querySelectorAll('.bib-del')).forEach(function (btn) {
+  [].slice.call(document.querySelectorAll('.bib-del')).forEach(function (btn) {
     btn.addEventListener('click', function (e) {
       e.stopPropagation(); e.preventDefault();
       if (!confirm('¿Eliminar esto de tu biblioteca? No se puede deshacer.')) return;
@@ -472,9 +522,10 @@ require __DIR__ . '/_shell.php';
   }
   function close() { lb.classList.remove('show'); lb.setAttribute('aria-hidden', 'true'); document.body.style.overflow = ''; track.innerHTML = ''; }
 
-  tiles.forEach(function (t, i) { t.addEventListener('click', function (e) {
+  tiles.forEach(function (t) { t.addEventListener('click', function (e) {
     if (selecting) { e.preventDefault(); e.stopPropagation(); if (t.getAttribute('data-kind') === 'subida') toggleSel(t); return; }
-    open(i);
+    if (t.getAttribute('data-kind') === 'carrusel') { var href = t.getAttribute('data-href'); if (href) location.href = href; return; }
+    if (t._ai >= 0) open(t._ai);
   }); });
 
   // ── Selección múltiple + borrar en bloque ──
