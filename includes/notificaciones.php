@@ -42,7 +42,7 @@ function crecer_enviar_email(string $para, string $asunto, string $cuerpo_html):
             $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS;
             $mail->Port       = defined('SMTP_PORT') ? (int)SMTP_PORT : 465;
             $mail->CharSet    = 'UTF-8';
-            $from = (defined('SMTP_FROM') && SMTP_FROM) ? SMTP_FROM : 'info@encuentraloahora.com';
+            $from = (defined('SMTP_FROM') && SMTP_FROM) ? SMTP_FROM : 'admin@encuentraloahora.com';
             $mail->setFrom($from, 'Crecer · Encuéntralo');
             $mail->isHTML(true);
             $mail->addAddress($para);
@@ -57,7 +57,7 @@ function crecer_enviar_email(string $para, string $asunto, string $cuerpo_html):
     }
 
     // Fallback: mail() (poco fiable; sirve en local o si SMTP no está configurado).
-    $from = (defined('SMTP_FROM') && SMTP_FROM) ? SMTP_FROM : 'info@encuentraloahora.com';
+    $from = (defined('SMTP_FROM') && SMTP_FROM) ? SMTP_FROM : 'admin@encuentraloahora.com';
     $headers  = "MIME-Version: 1.0\r\n";
     $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
     $headers .= "From: Crecer · Encuéntralo <$from>\r\n";

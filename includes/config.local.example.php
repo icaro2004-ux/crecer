@@ -100,5 +100,5 @@ define('SMTP_HOST',     '');                          // ej. smtp.hostinger.com
 define('SMTP_PORT',     465);
 define('SMTP_USER',     '');                          // ej. hola@encuentraloahora.com
 define('SMTP_PASS',     '');                          // contraseña de esa cuenta
-define('SMTP_FROM',     'hola@encuentraloahora.com'); // remitente visible
+define('SMTP_FROM',     'admin@encuentraloahora.com'); // remitente visible
 define('SMTP_FROMNAME', 'Encuéntralo Crecer');
