@@ -294,6 +294,43 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
   <h1 class="page-h">Analítica</h1>
   <p class="lede">Tu negocio Crecer de un vistazo — clientes, ventas, alcance, y lo que cuesta la IA.</p>
 
+  <!-- ── Tu equipo de operaciones: la IA vigilando el negocio del CREADOR (decisiones primero) ── -->
+  <?php require_once __DIR__.'/../includes/ops_agentes.php'; $ops = ops_vigilar($pdo); $ops_riesgo = $ops['retencion'] ?? []; ?>
+  <style>
+    .ops-team{background:linear-gradient(180deg,color-mix(in srgb,#00A49F 6%,#fff),#fff);border:1px solid var(--line,#ECEAE7);border-radius:16px;padding:16px 18px;margin:6px 0 20px}
+    .ops-head{display:inline-flex;align-items:center;gap:8px;font-family:'Poppins',sans-serif;font-weight:800;font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;color:#00827e;margin-bottom:12px}
+    .ops-dot{width:8px;height:8px;border-radius:50%;background:#00A49F;animation:opsb 2s infinite}
+    @keyframes opsb{0%{box-shadow:0 0 0 0 rgba(0,164,159,.5)}70%{box-shadow:0 0 0 7px rgba(0,164,159,0)}100%{box-shadow:0 0 0 0 rgba(0,164,159,0)}}
+    .ops-card{display:flex;gap:13px;align-items:flex-start}
+    .ops-ic{flex:none;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,#FF6B3D,#EF4375)}
+    .ops-ic svg{width:22px;height:22px}
+    .ops-t{font-family:'Poppins',sans-serif;font-weight:700;font-size:16px;color:var(--tinta,#231F20);margin-bottom:3px}
+    .ops-m{font-size:13.5px;color:var(--muted,#6E6A67);margin-bottom:10px}
+    .ops-list{display:flex;flex-wrap:wrap;gap:7px}
+    .ops-cli{font-size:13px;text-decoration:none;color:var(--tinta,#231F20);background:#fff;border:1px solid var(--line,#ECEAE7);border-radius:10px;padding:6px 11px}
+    .ops-cli b{font-weight:700}
+    .ops-ok{color:#00827e;font-weight:700;font-size:14px}
+  </style>
+  <section class="ops-team">
+    <div class="ops-head"><span class="ops-dot"></span> Tu equipo de operaciones · IA vigilando Crecer</div>
+    <?php if ($ops_riesgo): ?>
+      <div class="ops-card">
+        <span class="ops-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V5l-8-3z"/><path d="M9 12l2 2 4-4"/></svg></span>
+        <div class="ops-body">
+          <div class="ops-t">Agente de Retención — <?= count($ops_riesgo) ?> cliente(s) en riesgo de churn</div>
+          <div class="ops-m">Con suscripción viva pero sin publicar hace <?= OPS_RETENCION_DIAS ?>+ días. Reengánchalos antes de perderlos:</div>
+          <div class="ops-list">
+            <?php foreach (array_slice($ops_riesgo,0,8) as $r): ?>
+              <a class="ops-cli" href="#clientes"><b><?= $h($r['nombre']) ?></b> · <?= (int)$r['dias'] ?>d · <?= $h($r['sub']) ?></a>
+            <?php endforeach; ?>
+          </div>
+        </div>
+      </div>
+    <?php else: ?>
+      <div class="ops-ok">Nada en riesgo hoy. El equipo está pendiente — te aviso apenas un cliente se enfríe.</div>
+    <?php endif; ?>
+  </section>
+
   <!-- KPIs -->
   <div class="kpis">
     <div class="kpi"><div class="l">Clientes</div><div class="v"><?= $total_clientes ?></div>
