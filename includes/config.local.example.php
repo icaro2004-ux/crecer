@@ -72,6 +72,10 @@ define('META_GRAPH_VERSION', 'v21.0');
 //   https://tu-dominio/crecer/scripts/cron_publicar.php?key=XXXX
 define('CRON_TOKEN', '');
 
+// Correo del FUNDADOR para el reporte diario de operaciones (cron_reporte_diario.php).
+// Si se deja vacío, cae a jmp.arch.eng@gmail.com.
+define('REPORTE_EMAIL', '');
+
 // ── MODO PRUEBA (sandbox) — activar "Activar Crecer" SIN Stripe ──────────────
 // Para probar el flujo completo con cuentas de prueba, sin cobrar.
 //
