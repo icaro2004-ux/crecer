@@ -295,14 +295,19 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
   <p class="lede">Tu negocio Crecer de un vistazo — clientes, ventas, alcance, y lo que cuesta la IA.</p>
 
   <!-- ── Tu equipo de operaciones: la IA vigilando el negocio del CREADOR (decisiones primero) ── -->
-  <?php require_once __DIR__.'/../includes/ops_agentes.php'; $ops = ops_vigilar($pdo); $ops_riesgo = $ops['retencion'] ?? []; ?>
+  <?php require_once __DIR__.'/../includes/ops_agentes.php'; $ops = ops_vigilar($pdo);
+        $ops_riesgo = $ops['retencion'] ?? []; $ops_cal = $ops['conversion'] ?? []; $ops_sop = $ops['soporte'] ?? ['total'=>0,'soporte'=>0,'dms'=>0];
+        $ops_hay = $ops_riesgo || $ops_cal || (($ops_sop['total'] ?? 0) > 0); ?>
   <style>
     .ops-team{background:linear-gradient(180deg,color-mix(in srgb,#00A49F 6%,#fff),#fff);border:1px solid var(--line,#ECEAE7);border-radius:16px;padding:16px 18px;margin:6px 0 20px}
     .ops-head{display:inline-flex;align-items:center;gap:8px;font-family:'Poppins',sans-serif;font-weight:800;font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;color:#00827e;margin-bottom:12px}
     .ops-dot{width:8px;height:8px;border-radius:50%;background:#00A49F;animation:opsb 2s infinite}
     @keyframes opsb{0%{box-shadow:0 0 0 0 rgba(0,164,159,.5)}70%{box-shadow:0 0 0 7px rgba(0,164,159,0)}100%{box-shadow:0 0 0 0 rgba(0,164,159,0)}}
     .ops-card{display:flex;gap:13px;align-items:flex-start}
+    .ops-card + .ops-card{margin-top:14px;border-top:1px solid var(--line,#ECEAE7);padding-top:14px}
     .ops-ic{flex:none;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,#FF6B3D,#EF4375)}
+    .ops-ic.teal{background:linear-gradient(135deg,#00A49F,#00827e)}
+    .ops-ic.amber{background:linear-gradient(135deg,#EF4375,#8B5CF6)}
     .ops-ic svg{width:22px;height:22px}
     .ops-t{font-family:'Poppins',sans-serif;font-weight:700;font-size:16px;color:var(--tinta,#231F20);margin-bottom:3px}
     .ops-m{font-size:13.5px;color:var(--muted,#6E6A67);margin-bottom:10px}
@@ -313,12 +318,15 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
   </style>
   <section class="ops-team">
     <div class="ops-head"><span class="ops-dot"></span> Tu equipo de operaciones · IA vigilando Crecer</div>
-    <?php if ($ops_riesgo): ?>
+    <?php if (!$ops_hay): ?>
+      <div class="ops-ok">Todo tranqui — nada pide tu atención ahora. El equipo sigue vigilando el negocio.</div>
+    <?php else: ?>
+      <?php if ($ops_riesgo): ?>
       <div class="ops-card">
         <span class="ops-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V5l-8-3z"/><path d="M9 12l2 2 4-4"/></svg></span>
         <div class="ops-body">
-          <div class="ops-t">Agente de Retención — <?= count($ops_riesgo) ?> cliente(s) en riesgo de churn</div>
-          <div class="ops-m">Con suscripción viva pero sin publicar hace <?= OPS_RETENCION_DIAS ?>+ días. Reengánchalos antes de perderlos:</div>
+          <div class="ops-t">Agente de Retención — <?= count($ops_riesgo) ?> en riesgo de churn</div>
+          <div class="ops-m">Suscripción viva pero sin publicar hace <?= OPS_RETENCION_DIAS ?>+ días. Reengánchalos antes de perderlos:</div>
           <div class="ops-list">
             <?php foreach (array_slice($ops_riesgo,0,8) as $r): ?>
               <a class="ops-cli" href="#clientes"><b><?= $h($r['nombre']) ?></b> · <?= (int)$r['dias'] ?>d · <?= $h($r['sub']) ?></a>
@@ -326,8 +334,30 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
           </div>
         </div>
       </div>
-    <?php else: ?>
-      <div class="ops-ok">Nada en riesgo hoy. El equipo está pendiente — te aviso apenas un cliente se enfríe.</div>
+      <?php endif; ?>
+      <?php if ($ops_cal): ?>
+      <div class="ops-card">
+        <span class="ops-ic teal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/></svg></span>
+        <div class="ops-body">
+          <div class="ops-t">Agente de Conversión — <?= count($ops_cal) ?> cierre(s) caliente(s)</div>
+          <div class="ops-m">Trials enganchados que ya usaron el producto y aún no pagan. Ciérralos:</div>
+          <div class="ops-list">
+            <?php foreach (array_slice($ops_cal,0,8) as $r): ?>
+              <a class="ops-cli" href="#clientes"><b><?= $h($r['nombre']) ?></b> · <?= (int)$r['publicados'] ?> pub · <?= (int)$r['posts'] ?> posts</a>
+            <?php endforeach; ?>
+          </div>
+        </div>
+      </div>
+      <?php endif; ?>
+      <?php if (($ops_sop['total'] ?? 0) > 0): ?>
+      <div class="ops-card">
+        <span class="ops-ic amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-11.9 7.6L3 21l1.9-6A8.4 8.4 0 1 1 21 11.5z"/></svg></span>
+        <div class="ops-body">
+          <div class="ops-t">Agente de Soporte — <?= (int)$ops_sop['total'] ?> pendiente(s) de respuesta</div>
+          <div class="ops-m"><?= (int)$ops_sop['soporte'] ?> soporte sin leer · <?= (int)$ops_sop['dms'] ?> DMs de clientes pendientes. <a href="/crecer/panel/admin_soporte.php" style="color:#00827e;font-weight:700;text-decoration:none">Ir a soporte →</a></div>
+        </div>
+      </div>
+      <?php endif; ?>
     <?php endif; ?>
   </section>
 

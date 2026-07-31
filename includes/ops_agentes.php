@@ -58,19 +58,71 @@ function ops_retencion_riesgo(PDO $pdo): array {
 }
 
 /**
- * VIGILAR: corre los agentes de ops, loguea la evidencia, y devuelve un paquete
- * para el dashboard/email del fundador. Barato e idempotente.
- * Devuelve ['retencion'=>[...], 'resumen'=>['riesgo'=>N, ...]].
+ * AGENTE DE CONVERSIÓN — trials/incompletas ENGANCHADOS (ya crearon contenido)
+ * que aún no pagan = cierres calientes. Mejor palanca que el outreach frío
+ * a esta etapa: cerrar al que ya probó el producto y le gustó.
+ * Devuelve [ ['marca_id','nombre','posts','publicados'], ... ].
+ */
+function ops_conversion_calientes(PDO $pdo): array {
+    try {
+        $sql =
+          "SELECT m.id, m.nombre_negocio,
+                  (SELECT COUNT(*) FROM crecer_contenido c WHERE c.marca_id=m.id) posts,
+                  (SELECT COUNT(*) FROM crecer_contenido c WHERE c.marca_id=m.id AND c.estado='publicado') publicados
+           FROM crecer_marca m
+           JOIN crecer_suscripciones s ON s.marca_id=m.id
+           WHERE s.estado IN ('trial','prueba','incompleta')
+           HAVING posts >= 1
+           ORDER BY publicados DESC, posts DESC
+           LIMIT 20";
+        $out = [];
+        foreach ($pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[] = ['marca_id'=>(int)$r['id'], 'nombre'=>(string)$r['nombre_negocio'],
+                      'posts'=>(int)$r['posts'], 'publicados'=>(int)$r['publicados']];
+        }
+        return $out;
+    } catch (Throwable $e) { error_log('ops_conversion_calientes: '.$e->getMessage()); return []; }
+}
+
+/**
+ * AGENTE DE SOPORTE — lo que espera respuesta del fundador: soporte de clientes
+ * sin leer + DMs pendientes. Devuelve ['soporte'=>N, 'dms'=>N, 'total'=>N].
+ */
+function ops_soporte_pendiente(PDO $pdo): array {
+    $c = fn(string $sql) => (function() use ($pdo,$sql){ try { return (int)$pdo->query($sql)->fetchColumn(); } catch (Throwable $e) { return 0; } })();
+    $sop = $c("SELECT COUNT(*) FROM crecer_soporte WHERE de='cliente' AND leido=0");
+    $dms = $c("SELECT COUNT(*) FROM crecer_mensajes WHERE estado='pendiente'");
+    return ['soporte'=>$sop, 'dms'=>$dms, 'total'=>$sop+$dms];
+}
+
+/**
+ * VIGILAR: corre TODOS los agentes de ops, loguea la evidencia, y devuelve el
+ * paquete para el dashboard/email del fundador. Barato e idempotente.
+ * (provider_outreach / outreach frío: hook futuro — cablear su schema primero.)
  */
 function ops_vigilar(PDO $pdo): array {
-    $riesgo = ops_retencion_riesgo($pdo);
+    $riesgo    = ops_retencion_riesgo($pdo);
+    $calientes = ops_conversion_calientes($pdo);
+    $soporte   = ops_soporte_pendiente($pdo);
+
     if ($riesgo) {
-        $nombres = implode(', ', array_map(fn($r) => $r['nombre'] . " ({$r['dias']}d)", array_slice($riesgo, 0, 8)));
+        $n = implode(', ', array_map(fn($r) => $r['nombre'] . " ({$r['dias']}d)", array_slice($riesgo, 0, 8)));
         _ops_log($pdo, 'ops_retencion', 'Detectó clientes en riesgo de churn',
-                 count($riesgo) . " en riesgo (sin publicar " . OPS_RETENCION_DIAS . "+ días): " . $nombres);
+                 count($riesgo) . " en riesgo (sin publicar " . OPS_RETENCION_DIAS . "+ días): " . $n);
     }
+    if ($calientes) {
+        $n = implode(', ', array_map(fn($r) => $r['nombre'] . " ({$r['publicados']} pub)", array_slice($calientes, 0, 8)));
+        _ops_log($pdo, 'ops_conversion', 'Detectó trials enganchados para cerrar', count($calientes) . " cierres calientes: " . $n);
+    }
+    if ($soporte['total'] > 0) {
+        _ops_log($pdo, 'ops_soporte', 'Detectó pendientes de respuesta',
+                 "{$soporte['soporte']} soporte sin leer + {$soporte['dms']} DMs pendientes");
+    }
+
     return [
-        'retencion' => $riesgo,
-        'resumen'   => ['riesgo' => count($riesgo)],
+        'retencion'  => $riesgo,
+        'conversion' => $calientes,
+        'soporte'    => $soporte,
+        'resumen'    => ['riesgo'=>count($riesgo), 'calientes'=>count($calientes), 'soporte'=>$soporte['total']],
     ];
 }
