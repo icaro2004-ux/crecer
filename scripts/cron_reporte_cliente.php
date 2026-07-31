@@ -14,6 +14,7 @@
 // ============================================================
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/notif.php';
+require __DIR__ . '/../includes/notificaciones.php';   // crecer_enviar_email (email opt-in)
 
 $es_cli = (PHP_SAPI === 'cli');
 if (!$es_cli) {
@@ -35,7 +36,7 @@ try {
          WHERE s.estado IN ('activa','trial','prueba','incompleta')")->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) { echo "error leyendo marcas: ".$e->getMessage()."\n"; exit; }
 
-$enviados = 0; $saltados = 0;
+$enviados = 0; $saltados = 0; $emails = 0;
 foreach ($marcas as $mk) {
     $mid = (int)$mk['id'];
     $c = function(string $sql) use ($pdo, $mid) {
@@ -84,7 +85,25 @@ foreach ($marcas as $mk) {
 
     notif_crear($pdo, $mid, 'resumen', 'Tu resumen de la semana', $mensaje, $link, 'chart');
     $enviados++;
+
+    // EMAIL opt-in: solo si reporte_email=1 y el dueño tiene correo (el in-app ya salió).
+    $optin = 1; $correo = '';
+    try {
+        $qi = $pdo->prepare("SELECT COALESCE(m.reporte_email,1) opt, u.email FROM crecer_marca m LEFT JOIN usuarios u ON u.id=m.usuario_id WHERE m.id=?");
+        $qi->execute([$mid]); $ri = $qi->fetch(PDO::FETCH_ASSOC);
+        if ($ri) { $optin = (int)$ri['opt']; $correo = (string)($ri['email'] ?? ''); }
+    } catch (Throwable $e) { $optin = 0; }  // columna aún no existe → solo in-app
+    if ($optin === 1 && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL) && function_exists('crecer_enviar_email')) {
+        $conf = 'https://encuentraloahora.com/crecer/panel/configuracion.php?marca=' . $mid;
+        $nom  = htmlspecialchars((string)$mk['nombre_negocio'], ENT_QUOTES, 'UTF-8');
+        $html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#231F20;line-height:1.55">'
+              . '<div style="font-weight:800;font-size:13px;color:#00A49F;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">' . $nom . ' · Tu semana</div>'
+              . '<div style="font-size:15px">' . htmlspecialchars($mensaje, ENT_QUOTES, 'UTF-8') . '</div>'
+              . '<div style="margin-top:18px"><a href="' . $conf . '" style="background:linear-gradient(135deg,#FF6B3D,#EF4375);color:#fff;text-decoration:none;font-weight:700;padding:11px 20px;border-radius:12px;display:inline-block">Ver mis resultados</a></div>'
+              . '<div style="margin-top:20px;font-size:12px;color:#6E6A67;border-top:1px solid #ECEAE7;padding-top:12px">Te lo manda tu corillo cada semana. ¿No lo quieres? <a href="' . $conf . '" style="color:#6E6A67">Desactívalo en Configuración</a>.</div></div>';
+        if (crecer_enviar_email($correo, 'Tu resumen de la semana · Crecer', $html)) $emails++;
+    }
 }
 
 echo "[" . date('Y-m-d H:i:s') . "] reporte_cliente_semanal: marcas=" . count($marcas)
-   . " enviados={$enviados} saltados={$saltados}\n";
+   . " in_app={$enviados} emails={$emails} saltados={$saltados}\n";

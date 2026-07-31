@@ -69,6 +69,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ' . $volver . 'negocio&ok=1'); exit;
     }
 
+    if ($accion === 'reporte_email') {
+        $on = !empty($_POST['reporte_email']) ? 1 : 0;
+        try { $pdo->prepare("UPDATE crecer_marca SET reporte_email=? WHERE id=? AND usuario_id=?")->execute([$on, $marca_id, $USUARIO_ID]); } catch (Throwable $e) {}
+        header('Location: ' . $volver . 'cuenta&ok=1'); exit;
+    }
+
     if ($accion === 'cuenta_datos') {
         $nombre = trim($_POST['nombre'] ?? '');
         $email  = trim($_POST['email'] ?? '');
@@ -408,6 +414,19 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
         </div>
         <div class="cfg-hint">Mínimo 8 caracteres.</div>
         <button class="cfg-save" type="submit">Cambiar contraseña</button>
+      </div>
+    </form>
+
+    <form method="post" action="<?= $turl('cuenta') ?>">
+      <?= csrf_field() ?><input type="hidden" name="accion" value="reporte_email">
+      <div class="cfg-card">
+        <h2>Resumen semanal por email <?= ico('chart') ?></h2>
+        <p class="sub">Cada semana tu corillo te manda por correo lo que hizo y tus resultados. (En la campanita siempre lo tienes.)</p>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600;margin-top:4px">
+          <input type="checkbox" name="reporte_email" value="1" <?= ((int)($marca['reporte_email'] ?? 1) === 1) ? 'checked' : '' ?> style="width:18px;height:18px;accent-color:var(--magenta,#EF4375)">
+          Enviarme el resumen por email
+        </label>
+        <button class="cfg-save" type="submit">Guardar</button>
       </div>
     </form>
   </section>

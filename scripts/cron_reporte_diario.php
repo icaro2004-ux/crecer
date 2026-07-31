@@ -16,6 +16,7 @@
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/ia.php';
 require __DIR__ . '/../includes/notificaciones.php';
+require_once __DIR__ . '/../includes/ops_agentes.php';   // agentes de ops (nombres de en-riesgo / cierres calientes)
 
 $es_cli = (PHP_SAPI === 'cli');
 if (!$es_cli) {
@@ -82,6 +83,20 @@ $hechos =
   "MRR: " . $m($mrr) . " ({$activas} activas, {$en_prueba} en prueba)\n" .
   "gasto IA del mes: " . $m($ia_mes) . " · MARGEN del mes: " . $m($margen) . "\n" .
   "marcas en autopilot: {$autopilot}\n";
+
+// Enriquecer con los AGENTES DE OPS (nombres concretos, no solo conteos).
+$ops = ops_vigilar($pdo);
+$op_riesgo = $ops['retencion'] ?? []; $op_cal = $ops['conversion'] ?? [];
+if ($op_riesgo) {
+    $hechos .= "clientes EN RIESGO de churn (reenganchar): "
+        . implode(', ', array_map(fn($r)=>$r['nombre']." ({$r['dias']}d)", array_slice($op_riesgo,0,8))) . "\n";
+    $decisiones += count($op_riesgo);
+}
+if ($op_cal) {
+    $hechos .= "cierres CALIENTES (trials enganchados sin pagar): "
+        . implode(', ', array_map(fn($r)=>$r['nombre']." ({$r['publicados']} pub)", array_slice($op_cal,0,8))) . "\n";
+    $decisiones += count($op_cal);
+}
 
 // ── La IA REDACTA el resumen a partir de los hechos (no inventa) ──
 $prompt =
