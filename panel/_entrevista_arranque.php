@@ -13,7 +13,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <link rel="icon" type="image/png" href="/crecer/assets/brand/crecer-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=22" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=<?= ASSET_VER ?>" rel="stylesheet">
 <style>
   body{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px}
   .arr{max-width:440px;width:100%;text-align:center}

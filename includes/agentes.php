@@ -1728,9 +1728,16 @@ function corillo_guardar(PDO $pdo, int $contenido_id, ?array $corillo): void {
     } catch (Throwable $e) { /* columna corillo_json aún no migrada */ }
 }
 
-function redactar_pieza(PDO $pdo, int $contenido_id, array $extra = []): array {
-    $c = $pdo->prepare("SELECT * FROM crecer_contenido WHERE id = ?");
-    $c->execute([$contenido_id]);
+function redactar_pieza(PDO $pdo, int $contenido_id, array $extra = [], ?int $marca_id = null): array {
+    // Aislamiento multi-tenant (ADR/QA CR-QA-001): si el llamador pasa marca_id, la
+    // pieza SOLO se resuelve si pertenece a esa marca. Un id ajeno = "no existe" (403).
+    if ($marca_id !== null) {
+        $c = $pdo->prepare("SELECT * FROM crecer_contenido WHERE id = ? AND marca_id = ?");
+        $c->execute([$contenido_id, $marca_id]);
+    } else {
+        $c = $pdo->prepare("SELECT * FROM crecer_contenido WHERE id = ?");
+        $c->execute([$contenido_id]);
+    }
     $pieza = $c->fetch();
     if (!$pieza) throw new RuntimeException("Contenido #$contenido_id no existe.");
 

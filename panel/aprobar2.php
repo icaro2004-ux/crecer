@@ -136,8 +136,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ── Regenerar caption con la IA ──
     if ($accion === 'regenerar') {
         if (!$pagado) { header('Content-Type: application/json'); echo json_encode(['ok'=>false,'paywall'=>true]); exit; }
+        // CR-QA-001: la pieza DEBE pertenecer a la marca de la sesión (no basta ocultarla en UI).
+        $own = $pdo->prepare("SELECT 1 FROM crecer_contenido WHERE id=? AND marca_id=?");
+        $own->execute([$id, $marca_id]);
+        if (!$own->fetchColumn()) { header('Content-Type: application/json'); http_response_code(403); echo json_encode(['ok'=>false,'err'=>'no_autorizado']); exit; }
         @set_time_limit(0);
-        try { $r = redactar_pieza($pdo, $id); $cap = $r['caption']; }
+        try { $r = redactar_pieza($pdo, $id, [], $marca_id); $cap = $r['caption']; }
         catch (Throwable $e) { $cap = null; }
         if (!empty($_POST['ajax'])) { header('Content-Type: application/json'); echo json_encode(['ok'=>(bool)$cap,'id'=>$id,'caption'=>$cap], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE); exit; }
         header('Location: ' . $_SERVER['REQUEST_URI']); exit;
@@ -367,7 +371,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $cm = $cal ? (int)$cal['mes']  : (int)date('n');
         try {
             $plan = planificar_mes($pdo, $marca_id, $ca, $cm, $n);
-            foreach ($plan['piezas'] as $pz) { try { redactar_pieza($pdo, (int)$pz['id']); } catch (Throwable $e) {} }
+            foreach ($plan['piezas'] as $pz) { try { redactar_pieza($pdo, (int)$pz['id'], [], $marca_id); } catch (Throwable $e) {} }
         } catch (Throwable $e) {
             header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&err=".urlencode(substr($e->getMessage(),0,100))); exit;
         }

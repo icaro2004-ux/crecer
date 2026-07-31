@@ -39,6 +39,19 @@ if (!defined('DB_USER')) define('DB_USER', getenv('DB_USER') ?: '');
 if (!defined('DB_PASS')) define('DB_PASS', getenv('DB_PASS') ?: '');
 define('DB_CHARSET', 'utf8mb4');
 
+// ── 1.5) Timezone global de Puerto Rico (QA CR-QA-003) ───────
+// Centralizado aquí (bootstrap común). NO altera fechas ya almacenadas: solo
+// define cómo PHP formatea/interpreta fechas de ahora en adelante (AST).
+if (!defined('APP_TZ')) define('APP_TZ', 'America/Puerto_Rico');
+@date_default_timezone_set(APP_TZ);
+
+// ── 1.6) Versión de assets (QA CR-QA-002): cache-bust ÚNICO por filemtime ─
+// Una sola fuente de verdad → cero drift entre páginas. Se actualiza solo
+// cuando cambia el CSS. Se usa como ?v=<?= ASSET_VER ?> en todos los <link>.
+if (!defined('ASSET_VER')) {
+    define('ASSET_VER', (string)(@filemtime(dirname(__DIR__) . '/assets/encuentralo-ui.css') ?: '24'));
+}
+
 // ── 3) Validar antes de intentar conectar ────────────────────
 if (DB_NAME === '' || DB_USER === '') {
     error_log('db.php: faltan credenciales DB. Crea includes/config.local.php o define DB_NAME / DB_USER como variables de entorno.');

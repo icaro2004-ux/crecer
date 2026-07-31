@@ -83,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ✨ Otra sugerencia: la IA reescribe el copy desde cero (respeta el tono elegido).
     if ($accion === 'sugerir') {
         @set_time_limit(0);
-        try { $r = redactar_pieza($pdo, $post_id); echo json_encode(['ok'=>true, 'caption'=>(string)($r['caption'] ?? '')], JSON_UNESCAPED_UNICODE); }
+        try { $r = redactar_pieza($pdo, $post_id, [], $marca_id); echo json_encode(['ok'=>true, 'caption'=>(string)($r['caption'] ?? '')], JSON_UNESCAPED_UNICODE); }
         catch (Throwable $e) { echo json_encode(['ok'=>false, 'err'=>'No pude sugerir otra ahora.']); }
         exit;
     }
@@ -188,7 +188,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <link rel="icon" type="image/png" href="/crecer/assets/brand/crecer-icon.png">
 <link rel="apple-touch-icon" href="/crecer/assets/brand/crecer-icon.png">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link href="/crecer/assets/encuentralo-ui.css?v=22" rel="stylesheet">
+<link href="/crecer/assets/encuentralo-ui.css?v=<?= ASSET_VER ?>" rel="stylesheet">
 <style>
   body{background:#fff;min-height:100vh}
   .gw{max-width:560px;margin:0 auto;padding:22px 18px 60px}

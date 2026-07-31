@@ -40,3 +40,8 @@ migrations/_backup_*.sql
 .agents/
 design-system/
 skills-lock.json
+
+# QA (evidencia/credenciales/dumps — NUNCA subir)
+qa-evidence/
+QA_AUDIT_CRECER_*.md
+QA_BUGS_CRECER_*.csv
