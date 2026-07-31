@@ -47,7 +47,7 @@ if (!defined('APP_TZ')) define('APP_TZ', 'America/Puerto_Rico');
 
 // ── 1.6) Versión de assets (QA CR-QA-002): cache-bust ÚNICO por filemtime ─
 // Una sola fuente de verdad → cero drift entre páginas. Se actualiza solo
-// cuando cambia el CSS. Se usa como ?v=<?= ASSET_VER ?> en todos los <link>.
+// cuando cambia el CSS. Se emite como ?v=ASSET_VER en el href de cada CSS.
 if (!defined('ASSET_VER')) {
     define('ASSET_VER', (string)(@filemtime(dirname(__DIR__) . '/assets/encuentralo-ui.css') ?: '24'));
 }
