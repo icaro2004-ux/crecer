@@ -62,7 +62,7 @@ try {
     // Llave FIJA propia (NO el CRON_TOKEN de prod, que no cuadra — mismo lío del SMS).
     // Estas pruebas gastan dinero → protegidas con esta llave. Rota/borra luego.
     $__imgkey = (defined('CRECER_WORKER_KEY') && CRECER_WORKER_KEY !== '') ? CRECER_WORKER_KEY : 'crimg_7k2x';
-    if (in_array($__test, ['img','arte','imgmanual','compare','v3async'], true) && !hash_equals($__imgkey, (string)($_GET['t'] ?? ''))) {
+    if (in_array($__test, ['img','arte','imgmanual','compare','v3async','checkout'], true) && !hash_equals($__imgkey, (string)($_GET['t'] ?? ''))) {
         echo "\n(Para las pruebas en vivo añade  &t={$__imgkey}  al final.)\n";
         $__test = '';
     }
@@ -100,6 +100,39 @@ try {
                 echo "  " . str_pad($r['slug'],10) . " \$" . $r['precio_mensual'] . "  price_id=" . ($r['stripe_price_id'] ?: "(VACÍO ❌)") . "\n";
             }
         } catch (Throwable $e) { echo "  (no pude leer crecer_planes: " . $e->getMessage() . ")\n"; }
+    }
+
+    // PRUEBA DEFINITIVA: crea una sesión de Checkout REAL y reporta cs_live_ vs cs_test_.
+    // NO cobra nada (solo abre la sesión). Protegida con la llave de pruebas.
+    if ($__test === 'checkout') {
+        echo "\n--- Prueba REAL de Checkout (crea sesión, NO cobra) ---\n";
+        require_once __DIR__ . '/includes/stripe.php';
+        if (!stripe_configurado()) { echo "❌ Stripe no configurado.\n"; }
+        else {
+            try {
+                $slug = (string)($_GET['plan'] ?? 'crecer');
+                $ps = $pdo->prepare("SELECT * FROM crecer_planes WHERE slug=?");
+                $ps->execute([$slug]); $plan = $ps->fetch(PDO::FETCH_ASSOC);
+                if (!$plan) { echo "❌ plan '{$slug}' no existe.\n"; }
+                elseif (empty($plan['stripe_price_id'])) { echo "❌ plan '{$slug}' sin price_id.\n"; }
+                else {
+                    $ses = stripe_crear_checkout(
+                        $plan['stripe_price_id'], (int)($plan['trial_dias'] ?? 0),
+                        'https://encuentraloahora.com/crecer/panel/checkout_ok.php?ok=1',
+                        'https://encuentraloahora.com/crecer/panel/precios.php?cancelado=1',
+                        ['marca_id'=>0,'usuario_id'=>0,'plan_slug'=>$slug,'plan_id'=>(int)$plan['id'],'probe'=>'1'],
+                        null, 'probe@encuentraloahora.com'
+                    );
+                    $id = (string)($ses['id'] ?? '');
+                    $pref = substr($id, 0, 8);
+                    echo "plan={$slug}  price={$plan['stripe_price_id']}\n";
+                    echo "session id: {$pref}…\n";
+                    echo "VEREDICTO : " . (strpos($id,'cs_live_')===0 ? "LIVE ✅✅ (cobro real activo)"
+                                        : (strpos($id,'cs_test_')===0 ? "TEST ⚠️ (todavía sandbox)" : "??? ({$pref})")) . "\n";
+                    if (!empty($ses['url'])) echo "URL checkout: " . $ses['url'] . "\n";
+                }
+            } catch (Throwable $e) { echo "❌ " . $e->getMessage() . "\n"; }
+        }
     }
 
     if ($__test === 'img') {
