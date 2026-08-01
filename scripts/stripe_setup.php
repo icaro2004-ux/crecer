@@ -7,6 +7,17 @@
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/stripe.php';
 
+// ── Candado: CLI libre; por URL exige ?key=CRON_TOKEN (igual que los crons) ──
+// Sin esto, cualquiera podría dispararlo por web y crear productos en Stripe.
+if (PHP_SAPI !== 'cli') {
+    $token = defined('CRON_TOKEN') ? CRON_TOKEN : '';
+    if ($token === '' || !hash_equals($token, (string)($_GET['key'] ?? ''))) {
+        http_response_code(403); header('Content-Type: text/plain; charset=utf-8');
+        echo "403 — no autorizado. Usa ?key=CRON_TOKEN o córrelo por CLI.\n"; exit;
+    }
+    header('Content-Type: text/plain; charset=utf-8');
+}
+
 if (!stripe_configurado()) { exit("Falta STRIPE_SECRET_KEY en config.local.php\n"); }
 
 $planes = $pdo->query("SELECT * FROM crecer_planes WHERE activo=1 ORDER BY orden")->fetchAll();
