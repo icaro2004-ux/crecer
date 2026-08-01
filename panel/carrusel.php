@@ -13,6 +13,8 @@ require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/iconos.php';
 require __DIR__ . '/../includes/carrusel.php';
 requiere_login();
+require_once __DIR__ . '/../includes/panel_guard.php';
+requiere_suscripcion($pdo, isset($_GET['marca']) ? (int)$_GET['marca'] : null);
 
 $usuario = usuario_actual($pdo);
 $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (int)$_GET['marca'] : null);

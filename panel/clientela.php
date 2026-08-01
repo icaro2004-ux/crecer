@@ -16,6 +16,8 @@ require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/agentes.php';
 require __DIR__ . '/../includes/suscripcion.php';
 requiere_login();
+require_once __DIR__ . '/../includes/panel_guard.php';
+requiere_suscripcion($pdo, isset($_GET['marca']) ? (int)$_GET['marca'] : null);
 
 $usuario = usuario_actual($pdo);
 $USUARIO_ID = (int)$usuario['id'];

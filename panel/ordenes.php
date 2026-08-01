@@ -6,6 +6,8 @@
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/auth.php';
 requiere_login();
+require_once __DIR__ . '/../includes/panel_guard.php';
+requiere_suscripcion($pdo, isset($_GET['marca']) ? (int)$_GET['marca'] : null);
 $usuario = usuario_actual($pdo);
 $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (int)$_GET['marca'] : null);
 if (!$marca) { header('Location: /crecer/onboarding.php'); exit; }
