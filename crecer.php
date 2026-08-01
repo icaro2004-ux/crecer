@@ -114,57 +114,101 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   body.revealed #ask{display:none}
   body.revealed #exp{display:block}
 
-  /* ── 2 · EL CORILLO EMPIEZA A PENSAR (direcciones estratégicas, swipe) ── */
-  .stage{padding:56px 0 58px}
-  .stage .demo{margin-bottom:16px}
-  .biz{font-family:var(--disp);font-weight:600;font-size:15px;letter-spacing:-.01em;color:var(--ink);margin-bottom:6px}
-  .relevo{font-family:var(--disp);font-weight:600;font-size:clamp(24px,5.2vw,34px);line-height:1.15;letter-spacing:-.02em;color:var(--ink);text-wrap:balance;max-width:20ch}
-  .relevo-sub{margin-top:12px;font-size:16px;color:var(--muted);line-height:1.5;max-width:36ch}
-  /* carrusel de direcciones — objetivos distintos, no versiones de un copy */
-  .dirs{display:flex;gap:14px;margin:26px 0 12px;overflow-x:auto;scroll-snap-type:x mandatory;
-    -webkit-overflow-scrolling:touch;scrollbar-width:none;padding:4px 0 6px;cursor:grab}
-  .dirs::-webkit-scrollbar{display:none}
-  .dirs.drag{cursor:grabbing}
-  .dir{flex:0 0 78%;max-width:300px;scroll-snap-align:center;background:var(--card);border:1px solid var(--line);
-    border-radius:22px;padding:24px;box-shadow:0 2px 6px rgba(40,22,28,.05),0 20px 46px -26px rgba(40,22,28,.2);
-    display:flex;flex-direction:column;min-height:184px;user-select:none}
-  @media(min-width:640px){.dir{flex-basis:300px}}
-  .dir-n{font-family:var(--disp);font-weight:600;font-size:12px;letter-spacing:.05em;color:var(--magenta);text-transform:uppercase;margin-bottom:16px}
-  .dir h3{font-family:var(--disp);font-weight:600;font-size:21px;line-height:1.2;letter-spacing:-.015em;color:var(--ink);margin:0}
-  .dir p{margin:12px 0 0;font-size:15px;line-height:1.5;color:var(--muted)}
-  .dots{display:flex;gap:6px;margin-top:6px}
-  .dot{width:6px;height:6px;border-radius:50%;background:var(--line);transition:width .3s var(--ease),background .3s}
-  .dot.on{background:var(--magenta);width:20px;border-radius:3px}
-  .team-line{margin-top:28px;font-size:14px;color:var(--muted);line-height:1.55;max-width:42ch}
-  .team-line b{color:var(--ink);font-weight:600}
+  /* ══ POST-NOMBRE reinventado — "El Corillo ya empezó" (1 pantalla, desktop-native) ══ */
+  .show{position:relative;overflow:hidden;min-height:calc(100dvh - 66px);display:flex;flex-direction:column;justify-content:center;gap:clamp(28px,4vh,44px);padding:36px 22px}
+  .show::before{content:"";position:absolute;z-index:0;top:-24%;right:-12%;width:64vw;max-width:820px;height:64vw;max-height:820px;border-radius:50%;
+    background:radial-gradient(circle at 32% 30%, color-mix(in srgb,var(--magenta) 16%,#fff), transparent 62%);pointer-events:none}
+  .show::after{content:"";position:absolute;z-index:0;bottom:-30%;left:-14%;width:52vw;max-width:640px;height:52vw;max-height:640px;border-radius:50%;
+    background:radial-gradient(circle at 60% 40%, color-mix(in srgb,var(--teal) 13%,#fff), transparent 64%);pointer-events:none}
+  .show-in{position:relative;z-index:2;width:min(1080px,100%);margin-inline:auto;display:grid;grid-template-columns:1.05fr .95fr;gap:clamp(28px,5vw,72px);align-items:center}
 
-  /* ── 3 · APRENDE TU VOZ (promesa; la personalidad llega tras conocerte) ── */
-  .voz{padding:66px 0;border-top:1px solid var(--line)}
-  .voz .demo{margin-bottom:16px}
-  .voz h2{font-family:var(--disp);font-weight:600;font-size:clamp(23px,5vw,30px);line-height:1.2;letter-spacing:-.02em;color:var(--ink);max-width:18ch}
-  .voz p{margin-top:16px;font-size:16.5px;line-height:1.55;color:var(--muted);max-width:42ch}
-  .voz p b{color:var(--ink);font-weight:600}
+  /* — izquierda: pitch — */
+  .pitch{max-width:530px}
+  .eyebrow{display:inline-flex;align-items:center;gap:9px;font-family:var(--disp);font-weight:600;font-size:13px;letter-spacing:.01em;color:#00827e;
+    background:color-mix(in srgb,var(--teal) 9%,#fff);border:1px solid color-mix(in srgb,var(--teal) 24%,#fff);padding:6px 14px;border-radius:999px}
+  .eyebrow .pulse{width:8px;height:8px;border-radius:50%;background:var(--teal);animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--teal) 55%,transparent)}70%{box-shadow:0 0 0 9px transparent}100%{box-shadow:0 0 0 0 transparent}}
+  .pitch h2{margin:18px 0 0;font-family:var(--disp);font-weight:700;font-size:clamp(32px,3.9vw,52px);line-height:1.03;letter-spacing:-.032em;color:var(--tinta);text-wrap:balance}
+  .pitch h2 .hl{color:var(--magenta)}
+  .pitch .lead{margin:15px 0 0;font-size:clamp(16px,1.15vw,18px);line-height:1.55;color:var(--muted);max-width:42ch}
+  .pills{display:flex;flex-wrap:wrap;gap:9px;margin:24px 0 0}
+  .pill{display:inline-flex;align-items:center;gap:8px;font-family:var(--disp);font-weight:600;font-size:13.5px;color:var(--ink);
+    background:#fff;border:1px solid var(--line);border-radius:999px;padding:9px 15px;box-shadow:0 8px 18px -14px rgba(40,22,28,.4);
+    transition:transform .2s var(--ease),box-shadow .2s var(--ease)}
+  .pill:hover{transform:translateY(-2px);box-shadow:0 14px 24px -14px rgba(239,67,117,.4)}
+  .pill .d{width:8px;height:8px;border-radius:50%;flex:none}
+  .pill.a .d{background:var(--teal)} .pill.b .d{background:var(--coral)} .pill.c .d{background:var(--magenta)}
+  .cta-row{margin:32px 0 0;display:flex;flex-direction:column;align-items:flex-start;gap:12px}
+  .enter{display:inline-flex;align-items:center;gap:10px;border:0;cursor:pointer;text-decoration:none;font-family:var(--disp);font-weight:600;font-size:17px;color:#fff;
+    padding:17px 34px;border-radius:16px;background:var(--grad);box-shadow:var(--glow);transition:transform .2s var(--ease),box-shadow .2s var(--ease)}
+  .enter:hover{transform:translateY(-2px)} .enter:active{transform:translateY(1px);box-shadow:var(--glow-active)}
+  .enter .arw{display:inline-block;transition:transform .2s var(--ease)} .enter:hover .arw{transform:translateX(4px)}
+  .micro{font-size:13.5px;color:var(--muted)} .micro b{color:var(--ink);font-weight:600}
 
-  /* ── 4 · RESULTADOS DEMOSTRATIVOS (honestos) ── */
-  .res{padding:66px 0;border-top:1px solid var(--line)}
-  .res .demo{margin-bottom:16px}
-  .res .pre{font-size:16px;color:var(--tinta);margin-bottom:16px;max-width:26ch;line-height:1.45;font-weight:500}
-  .num{font-family:var(--disp);font-weight:600;font-size:clamp(54px,15vw,84px);line-height:.9;letter-spacing:-.035em;color:var(--magenta)}
-  .res .after{margin-top:12px;font-size:15px;color:var(--muted)}
-  .spark{display:flex;align-items:flex-end;gap:6px;height:44px;margin-top:24px;max-width:260px}
-  .spark i{flex:1;border-radius:4px 4px 0 0;background:linear-gradient(180deg,var(--teal),#00827e)}
+  /* — derecha: el CELULAR (SHOW, no tell) — */
+  .stageph{display:flex;justify-content:center;position:relative}
+  .phone{position:relative;width:min(300px,80vw);background:#fff;border-radius:40px;padding:11px;border:1px solid var(--line);
+    box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 44px 84px -32px rgba(40,22,28,.5),0 20px 44px -24px rgba(239,67,117,.32);
+    animation:floaty 6.5s ease-in-out infinite}
+  @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+  .phone .scr{border-radius:30px;overflow:hidden;background:#fff;border:1px solid var(--line)}
+  .pbar{display:flex;align-items:center;gap:9px;padding:11px 13px}
+  .pav{width:33px;height:33px;border-radius:50%;background:var(--grad);color:#fff;font-family:var(--disp);font-weight:700;font-size:15px;display:grid;place-items:center;flex:none}
+  .pname{font-family:var(--disp);font-weight:600;font-size:14px;color:var(--tinta);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pmore{color:var(--muted);font-weight:700;letter-spacing:1.5px;font-size:15px}
+  .pimg{position:relative;aspect-ratio:1;display:grid;place-items:center;padding:24px;text-align:center;
+    background:radial-gradient(120% 120% at 12% 12%, color-mix(in srgb,var(--coral) 88%,#fff) 0, transparent 52%),
+               radial-gradient(130% 130% at 92% 90%, color-mix(in srgb,var(--magenta) 92%,#000 8%) 0, transparent 58%),
+               linear-gradient(135deg,var(--coral),var(--magenta))}
+  .pimg .pk{font-family:var(--disp);font-weight:700;font-size:clamp(21px,4.6vw,27px);line-height:1.08;letter-spacing:-.02em;color:#fff;text-shadow:0 2px 16px rgba(0,0,0,.2);text-wrap:balance}
+  .pimg .pk small{display:block;font-weight:500;font-size:12.5px;opacity:.94;margin-top:9px}
+  .demo-chip{position:absolute;top:11px;left:11px;font-family:var(--disp);font-weight:600;font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;
+    color:#fff;background:rgba(0,0,0,.26);backdrop-filter:blur(3px);padding:4px 9px;border-radius:999px}
+  .pacts{display:flex;align-items:center;gap:15px;padding:11px 13px 5px}
+  .pacts svg{width:23px;height:23px;color:var(--tinta)}
+  .pacts .sp{flex:1}
+  .plikes{padding:1px 13px 0;font-size:12.5px;font-weight:700;color:var(--tinta)}
+  .pcap{padding:5px 13px 14px;font-size:12.5px;line-height:1.5;color:var(--ink)}
+  .pcap b{font-weight:700}
+  .pflag{position:absolute;right:-14px;bottom:30px;background:#fff;border:1px solid var(--line);border-radius:15px;padding:9px 14px;
+    box-shadow:0 18px 36px -18px rgba(40,22,28,.45);display:flex;align-items:center;gap:10px;font-family:var(--disp);font-weight:600;font-size:12.5px;color:var(--tinta);
+    animation:floaty 6.5s ease-in-out infinite .5s}
+  .pflag .pf-ic{width:27px;height:27px;border-radius:9px;background:color-mix(in srgb,var(--teal) 13%,#fff);display:grid;place-items:center;flex:none}
+  .pflag .pf-ic svg{width:16px;height:16px;color:#00827e}
 
-  /* ── 5 · CTA — pertenencia ── */
-  .cta{padding:80px 0 92px;border-top:1px solid var(--line);text-align:center}
-  .cta h2{font-family:var(--disp);font-weight:600;font-size:clamp(32px,7.4vw,50px);line-height:1.05;letter-spacing:-.03em;color:var(--ink)}
-  .cta p{margin:18px auto 30px;font-size:16.5px;color:var(--muted);line-height:1.5;max-width:30ch}
-  .cta p b{color:var(--ink);font-weight:600}
-  .enter{display:inline-block;border:0;cursor:pointer;text-decoration:none;font-family:var(--disp);font-weight:600;font-size:17px;color:#fff;
-    padding:17px 42px;border-radius:16px;background:var(--grad);box-shadow:var(--glow);transition:transform .2s var(--ease),box-shadow .2s var(--ease)}
-  .enter:active{transform:translateY(1px);box-shadow:var(--glow-active)}
-  .free{margin-top:16px;font-size:13.5px;color:var(--muted)}
-  .foot{padding:26px 0;border-top:1px solid var(--line);text-align:center;color:var(--muted);font-size:13px}
+  /* entrada escalonada al revelar */
+  body.revealed.animate .pitch>*{opacity:0;animation:riseIn .5s var(--ease) both}
+  body.revealed.animate .pitch>*:nth-child(2){animation-delay:.06s}
+  body.revealed.animate .pitch>*:nth-child(3){animation-delay:.12s}
+  body.revealed.animate .pitch>*:nth-child(4){animation-delay:.18s}
+  body.revealed.animate .cta-row{opacity:0;animation:riseIn .5s var(--ease) .24s both}
+  body.revealed.animate .stageph{opacity:0;animation:riseIn .6s var(--ease) .12s both}
+
+  /* ribbon de capacidades */
+  .caps{position:relative;z-index:2;width:min(1000px,100%);margin-inline:auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;
+    gap:10px 20px;border-top:1px solid var(--line);padding-top:22px}
+  .caps-l{font-family:var(--disp);font-weight:600;font-size:13px;color:var(--muted)}
+  .cap{display:inline-flex;align-items:center;gap:7px;font-family:var(--disp);font-weight:600;font-size:13px;color:var(--ink)}
+  .cap svg{width:16px;height:16px;color:var(--magenta);flex:none}
+  body.revealed.animate .caps{opacity:0;animation:riseIn .5s var(--ease) .32s both}
+
+  /* footer slim */
+  .foot{position:relative;z-index:2;padding:22px;text-align:center;color:var(--muted);font-size:13px}
   .foot a{text-decoration:none}.foot a:hover{color:var(--tinta)}
+
+  /* MÓVIL: una columna, corta; el celular arriba (el gancho antes del scroll) */
+  @media(max-width:820px){
+    .show{min-height:0;padding:26px 22px 42px}
+    .show-in{grid-template-columns:1fr;gap:26px;text-align:center}
+    .pitch{max-width:none;display:flex;flex-direction:column;align-items:center}
+    .pitch .lead{max-width:32ch}
+    .pills{justify-content:center}
+    .cta-row{align-items:center;width:100%}
+    .enter{width:100%;max-width:360px;justify-content:center}
+    .stageph{order:-1}
+    .phone{width:min(280px,74vw)}
+    .pflag{right:-6px}
+  }
 
   /* Fichaje: el Home entra desde abajo (una vez, al revelar) */
   body.revealed.animate #exp{animation:riseIn .5s var(--ease) both}
@@ -220,43 +264,65 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <!-- ── 2–5 · LA EXPERIENCIA (se revela al fichar) ── -->
 <main id="exp">
 
-  <!-- 2 · EL CORILLO EMPIEZA A PENSAR (direcciones estratégicas) -->
-  <section class="stage wrap">
-    <span class="demo">Demostración</span>
-    <div class="biz jsname"><?= $h($biz) ?></div>
-    <h2 class="relevo">Tu Corillo prepararía varios posts.</h2>
-    <p class="relevo-sub">Cada uno con un enfoque distinto para <b class="jsname"><?= $h($biz) ?></b>. Deslízalos.</p>
-    <div class="dirs" id="dirs">
-      <article class="dir"><div class="dir-n">Enfoque 01</div><h3>Darte a conocer</h3><p>Llegar a personas de tu zona que todavía no saben que existes.</p></article>
-      <article class="dir"><div class="dir-n">Enfoque 02</div><h3>Mostrar lo que haces</h3><p>Enseñar tu producto o tu servicio para que la gente lo quiera.</p></article>
-      <article class="dir"><div class="dir-n">Enfoque 03</div><h3>Que vuelvan</h3><p>Mantener cerca a tus clientes para que regresen y te recomienden.</p></article>
+  <!-- EL CORILLO YA EMPEZÓ — split: pitch + celular con post de muestra -->
+  <section class="show">
+    <div class="show-in">
+
+      <div class="pitch">
+        <span class="eyebrow"><span class="pulse"></span> El Corillo ya empezó</span>
+        <h2>Mira lo que tu Corillo montaría para <span class="hl jsname"><?= $h($biz) ?></span>.</h2>
+        <p class="lead">Un equipo de marketing que trabaja por ti: crea el post, escribe el caption en tu voz y lo deja listo. Tú solo apruebas desde el celular.</p>
+        <div class="pills">
+          <span class="pill a"><span class="d"></span> Darte a conocer</span>
+          <span class="pill b"><span class="d"></span> Mostrar lo que haces</span>
+          <span class="pill c"><span class="d"></span> Que vuelvan</span>
+        </div>
+        <div class="cta-row">
+          <a class="enter" id="enterCta" href="/crecer/registro.php?negocio=<?= urlencode($negocio) ?>">Crear mi primer post gratis <span class="arw" aria-hidden="true">&rarr;</span></a>
+          <span class="micro"><b>Gratis</b> · sin tarjeta · listo en 1 minuto</span>
+        </div>
+      </div>
+
+      <div class="stageph">
+        <div class="phone">
+          <div class="scr">
+            <div class="pbar">
+              <span class="pav jsinitial"><?= $h(mb_strtoupper(mb_substr($biz, 0, 1))) ?></span>
+              <span class="pname jsname"><?= $h($biz) ?></span>
+              <span class="pmore" aria-hidden="true">•••</span>
+            </div>
+            <div class="pimg">
+              <span class="demo-chip">Demostración</span>
+              <div class="pk"><span class="jsname"><?= $h($biz) ?></span><small>Tu arte y tu voz — hecho por el Corillo.</small></div>
+            </div>
+            <div class="pacts" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20l1.3-4a8.4 8.4 0 0 1-.9-3.9 8.5 8.5 0 0 1 17.6-.6Z"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+              <span class="sp"></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z"/></svg>
+            </div>
+            <div class="plikes">A 128 personas les gusta</div>
+            <div class="pcap"><b class="jsname"><?= $h($biz) ?></b> Así podría verse tu primer post — en tu estilo, listo para publicar.</div>
+          </div>
+          <div class="pflag">
+            <span class="pf-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span>
+            Hecho por el Corillo
+          </div>
+        </div>
+      </div>
+
     </div>
-    <div class="dots" id="dots"><span class="dot on"></span><span class="dot"></span><span class="dot"></span></div>
-    <p class="team-line">Estos son los enfoques que trabajaría tu Corillo. <b>Tu primer post de verdad —en tu voz— lo creas gratis al entrar.</b></p>
-  </section>
 
-  <!-- 3 · APRENDE TU VOZ (la personalidad llega después de conocerte) -->
-  <section class="voz wrap">
-    <span class="demo">Más adelante</span>
-    <h2>Después, aprende a hablar como tú.</h2>
-    <p>Cuando le cuentes de tu negocio, <b>El Corillo</b> escribe con tu personalidad y tu forma de hablar. Por ahora, apenas te está conociendo.</p>
-  </section>
-
-  <!-- 4 · RESULTADOS DEMOSTRATIVOS (honestos) -->
-  <section class="res wrap">
-    <span class="demo">Demostración</span>
-    <p class="pre">Así se ven los números de un negocio con el Corillo.</p>
-    <div class="num">2,082</div>
-    <p class="after">personas alcanzadas en un mes · ejemplo de demostración, no tus resultados.</p>
-    <div class="spark"><i style="height:22%"></i><i style="height:38%"></i><i style="height:31%"></i><i style="height:55%"></i><i style="height:70%"></i><i style="height:64%"></i><i style="height:88%"></i><i style="height:100%"></i></div>
-  </section>
-
-  <!-- 5 · CTA -->
-  <section class="cta wrap">
-    <h2>Ya vimos por dónde podemos empezar.</h2>
-    <p>Crea tu cuenta gratis y el Corillo prepara tu primer post real — con lo que aprenda de <b class="jsname"><?= $h($biz) ?></b>.</p>
-    <a class="enter" id="enterCta" href="/crecer/registro.php?negocio=<?= urlencode($negocio) ?>">Crear mi primer post gratis</a>
-    <div class="free">Sin tarjeta. El Corillo aprende primero sobre tu negocio.</div>
+    <!-- ribbon: todo lo que el Corillo ya hace -->
+    <div class="caps">
+      <span class="caps-l">El Corillo también</span>
+      <span class="cap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M8 4v16"/></svg> Carruseles</span>
+      <span class="cap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="m10 9 5 3-5 3Z"/></svg> Reels con IA</span>
+      <span class="cap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg> Publica solo</span>
+      <span class="cap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg> Responde DMs</span>
+      <span class="cap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M5 10a7 7 0 0 0 14 0M12 19v3"/></svg> Aprende tu voz</span>
+    </div>
   </section>
 
   <footer class="foot">
@@ -279,6 +345,8 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     var seguro = n || 'tu negocio';
     // textContent = XSS-safe; nunca innerHTML con input del usuario.
     document.querySelectorAll('.jsname').forEach(function(el){ el.textContent = seguro; });
+    var ini = (seguro.trim().charAt(0) || 'T').toUpperCase();
+    document.querySelectorAll('.jsinitial').forEach(function(el){ el.textContent = ini; });
     if (cta) cta.setAttribute('href', '/crecer/registro.php?negocio=' + encodeURIComponent(n));
   }
 
