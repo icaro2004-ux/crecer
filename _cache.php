@@ -66,6 +66,41 @@ try {
         echo "\n(Para las pruebas en vivo añade  &t={$__imgkey}  al final.)\n";
         $__test = '';
     }
+    // AUDIT de la BD (read-only): la huella de Crecer para limpiar cuentas de prueba.
+    //   &test=dbaudit&t=WORKERKEY  (&keep=correo para marcar cuál dejar)
+    if ($__test === 'dbaudit' && hash_equals($__imgkey, (string)($_GET['t'] ?? ''))) {
+        echo "\n--- AUDIT BD: huella de Crecer (NO borra nada) ---\n";
+        $keep = strtolower(trim((string)($_GET['keep'] ?? 'jmp.arch.eng@gmail.com')));
+        $cnt = function($sql) use ($pdo){ try { return (int)$pdo->query($sql)->fetchColumn(); } catch (Throwable $e){ return "ERR:".$e->getMessage(); } };
+        echo "usuarios (TABLA COMPARTIDA con Encuéntralo): " . $cnt("SELECT COUNT(*) FROM usuarios") . "\n";
+        echo "  · con marca de Crecer (usuarios de Crecer): " . $cnt("SELECT COUNT(DISTINCT usuario_id) FROM crecer_marca") . "\n";
+        echo "\nTotales tablas crecer_*:\n";
+        foreach (['crecer_marca','crecer_contenido','crecer_suscripciones','crecer_graficas','crecer_publicaciones','crecer_conexiones','crecer_ia_log','crecer_carrusel','crecer_notificaciones','crecer_metricas','crecer_generaciones','crecer_mensajes','crecer_logos','crecer_soporte','crecer_telefono_gratis'] as $t) {
+            echo "  " . str_pad($t,26) . " " . $cnt("SELECT COUNT(*) FROM {$t}") . "\n";
+        }
+        echo "\nMARCAS (id · dueño · creada · #posts · #subs):\n";
+        try {
+            $rows = $pdo->query(
+                "SELECT m.id, m.nombre_negocio, m.usuario_id, u.email, m.created_at,
+                        (SELECT COUNT(*) FROM crecer_contenido c WHERE c.marca_id=m.id) posts,
+                        (SELECT COUNT(*) FROM crecer_suscripciones s WHERE s.marca_id=m.id) subs
+                 FROM crecer_marca m LEFT JOIN usuarios u ON u.id=m.usuario_id
+                 ORDER BY m.id")->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $r) {
+                $marca_keep = (strtolower((string)$r['email']) === $keep);
+                echo "  " . ($marca_keep ? "KEEP→ " : "      ")
+                   . "#{$r['id']} '{$r['nombre_negocio']}' · " . ($r['email'] ?: '(sin dueño)')
+                   . " · {$r['created_at']} · posts={$r['posts']} subs={$r['subs']}\n";
+            }
+        } catch (Throwable $e) { echo "  ERR: ".$e->getMessage()."\n"; }
+        echo "\nUsuario a CONSERVAR: {$keep}\n";
+        try {
+            $q=$pdo->prepare("SELECT id,rol,verificado,created_at FROM usuarios WHERE email=?"); $q->execute([$keep]);
+            if ($u=$q->fetch(PDO::FETCH_ASSOC)) echo "  → existe: user #{$u['id']} rol={$u['rol']} verificado={$u['verificado']} creado={$u['created_at']}\n";
+            else echo "  → OJO: ese email NO existe en usuarios.\n";
+        } catch (Throwable $e) { echo "  ERR: ".$e->getMessage()."\n"; }
+    }
+
     // DIAGNÓSTICO DE PUBLICACIÓN: ¿de verdad salió a las redes o falló calladito?
     //   &test=pub&marca=ID&t=WORKERKEY   (o &email=X para buscar su marca)
     if ($__test === 'pub' && hash_equals($__imgkey, (string)($_GET['t'] ?? ''))) {
