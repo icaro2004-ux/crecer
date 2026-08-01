@@ -177,6 +177,9 @@ $publicado = ($post['estado'] ?? '') === 'publicado';
 // (regenerar es del app pagado) → lo agarramos con la venta, con salida a seguir con su post gratis.
 $ver_venta = (!$publicado && !$acceso_full && ($_GET['venta'] ?? '') === '1');
 $es_venta  = $publicado || $ver_venta;
+// ¿Cliente que YA pagó y se le venció el pago? (para avisarle claro, no venderle como nuevo)
+$sub_gp     = function_exists('suscripcion_de_marca') ? suscripcion_de_marca($pdo, $marca_id) : null;
+$es_vencida = $sub_gp && ($sub_gp['estado'] ?? '') === 'vencida';
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 ?>
 <!DOCTYPE html>
@@ -304,6 +307,11 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   </div>
 
 <?php if ($es_venta): /* ── VENTA: PROMO animada (se corre sola → X para cerrar) sobre el preview + precio ── */ ?>
+  <?php if ($es_vencida): ?>
+  <div style="max-width:430px;margin:14px auto 0;background:#fdeaea;border:1px solid #f5c2c0;color:#b42318;font-weight:600;font-size:14px;line-height:1.5;padding:13px 16px;border-radius:14px">
+    Tu pago no entró (tarjeta vencida o sin fondos, suele ser eso). Tu corillo está <b>en pausa</b> — actualiza tu pago aquí abajo y sigues justo donde quedaste. No se perdió nada.
+  </div>
+  <?php endif; ?>
   <div class="vhero">
     <span class="vk"><?= ico('check-circle') ?> <?= $publicado ? 'Publicado' : 'Tu primer post, listo' ?></span>
     <h1><?= $publicado ? '¡Ya estás <span class="mg">en la calle</span>!' : 'Esto es <span class="mg">solo el comienzo</span>' ?></h1>

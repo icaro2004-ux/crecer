@@ -170,8 +170,37 @@ try {
         case 'invoice.payment_failed':
             $sub_id = $obj['subscription'] ?? null;
             if ($sub_id) {
+                // ¿Es la PRIMERA falla? (para avisar una sola vez, no en cada reintento de Stripe)
+                $q = $pdo->prepare(
+                    "SELECT su.estado, su.marca_id, m.nombre_negocio, u.email
+                       FROM crecer_suscripciones su
+                       JOIN crecer_marca m ON m.id = su.marca_id
+                       LEFT JOIN usuarios u ON u.id = m.usuario_id
+                      WHERE su.stripe_subscription_id = ?");
+                $q->execute([$sub_id]);
+                $info = $q->fetch();
+                $era_primera = $info && $info['estado'] !== 'vencida';
+
                 $pdo->prepare("UPDATE crecer_suscripciones SET estado='vencida' WHERE stripe_subscription_id=?")
                     ->execute([$sub_id]);
+
+                // Aviso con marca al dueño (solo en la 1ra falla; Stripe reintenta varias veces).
+                $correo = (string)($info['email'] ?? '');
+                if ($era_primera && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL) && function_exists('crecer_enviar_email')) {
+                    $portal = 'https://encuentraloahora.com/crecer/panel/precios.php?marca=' . (int)$info['marca_id'];
+                    $cuerpo = 'Tu pago mensual de Crecer no entró (tarjeta vencida o sin fondos, suele ser eso). '
+                            . 'Tu corillo quedó <b>en pausa</b> hasta que actualices el pago — tu contenido y tu marca están guardados, no se pierde nada. '
+                            . 'Actualiza tu tarjeta y sigues donde quedaste.';
+                    $html = function_exists('crecer_email_shell')
+                        ? crecer_email_shell('Tu pago no entró', $cuerpo, [
+                            'eyebrow' => (string)($info['nombre_negocio'] ?? 'Crecer'),
+                            'cta_txt' => 'Actualizar mi pago',
+                            'cta_url' => $portal,
+                            'footer'  => 'Si ya lo resolviste, ignora este correo · Crecer by Encuéntralo.',
+                          ])
+                        : '<div>' . htmlspecialchars($cuerpo, ENT_QUOTES, 'UTF-8') . '</div>';
+                    crecer_enviar_email($correo, 'Tu pago no entró — reactiva tu corillo', $html);
+                }
             }
             break;
 
