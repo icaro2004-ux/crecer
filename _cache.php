@@ -66,6 +66,65 @@ try {
         echo "\n(Para las pruebas en vivo añade  &t={$__imgkey}  al final.)\n";
         $__test = '';
     }
+    // DIAGNÓSTICO DE CORREO. Reporta config + transporte (solo sí/no, sin secretos).
+    // Con &to=email&t=WORKERKEY hace un ENVÍO REAL por SMTP y muestra el ERROR EXACTO
+    // (sin el fallback a mail() que se traga el error en crecer_enviar_email).
+    if ($__test === 'mail') {
+        echo "\n--- Diagnóstico de CORREO (SMTP) ---\n";
+        $ver = fn($n) => (defined($n) && constant($n) !== '')
+            ? ("SÍ ✅ (empieza " . substr((string)constant($n),0,4) . "…, len " . strlen((string)constant($n)) . ")") : "NO ❌";
+        echo "SMTP_HOST   : " . (defined('SMTP_HOST') && SMTP_HOST!=='' ? SMTP_HOST : "VACÍO ❌ (→ usaría mail(), poco fiable)") . "\n";
+        echo "SMTP_USER   : " . $ver('SMTP_USER') . "\n";
+        echo "SMTP_PASS   : " . (defined('SMTP_PASS') && SMTP_PASS!=='' ? ("SÍ ✅ (len " . strlen((string)SMTP_PASS) . ")") : "NO ❌") . "\n";
+        echo "SMTP_PORT   : " . (defined('SMTP_PORT') ? SMTP_PORT : "(default 465)") . "\n";
+        echo "SMTP_FROM   : " . (defined('SMTP_FROM') && SMTP_FROM!=='' ? SMTP_FROM : "(default admin@encuentraloahora.com)") . "\n";
+        require_once __DIR__ . '/includes/notificaciones.php';
+        $tiene_pm = function_exists('crecer_cargar_phpmailer') && crecer_cargar_phpmailer();
+        echo "PHPMailer   : " . ($tiene_pm ? "SÍ ✅" : "NO ❌") . "\n";
+        $usa_smtp = defined('SMTP_HOST') && SMTP_HOST!=='' && $tiene_pm;
+        echo "TRANSPORTE  : " . ($usa_smtp ? "SMTP autenticado ✅" : "mail() ⚠️ (Hostinger lo bota seguido)") . "\n";
+
+        $to = trim((string)($_GET['to'] ?? ''));
+        if ($to !== '' && hash_equals($__imgkey, (string)($_GET['t'] ?? ''))) {
+            echo "\n--- ENVÍO REAL a {$to} (por SMTP, mostrando error crudo) ---\n";
+            if (!$usa_smtp) {
+                echo "No hay SMTP → probando con mail() directo…\n";
+                $ok = @mail($to, '=?UTF-8?B?'.base64_encode('Prueba Crecer (mail)').'?=', 'Prueba de correo por mail().',
+                    "MIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nFrom: " . (defined('SMTP_FROM')&&SMTP_FROM?SMTP_FROM:'admin@encuentraloahora.com') . "\r\n");
+                echo "mail() devolvió: " . ($ok ? "true (pero Hostinger igual lo puede botar)" : "false ❌") . "\n";
+            } else {
+                $dbg = '';
+                try {
+                    $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+                    $mail->SMTPDebug = 2;
+                    $mail->Debugoutput = function($str,$lvl) use (&$dbg){ $dbg .= $str . "\n"; };
+                    $mail->isSMTP();
+                    $mail->Host       = SMTP_HOST;
+                    $mail->SMTPAuth   = true;
+                    $mail->Username   = SMTP_USER;
+                    $mail->Password   = SMTP_PASS;
+                    $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS;
+                    $mail->Port       = defined('SMTP_PORT') ? (int)SMTP_PORT : 465;
+                    $mail->CharSet    = 'UTF-8';
+                    $from = (defined('SMTP_FROM') && SMTP_FROM) ? SMTP_FROM : 'admin@encuentraloahora.com';
+                    $mail->setFrom($from, 'Crecer');
+                    $mail->addAddress($to);
+                    $mail->Subject = 'Prueba SMTP · Crecer';
+                    $mail->isHTML(true);
+                    $mail->Body = 'Si ves esto, el SMTP de Crecer funciona.';
+                    $mail->send();
+                    echo "RESULTADO: ✅ SMTP aceptó el correo. Revisa la bandeja (y spam).\n";
+                } catch (Throwable $e) {
+                    echo "RESULTADO: ❌ SMTP FALLÓ.\n";
+                    echo "ERROR EXACTO: " . $e->getMessage() . "\n";
+                    echo "\n--- Conversación SMTP (últimas líneas) ---\n" . substr($dbg, -1200) . "\n";
+                }
+            }
+        } else {
+            echo "\n(Para envío real: &test=mail&to=TUCORREO&t={$__imgkey})\n";
+        }
+    }
+
     // DIAGNÓSTICO STRIPE (solo sí/no + qué config se cargó; NUNCA los valores). No gasta.
     if ($__test === 'stripe') {
         echo "\n--- Diagnóstico STRIPE (sin exponer secretos) ---\n";
