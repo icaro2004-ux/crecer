@@ -21,11 +21,14 @@
 //       del alcance web. Crear una sola vez por el File Manager de hPanel.
 //       En Hostinger __DIR__ = /home/USER/public_html/crecer/includes, así que
 //       dirname(__DIR__, 3) = /home/USER  (la carpeta home).
+// CR-QA-006: el config ROOT (prod) va PRIMERO — así un includes/config.local.php
+// que quede stale tras un push NO puede secuestrar prod con valores de dev. En
+// local no existen las rutas root, así que cae a includes/config.local.php igual.
 $config_candidates = [
     getenv('CRECER_CONFIG') ?: null,
-    __DIR__ . '/config.local.php',
-    dirname(__DIR__, 3) . '/crecer-config.local.php',   // /home/USER/crecer-config.local.php
-    dirname(__DIR__, 2) . '/crecer-config.local.php',   // un nivel sobre public_html como respaldo
+    dirname(__DIR__, 3) . '/crecer-config.local.php',   // /home/USER/crecer-config.local.php (PROD — preferido)
+    dirname(__DIR__, 2) . '/crecer-config.local.php',   // un nivel sobre public_html (respaldo PROD)
+    __DIR__ . '/config.local.php',                       // dev local (último; en prod se borra en push)
 ];
 foreach ($config_candidates as $cfg) {
     if ($cfg && is_file($cfg)) { require_once $cfg; break; }
