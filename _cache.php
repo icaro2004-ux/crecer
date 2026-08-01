@@ -66,6 +66,42 @@ try {
         echo "\n(Para las pruebas en vivo añade  &t={$__imgkey}  al final.)\n";
         $__test = '';
     }
+    // DIAGNÓSTICO DE ACCESO/PAYWALL: por qué un email entra (o no) al app.
+    //   &test=gate&email=X&t=WORKERKEY
+    if ($__test === 'gate' && hash_equals($__imgkey, (string)($_GET['t'] ?? ''))) {
+        require_once __DIR__ . '/includes/suscripcion.php';
+        require_once __DIR__ . '/includes/auth.php';
+        require_once __DIR__ . '/includes/gateway.php';
+        $em = strtolower(trim((string)($_GET['email'] ?? '')));
+        echo "\n--- Diagnóstico de ACCESO (paywall) ---\n";
+        echo "APP_ENV               : " . (defined('APP_ENV') ? APP_ENV : '(no def)') . "\n";
+        echo "crecer_entorno_local(): " . (crecer_entorno_local() ? "SÍ ⚠️ (baja defensas)" : "NO ✅ (producción)") . "\n";
+        echo "CRECER_DEV_ACTIVAR    : " . (defined('CRECER_DEV_ACTIVAR') && CRECER_DEV_ACTIVAR ? "true" . (crecer_entorno_local()?" y APLICA ⚠️":" pero IGNORADO en prod ✅") : "off ✅") . "\n";
+        echo "CRECER_TEST_EMAILS    : " . (defined('CRECER_TEST_EMAILS') && CRECER_TEST_EMAILS!=='' ? "definido (" . count(explode(',',CRECER_TEST_EMAILS)) . " emails)" : "vacío") . "\n";
+        if ($em !== '') {
+            echo "\nemail probado: {$em}\n";
+            echo "  activacion_de_prueba(): " . (activacion_de_prueba($em) ? "SÍ ⚠️ (entra gratis SIN Stripe — es cuenta de prueba)" : "NO ✅ (va a pagar por Stripe)") . "\n";
+            $u = $pdo->prepare("SELECT id, rol, verificado FROM usuarios WHERE email=? AND deleted_at IS NULL");
+            $u->execute([$em]); $usr = $u->fetch(PDO::FETCH_ASSOC);
+            if (!$usr) { echo "  usuario: NO existe\n"; }
+            else {
+                echo "  usuario #{$usr['id']} rol={$usr['rol']} verificado={$usr['verificado']}\n";
+                $mk = marca_del_usuario($pdo, (int)$usr['id']);
+                if (!$mk) { echo "  marca: ninguna\n"; }
+                else {
+                    $mid = (int)$mk['id'];
+                    $su = suscripcion_de_marca($pdo, $mid);
+                    echo "  marca #{$mid} '{$mk['nombre_negocio']}'\n";
+                    echo "  suscripción estado: " . ($su['estado'] ?? '(ninguna)') . "\n";
+                    echo "  marca_es_pagada()  : " . (marca_es_pagada($pdo,$mid) ? "SÍ (tiene acceso al app)" : "NO") . "\n";
+                    echo "  gateway_estado()   : " . gateway_estado($pdo, $usr, $mk) . "  (app=paga/admin · venta/post/entrevista=aún no)\n";
+                }
+            }
+        } else {
+            echo "\n(Añade &email=elcorreo para ver por qué entra o no.)\n";
+        }
+    }
+
     // DIAGNÓSTICO DE CORREO. Reporta config + transporte (solo sí/no, sin secretos).
     // Con &to=email&t=WORKERKEY hace un ENVÍO REAL por SMTP y muestra el ERROR EXACTO
     // (sin el fallback a mail() que se traga el error en crecer_enviar_email).
