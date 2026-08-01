@@ -66,6 +66,44 @@ try {
         echo "\n(Para las pruebas en vivo añade  &t={$__imgkey}  al final.)\n";
         $__test = '';
     }
+    // DIAGNÓSTICO DE PUBLICACIÓN: ¿de verdad salió a las redes o falló calladito?
+    //   &test=pub&marca=ID&t=WORKERKEY   (o &email=X para buscar su marca)
+    if ($__test === 'pub' && hash_equals($__imgkey, (string)($_GET['t'] ?? ''))) {
+        require_once __DIR__ . '/includes/auth.php';
+        echo "\n--- Diagnóstico de PUBLICACIÓN a redes ---\n";
+        $mid = (int)($_GET['marca'] ?? 0);
+        $em = strtolower(trim((string)($_GET['email'] ?? '')));
+        if (!$mid && $em !== '') {
+            $q=$pdo->prepare("SELECT m.id FROM crecer_marca m JOIN usuarios u ON u.id=m.usuario_id WHERE u.email=? ORDER BY m.id DESC LIMIT 1");
+            $q->execute([$em]); $mid=(int)$q->fetchColumn();
+        }
+        if (!$mid) { echo "Pasa &marca=ID (o &email=correo).\n"; }
+        else {
+            echo "marca #{$mid}\n";
+            // Conexión de Meta
+            try {
+                $cx = $pdo->prepare("SELECT plataforma,estado,ig_user_id,fb_page_id, (page_access_token IS NOT NULL AND page_access_token<>'') tiene_token FROM crecer_conexiones WHERE marca_id=?");
+                $cx->execute([$mid]); $rows=$cx->fetchAll(PDO::FETCH_ASSOC);
+                echo "\nConexiones:\n";
+                if (!$rows) echo "  (ninguna — NO hay redes conectadas → nada puede salir)\n";
+                foreach ($rows as $r) echo "  - {$r['plataforma']} estado={$r['estado']} ig_user=" . ($r['ig_user_id']?'sí':'no') . " fb_page=" . ($r['fb_page_id']?'sí':'no') . " token=" . ($r['tiene_token']?'sí':'NO') . "\n";
+            } catch (Throwable $e) { echo "  (no pude leer crecer_conexiones: ".$e->getMessage().")\n"; }
+            // Últimos intentos de publicación
+            try {
+                $pq = $pdo->prepare("SELECT contenido_id,plataforma,estado,external_id,permalink,error_msg,created_at FROM crecer_publicaciones WHERE marca_id=? ORDER BY id DESC LIMIT 12");
+                $pq->execute([$mid]); $pr=$pq->fetchAll(PDO::FETCH_ASSOC);
+                echo "\nÚltimos intentos de publicación:\n";
+                if (!$pr) echo "  (ninguno registrado — el post NUNCA intentó salir a Meta)\n";
+                foreach ($pr as $r) {
+                    echo "  #{$r['contenido_id']} {$r['plataforma']} [{$r['estado']}] {$r['created_at']}\n";
+                    if (!empty($r['external_id'])) echo "     external_id={$r['external_id']}" . (!empty($r['permalink'])?"  link={$r['permalink']}":"") . "\n";
+                    if (!empty($r['error_msg']))  echo "     ERROR: " . substr((string)$r['error_msg'],0,240) . "\n";
+                }
+                echo "\nLECTURA: estado='ok' con external_id = SÍ salió a la red. estado='error' con ERROR = Meta lo rechazó (ahí está el porqué).\n";
+            } catch (Throwable $e) { echo "  (no pude leer crecer_publicaciones: ".$e->getMessage().")\n"; }
+        }
+    }
+
     // DIAGNÓSTICO DE ACCESO/PAYWALL: por qué un email entra (o no) al app.
     //   &test=gate&email=X&t=WORKERKEY
     if ($__test === 'gate' && hash_equals($__imgkey, (string)($_GET['t'] ?? ''))) {

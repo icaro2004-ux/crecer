@@ -177,12 +177,16 @@ function publicar_pieza(PDO $pdo, int $contenido_id, array $override_plataformas
     //    proceso murió a medias (lock viejo >10 min). Sin esto, una pieza atascada
     //    en 'publicando' nunca se recupera. El guard de lock_at evita robarle una
     //    publicación en curso (lock fresco).
+    //    Incluye 'publicado' para PODER AÑADIR OTRA RED después: si ya salió en IG y
+    //    el dueño luego le da a FB, hay que re-entrar; ya_publicada() salta la red que
+    //    ya salió OK (no duplica) y publica solo la que falta. Sin esto, el 2do clic
+    //    daba "no apto o ya tomado".
     $tok = bin2hex(random_bytes(8));
     $lock = $pdo->prepare(
         "UPDATE crecer_contenido
             SET estado='publicando', lock_token=?, lock_at=NOW(), pub_intentos=pub_intentos+1
           WHERE id=?
-            AND estado IN ('aprobado','programado','fallido','publicando')
+            AND estado IN ('aprobado','programado','fallido','publicando','publicado')
             AND (lock_token IS NULL OR lock_at < (NOW() - INTERVAL 10 MINUTE))");
     $lock->execute([$tok, $contenido_id]);
     if ($lock->rowCount() === 0) {
