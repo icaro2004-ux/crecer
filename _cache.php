@@ -61,9 +61,9 @@ try {
     $__test = $_GET['test'] ?? '';
     // Llave FIJA propia (NO el CRON_TOKEN de prod, que no cuadra — mismo lío del SMS).
     // Estas pruebas gastan dinero → protegidas con esta llave. Rota/borra luego.
-    $__imgkey = 'crimg_7k2x';
+    $__imgkey = (defined('CRECER_WORKER_KEY') && CRECER_WORKER_KEY !== '') ? CRECER_WORKER_KEY : 'crimg_7k2x';
     if (in_array($__test, ['img','arte','imgmanual','compare','v3async'], true) && !hash_equals($__imgkey, (string)($_GET['t'] ?? ''))) {
-        echo "\n(Para las pruebas en vivo añade  &t=crimg_7k2x  al final.)\n";
+        echo "\n(Para las pruebas en vivo añade  &t={$__imgkey}  al final.)\n";
         $__test = '';
     }
     if ($__test === 'img') {
@@ -118,7 +118,7 @@ try {
         if (!isset($variantes[$one])) {
             echo "Corre estas 3 URLs, UNA por UNA (cada una tarda ~40s):\n";
             foreach (array_keys($variantes) as $k)
-                echo "  https://" . ($_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com') . "/crecer/_cache.php?k=crecer&test=compare&t=crimg_7k2x&one={$k}\n";
+                echo "  https://" . ($_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com') . "/crecer/_cache.php?k=crecer&test=compare&t={$__imgkey}&one={$k}\n";
         } else {
             try {
                 require_once __DIR__ . '/includes/agentes.php';

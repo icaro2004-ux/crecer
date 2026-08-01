@@ -11,7 +11,7 @@
 //  tomar 1-3 min y ya no depende de mantener la conexión HTTP abierta.
 // ============================================================
 
-const SALA_WORKER_KEY = 'crsala_8q3z';
+if (!defined('SALA_WORKER_KEY')) define('SALA_WORKER_KEY', (defined('CRECER_WORKER_KEY') && CRECER_WORKER_KEY !== '') ? CRECER_WORKER_KEY : 'crsala_8q3z');
 
 function _sala_set(PDO $pdo, int $id, array $f): void {
     if (!$f) return;

@@ -857,4 +857,4 @@ function reels_estado(PDO $pdo, int $id): ?array {
 }
 
 // Llave fija del worker (no es público). Aislada del resto.
-if (!defined('REELS_WORKER_KEY')) define('REELS_WORKER_KEY', 'crreel_9m4v');
+if (!defined('REELS_WORKER_KEY')) define('REELS_WORKER_KEY', (defined('CRECER_WORKER_KEY') && CRECER_WORKER_KEY !== '') ? CRECER_WORKER_KEY : 'crreel_9m4v');

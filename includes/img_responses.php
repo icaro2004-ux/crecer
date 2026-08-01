@@ -11,7 +11,7 @@
 // ============================================================
 require_once __DIR__ . '/ia.php';
 
-const ARTE_WORKER_KEY = 'crarte_5x8p';
+if (!defined('ARTE_WORKER_KEY')) define('ARTE_WORKER_KEY', (defined('CRECER_WORKER_KEY') && CRECER_WORKER_KEY !== '') ? CRECER_WORKER_KEY : 'crarte_5x8p');
 
 /** ¿Está activo el motor Responses para producción? */
 function img_resp_activo(): bool {

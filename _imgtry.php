@@ -12,7 +12,13 @@ require __DIR__ . '/includes/ia.php';
 require __DIR__ . '/includes/agentes.php';
 require __DIR__ . '/includes/image_messenger.php';
 
-if (($_GET['k'] ?? '') !== 'crecer') { http_response_code(403); exit('Añade ?k=crecer'); }
+// Herramienta INTERNA (gasta API): SOLO administradores (auth real, no ?k= público).
+require __DIR__ . '/includes/auth.php';
+requiere_login();
+$usuario = usuario_actual($pdo);
+if (!(($usuario['rol'] ?? '') === 'admin' || (function_exists('activacion_de_prueba') && activacion_de_prueba($usuario['email'] ?? null)))) {
+    http_response_code(403); exit('Solo administradores.');
+}
 
 /** Carga un experimento por id (o null). */
 function lab_exp(PDO $pdo, int $id): ?array {

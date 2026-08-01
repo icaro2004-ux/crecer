@@ -12,6 +12,8 @@
 //  prompt (nada de rulebook) sin informar. (strict=true en el director.)
 // ============================================================
 
+if (!defined('GEN_WORKER_KEY')) define('GEN_WORKER_KEY', (defined('CRECER_WORKER_KEY') && CRECER_WORKER_KEY !== '') ? CRECER_WORKER_KEY : 'crimg_7k2x');
+
 function _gen_set(PDO $pdo, int $id, array $f): void {
     if (!$f) return;
     $set = []; $vals = [];
@@ -30,7 +32,7 @@ function gen_encolar(PDO $pdo, int $marca_id, string $copy, array $opts = []): i
 /** Dispara el worker por auto-HTTP, fire-and-forget (el worker responde YA y sigue por detrás). */
 function gen_disparar(int $id): void {
     $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
-    $url  = 'https://' . $host . '/crecer/panel/gen_worker.php?id=' . $id . '&key=crimg_7k2x';
+    $url  = 'https://' . $host . '/crecer/panel/gen_worker.php?id=' . $id . '&key=' . GEN_WORKER_KEY;
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,

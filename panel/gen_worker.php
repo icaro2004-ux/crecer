@@ -10,7 +10,7 @@ require_once __DIR__ . '/../includes/gen_async.php';
 
 $id  = (int)($_GET['id'] ?? 0);
 $key = (string)($_GET['key'] ?? '');
-if (!$id || !hash_equals('crimg_7k2x', $key)) { http_response_code(403); exit('no'); }
+if (!$id || !hash_equals(GEN_WORKER_KEY, $key)) { http_response_code(403); exit('no'); }
 
 // Responde YA al que disparó; el trabajo sigue por detrás.
 header('Content-Type: text/plain; charset=utf-8');

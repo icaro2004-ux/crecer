@@ -76,6 +76,12 @@ define('CRON_TOKEN', '');
 // Si se deja vacío, cae a jmp.arch.eng@gmail.com.
 define('REPORTE_EMAIL', '');
 
+// Llave secreta de los workers async internos (arte, carrusel, gen, reels, sala, publicar).
+// Vacío = cada worker usa su literal por defecto (solo dev). En PROD PONLE un valor ALEATORIO
+// (ej. bin2hex(random_bytes(16))) para que nadie dispare tus workers de generación desde el
+// repo público y te queme los créditos de API. Rota este valor antes de hacer público el repo.
+define('CRECER_WORKER_KEY', '');
+
 // ── MODO PRUEBA (sandbox) — activar "Activar Crecer" SIN Stripe ──────────────
 // Para probar el flujo completo con cuentas de prueba, sin cobrar.
 //

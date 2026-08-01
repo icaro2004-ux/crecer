@@ -12,7 +12,7 @@
 require_once __DIR__ . '/agentes.php';
 require_once __DIR__ . '/notif.php';
 
-const CARRUSEL_WORKER_KEY = 'crcarr_8w3z';
+if (!defined('CARRUSEL_WORKER_KEY')) define('CARRUSEL_WORKER_KEY', (defined('CRECER_WORKER_KEY') && CRECER_WORKER_KEY !== '') ? CRECER_WORKER_KEY : 'crcarr_8w3z');
 const CARRUSEL_MIN = 3;   // mínimo útil
 const CARRUSEL_MAX = 5;   // tope del producto (IG permite 10; nosotros 5, no exagerar)
 

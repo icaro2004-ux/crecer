@@ -21,7 +21,7 @@
 require_once __DIR__ . '/meta.php';
 require_once __DIR__ . '/suscripcion.php';   // cupo_registrar_publicacion()
 
-const PUBLICAR_WORKER_KEY = 'crpub_6t1q';
+if (!defined('PUBLICAR_WORKER_KEY')) define('PUBLICAR_WORKER_KEY', (defined('CRECER_WORKER_KEY') && CRECER_WORKER_KEY !== '') ? CRECER_WORKER_KEY : 'crpub_6t1q');
 
 /**
  * Dispara la publicación de una pieza en BACKGROUND (fire-and-forget). Para

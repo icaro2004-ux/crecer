@@ -10,7 +10,7 @@
 //  agentes trabajando en tiempo real. No toca ninguna lógica existente.
 // ============================================================
 
-const RELEVO_WORKER_KEY = 'crrelevo_7k2n';
+if (!defined('RELEVO_WORKER_KEY')) define('RELEVO_WORKER_KEY', (defined('CRECER_WORKER_KEY') && CRECER_WORKER_KEY !== '') ? CRECER_WORKER_KEY : 'crrelevo_7k2n');
 
 /**
  * Marca en crecer_ia_log un hito del relevo (inicio/fin) como 'kernel'
