@@ -70,6 +70,9 @@ try {
     //   &test=dbaudit&t=WORKERKEY  (&keep=correo para marcar cuál dejar)
     if ($__test === 'dbaudit' && hash_equals($__imgkey, (string)($_GET['t'] ?? ''))) {
         echo "\n--- AUDIT BD: huella de Crecer (NO borra nada) ---\n";
+        echo "DB del app (config DB_NAME): " . (defined('DB_NAME') ? DB_NAME : '(?)') . "\n";
+        try { echo "DB conectada (DATABASE()): " . $pdo->query("SELECT DATABASE()")->fetchColumn() . "\n"; } catch (Throwable $e) {}
+        try { echo "marcas de prueba que AÚN existen (2,3,4,58): " . $pdo->query("SELECT GROUP_CONCAT(id) FROM crecer_marca WHERE id IN (2,3,4,58)")->fetchColumn() . "\n"; } catch (Throwable $e) {}
         $keep = strtolower(trim((string)($_GET['keep'] ?? 'jmp.arch.eng@gmail.com')));
         $cnt = function($sql) use ($pdo){ try { return (int)$pdo->query($sql)->fetchColumn(); } catch (Throwable $e){ return "ERR:".$e->getMessage(); } };
         echo "usuarios (TABLA COMPARTIDA con Encuéntralo): " . $cnt("SELECT COUNT(*) FROM usuarios") . "\n";
