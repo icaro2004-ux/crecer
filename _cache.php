@@ -66,6 +66,42 @@ try {
         echo "\n(Para las pruebas en vivo añade  &t={$__imgkey}  al final.)\n";
         $__test = '';
     }
+    // DIAGNÓSTICO STRIPE (solo sí/no + qué config se cargó; NUNCA los valores). No gasta.
+    if ($__test === 'stripe') {
+        echo "\n--- Diagnóstico STRIPE (sin exponer secretos) ---\n";
+        // ¿Cuál archivo de config existe y se cargaría PRIMERO? (misma lista que db.php)
+        $cands = [
+            getenv('CRECER_CONFIG') ?: null,
+            dirname(__DIR__) . '/crecer-config.local.php',          // ROOT prod (aquí __DIR__ = /crecer)
+            dirname(__DIR__, 2) . '/crecer-config.local.php',       // respaldo prod
+            __DIR__ . '/includes/config.local.php',                 // dev local
+        ];
+        echo "Config candidates (el PRIMERO que exista, gana):\n";
+        $cargado = null;
+        foreach ($cands as $c) {
+            if (!$c) continue;
+            $existe = is_file($c);
+            if ($existe && $cargado === null) $cargado = $c;
+            echo "  " . ($existe ? "EXISTE  " : "no      ") . $c . ($existe && $cargado === $c ? "   <== SE CARGA ESTE\n" : "\n");
+        }
+        $ver = fn($n) => (defined($n) && constant($n) !== '') ? ("SÍ ✅ (len " . strlen((string)constant($n)) . ", empieza " . substr((string)constant($n),0,8) . "…)") : "NO ❌";
+        echo "\nSTRIPE_SECRET_KEY      : " . $ver('STRIPE_SECRET_KEY') . "\n";
+        echo "STRIPE_PUBLISHABLE_KEY : " . $ver('STRIPE_PUBLISHABLE_KEY') . "\n";
+        echo "STRIPE_WEBHOOK_SECRET  : " . $ver('STRIPE_WEBHOOK_SECRET') . "\n";
+        // ¿En qué modo está la secret? (test vs live) — el prefijo NO es secreto.
+        if (defined('STRIPE_SECRET_KEY') && STRIPE_SECRET_KEY !== '') {
+            $pref = substr(STRIPE_SECRET_KEY, 0, 7);
+            echo "Modo de la secret      : " . (strpos($pref,'sk_live')===0 ? "LIVE ✅ (cobro real)" : (strpos($pref,'sk_test')===0 ? "TEST ⚠️ (aún sandbox)" : "??? ($pref)")) . "\n";
+        }
+        // ¿Los planes ya tienen price_id?
+        try {
+            echo "\nPlanes en la BD:\n";
+            foreach ($pdo->query("SELECT slug, precio_mensual, stripe_price_id FROM crecer_planes ORDER BY orden") as $r) {
+                echo "  " . str_pad($r['slug'],10) . " \$" . $r['precio_mensual'] . "  price_id=" . ($r['stripe_price_id'] ?: "(VACÍO ❌)") . "\n";
+            }
+        } catch (Throwable $e) { echo "  (no pude leer crecer_planes: " . $e->getMessage() . ")\n"; }
+    }
+
     if ($__test === 'img') {
         echo "\n--- Prueba EN VIVO a OpenAI (gpt-image-1) ---\n";
         try {
