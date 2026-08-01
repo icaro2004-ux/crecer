@@ -63,17 +63,23 @@ try {
 }
 
 // ── 2) Código promo (el que teclea el cliente). Reusar si ya existe. ──
-$existe = stripe_api('GET', 'promotion_codes', ['code' => $code, 'limit' => 1]);
-if (!empty($existe['data'][0])) {
-    $pc = $existe['data'][0];
-    echo "· código '{$code}' ya existe ({$pc['id']}) — no lo duplico.\n";
-} else {
-    $pc = stripe_api('POST', 'promotion_codes', [
-        'coupon' => $cupon['id'],
-        'code'   => $code,
-        'active' => 'true',
-    ]);
-    echo "✓ código promo creado: {$pc['code']} ({$pc['id']})\n";
+try {
+    $existe = stripe_api('GET', 'promotion_codes', ['code' => $code, 'limit' => 1]);
+    if (!empty($existe['data'][0])) {
+        $pc = $existe['data'][0];
+        echo "· código '{$code}' ya existe ({$pc['id']}) — no lo duplico.\n";
+    } else {
+        $pc = stripe_api('POST', 'promotion_codes', [
+            'coupon' => $cupon['id'],
+            'code'   => $code,
+            'active' => 'true',
+        ]);
+        echo "✓ código promo creado: {$pc['code']} ({$pc['id']})\n";
+    }
+} catch (Throwable $e) {
+    echo "❌ Paso 2 (código promo) falló: " . $e->getMessage() . "\n";
+    echo "   (El cupón '{$cupon_id}' SÍ existe; solo falta el código que teclea el cliente.)\n";
+    exit;
 }
 
 echo "\nLISTO. El cliente escribe  {$code}  en el checkout (el campo de promo ya está activo).\n";
