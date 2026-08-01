@@ -5,6 +5,7 @@
 require __DIR__ . '/includes/db.php';
 require __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/iconos.php';
+require_once __DIR__ . '/includes/pw_widget.php';
 
 // Recuerda el plan elegido en el landing (para llevarlo al checkout tras el onboarding)
 if (!empty($_GET['plan']) && in_array($_GET['plan'], ['crecer','despegar'], true)) {
@@ -38,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                           $err = 'Completa todos los campos.';
     elseif (!filter_var($val['email'], FILTER_VALIDATE_EMAIL))
                                           $err = 'Ese email no se ve válido.';
-    elseif (strlen($pass) < 8)            $err = 'La contraseña debe tener al menos 8 caracteres.';
+    elseif (!($pv = password_valida($pass))[0]) $err = $pv[1];
     elseif ($pass !== $pass2)             $err = 'Las contraseñas no coinciden.';
     else {
         $dup = $pdo->prepare("SELECT 1 FROM usuarios WHERE email = ?");
@@ -211,11 +212,12 @@ $plan_lbl = ['crecer'=>'Crecer','despegar'=>'Despegar'][$plan_intent] ?? '';
       <input class="f-input" type="email" name="email" required value="<?= $h($val['email']) ?>" placeholder="tu@email.com">
 
       <div class="r2">
-        <div><label class="f-label">Contraseña *</label><input class="f-input" type="password" name="password" required placeholder="Mín. 8 caracteres"></div>
-        <div><label class="f-label">Repítela *</label><input class="f-input" type="password" name="password2" required placeholder="Otra vez"></div>
+        <div><label class="f-label">Contraseña *</label><input class="f-input" type="password" name="password" id="pw1" required placeholder="Mín. 8 caracteres"></div>
+        <div><label class="f-label">Repítela *</label><input class="f-input" type="password" name="password2" id="pw2" required placeholder="Otra vez"></div>
       </div>
+      <?php pw_widget('pw1', 'btnCrear', 'pw2'); ?>
 
-      <button class="btn-pink go-full" type="submit">Crear mi cuenta →</button>
+      <button class="btn-pink go-full" type="submit" id="btnCrear">Crear mi cuenta →</button>
       <p class="trust">Gratis · sin tarjeta · en 1 minuto lo tienes corriendo</p>
     </form>
 

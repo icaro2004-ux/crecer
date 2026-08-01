@@ -18,6 +18,20 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+/**
+ * Valida una contraseña según la política de Crecer (2026-08, "recomienda especial").
+ * OBLIGA: mínimo 8 caracteres + al menos una letra + al menos un número.
+ * El símbolo se RECOMIENDA (suma fuerza en el widget) pero NO se obliga aquí.
+ * Fuente de verdad en el servidor — el JS de pw_widget.php es solo ayuda visual.
+ * Devuelve [true, ''] si pasa, o [false, 'mensaje para el usuario'] si no.
+ */
+function password_valida(string $p): array {
+    if (mb_strlen($p) < 8)           return [false, 'La contraseña debe tener al menos 8 caracteres.'];
+    if (!preg_match('/\p{L}/u', $p)) return [false, 'La contraseña debe incluir al menos una letra.'];
+    if (!preg_match('/[0-9]/', $p))  return [false, 'La contraseña debe incluir al menos un número.'];
+    return [true, ''];
+}
+
 /** Devuelve el usuario logueado (array) o null. Cacheado por request. */
 function usuario_actual(PDO $pdo) {
     static $cache = false;

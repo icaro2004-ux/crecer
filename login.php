@@ -91,9 +91,9 @@ $nf = fn($n) => number_format($n);
   .eye svg{width:19px;height:19px}
   .eye.on{color:var(--teal)}
   .go-full{margin-top:22px;width:100%}
-  .forgot{text-align:center;margin-top:16px;font-size:14px}
-  .forgot a{color:var(--muted);font-weight:500;text-decoration:none}
-  .forgot a:hover{color:var(--ink)}
+  .lbl-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+  .forgot-link{font-size:13px;font-weight:600;color:var(--teal-dark);text-decoration:none;white-space:nowrap}
+  .forgot-link:hover{color:var(--magenta);text-decoration:underline}
   .alt{text-align:center;margin-top:12px;font-size:14px;color:var(--muted);font-weight:400}
   .alt a{color:var(--teal-dark);font-weight:600;text-decoration:none}
   .legal{text-align:center;font-size:12px;color:var(--muted);margin-top:18px}
@@ -145,7 +145,10 @@ $nf = fn($n) => number_format($n);
       <label class="f-label">Email</label>
       <input class="f-input" type="email" name="email" required autofocus value="<?= $h($email) ?>" placeholder="tu@email.com">
 
-      <label class="f-label">Contraseña</label>
+      <div class="lbl-row">
+        <label class="f-label" for="pw">Contraseña</label>
+        <a class="forgot-link" href="/crecer/recuperar.php">¿Olvidaste tu contraseña?</a>
+      </div>
       <div class="pw">
         <input class="f-input" type="password" name="password" id="pw" required placeholder="Tu contraseña">
         <button type="button" class="eye" id="eye" aria-label="Mostrar contraseña"><?= ico('eye') ?></button>
@@ -154,7 +157,6 @@ $nf = fn($n) => number_format($n);
       <button class="btn-pink go-full" type="submit">Entrar →</button>
     </form>
 
-    <p class="forgot"><a href="/crecer/recuperar.php">¿Olvidaste tu contraseña?</a></p>
     <p class="alt">¿No tienes cuenta? <a href="/crecer/registro.php">Créala gratis</a></p>
     <p class="legal">
       <a href="/crecer/terminos.php">Términos</a> ·

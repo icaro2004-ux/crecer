@@ -5,6 +5,8 @@
 // ============================================================
 require __DIR__ . '/includes/db.php';
 require __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/includes/iconos.php';
+require_once __DIR__ . '/includes/pw_widget.php';
 
 $token = $_GET['token'] ?? ($_POST['token'] ?? '');
 $err = ''; $ok_token = false; $user_id = null;
@@ -21,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $ok_token) {
     $p1 = $_POST['password'] ?? '';
     $p2 = $_POST['password2'] ?? '';
     if (!csrf_ok())              $err = 'La sesión expiró. Recarga e intenta otra vez.';
-    elseif (strlen($p1) < 8)     $err = 'La contraseña debe tener al menos 8 caracteres.';
+    elseif (!($pv = password_valida($p1))[0]) $err = $pv[1];
     elseif ($p1 !== $p2)         $err = 'Las contraseñas no coinciden.';
     else {
         $pdo->prepare("UPDATE usuarios SET password=?, updated_at=NOW() WHERE id=?")
@@ -58,7 +60,9 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .pw{position:relative}
   input{width:100%;font-family:var(--font-body);font-size:16px;color:var(--tinta);background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:12px 46px 12px 14px;transition:border-color .15s,box-shadow .15s}
   input:focus{outline:none;border-color:color-mix(in srgb,var(--magenta) 45%,var(--line));box-shadow:0 0 0 3px color-mix(in srgb,var(--magenta) 15%,transparent)}
-  .eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:0;cursor:pointer;font-size:18px;padding:6px;line-height:1;color:var(--muted)}
+  .eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:0;cursor:pointer;padding:6px;line-height:0;color:var(--muted)}
+  .eye svg{width:19px;height:19px;display:block}
+  .eye.on{color:var(--teal)}
   .go{margin-top:20px;width:100%;background:var(--btn-grad);color:#fff;border:0;cursor:pointer;font-family:var(--font-display);font-weight:600;font-size:16px;padding:15px;border-radius:16px;box-shadow:var(--btn-glow);transition:transform .2s var(--ease),box-shadow .2s var(--ease)}
   .go:active{transform:translateY(1px);box-shadow:var(--btn-glow-active)}
   .err{background:#fdeaea;color:#b42318;font-weight:600;font-size:14px;padding:11px 14px;border-radius:12px;margin-bottom:10px;border:1px solid #f5c2c0}
@@ -74,24 +78,25 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
   <div class="card">
     <?php if (!$ok_token): ?>
-      <div class="err">⚠️ Este link no sirve o ya venció (vale por 1 hora). Pide uno nuevo.</div>
+      <div class="err">Este link no sirve o ya venció (vale por 1 hora). Pide uno nuevo.</div>
       <p class="alt" style="margin-top:18px"><a href="/crecer/recuperar.php">Pedir un link nuevo →</a></p>
     <?php else: ?>
-      <?php if ($err): ?><div class="err">⚠️ <?= $h($err) ?></div><?php endif; ?>
+      <?php if ($err): ?><div class="err"><?= $h($err) ?></div><?php endif; ?>
       <form method="post">
         <?= csrf_field() ?>
         <input type="hidden" name="token" value="<?= $h($token) ?>">
-        <label>Nueva contraseña</label>
+        <label for="p1">Nueva contraseña</label>
         <div class="pw">
           <input type="password" name="password" id="p1" required placeholder="Mín. 8 caracteres" autofocus>
-          <button type="button" class="eye" data-for="p1" aria-label="Mostrar contraseña">👁</button>
+          <button type="button" class="eye" data-for="p1" aria-label="Mostrar contraseña"><?= ico('eye') ?></button>
         </div>
-        <label>Repítela</label>
+        <label for="p2">Repítela</label>
         <div class="pw">
           <input type="password" name="password2" id="p2" required placeholder="Otra vez">
-          <button type="button" class="eye" data-for="p2" aria-label="Mostrar contraseña">👁</button>
+          <button type="button" class="eye" data-for="p2" aria-label="Mostrar contraseña"><?= ico('eye') ?></button>
         </div>
-        <button class="go" type="submit">Guardar y entrar →</button>
+        <?php pw_widget('p1', 'btnGuardar', 'p2'); ?>
+        <button class="go" type="submit" id="btnGuardar">Guardar y entrar →</button>
       </form>
     <?php endif; ?>
   </div>
@@ -103,7 +108,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       if(!i) return;
       var show = i.type==='password';
       i.type = show ? 'text' : 'password';
-      b.textContent = show ? '🙈' : '👁';
+      b.classList.toggle('on', show);
     });
   });
 </script>

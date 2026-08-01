@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $link = $base . '/nuevo-password.php?token=' . $token;
             $nombre = htmlspecialchars($usuario['nombre'] ?: 'jefe');
             $cuerpo = "<div style='font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#1a1a24'>"
-                . "<h2>¡Hola, $nombre! 👋</h2>"
+                . "<h2>¡Hola, $nombre!</h2>"
                 . "<p>Pediste cambiar tu contraseña en Crecer. Dale al botón (el link vale por <b>1 hora</b>):</p>"
                 . "<p style='margin:26px 0'><a href='$link' style='background:#e3683f;color:#fff;text-decoration:none;font-weight:bold;padding:13px 24px;border-radius:12px'>Crear contraseña nueva</a></p>"
                 . "<p style='font-size:13px;color:#8a8a98'>Si el botón no abre, copia este link:<br><span style='word-break:break-all'>$link</span></p>"
@@ -86,10 +86,10 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
   <div class="card">
     <?php if ($enviado): ?>
-      <div class="ok">✓ Si existe una cuenta con ese email, te mandamos el link. Revisa tu correo (y el spam por si acaso). Vale por 1 hora.</div>
+      <div class="ok">Si existe una cuenta con ese email, te mandamos el link. Revisa tu correo (y el spam por si acaso). Vale por 1 hora.</div>
       <p class="alt" style="margin-top:18px"><a href="/crecer/login.php">← Volver a entrar</a></p>
     <?php else: ?>
-      <?php if ($err): ?><div class="err">⚠️ <?= $h($err) ?></div><?php endif; ?>
+      <?php if ($err): ?><div class="err"><?= $h($err) ?></div><?php endif; ?>
       <form method="post">
         <?= csrf_field() ?>
         <label>Tu email</label>
