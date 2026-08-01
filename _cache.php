@@ -78,6 +78,10 @@ try {
         echo "crecer_entorno_local(): " . (crecer_entorno_local() ? "SÍ ⚠️ (baja defensas)" : "NO ✅ (producción)") . "\n";
         echo "CRECER_DEV_ACTIVAR    : " . (defined('CRECER_DEV_ACTIVAR') && CRECER_DEV_ACTIVAR ? "true" . (crecer_entorno_local()?" y APLICA ⚠️":" pero IGNORADO en prod ✅") : "off ✅") . "\n";
         echo "CRECER_TEST_EMAILS    : " . (defined('CRECER_TEST_EMAILS') && CRECER_TEST_EMAILS!=='' ? "definido (" . count(explode(',',CRECER_TEST_EMAILS)) . " emails)" : "vacío") . "\n";
+        if (defined('CRECER_TEST_EMAILS') && CRECER_TEST_EMAILS!=='') {
+            echo "  LISTA (borra estos del config para cerrar el bypass):\n";
+            foreach (array_map('trim', explode(',', CRECER_TEST_EMAILS)) as $__e) if ($__e!=='') echo "    - {$__e}\n";
+        }
         if ($em !== '') {
             echo "\nemail probado: {$em}\n";
             echo "  activacion_de_prueba(): " . (activacion_de_prueba($em) ? "SÍ ⚠️ (entra gratis SIN Stripe — es cuenta de prueba)" : "NO ✅ (va a pagar por Stripe)") . "\n";
