@@ -65,6 +65,58 @@ function crecer_enviar_email(string $para, string $asunto, string $cuerpo_html):
 }
 
 /**
+ * Envoltura de email con MARCA Crecer (logo + colores). Email-safe: tablas +
+ * estilos inline, sin CSS externo ni web-fonts (para que se vea bien en Gmail/
+ * Outlook/Apple Mail). $cuerpo_html ya debe venir en HTML.
+ * $opts: eyebrow, cta_txt, cta_url, footer.
+ */
+function crecer_email_shell(string $titulo, string $cuerpo_html, array $opts = []): string {
+    $eyebrow = trim((string)($opts['eyebrow'] ?? ''));
+    $cta_txt = trim((string)($opts['cta_txt'] ?? ''));
+    $cta_url = trim((string)($opts['cta_url'] ?? ''));
+    $footer  = trim((string)($opts['footer'] ?? 'Generado por tu equipo de IA · Crecer by Encuéntralo'));
+    $logo    = 'https://encuentraloahora.com/crecer/assets/brand/crecer-icon.png';
+    $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+    $F = 'font-family:Arial,Helvetica,sans-serif';
+
+    $cta = '';
+    if ($cta_txt !== '' && $cta_url !== '') {
+        $cta = '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:22px 0 2px"><tr>'
+             . '<td align="center" bgcolor="#EF4375" style="border-radius:12px">'
+             . '<a href="' . $e($cta_url) . '" style="display:inline-block;padding:13px 28px;' . $F . ';font-weight:bold;font-size:15px;color:#ffffff;text-decoration:none;border-radius:12px">' . $e($cta_txt) . '</a>'
+             . '</td></tr></table>';
+    }
+
+    return
+      '<div style="background:#f4f5f7;padding:24px 12px;' . $F . '">'
+    . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">'
+    . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border:1px solid #ececec;border-radius:16px;overflow:hidden">'
+    // header (logo + wordmark sobre blanco)
+    . '<tr><td style="padding:20px 26px 14px">'
+    .   '<table role="presentation" cellpadding="0" cellspacing="0"><tr>'
+    .     '<td style="padding-right:10px" valign="middle"><img src="' . $logo . '" width="38" height="42" alt="Crecer" style="display:block;border:0"></td>'
+    .     '<td valign="middle" style="' . $F . ';line-height:1.1"><span style="font-size:19px;font-weight:bold;color:#00A49F">Crecer</span><br><span style="font-size:11px;color:#8a8a8a">by Encuéntralo</span></td>'
+    .   '</tr></table>'
+    . '</td></tr>'
+    // regla de marca (teal · coral · magenta, como el subrayado del landing)
+    . '<tr><td style="font-size:0;line-height:0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
+    .   '<td width="42%" height="4" style="background:#00A49F;font-size:0;line-height:0">&nbsp;</td>'
+    .   '<td width="16%" height="4" style="background:#FF6B3D;font-size:0;line-height:0">&nbsp;</td>'
+    .   '<td width="42%" height="4" style="background:#EF4375;font-size:0;line-height:0">&nbsp;</td>'
+    . '</tr></table></td></tr>'
+    // cuerpo
+    . '<tr><td style="padding:24px 26px 26px">'
+    .   ($eyebrow !== '' ? '<div style="' . $F . ';font-size:12px;font-weight:bold;color:#00A49F;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">' . $e($eyebrow) . '</div>' : '')
+    .   '<div style="' . $F . ';font-size:22px;font-weight:bold;color:#231F20;line-height:1.25;margin-bottom:14px">' . $e($titulo) . '</div>'
+    .   '<div style="' . $F . ';font-size:15px;color:#3a3436;line-height:1.6">' . $cuerpo_html . '</div>'
+    .   $cta
+    . '</td></tr>'
+    // footer
+    . '<tr><td style="padding:16px 26px;background:#fafafa;border-top:1px solid #ececec;' . $F . ';font-size:12px;color:#8a8a8a">' . $e($footer) . '</td></tr>'
+    . '</table></td></tr></table></div>';
+}
+
+/**
  * Correo de ACTIVACIÓN (verificar que es humano). Se envía al registrarse.
  * Sin confirmar el correo, la cuenta no entra ni ve el post de muestra.
  */

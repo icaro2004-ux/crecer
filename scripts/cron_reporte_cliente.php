@@ -94,13 +94,18 @@ foreach ($marcas as $mk) {
         if ($ri) { $optin = (int)$ri['opt']; $correo = (string)($ri['email'] ?? ''); }
     } catch (Throwable $e) { $optin = 0; }  // columna aún no existe → solo in-app
     if ($optin === 1 && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL) && function_exists('crecer_enviar_email')) {
-        $conf = 'https://encuentraloahora.com/crecer/panel/configuracion.php?marca=' . $mid;
-        $nom  = htmlspecialchars((string)$mk['nombre_negocio'], ENT_QUOTES, 'UTF-8');
-        $html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#231F20;line-height:1.55">'
-              . '<div style="font-weight:800;font-size:13px;color:#00A49F;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">' . $nom . ' · Tu semana</div>'
-              . '<div style="font-size:15px">' . htmlspecialchars($mensaje, ENT_QUOTES, 'UTF-8') . '</div>'
-              . '<div style="margin-top:18px"><a href="' . $conf . '" style="background:linear-gradient(135deg,#FF6B3D,#EF4375);color:#fff;text-decoration:none;font-weight:700;padding:11px 20px;border-radius:12px;display:inline-block">Ver mis resultados</a></div>'
-              . '<div style="margin-top:20px;font-size:12px;color:#6E6A67;border-top:1px solid #ECEAE7;padding-top:12px">Te lo manda tu corillo cada semana. ¿No lo quieres? <a href="' . $conf . '" style="color:#6E6A67">Desactívalo en Configuración</a>.</div></div>';
+        $conf   = 'https://encuentraloahora.com/crecer/panel/configuracion.php?marca=' . $mid;
+        $resurl = 'https://encuentraloahora.com/crecer/panel/resultados.php?marca=' . $mid;
+        $body   = htmlspecialchars($mensaje, ENT_QUOTES, 'UTF-8')
+                . '<div style="margin-top:14px;font-size:12.5px;color:#8a8a8a">¿No quieres este resumen? <a href="' . $conf . '" style="color:#8a8a8a">Desactívalo en Configuración</a>.</div>';
+        $html = function_exists('crecer_email_shell')
+            ? crecer_email_shell('Tu resumen de la semana', $body, [
+                'eyebrow' => (string)$mk['nombre_negocio'],
+                'cta_txt' => 'Ver mis resultados',
+                'cta_url' => $resurl,
+                'footer'  => 'Te lo manda tu corillo cada semana · Crecer by Encuéntralo.',
+              ])
+            : '<div>' . htmlspecialchars($mensaje, ENT_QUOTES, 'UTF-8') . '</div>';
         if (crecer_enviar_email($correo, 'Tu resumen de la semana · Crecer', $html)) $emails++;
     }
 }

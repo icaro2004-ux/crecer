@@ -118,13 +118,18 @@ if ($cuerpo === '' || ($r['estado'] ?? '') === 'error' || ($r['modelo'] ?? '') =
     $cuerpo  = $titular . "\n\n" . $hechos;
 }
 
-// ── Email HTML mínimo ──
+// ── Email con MARCA (plantilla crecer_email_shell) ──
 $titular = strtok($cuerpo, "\n") ?: 'Reporte diario';
-$html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#231F20;line-height:1.55">'
-      . '<div style="font-weight:800;font-size:13px;color:#00A49F;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">Crecer · Reporte diario</div>'
-      . '<div style="white-space:pre-wrap;font-size:15px">' . htmlspecialchars($cuerpo, ENT_QUOTES, 'UTF-8') . '</div>'
-      . '<div style="margin-top:20px;font-size:12px;color:#6E6A67;border-top:1px solid #ECEAE7;padding-top:12px">'
-      . 'Generado por tu equipo de IA · ' . date('Y-m-d H:i') . ' AST · datos reales de tu panel.</div></div>';
+$resto   = trim(mb_substr($cuerpo, mb_strlen($titular)));
+$body    = nl2br(htmlspecialchars($resto !== '' ? $resto : $cuerpo, ENT_QUOTES, 'UTF-8'));
+$html = function_exists('crecer_email_shell')
+    ? crecer_email_shell($titular, $body, [
+        'eyebrow' => 'Reporte diario · ' . date('Y-m-d'),
+        'cta_txt' => 'Ver el panel',
+        'cta_url' => 'https://encuentraloahora.com/crecer/panel/admin.php',
+        'footer'  => 'Generado por tu equipo de IA · datos reales de tu panel.',
+      ])
+    : '<div style="white-space:pre-wrap">' . htmlspecialchars($cuerpo, ENT_QUOTES, 'UTF-8') . '</div>';
 
 $asunto = 'Crecer · ' . mb_substr($titular, 0, 80);
 $ok = crecer_enviar_email($destino, $asunto, $html);
