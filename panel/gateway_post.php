@@ -283,7 +283,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .vprice .hook{font-size:15px;font-weight:800;color:var(--magenta,#EF4375);margin:9px 0 4px}
   .vprice .sub{font-size:12.5px;color:var(--muted);margin:0 auto;max-width:36ch;line-height:1.5}
   /* CTA pegajoso */
-  .vcta{position:sticky;bottom:0;margin-top:20px;padding:16px 0 12px;background:linear-gradient(to top,#fff 76%,transparent)}
+  .vcta{position:sticky;bottom:0;z-index:20;margin-top:20px;padding:16px 0 12px;background:linear-gradient(to top,#fff 76%,transparent)}
   .vcta .btn.pri{font-size:17px;padding:17px}
   .vback{margin-top:11px;font-size:14px}
   /* Selector segmentado: la imagen con o sin texto (lo decide el dueño) */
