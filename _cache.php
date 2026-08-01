@@ -66,31 +66,6 @@ try {
         echo "\n(Para las pruebas en vivo añade  &t={$__imgkey}  al final.)\n";
         $__test = '';
     }
-    // LIMPIEZA (DESTRUCTIVO): borra la data de las marcas de prueba 2,3,4,58.
-    //   &test=dbclean&confirm=BORRAR-4-MARCAS&t=WORKERKEY
-    //   Solo tablas crecer_*, jamás usuarios ni Encuéntralo. Reporta filas por tabla.
-    if ($__test === 'dbclean' && hash_equals($__imgkey, (string)($_GET['t'] ?? ''))) {
-        echo "\n--- LIMPIEZA de marcas de prueba (2,3,4,58) ---\n";
-        if (($_GET['confirm'] ?? '') !== 'BORRAR-4-MARCAS') {
-            echo "Falta &confirm=BORRAR-4-MARCAS (candado de seguridad).\n";
-        } else {
-            $tablas = [
-                'crecer_publicaciones','crecer_metricas','crecer_carrusel','crecer_generaciones',
-                'crecer_graficas','crecer_logos','crecer_notificaciones','crecer_publicacion_cupo',
-                'crecer_soporte','crecer_telefono_gratis','crecer_conexiones','crecer_suscripciones',
-                'crecer_mensajes','crecer_contenido','crecer_ia_log',
-            ];
-            $pdo->exec("SET autocommit=1");
-            foreach ($tablas as $t) {
-                try { $st=$pdo->prepare("DELETE FROM {$t} WHERE marca_id IN (2,3,4,58)"); $st->execute(); echo "  " . str_pad($t,26) . " borradas: " . $st->rowCount() . "\n"; }
-                catch (Throwable $e) { echo "  " . str_pad($t,26) . " ERROR: " . $e->getMessage() . "\n"; }
-            }
-            try { $st=$pdo->prepare("DELETE FROM crecer_marca WHERE id IN (2,3,4,58)"); $st->execute(); echo "  " . str_pad('crecer_marca',26) . " borradas: " . $st->rowCount() . "\n"; }
-            catch (Throwable $e) { echo "  crecer_marca ERROR: " . $e->getMessage() . "\n"; }
-            echo "\nVerificación → marcas 2,3,4,58 que quedan: " . ($pdo->query("SELECT GROUP_CONCAT(id) FROM crecer_marca WHERE id IN (2,3,4,58)")->fetchColumn() ?: 'NINGUNA ✅') . "\n";
-        }
-    }
-
     // AUDIT de la BD (read-only): la huella de Crecer para limpiar cuentas de prueba.
     //   &test=dbaudit&t=WORKERKEY  (&keep=correo para marcar cuál dejar)
     if ($__test === 'dbaudit' && hash_equals($__imgkey, (string)($_GET['t'] ?? ''))) {
