@@ -467,7 +467,9 @@ try {
             echo "  email: " . ($av['email'] ? "✅ salió\n" : "❌ no salió\n");
             echo "  SMS  : " . ($av['sms']   ? "✅ salió\n" : "❌ no salió\n");
             if ($av['error'] !== '') echo "  detalle: {$av['error']}\n";
-        } else {
+        } elseif (($_GET['avisa'] ?? '') !== '1') {
+            // Si ya puso &avisa=1 pero le falta la llave, arriba ya se lo dijo:
+            // no se repite el mensaje (confundía ver los dos a la vez).
             echo "\n(Para probar el aviso de verdad añade  &avisa=1  — te llega email + texto.)\n";
         }
     }
