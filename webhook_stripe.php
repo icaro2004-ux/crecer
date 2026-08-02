@@ -88,14 +88,28 @@ function sincronizar_suscripcion(PDO $pdo, array $sub): void {
     ]);
 }
 
-/** Registra un ingreso de Crecer en la tabla `pagos` (libro de ingresos). */
+/**
+ * Registra un ingreso de Crecer en la tabla `pagos` (libro de ingresos).
+ *
+ * CR-F05 · IDEMPOTENCIA ATÓMICA. Antes esto comprobaba con un SELECT y después
+ * insertaba; entre las dos cosas cabe otra entrega del mismo evento (Stripe
+ * reintenta) y el ingreso se registraba dos veces. Ahora el árbitro es el índice
+ * UNIQUE de la BD, que no tiene ventana de carrera:
+ *   · primera entrega  → inserta normal;
+ *   · reenvío/carrera  → choca con la restricción = "ya procesado", se sale limpio
+ *                        y el webhook responde 200 (si no, Stripe seguiría reintentando);
+ *   · cualquier OTRO error de SQL → se relanza, NO se disfraza de éxito.
+ *
+ * El SELECT previo se queda como atajo barato: cubre el caso de que la migración
+ * 2026-08-02_pagos_invoice_unico.sql todavía no esté corrida en ese entorno.
+ * La garantía de verdad es la restricción; esto solo evita el viaje de ida.
+ */
 function registrar_pago(PDO $pdo, array $invoice): void {
     $invoice_id = $invoice['id'] ?? null;
     if (!$invoice_id) return;
-    // Idempotencia: no duplicar si ya registramos esta factura.
     $dup = $pdo->prepare("SELECT 1 FROM pagos WHERE stripe_invoice_id=? LIMIT 1");
     $dup->execute([$invoice_id]);
-    if ($dup->fetchColumn()) return;
+    if ($dup->fetchColumn()) { error_log('[crecer webhook] invoice ya registrado, deduplicado.'); return; }
 
     $sub_id   = $invoice['subscription'] ?? null;
     $cust_id  = $invoice['customer'] ?? null;
@@ -116,15 +130,29 @@ function registrar_pago(PDO $pdo, array $invoice): void {
     $p_ini = !empty($linea['start']) ? date('Y-m-d', (int)$linea['start']) : null;
     $p_fin = !empty($linea['end'])   ? date('Y-m-d', (int)$linea['end'])   : null;
 
-    $pdo->prepare(
-        "INSERT INTO pagos
-            (usuario_id, producto, marca_id, plan, monto, moneda, estado, tipo,
-             stripe_invoice_id, stripe_subscription_id, stripe_customer_id, periodo_inicio, periodo_fin)
-         VALUES (?, 'crecer', ?, ?, ?, ?, 'completado', 'suscripcion', ?, ?, ?, ?, ?)"
-    )->execute([
-        (int)$su['usuario_id'], (int)$su['marca_id'], $plan_slug, $monto, $moneda,
-        $invoice_id, $sub_id, $cust_id, $p_ini, $p_fin,
-    ]);
+    // LA RECLAMACIÓN va PRIMERO. Todo efecto (activar la suscripción, y cualquier
+    // aviso que se añada mañana) ocurre DESPUÉS y solo si esta entrega ganó: si se
+    // deduplicara al final, evitaríamos la fila doble pero mandaríamos el correo dos veces.
+    try {
+        $pdo->prepare(
+            "INSERT INTO pagos
+                (usuario_id, producto, marca_id, plan, monto, moneda, estado, tipo,
+                 stripe_invoice_id, stripe_subscription_id, stripe_customer_id, periodo_inicio, periodo_fin)
+             VALUES (?, 'crecer', ?, ?, ?, ?, 'completado', 'suscripcion', ?, ?, ?, ?, ?)"
+        )->execute([
+            (int)$su['usuario_id'], (int)$su['marca_id'], $plan_slug, $monto, $moneda,
+            $invoice_id, $sub_id, $cust_id, $p_ini, $p_fin,
+        ]);
+    } catch (PDOException $e) {
+        // 1062 = clave duplicada. Es el reenvío del mismo invoice: ya está cobrado
+        // y registrado. Se sale limpio (el webhook responde 200) y NO se repite
+        // ningún efecto. El id del invoice no se escribe en el log: no hace falta.
+        if ((int)($e->errorInfo[1] ?? 0) === 1062) {
+            error_log('[crecer webhook] invoice duplicado, deduplicado por la restricción.');
+            return;
+        }
+        throw $e;   // cualquier otro fallo de SQL sube y termina en 500. No se disfraza.
+    }
 
     // Marcar la suscripción como activa y extender el período pagado.
     $pdo->prepare("UPDATE crecer_suscripciones
@@ -179,10 +207,15 @@ try {
                       WHERE su.stripe_subscription_id = ?");
                 $q->execute([$sub_id]);
                 $info = $q->fetch();
-                $era_primera = $info && $info['estado'] !== 'vencida';
 
-                $pdo->prepare("UPDATE crecer_suscripciones SET estado='vencida' WHERE stripe_subscription_id=?")
-                    ->execute([$sub_id]);
+                // CR-F05 · el UPDATE ES la reclamación, y va ANTES del correo.
+                // Antes se decidía "¿es la primera falla?" leyendo y luego escribiendo:
+                // dos entregas simultáneas leían 'activa' las dos y mandaban el correo
+                // las dos. Ahora solo UNA cambia la fila, y solo esa avisa.
+                $upd = $pdo->prepare("UPDATE crecer_suscripciones SET estado='vencida'
+                                      WHERE stripe_subscription_id=? AND estado<>'vencida'");
+                $upd->execute([$sub_id]);
+                $era_primera = ($upd->rowCount() === 1);
 
                 // Aviso con marca al dueño (solo en la 1ra falla; Stripe reintenta varias veces).
                 $correo = (string)($info['email'] ?? '');
