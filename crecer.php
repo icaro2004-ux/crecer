@@ -23,6 +23,36 @@ $negocio  = crecer_clean_negocio($_GET['negocio'] ?? '');
 $has_name = $negocio !== '';
 $biz      = $has_name ? $negocio : 'tu negocio';   // token visible por defecto
 $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+
+// ── Feed de DEMOSTRACIÓN: posts ficticios de negocios variados (corre solo). ──
+// Muestran QUÉ tipo de posts monta el Corillo, para CUALQUIER negocio. Ficticios.
+// El arte es un gráfico de marca (gradiente + ícono + oferta), no foto de terceros (IP).
+$feed = [
+  ['n'=>'Barbería El Corte','h'=>'barberia_elcorte','c1'=>'#1f2937','c2'=>'#0ea5e9',
+   'ic'=>'<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/>',
+   'kick'=>'Fade impecable','offer'=>'Lun–Sáb · sin cita','cap'=>'El finde se llena rápido — asegura tu turno. 💈✂️'],
+  ['n'=>'DJ Ritmo PR','h'=>'dj_ritmo_pr','c1'=>'#6d28d9','c2'=>'#ec4899',
+   'ic'=>'<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="2" y="14" width="4" height="6" rx="1.5"/><rect x="18" y="14" width="4" height="6" rx="1.5"/>',
+   'kick'=>'Tu fiesta, perfecta','offer'=>'Bodas · Cumpleaños','cap'=>'Fechas de diciembre volando 🔥 Aparta la tuya.'],
+  ['n'=>'Grooming Patitas','h'=>'grooming_patitas','c1'=>'#0f766e','c2'=>'#22c55e',
+   'ic'=>'<circle cx="7" cy="9" r="1.6"/><circle cx="12" cy="7" r="1.6"/><circle cx="17" cy="9" r="1.6"/><ellipse cx="12" cy="15" rx="4.5" ry="3.5"/>',
+   'kick'=>'Tu perro, consentido','offer'=>'Baño + corte','cap'=>'Se va lindo y oliendo rico 🐾 Reserva hoy.'],
+  ['n'=>'Electric Torres','h'=>'electric_torres','c1'=>'#b45309','c2'=>'#f59e0b',
+   'ic'=>'<path d="M13 2 3 14h7l-1 8 10-12h-7Z"/>',
+   'kick'=>'Emergencias 24/7','offer'=>'Estimados gratis','cap'=>'¿Se te fue la luz en un breaker? Te resuelvo. ⚡'],
+  ['n'=>'Lcda. Rivera','h'=>'lcda_rivera','c1'=>'#1e3a5f','c2'=>'#a67c00',
+   'ic'=>'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+   'kick'=>'¿Te chocaron?','offer'=>'Consulta gratis','cap'=>'No firmes nada sin hablar conmigo. Te oriento. ⚖️'],
+  ['n'=>'Dulce Encanto','h'=>'dulce_encanto','c1'=>'#be185d','c2'=>'#fb7185',
+   'ic'=>'<path d="M6 11h12l-1.5 8h-9zM6 11a4 4 0 0 1 .6-8 3 3 0 0 1 5-1 3 3 0 0 1 5 1 4 4 0 0 1 .6 8"/>',
+   'kick'=>'Bizcochos que enamoran','offer'=>'Por encargo','cap'=>'¿Cumpleaños esta semana? Te lo hago a la medida 🎂'],
+  ['n'=>'La Guagua del Sabor','h'=>'guagua_sabor','c1'=>'#b91c1c','c2'=>'#f97316',
+   'ic'=>'<path d="M3 6h11v9H3zM14 9h4l3 3v3h-7z"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/>',
+   'kick'=>'Sabor en la calle','offer'=>'Vie–Dom','cap'=>'Hoy toca pinchos y tostones 🔥 Búscanos en la 65.'],
+  ['n'=>'CPA Núñez','h'=>'cpa_nunez','c1'=>'#1d4ed8','c2'=>'#38bdf8',
+   'ic'=>'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M8 15h2M12 15h2"/>',
+   'kick'=>'Planillas sin estrés','offer'=>'Individuos y negocios','cap'=>'Deadline cerca 📊 Deja que yo me encargue de los números.'],
+];
 ?>
 <!doctype html>
 <html lang="es">
@@ -148,28 +178,35 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   /* — derecha: el CELULAR (SHOW, no tell) — */
   .stageph{display:flex;justify-content:center;position:relative}
   .phone{position:relative;width:min(300px,80vw);background:#fff;border-radius:40px;padding:11px;border:1px solid var(--line);
-    box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 44px 84px -32px rgba(40,22,28,.5),0 20px 44px -24px rgba(239,67,117,.32);
-    animation:floaty 6.5s ease-in-out infinite}
-  @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
-  .phone .scr{border-radius:30px;overflow:hidden;background:#fff;border:1px solid var(--line)}
-  .pbar{display:flex;align-items:center;gap:9px;padding:11px 13px}
-  .pav{width:33px;height:33px;border-radius:50%;background:var(--grad);color:#fff;font-family:var(--disp);font-weight:700;font-size:15px;display:grid;place-items:center;flex:none}
-  .pname{font-family:var(--disp);font-weight:600;font-size:14px;color:var(--tinta);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .pmore{color:var(--muted);font-weight:700;letter-spacing:1.5px;font-size:15px}
-  .pimg{position:relative;aspect-ratio:1;display:grid;place-items:center;padding:24px;text-align:center;
-    background:radial-gradient(120% 120% at 12% 12%, color-mix(in srgb,var(--coral) 88%,#fff) 0, transparent 52%),
-               radial-gradient(130% 130% at 92% 90%, color-mix(in srgb,var(--magenta) 92%,#000 8%) 0, transparent 58%),
-               linear-gradient(135deg,var(--coral),var(--magenta))}
-  .pimg .pk{font-family:var(--disp);font-weight:700;font-size:clamp(21px,4.6vw,27px);line-height:1.08;letter-spacing:-.02em;color:#fff;text-shadow:0 2px 16px rgba(0,0,0,.2);text-wrap:balance}
-  .pimg .pk small{display:block;font-weight:500;font-size:12.5px;opacity:.94;margin-top:9px}
-  .demo-chip{position:absolute;top:11px;left:11px;font-family:var(--disp);font-weight:600;font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;
-    color:#fff;background:rgba(0,0,0,.26);backdrop-filter:blur(3px);padding:4px 9px;border-radius:999px}
-  .pacts{display:flex;align-items:center;gap:15px;padding:11px 13px 5px}
-  .pacts svg{width:23px;height:23px;color:var(--tinta)}
-  .pacts .sp{flex:1}
-  .plikes{padding:1px 13px 0;font-size:12.5px;font-weight:700;color:var(--tinta)}
-  .pcap{padding:5px 13px 14px;font-size:12.5px;line-height:1.5;color:var(--ink)}
-  .pcap b{font-weight:700}
+    box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 44px 84px -32px rgba(40,22,28,.5),0 20px 44px -24px rgba(239,67,117,.32)}
+  @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+  .phone .scr{position:relative;border-radius:30px;overflow:hidden;background:#fff;border:1px solid var(--line)}
+  /* feed que corre solo (loop sin fin; pausa al hover) */
+  .feed{height:clamp(430px,58vh,560px);overflow:hidden;position:relative;
+    -webkit-mask-image:linear-gradient(#0000,#000 6%,#000 94%,#0000);mask-image:linear-gradient(#0000,#000 6%,#000 94%,#0000)}
+  .feed-track{display:flex;flex-direction:column;animation:feedup 64s linear infinite;will-change:transform}
+  .feed:hover .feed-track{animation-play-state:paused}
+  @keyframes feedup{from{transform:translateY(0)}to{transform:translateY(-50%)}}
+  .fpost{border-bottom:9px solid #f2efec}
+  .fbar{display:flex;align-items:center;gap:9px;padding:10px 12px}
+  .fav{width:31px;height:31px;border-radius:50%;color:#fff;font-family:var(--disp);font-weight:700;font-size:14px;display:grid;place-items:center;flex:none}
+  .fmeta{display:flex;flex-direction:column;line-height:1.15;flex:1;min-width:0}
+  .fmeta b{font-family:var(--disp);font-weight:600;font-size:13.5px;color:var(--tinta);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fmeta small{font-size:11px;color:var(--muted)}
+  .fmore{color:var(--muted);font-weight:700;letter-spacing:1.5px;font-size:14px}
+  .fimg{position:relative;aspect-ratio:1;display:flex;flex-direction:column;justify-content:flex-end;padding:16px;overflow:hidden;
+    background:radial-gradient(130% 120% at 14% 12%, color-mix(in srgb,var(--c2) 76%,#fff) 0, transparent 52%),linear-gradient(150deg,var(--c1),var(--c2))}
+  .fic{position:absolute;top:-6px;right:-6px;color:rgba(255,255,255,.20)}
+  .fic svg{width:120px;height:120px}
+  .fk{position:relative;font-family:var(--disp);font-weight:700;font-size:clamp(19px,4.4vw,24px);line-height:1.1;letter-spacing:-.02em;color:#fff;text-shadow:0 2px 14px rgba(0,0,0,.24);max-width:90%}
+  .foffer{position:relative;align-self:flex-start;margin-top:10px;font-family:var(--disp);font-weight:600;font-size:11.5px;color:#fff;background:rgba(0,0,0,.24);backdrop-filter:blur(3px);padding:5px 11px;border-radius:999px}
+  .facts{display:flex;align-items:center;gap:14px;padding:10px 12px 4px}
+  .facts svg{width:22px;height:22px;color:var(--tinta)}
+  .facts .sp{flex:1}
+  .fcap{padding:2px 12px 13px;font-size:12.5px;line-height:1.45;color:var(--ink)}
+  .fcap b{font-weight:700;color:var(--tinta)}
+  .demo-note{margin-top:14px;text-align:center;font-size:12px;color:var(--muted)}
+  @media (prefers-reduced-motion:reduce){ .feed{overflow-y:auto} .feed-track{animation:none;transform:none} }
   .pflag{position:absolute;right:-14px;bottom:30px;background:#fff;border:1px solid var(--line);border-radius:15px;padding:9px 14px;
     box-shadow:0 18px 36px -18px rgba(40,22,28,.45);display:flex;align-items:center;gap:10px;font-family:var(--disp);font-weight:600;font-size:12.5px;color:var(--tinta);
     animation:floaty 6.5s ease-in-out infinite .5s}
@@ -269,9 +306,9 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <div class="show-in">
 
       <div class="pitch">
-        <span class="eyebrow"><span class="pulse"></span> El Corillo ya empezó</span>
-        <h2>Mira lo que tu Corillo montaría para <span class="hl jsname"><?= $h($biz) ?></span>.</h2>
-        <p class="lead">Un equipo de marketing que trabaja por ti: crea el post, escribe el caption en tu voz y lo deja listo. Tú solo apruebas desde el celular.</p>
+        <span class="eyebrow"><span class="pulse"></span> El Corillo en acción</span>
+        <h2>Esto es lo que el Corillo <span class="hl">crea cada día</span>.</h2>
+        <p class="lead">Barberías, DJs, abogados, reposterías, electricistas… posts completos, en la voz de cada negocio. Lo mismo hace por <b class="jsname"><?= $h($biz) ?></b> — tú solo apruebas desde el celular.</p>
         <div class="pills">
           <span class="pill a"><span class="d"></span> Darte a conocer</span>
           <span class="pill b"><span class="d"></span> Mostrar lo que haces</span>
@@ -286,30 +323,37 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       <div class="stageph">
         <div class="phone">
           <div class="scr">
-            <div class="pbar">
-              <span class="pav jsinitial"><?= $h(mb_strtoupper(mb_substr($biz, 0, 1))) ?></span>
-              <span class="pname jsname"><?= $h($biz) ?></span>
-              <span class="pmore" aria-hidden="true">•••</span>
-            </div>
-            <div class="pimg">
-              <span class="demo-chip">Demostración</span>
-              <div class="pk"><span class="jsname"><?= $h($biz) ?></span><small>Tu arte y tu voz — hecho por el Corillo.</small></div>
-            </div>
-            <div class="pacts" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20l1.3-4a8.4 8.4 0 0 1-.9-3.9 8.5 8.5 0 0 1 17.6-.6Z"/></svg>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
-              <span class="sp"></span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z"/></svg>
-            </div>
-            <div class="plikes">A 128 personas les gusta</div>
-            <div class="pcap"><b class="jsname"><?= $h($biz) ?></b> Así podría verse tu primer post — en tu estilo, listo para publicar.</div>
+            <div class="feed"><div class="feed-track">
+              <?php for ($rep = 0; $rep < 2; $rep++): foreach ($feed as $p): ?>
+              <article class="fpost">
+                <div class="fbar">
+                  <span class="fav" style="background:linear-gradient(135deg,<?= $h($p['c1']) ?>,<?= $h($p['c2']) ?>)"><?= $h(mb_strtoupper(mb_substr($p['n'], 0, 1))) ?></span>
+                  <span class="fmeta"><b><?= $h($p['n']) ?></b><small>@<?= $h($p['h']) ?></small></span>
+                  <span class="fmore" aria-hidden="true">•••</span>
+                </div>
+                <div class="fimg" style="--c1:<?= $h($p['c1']) ?>;--c2:<?= $h($p['c2']) ?>">
+                  <span class="fic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><?= $p['ic'] ?></svg></span>
+                  <div class="fk"><?= $h($p['kick']) ?></div>
+                  <span class="foffer"><?= $h($p['offer']) ?></span>
+                </div>
+                <div class="facts" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20l1.3-4a8.4 8.4 0 0 1-.9-3.9 8.5 8.5 0 0 1 17.6-.6Z"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+                  <span class="sp"></span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z"/></svg>
+                </div>
+                <div class="fcap"><b>@<?= $h($p['h']) ?></b> <?= $h($p['cap']) ?></div>
+              </article>
+              <?php endforeach; endfor; ?>
+            </div></div>
           </div>
           <div class="pflag">
             <span class="pf-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span>
             Hecho por el Corillo
           </div>
         </div>
+        <p class="demo-note">Ejemplos de demostración · negocios ficticios</p>
       </div>
 
     </div>
