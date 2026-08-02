@@ -115,6 +115,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ' . $volver . 'negocio&ok=1'); exit;
     }
 
+    // "Ver el recibimiento otra vez" — borra la marca y el Inicio lo vuelve a dar.
+    // Es de una sola vez por diseño, pero el dueño manda: si lo quiere repasar, puede.
+    if ($accion === 'tour_repetir') {
+        try {
+            $pdo->prepare("UPDATE crecer_marca SET tour_home_at=NULL WHERE id=? AND usuario_id=?")
+                ->execute([$marca_id, $USUARIO_ID]);
+        } catch (Throwable $e) { /* sin la columna todavía: el JS lo maneja con ?tour=1 */ }
+        header('Location: /crecer/panel/index.php?marca=' . $marca_id . '&tour=1'); exit;
+    }
+
     // "Corre el corillo AHORA" — dispara el trabajo autónomo a demanda (no espera al cron semanal).
     if ($accion === 'corre_ahora') {
         $elegible = (function_exists('activacion_de_prueba') && activacion_de_prueba($usuario['email'] ?? null));
@@ -353,6 +363,15 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
         <h2><?= ico('sparkles') ?> ¿No quieres esperar?</h2>
         <p class="sub">Dispara el corillo ahora mismo: te prepara los posts que falten y los deja como borradores en Propuestas → Revisar. (Sin esperar al piloto semanal.)</p>
         <button class="cfg-save" type="submit">Corre el corillo ahora</button>
+      </div>
+    </form>
+
+    <form method="post" action="<?= $turl('negocio') ?>">
+      <?= csrf_field() ?><input type="hidden" name="accion" value="tour_repetir">
+      <div class="cfg-card">
+        <h2><?= ico('compass') ?> Repasar el recorrido</h2>
+        <p class="sub">El paseo que te dimos la primera vez: qué hace tu corillo, dónde vive cada cosa y cómo pedir ayuda. Te lo damos de nuevo en tu Inicio.</p>
+        <button class="cfg-save" type="submit">Verlo otra vez</button>
       </div>
     </form>
 
