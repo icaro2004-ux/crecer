@@ -1,17 +1,40 @@
 <?php
 // ============================================================
-//  _cache.php — Limpiar OPcache + diagnóstico rápido del generador.
-//  Abre:  https://TU-DOMINIO/crecer/_cache.php?k=crecer
-//  No exige CRON_TOKEN. Borrable cuando quieras.
+//  _cache.php — Limpiar OPcache + diagnóstico de producción.
+//  Abre:  https://TU-DOMINIO/crecer/_cache.php   (pide login de admin)
+//
+//  CR-F01 (2026-08-02) — ESTE ARCHIVO ERA EL AGUJERO MÁS GRANDE DEL PRODUCTO.
+//  Antes bastaba con `?k=crecer` (un literal que vive en el repo) para entrar, y
+//  la propia página IMPRIMÍA la CRECER_WORKER_KEY de producción. Con esa llave,
+//  los ocho workers (arte, gen, carrusel, reel, reel_publicar, sala, publicar,
+//  relevo) autorizan SIN sesión: se podían quemar créditos de API, forzar
+//  publicaciones en las redes de un cliente y volcar la lista de negocios con el
+//  correo de cada dueño (test=dbaudit). Al compartir el repo con el jurado, eso
+//  quedaba al alcance de cualquiera.
+//
+//  Ahora: sesión + rol admin (mismo patrón que _imgtry.php), y la llave de
+//  workers NO se imprime NUNCA — ni se pasa por la URL, que además queda escrita
+//  en los access logs del hosting y en el historial del navegador. Las pruebas
+//  que gastan dinero se confirman con `&gasta=1`, que no es un secreto.
 // ============================================================
 header('Content-Type: text/plain; charset=utf-8');
 
-if (($_GET['k'] ?? '') !== 'crecer') {
+// El candado real: sesión de administrador. Nada de llaves en el query string.
+// Cierra con 403 seco (no redirige a login): esto es una herramienta, no una
+// pantalla — y un 403 no le insinúa nada a quien esté tocando puertas.
+require_once __DIR__ . '/includes/db.php';     // define las constantes de config + $pdo
+require_once __DIR__ . '/includes/auth.php';
+$__usuario = esta_logueado() ? usuario_actual($pdo) : null;
+if (($__usuario['rol'] ?? '') !== 'admin') {
     http_response_code(403);
-    echo "Añade  ?k=crecer  al final de la URL.\n";
-    echo "Ej:  /crecer/_cache.php?k=crecer\n";
+    echo "403 — diagnóstico solo para administradores.\n";
+    echo "Entra en /crecer/login.php con tu cuenta de admin y vuelve a esta URL.\n";
     exit;
 }
+
+// Confirmación explícita para las pruebas que GASTAN (llamadas a OpenAI/Gemini,
+// SMS, correo real). No es un secreto: es un "sí, quiero gastar".
+$__gasta = (($_GET['gasta'] ?? '') === '1');
 
 echo "CRECER · limpiar caché + diagnóstico\n";
 echo str_repeat('=', 44) . "\n\n";
@@ -26,8 +49,8 @@ if (function_exists('opcache_reset')) {
 // 2) Diagnóstico del generador de imágenes (envuelto: si algo falla, no rompe el reset).
 echo "\n--- Generador de imágenes ---\n";
 try {
-    require __DIR__ . '/includes/db.php';    // define las constantes de config
-    require __DIR__ . '/includes/ia.php';    // motor de imagen
+    require_once __DIR__ . '/includes/db.php';    // ya cargado arriba por el candado
+    require_once __DIR__ . '/includes/ia.php';    // motor de imagen
     require_once __DIR__ . '/includes/agentes.php';
 
     // ── ¿ESTÁ VIVO EL CÓDIGO NUEVO DE LA ENTREVISTA? (lo que se acaba de subir) ──
@@ -53,22 +76,21 @@ try {
     } else {
         echo "(código viejo, no se puede evaluar)\n";
     }
-    // 3) Prueba EN VIVO contra OpenAI (opcional): añade  &test=img  a la URL.
+    // 3) Prueba EN VIVO contra OpenAI (opcional): añade  &test=img&gasta=1  a la URL.
     //    Hace 1 llamada real y muestra el resultado o el ERROR EXACTO (ej. "org
     //    no verificada"). Cuesta ~$0.17 la prueba.
-    // Los tests EN VIVO gastan dinero (llaman a OpenAI/Gemini) → exigen el CRON_TOKEN real,
-    // no el 'crecer' público. Evita que alguien te queme el balance con &test=img/arte en loop.
+    // Los tests EN VIVO gastan dinero. Ya estás dentro con sesión de admin, así que
+    // el segundo candado no necesita ser un secreto: basta con que sea DELIBERADO.
+    // (Antes iba una llave por la URL. Mala idea: se imprimía en pantalla y quedaba
+    //  escrita en los access logs del hosting y en el historial del navegador.)
     $__test = $_GET['test'] ?? '';
-    // Llave FIJA propia (NO el CRON_TOKEN de prod, que no cuadra — mismo lío del SMS).
-    // Estas pruebas gastan dinero → protegidas con esta llave. Rota/borra luego.
-    $__imgkey = (defined('CRECER_WORKER_KEY') && CRECER_WORKER_KEY !== '') ? CRECER_WORKER_KEY : 'crimg_7k2x';
-    if (in_array($__test, ['img','arte','imgmanual','compare','v3async','checkout'], true) && !hash_equals($__imgkey, (string)($_GET['t'] ?? ''))) {
-        echo "\n(Para las pruebas en vivo añade  &t={$__imgkey}  al final.)\n";
+    if (in_array($__test, ['img','arte','imgmanual','compare','v3async','checkout'], true) && !$__gasta) {
+        echo "\n(Esa prueba GASTA dinero. Si de verdad la quieres, añade  &gasta=1  al final.)\n";
         $__test = '';
     }
     // AUDIT de la BD (read-only): la huella de Crecer para limpiar cuentas de prueba.
-    //   &test=dbaudit&t=WORKERKEY  (&keep=correo para marcar cuál dejar)
-    if ($__test === 'dbaudit' && hash_equals($__imgkey, (string)($_GET['t'] ?? ''))) {
+    //   &test=dbaudit  (&keep=correo para marcar cuál dejar)
+    if ($__test === 'dbaudit') {   // solo lectura · ya estás dentro como admin
         echo "\n--- AUDIT BD: huella de Crecer (NO borra nada) ---\n";
         echo "DB del app (config DB_NAME): " . (defined('DB_NAME') ? DB_NAME : '(?)') . "\n";
         try { echo "DB conectada (DATABASE()): " . $pdo->query("SELECT DATABASE()")->fetchColumn() . "\n"; } catch (Throwable $e) {}
@@ -105,8 +127,8 @@ try {
     }
 
     // DIAGNÓSTICO DE PUBLICACIÓN: ¿de verdad salió a las redes o falló calladito?
-    //   &test=pub&marca=ID&t=WORKERKEY   (o &email=X para buscar su marca)
-    if ($__test === 'pub' && hash_equals($__imgkey, (string)($_GET['t'] ?? ''))) {
+    //   &test=pub&marca=ID   (o &email=X para buscar su marca)
+    if ($__test === 'pub') {       // solo lectura · ya estás dentro como admin
         require_once __DIR__ . '/includes/auth.php';
         echo "\n--- Diagnóstico de PUBLICACIÓN a redes ---\n";
         $mid = (int)($_GET['marca'] ?? 0);
@@ -143,8 +165,8 @@ try {
     }
 
     // DIAGNÓSTICO DE ACCESO/PAYWALL: por qué un email entra (o no) al app.
-    //   &test=gate&email=X&t=WORKERKEY
-    if ($__test === 'gate' && hash_equals($__imgkey, (string)($_GET['t'] ?? ''))) {
+    //   &test=gate&email=X
+    if ($__test === 'gate') {      // solo lectura · ya estás dentro como admin
         require_once __DIR__ . '/includes/suscripcion.php';
         require_once __DIR__ . '/includes/auth.php';
         require_once __DIR__ . '/includes/gateway.php';
@@ -183,7 +205,7 @@ try {
     }
 
     // DIAGNÓSTICO DE CORREO. Reporta config + transporte (solo sí/no, sin secretos).
-    // Con &to=email&t=WORKERKEY hace un ENVÍO REAL por SMTP y muestra el ERROR EXACTO
+    // Con &to=email&gasta=1 hace un ENVÍO REAL por SMTP y muestra el ERROR EXACTO
     // (sin el fallback a mail() que se traga el error en crecer_enviar_email).
     if ($__test === 'mail') {
         echo "\n--- Diagnóstico de CORREO (SMTP) ---\n";
@@ -201,7 +223,7 @@ try {
         echo "TRANSPORTE  : " . ($usa_smtp ? "SMTP autenticado ✅" : "mail() ⚠️ (Hostinger lo bota seguido)") . "\n";
 
         $to = trim((string)($_GET['to'] ?? ''));
-        if ($to !== '' && hash_equals($__imgkey, (string)($_GET['t'] ?? ''))) {
+        if ($to !== '' && $__gasta) {
             echo "\n--- ENVÍO REAL a {$to} (por SMTP, mostrando error crudo) ---\n";
             if (!$usa_smtp) {
                 echo "No hay SMTP → probando con mail() directo…\n";
@@ -237,7 +259,7 @@ try {
                 }
             }
         } else {
-            echo "\n(Para envío real: &test=mail&to=TUCORREO&t={$__imgkey})\n";
+            echo "\n(Para envío real: &test=mail&to=TUCORREO&gasta=1)\n";
         }
     }
 
@@ -362,7 +384,7 @@ try {
         if (!isset($variantes[$one])) {
             echo "Corre estas 3 URLs, UNA por UNA (cada una tarda ~40s):\n";
             foreach (array_keys($variantes) as $k)
-                echo "  https://" . ($_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com') . "/crecer/_cache.php?k=crecer&test=compare&t={$__imgkey}&one={$k}\n";
+                echo "  https://" . ($_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com') . "/crecer/_cache.php?test=compare&gasta=1&one={$k}\n";
         } else {
             try {
                 require_once __DIR__ . '/includes/agentes.php';
@@ -393,7 +415,7 @@ try {
         for ($i = 0; $i < $n; $i++) { $gid = gen_encolar($pdo, $mid, $cap); gen_disparar($gid); $ids[] = $gid; usleep(150000); }
         echo "encoladas + disparadas: " . implode(', ', $ids) . "\n";
         echo "→ Corren por detrás (~1 min c/u, en paralelo). Espera ~2 min y abre:\n";
-        echo "   " . 'https://' . ($_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com') . "/crecer/_cache.php?k=crecer&test=v3report\n";
+        echo "   " . 'https://' . ($_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com') . "/crecer/_cache.php?test=v3report\n";
     }
 
     // V3 ASYNC — reporte (lee crecer_generaciones). No cuesta, no requiere llave.
@@ -456,9 +478,9 @@ try {
         } catch (Throwable $e) { echo "  escaneo falló: " . $e->getMessage() . "\n"; }
         // Aviso de prueba de punta a punta (email + SMS reales). Gasta centavos →
         // exige la misma llave que el resto de las pruebas en vivo.
-        $__avisa_ok = (($_GET['avisa'] ?? '') === '1') && hash_equals($__imgkey, (string)($_GET['t'] ?? ''));
+        $__avisa_ok = (($_GET['avisa'] ?? '') === '1') && $__gasta;
         if (($_GET['avisa'] ?? '') === '1' && !$__avisa_ok) {
-            echo "\n(Para el aviso de prueba añade también  &t={$__imgkey} .)\n";
+            echo "\n(Para el aviso de prueba añade también  &gasta=1 .)\n";
         }
         if ($__avisa_ok) {
             echo "\nMandando CASO DE PRUEBA al fundador…\n";
@@ -479,11 +501,11 @@ try {
     }
 
     // Prueba REAL del SMS: manda un código de verdad y muestra el ERROR CRUDO de Twilio.
-    //    Añade  &test=sms&to=7875551234&s=crsms_7k2x  . Cuesta unos centavos.
+    //    Añade  &test=sms&to=7875551234&gasta=1  . Cuesta unos centavos.
     //    Llave FIJA (no el CRON_TOKEN) para no depender del config. Bórrala/rota luego.
-    $__sms_ok = ($_GET['test'] ?? '') === 'sms' && hash_equals('crsms_7k2x', (string)($_GET['s'] ?? ''));
+    $__sms_ok = (($_GET['test'] ?? '') === 'sms') && $__gasta;
     if (($_GET['test'] ?? '') === 'sms' && !$__sms_ok) {
-        echo "\n(Para la prueba de SMS añade  &s=crsms_7k2x  al final.)\n";
+        echo "\n(Para la prueba de SMS añade  &gasta=1  al final.)\n";
     }
     if ($__sms_ok) {
         echo "\n--- Prueba EN VIVO del SMS (Twilio Verify) ---\n";
