@@ -184,9 +184,7 @@ $feed = [
   /* feed que corre solo (loop sin fin; pausa al hover) */
   .feed{height:clamp(430px,58vh,560px);overflow:hidden;position:relative;
     -webkit-mask-image:linear-gradient(#0000,#000 6%,#000 94%,#0000);mask-image:linear-gradient(#0000,#000 6%,#000 94%,#0000)}
-  .feed-track{display:flex;flex-direction:column;animation:feedup 64s linear infinite;will-change:transform}
-  .feed:hover .feed-track{animation-play-state:paused}
-  @keyframes feedup{from{transform:translateY(0)}to{transform:translateY(-50%)}}
+  .feed-track{display:flex;flex-direction:column;will-change:transform}   /* el avance lo maneja el JS (paso a paso con ease) */
   .fpost{border-bottom:9px solid #f2efec}
   .fbar{display:flex;align-items:center;gap:9px;padding:10px 12px}
   .fav{width:31px;height:31px;border-radius:50%;color:#fff;font-family:var(--disp);font-weight:700;font-size:14px;display:grid;place-items:center;flex:none}
@@ -196,6 +194,7 @@ $feed = [
   .fmore{color:var(--muted);font-weight:700;letter-spacing:1.5px;font-size:14px}
   .fimg{position:relative;aspect-ratio:1;display:flex;flex-direction:column;justify-content:flex-end;padding:16px;overflow:hidden;
     background:radial-gradient(130% 120% at 14% 12%, color-mix(in srgb,var(--c2) 76%,#fff) 0, transparent 52%),linear-gradient(150deg,var(--c1),var(--c2))}
+  .fimg.hasimg{background-size:cover;background-position:center;background-repeat:no-repeat}
   .fic{position:absolute;top:-6px;right:-6px;color:rgba(255,255,255,.20)}
   .fic svg{width:120px;height:120px}
   .fk{position:relative;font-family:var(--disp);font-weight:700;font-size:clamp(19px,4.4vw,24px);line-height:1.1;letter-spacing:-.02em;color:#fff;text-shadow:0 2px 14px rgba(0,0,0,.24);max-width:90%}
@@ -331,8 +330,9 @@ $feed = [
                   <span class="fmeta"><b><?= $h($p['n']) ?></b><small>@<?= $h($p['h']) ?></small></span>
                   <span class="fmore" aria-hidden="true">•••</span>
                 </div>
-                <div class="fimg" style="--c1:<?= $h($p['c1']) ?>;--c2:<?= $h($p['c2']) ?>">
-                  <span class="fic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><?= $p['ic'] ?></svg></span>
+                <?php $imgf = __DIR__ . '/assets/landing/feed/' . $p['h'] . '.jpg'; $imgu = '/crecer/assets/landing/feed/' . $p['h'] . '.jpg'; $ph = is_file($imgf); ?>
+                <div class="fimg<?= $ph ? ' hasimg' : '' ?>" style="--c1:<?= $h($p['c1']) ?>;--c2:<?= $h($p['c2']) ?><?= $ph ? ";background-image:linear-gradient(to top,rgba(0,0,0,.58),rgba(0,0,0,.05) 46%,transparent 68%),url('" . $h($imgu) . "')" : '' ?>">
+                  <?php if (!$ph): ?><span class="fic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><?= $p['ic'] ?></svg></span><?php endif; ?>
                   <div class="fk"><?= $h($p['kick']) ?></div>
                   <span class="foffer"><?= $h($p['offer']) ?></span>
                 </div>
@@ -440,6 +440,34 @@ $feed = [
     window.addEventListener('pointermove', function(e){ if (!down) return; dirs.scrollLeft = sl - (e.clientX - sx); });
     window.addEventListener('pointerup', function(){ down = false; dirs.classList.remove('drag'); });
   }
+})();
+
+// ── Feed que corre como película: un post a la vez, sube con ease + rocecito suave ──
+(function(){
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var feed = document.querySelector('.feed');
+  var track = feed && feed.querySelector('.feed-track');
+  if (!feed || !track || reduce) return;
+  var posts = track.querySelectorAll('.fpost');
+  if (posts.length < 2) return;
+  var n = posts.length / 2;            // el track está duplicado → set real = mitad
+  var i = 0, timer = null;
+  function h(){ return posts[0].getBoundingClientRect().height; }
+  function go(){
+    if (!feed.offsetParent) return;    // #exp oculto → no avanzar todavía
+    var step = h(); if (!step) return;
+    i++;
+    track.style.transition = 'transform .8s cubic-bezier(.34,1.3,.36,1)';  // sube, roza el borde y se acomoda
+    track.style.transform = 'translateY(' + (-step * i) + 'px)';
+    if (i >= n){                        // llegó al final del set → vuelve al inicio sin que se note
+      setTimeout(function(){ track.style.transition = 'none'; i = 0; track.style.transform = 'translateY(0)'; }, 840);
+    }
+  }
+  function start(){ stop(); timer = setInterval(go, 3400); }   // ~2.6s mirando el post + .8s de swipe
+  function stop(){ if (timer){ clearInterval(timer); timer = null; } }
+  feed.addEventListener('mouseenter', stop);
+  feed.addEventListener('mouseleave', start);
+  start();
 })();
 </script>
 </body>
