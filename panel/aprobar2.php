@@ -211,12 +211,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                           : ($_POST['estilo_arte'] ?? 'realista')) ?: 'realista';
             // NO se llama a OpenAI aquí (eso colgaba la pantalla → timeout/"error de conexión").
             // Marcamos 'queued' y el WORKER crea el job + sondea + avisa por notificación.
-            $pdo->prepare("UPDATE crecer_contenido SET img_estado='queued', img_job=NULL, arte_intentos=arte_intentos+1, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$id, $marca_id]);
+            // NO contar el intento aquí: se cuenta cuando la imagen SE PRODUCE (img_responses).
+            // Antes se contaba al encolar → si el worker fallaba, quemaba el intento sin dar imagen.
+            $pdo->prepare("UPDATE crecer_contenido SET img_estado='queued', img_job=NULL, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$id, $marca_id]);
             arte_disparar($marca_id, $id, $con_txt, $extra !== '' ? $extra : null, false, $est_arte);
             header('Content-Type: application/json');
             echo json_encode(['ok'=>true, 'async'=>true, 'id'=>$id,
-                'restantes'=>max(0, CRECER_IMG_SEMANA - ($usados+1)),
-                'restantes_post'=>max(0, CRECER_IMG_POST - ($intentos+1)), 'reset'=>$reset], JSON_UNESCAPED_UNICODE);
+                'restantes'=>$sin_limite ? 999 : max(0, CRECER_IMG_SEMANA - ($usados+1)),
+                'restantes_post'=>$sin_limite ? 999 : max(0, CRECER_IMG_POST - $intentos), 'reset'=>$reset], JSON_UNESCAPED_UNICODE);
             exit;
         }
         try {
@@ -236,8 +238,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Content-Type: application/json');
             echo json_encode([
                 'ok'=>true, 'id'=>$id, 'img'=>$r['archivo'],
-                'restantes'=>max(0, CRECER_IMG_SEMANA - ($usados+1)),
-                'restantes_post'=>max(0, CRECER_IMG_POST - ($intentos+1)),
+                'restantes'=>$sin_limite ? 999 : max(0, CRECER_IMG_SEMANA - ($usados+1)),
+                'restantes_post'=>$sin_limite ? 999 : max(0, CRECER_IMG_POST - ($intentos+1)),
                 'reset'=>$reset,
             ], JSON_UNESCAPED_UNICODE);
             exit;
@@ -1046,7 +1048,7 @@ $cf = [
     $fecha = date('d/m', strtotime($p['fecha_programada'] ?: 'now'));
   ?>
     <?php $has_cap = trim($p['caption'])!==''; $has_art = !empty($p['grafica_path']); $is_ok = in_array($p['estado'],['aprobado','publicado'],true); ?>
-    <article class="post" data-id="<?= $p['id'] ?>" data-img="<?= $has_art?'1':'' ?>" data-intentos="<?= max(0, CRECER_IMG_POST - (int)($p['arte_intentos'] ?? 0)) ?>"<?= $__pi>0?' style="display:none"':'' ?>>
+    <article class="post" data-id="<?= $p['id'] ?>" data-img="<?= $has_art?'1':'' ?>" data-intentos="<?= img_generacion_ilimitada($pdo,$marca_id) ? 999 : max(0, CRECER_IMG_POST - (int)($p['arte_intentos'] ?? 0)) ?>"<?= $__pi>0?' style="display:none"':'' ?>>
       <div class="post-head">
         <span class="chip <?= $pl_cls ?>"><span class="ico"></span><?= $h($pl_label) ?></span>
         <span class="chip"><?= $h($p['tipo']) ?></span>

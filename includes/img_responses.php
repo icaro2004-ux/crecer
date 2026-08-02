@@ -164,7 +164,8 @@ function img_gemini_fallback(PDO $pdo, int $marca_id, int $post_id, string $copy
         $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
         @mkdir(dirname($abs), 0775, true); @file_put_contents($abs, $bin);
         $url = rtrim(UPLOADS_URL, '/') . '/' . $rel;
-        $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, img_estado='ok', img_job=NULL, updated_at=NOW() WHERE id=? AND marca_id=?")
+        // Cuenta el intento SOLO al producir la imagen (no al encolar). Ver aprobar2 'arte'.
+        $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, img_estado='ok', img_job=NULL, arte_intentos=arte_intentos+1, updated_at=NOW() WHERE id=? AND marca_id=?")
             ->execute([$url, $post_id, $marca_id]);
         try { $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,estado) VALUES (?,?,?,?,?,?, 'ok')")
             ->execute([$marca_id, 'director_imagen', 'Respaldo Gemini (gpt no pudo)', 'gemini-3-pro-image', $brief, $url]); } catch (Throwable $e) {}
@@ -180,20 +181,38 @@ function img_gemini_fallback(PDO $pdo, int $marca_id, int $post_id, string $copy
  */
 function img_sweep_pendientes(PDO $pdo, int $marca_id): void {
     try {
-        $pend = $pdo->prepare("SELECT id FROM crecer_contenido WHERE marca_id=? AND img_estado='queued' AND img_job IS NOT NULL ORDER BY id DESC LIMIT 4");
+        // Recoge jobs con response_id, Y TAMBIÉN los colgados sin job >2 min (el worker
+        // se murió/bloqueó antes de crear el job → sin esto quedaban en 'queued' para siempre).
+        $pend = $pdo->prepare("SELECT id, img_job FROM crecer_contenido
+             WHERE marca_id=? AND img_estado='queued'
+               AND (img_job IS NOT NULL OR updated_at < (NOW() - INTERVAL 2 MINUTE))
+             ORDER BY id DESC LIMIT 4");
         $pend->execute([$marca_id]);
-        $ids = $pend->fetchAll(PDO::FETCH_COLUMN);
-        if (!$ids) return;
+        $rows = $pend->fetchAll(PDO::FETCH_ASSOC);
+        if (!$rows) return;
         if (!function_exists('notif_crear')) { @require_once __DIR__ . '/notif.php'; }
         $link = '/crecer/panel/propuestas.php?marca=' . $marca_id;
-        foreach ($ids as $pid) {
-            $r = img_resp_completar($pdo, $marca_id, (int)$pid);
+        foreach ($rows as $row) {
+            $pid = (int)$row['id'];
+            // Colgado sin job → el worker nunca arrancó: rescátalo directo por Gemini (síncrono, fiable).
+            if (empty($row['img_job'])) {
+                if (function_exists('img_gemini_fallback')) {
+                    $cap = (string)($pdo->query("SELECT caption FROM crecer_contenido WHERE id=" . $pid)->fetchColumn() ?: '');
+                    $url = img_gemini_fallback($pdo, $marca_id, $pid, $cap);
+                    if ($url !== '' && function_exists('notif_crear')) {
+                        notif_crear($pdo, $marca_id, 'arte', 'Tu arte ya está listo',
+                            'El corillo terminó la imagen de tu post — dale un vistazo.', $link, 'image');
+                    }
+                }
+                continue;
+            }
+            $r = img_resp_completar($pdo, $marca_id, $pid);
             $est = $r['estado'] ?? '';
             if ($est === 'ok' && function_exists('notif_crear')) {
                 notif_crear($pdo, $marca_id, 'arte', 'Tu arte ya está listo',
                     'El corillo terminó la imagen de tu post — dale un vistazo.', $link, 'image');
             } elseif ($est === 'error' && function_exists('arte_disparar')) {
-                arte_disparar($marca_id, (int)$pid, null, null, true);   // gpt cayó → Gemini en background
+                arte_disparar($marca_id, $pid, null, null, true);   // gpt cayó → Gemini en background
             }
         }
     } catch (Throwable $e) {}
@@ -217,7 +236,8 @@ function img_resp_completar(PDO $pdo, int $marca_id, int $post_id): array {
             $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
             @mkdir(dirname($abs), 0775, true); @file_put_contents($abs, $bin);
             $url = rtrim(UPLOADS_URL, '/') . '/' . $rel;
-            $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, img_estado='ok', img_job=NULL, updated_at=NOW() WHERE id=? AND marca_id=?")
+            // Cuenta el intento SOLO al producir la imagen (no al encolar). Ver aprobar2 'arte'.
+            $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, img_estado='ok', img_job=NULL, arte_intentos=arte_intentos+1, updated_at=NOW() WHERE id=? AND marca_id=?")
                 ->execute([$url, $post_id, $marca_id]);
             return ['estado' => 'ok', 'img' => $url];
         }
