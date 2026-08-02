@@ -11,7 +11,10 @@
 // ============================================================
 require_once __DIR__ . '/ia.php';
 
-if (!defined('ARTE_WORKER_KEY')) define('ARTE_WORKER_KEY', (defined('CRECER_WORKER_KEY') && CRECER_WORKER_KEY !== '') ? CRECER_WORKER_KEY : 'crarte_5x8p');
+require_once __DIR__ . '/worker_key.php';
+// CR-F01b: sin CRECER_WORKER_KEY no hay llave. NADA de literal de respaldo:
+// adoptar en silencio una llave del repo publico era la trampa.
+if (!defined('ARTE_WORKER_KEY')) define('ARTE_WORKER_KEY', worker_key());
 
 /** ¿Está activo el motor Responses para producción? */
 function img_resp_activo(): bool {
@@ -24,6 +27,9 @@ function img_resp_activo(): bool {
  * dueño encola y sigue editando / se va; la notificación lo lleva al post listo.
  */
 function arte_disparar(int $marca_id, int $post_id, ?bool $con_texto = null, ?string $extra = null, bool $fb = false, string $estilo = 'realista'): void {
+    // CR-F01b: sin llave no se dispara. El job se queda en cola y lo rescata el
+    // sweep cuando el config vuelva — mejor eso que quemar el intento contra un 503.
+    if (!worker_puede_disparar('arte')) return;
     $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
     $q = '&ct=' . ($con_texto === null ? 'x' : ($con_texto ? '1' : '0'));
     if ($extra !== null && trim($extra) !== '') $q .= '&extra=' . rawurlencode(mb_substr(trim($extra), 0, 300));

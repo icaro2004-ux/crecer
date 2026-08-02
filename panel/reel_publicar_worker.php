@@ -7,6 +7,7 @@
 //  Gated por llave fija. Módulo AISLADO.
 // ============================================================
 require __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/worker_key.php';   // CR-F01b: falla cerrado sin llave
 require_once __DIR__ . '/../includes/reels.php';
 require_once __DIR__ . '/../includes/publicador.php';
 require_once __DIR__ . '/../includes/notif.php';
@@ -16,7 +17,8 @@ $cid   = (int)($_GET['cid'] ?? 0);
 $key   = (string)($_GET['key'] ?? '');
 $redes = array_values(array_intersect(explode(',', (string)($_GET['redes'] ?? '')), ['instagram', 'facebook']));
 if (!$redes) $redes = ['instagram', 'facebook'];
-if (!$rid || !$cid || !hash_equals(REELS_WORKER_KEY, $key)) { http_response_code(403); exit('no'); }
+if (!$rid || !$cid) { http_response_code(403); exit('no'); }
+worker_autorizar($key, 'reel_publicar');
 
 header('Content-Type: text/plain; charset=utf-8');
 echo "ok\n";

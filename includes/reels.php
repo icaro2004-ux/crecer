@@ -836,6 +836,9 @@ function reels_finalizar_render(PDO $pdo, int $id, array $doc): void {
 
 /** Dispara el worker por auto-HTTP (fire-and-forget). $modo: 'crear' | 'reedit'. */
 function reels_disparar(int $id, string $modo = 'crear'): void {
+    // CR-F01b: sin llave no se dispara. El job se queda en cola y lo rescata el
+    // sweep cuando el config vuelva — mejor eso que quemar el intento contra un 503.
+    if (!worker_puede_disparar('reel')) return;
     $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
     $sch  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
     $url  = $sch . '://' . $host . '/crecer/panel/reel_worker.php?id=' . $id . '&modo=' . rawurlencode($modo) . '&key=' . REELS_WORKER_KEY;
@@ -857,4 +860,7 @@ function reels_estado(PDO $pdo, int $id): ?array {
 }
 
 // Llave fija del worker (no es público). Aislada del resto.
-if (!defined('REELS_WORKER_KEY')) define('REELS_WORKER_KEY', (defined('CRECER_WORKER_KEY') && CRECER_WORKER_KEY !== '') ? CRECER_WORKER_KEY : 'crreel_9m4v');
+require_once __DIR__ . '/worker_key.php';
+// CR-F01b: sin CRECER_WORKER_KEY no hay llave. NADA de literal de respaldo:
+// adoptar en silencio una llave del repo publico era la trampa.
+if (!defined('REELS_WORKER_KEY')) define('REELS_WORKER_KEY', worker_key());

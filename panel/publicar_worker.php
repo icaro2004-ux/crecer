@@ -6,6 +6,7 @@
 //  notificación con el permalink. Gated por llave fija.
 // ============================================================
 require __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/worker_key.php';   // CR-F01b: falla cerrado sin llave
 require __DIR__ . '/../includes/meta.php';
 require __DIR__ . '/../includes/publicador.php';
 require __DIR__ . '/../includes/notif.php';
@@ -13,7 +14,8 @@ require __DIR__ . '/../includes/notif.php';
 $mid = (int)($_GET['marca'] ?? 0);
 $cid = (int)($_GET['id'] ?? 0);
 $key = (string)($_GET['key'] ?? '');
-if (!$mid || !$cid || !hash_equals(PUBLICAR_WORKER_KEY, $key)) { http_response_code(403); exit('no'); }
+if (!$mid || !$cid) { http_response_code(403); exit('no'); }
+worker_autorizar($key, 'publicar');
 
 header('Content-Type: text/plain; charset=utf-8');
 echo "ok\n";

@@ -21,7 +21,10 @@
 require_once __DIR__ . '/meta.php';
 require_once __DIR__ . '/suscripcion.php';   // cupo_registrar_publicacion()
 
-if (!defined('PUBLICAR_WORKER_KEY')) define('PUBLICAR_WORKER_KEY', (defined('CRECER_WORKER_KEY') && CRECER_WORKER_KEY !== '') ? CRECER_WORKER_KEY : 'crpub_6t1q');
+require_once __DIR__ . '/worker_key.php';
+// CR-F01b: sin CRECER_WORKER_KEY no hay llave. NADA de literal de respaldo:
+// adoptar en silencio una llave del repo publico era la trampa.
+if (!defined('PUBLICAR_WORKER_KEY')) define('PUBLICAR_WORKER_KEY', worker_key());
 
 /**
  * Dispara la publicación de una pieza en BACKGROUND (fire-and-forget). Para
@@ -29,6 +32,9 @@ if (!defined('PUBLICAR_WORKER_KEY')) define('PUBLICAR_WORKER_KEY', (defined('CRE
  * la pantalla / daría 504. El worker publica y avisa por notificación.
  */
 function publicar_disparar(int $marca_id, int $contenido_id, array $plataformas = []): void {
+    // CR-F01b: sin llave no se dispara. El job se queda en cola y lo rescata el
+    // sweep cuando el config vuelva — mejor eso que quemar el intento contra un 503.
+    if (!worker_puede_disparar('publicar')) return;
     $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
     $pl = array_values(array_intersect(['instagram', 'facebook'], $plataformas));
     $url  = 'https://' . $host . '/crecer/panel/publicar_worker.php?marca=' . $marca_id . '&id=' . $contenido_id . '&key=' . PUBLICAR_WORKER_KEY

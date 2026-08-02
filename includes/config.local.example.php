@@ -97,10 +97,17 @@ define('REPORTE_EMAIL', '');
 //       define('TWILIO_FROM',          '+17875550100');       // número comprado
 //       define('TWILIO_MESSAGING_SID', 'MGxxxxxxxxxxxxxxxx'); // Messaging Service
 
-// Llave secreta de los workers async internos (arte, carrusel, gen, reels, sala, publicar).
-// Vacío = cada worker usa su literal por defecto (solo dev). En PROD PONLE un valor ALEATORIO
-// (ej. bin2hex(random_bytes(16))) para que nadie dispare tus workers de generación desde el
-// repo público y te queme los créditos de API. Rota este valor antes de hacer público el repo.
+// ── OBLIGATORIA EN PRODUCCIÓN ────────────────────────────────────────────────
+// Llave de los workers async internos (arte, gen, carrusel, reels, sala, publicar,
+// relevo). SIN ella los ocho workers FALLAN CERRADO: responden 503 y NO ejecutan
+// trabajo. No hay literal de respaldo — antes lo había y era una trampa: si el
+// config desaparecía tras un deploy, los workers adoptaban en silencio una llave
+// que vive en el repo (CR-F01b, 2026-08-02).
+//
+// Genérala aleatoria y no la compartas:  php -r "echo bin2hex(random_bytes(16));"
+// Rótala si alguna vez se imprimió, se pegó en un chat o viajó por una URL.
+//
+// Vacía = local sin workers async (el sweep recoge el trabajo igual, más lento).
 define('CRECER_WORKER_KEY', '');
 
 // ── MODO PRUEBA (sandbox) — activar "Activar Crecer" SIN Stripe ──────────────

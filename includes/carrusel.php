@@ -12,7 +12,10 @@
 require_once __DIR__ . '/agentes.php';
 require_once __DIR__ . '/notif.php';
 
-if (!defined('CARRUSEL_WORKER_KEY')) define('CARRUSEL_WORKER_KEY', (defined('CRECER_WORKER_KEY') && CRECER_WORKER_KEY !== '') ? CRECER_WORKER_KEY : 'crcarr_8w3z');
+require_once __DIR__ . '/worker_key.php';
+// CR-F01b: sin CRECER_WORKER_KEY no hay llave. NADA de literal de respaldo:
+// adoptar en silencio una llave del repo publico era la trampa.
+if (!defined('CARRUSEL_WORKER_KEY')) define('CARRUSEL_WORKER_KEY', worker_key());
 const CARRUSEL_MIN = 3;   // mínimo útil
 const CARRUSEL_MAX = 5;   // tope del producto (IG permite 10; nosotros 5, no exagerar)
 
@@ -367,6 +370,9 @@ function carrusel_arte_slide_gemini(PDO $pdo, int $marca_id, int $slide_id): boo
 
 /** Dispara el worker que genera el arte de TODOS los slides en background + avisa. */
 function carrusel_disparar(int $marca_id, int $contenido_id): void {
+    // CR-F01b: sin llave no se dispara. El job se queda en cola y lo rescata el
+    // sweep cuando el config vuelva — mejor eso que quemar el intento contra un 503.
+    if (!worker_puede_disparar('carrusel')) return;
     $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
     $url  = 'https://' . $host . '/crecer/panel/carrusel_worker.php?marca=' . $marca_id . '&id=' . $contenido_id . '&key=' . CARRUSEL_WORKER_KEY;
     $ch = curl_init($url);

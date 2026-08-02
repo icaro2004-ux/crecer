@@ -12,7 +12,10 @@
 //  prompt (nada de rulebook) sin informar. (strict=true en el director.)
 // ============================================================
 
-if (!defined('GEN_WORKER_KEY')) define('GEN_WORKER_KEY', (defined('CRECER_WORKER_KEY') && CRECER_WORKER_KEY !== '') ? CRECER_WORKER_KEY : 'crimg_7k2x');
+require_once __DIR__ . '/worker_key.php';
+// CR-F01b: sin CRECER_WORKER_KEY no hay llave. NADA de literal de respaldo:
+// adoptar en silencio una llave del repo publico era la trampa.
+if (!defined('GEN_WORKER_KEY')) define('GEN_WORKER_KEY', worker_key());
 
 function _gen_set(PDO $pdo, int $id, array $f): void {
     if (!$f) return;
@@ -31,6 +34,9 @@ function gen_encolar(PDO $pdo, int $marca_id, string $copy, array $opts = []): i
 
 /** Dispara el worker por auto-HTTP, fire-and-forget (el worker responde YA y sigue por detrás). */
 function gen_disparar(int $id): void {
+    // CR-F01b: sin llave no se dispara. El job se queda en cola y lo rescata el
+    // sweep cuando el config vuelva — mejor eso que quemar el intento contra un 503.
+    if (!worker_puede_disparar('gen')) return;
     $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
     $url  = 'https://' . $host . '/crecer/panel/gen_worker.php?id=' . $id . '&key=' . GEN_WORKER_KEY;
     $ch = curl_init($url);

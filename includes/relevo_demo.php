@@ -10,7 +10,10 @@
 //  agentes trabajando en tiempo real. No toca ninguna lógica existente.
 // ============================================================
 
-if (!defined('RELEVO_WORKER_KEY')) define('RELEVO_WORKER_KEY', (defined('CRECER_WORKER_KEY') && CRECER_WORKER_KEY !== '') ? CRECER_WORKER_KEY : 'crrelevo_7k2n');
+require_once __DIR__ . '/worker_key.php';
+// CR-F01b: sin CRECER_WORKER_KEY no hay llave. NADA de literal de respaldo:
+// adoptar en silencio una llave del repo publico era la trampa.
+if (!defined('RELEVO_WORKER_KEY')) define('RELEVO_WORKER_KEY', worker_key());
 
 /**
  * Marca en crecer_ia_log un hito del relevo (inicio/fin) como 'kernel'

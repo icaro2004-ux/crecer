@@ -7,12 +7,14 @@
 //  Módulo AISLADO. NO toca nada del app existente.
 // ============================================================
 require __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/worker_key.php';   // CR-F01b: falla cerrado sin llave
 require_once __DIR__ . '/../includes/reels.php';
 require_once __DIR__ . '/../includes/notif.php';
 
 $id  = (int)($_GET['id'] ?? 0);
 $key = (string)($_GET['key'] ?? '');
-if (!$id || !hash_equals(REELS_WORKER_KEY, $key)) { http_response_code(403); exit('no'); }
+if (!$id) { http_response_code(403); exit('no'); }
+worker_autorizar($key, 'reel');
 
 // Responde YA al que disparó; el trabajo sigue por detrás.
 header('Content-Type: text/plain; charset=utf-8');

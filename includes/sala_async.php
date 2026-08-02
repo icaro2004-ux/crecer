@@ -11,7 +11,10 @@
 //  tomar 1-3 min y ya no depende de mantener la conexión HTTP abierta.
 // ============================================================
 
-if (!defined('SALA_WORKER_KEY')) define('SALA_WORKER_KEY', (defined('CRECER_WORKER_KEY') && CRECER_WORKER_KEY !== '') ? CRECER_WORKER_KEY : 'crsala_8q3z');
+require_once __DIR__ . '/worker_key.php';
+// CR-F01b: sin CRECER_WORKER_KEY no hay llave. NADA de literal de respaldo:
+// adoptar en silencio una llave del repo publico era la trampa.
+if (!defined('SALA_WORKER_KEY')) define('SALA_WORKER_KEY', worker_key());
 
 function _sala_set(PDO $pdo, int $id, array $f): void {
     if (!$f) return;
@@ -31,6 +34,9 @@ function sala_encolar(PDO $pdo, int $marca_id, string $mensaje, array $historial
 
 /** Dispara el worker por auto-HTTP, fire-and-forget (responde YA y sigue por detrás). */
 function sala_disparar(int $id): void {
+    // CR-F01b: sin llave no se dispara. El job se queda en cola y lo rescata el
+    // sweep cuando el config vuelva — mejor eso que quemar el intento contra un 503.
+    if (!worker_puede_disparar('sala')) return;
     $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
     $url  = 'https://' . $host . '/crecer/panel/sala_worker.php?id=' . $id . '&key=' . SALA_WORKER_KEY;
     $ch = curl_init($url);

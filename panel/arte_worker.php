@@ -8,13 +8,15 @@
 //  Gated por llave fija (no público).
 // ============================================================
 require __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/worker_key.php';   // CR-F01b: falla cerrado sin llave
 require_once __DIR__ . '/../includes/img_responses.php';
 require_once __DIR__ . '/../includes/notif.php';
 
 $mid = (int)($_GET['marca'] ?? 0);
 $pid = (int)($_GET['id'] ?? 0);
 $key = (string)($_GET['key'] ?? '');
-if (!$mid || !$pid || !hash_equals(ARTE_WORKER_KEY, $key)) { http_response_code(403); exit('no'); }
+if (!$mid || !$pid) { http_response_code(403); exit('no'); }
+worker_autorizar($key, 'arte');
 
 // Responde YA al que disparó; el trabajo sigue por detrás.
 header('Content-Type: text/plain; charset=utf-8');

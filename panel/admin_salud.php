@@ -13,6 +13,7 @@ require_once __DIR__ . '/../includes/iconos.php';
 require_once __DIR__ . '/../includes/ia.php';       // ia_transporte(), openai_configurado()
 require_once __DIR__ . '/../includes/meta.php';     // meta_configurado()
 require_once __DIR__ . '/../includes/stripe.php';   // stripe_configurado()
+require_once __DIR__ . '/../includes/worker_key.php'; // worker_key_configurada() — solo el booleano
 require_once __DIR__ . '/../includes/metricas.php'; // refrescar insights de todos
 requiere_login();
 $usuario = usuario_actual($pdo);
@@ -47,6 +48,10 @@ $integraciones = [
     ['OpenAI (imágenes)',     openai_configurado(),        openai_configurado()?'configurado':'opcional — sin llave (todo cae a Gemini)'],
     ['Meta (IG/FB)',          meta_configurado(),          meta_configurado()?'app configurada':'falta META_APP_ID/SECRET'],
     ['Stripe (cobros)',       stripe_configurado(),        stripe_configurado()?'configurado':'falta STRIPE_SECRET_KEY'],
+    // CR-F01b: se reporta SOLO si está configurada. El valor no se muestra nunca.
+    ['Llave de workers',      worker_key_configurada(),    worker_key_configurada()
+        ? 'configurada'
+        : 'FALTA CRECER_WORKER_KEY — los workers async están fallando cerrado (503)'],
 ];
 
 // ── Actividad de crons (proxies honestos) ──

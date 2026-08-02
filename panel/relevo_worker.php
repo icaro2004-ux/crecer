@@ -8,12 +8,14 @@
 //  Gated por llave fija (no público). NO toca la lógica del relevo.
 // ============================================================
 require __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/worker_key.php';   // CR-F01b: falla cerrado sin llave
 require __DIR__ . '/../includes/agentes.php';
 require __DIR__ . '/../includes/relevo_demo.php';
 
 $mid = (int)($_GET['marca'] ?? 0);
 $key = (string)($_GET['key'] ?? '');
-if (!$mid || !hash_equals(RELEVO_WORKER_KEY, $key)) { http_response_code(403); exit('no'); }
+if (!$mid) { http_response_code(403); exit('no'); }
+worker_autorizar($key, 'relevo');
 
 // Responde YA al que disparó; el corillo sigue por detrás.
 header('Content-Type: text/plain; charset=utf-8');
