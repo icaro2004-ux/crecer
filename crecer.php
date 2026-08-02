@@ -235,13 +235,16 @@ $feed = [
   /* MÓVIL: una columna, corta; el celular arriba (el gancho antes del scroll) */
   @media(max-width:820px){
     .show{min-height:0;padding:26px 22px 42px}
-    .show-in{grid-template-columns:1fr;gap:26px;text-align:center}
-    .pitch{max-width:none;display:flex;flex-direction:column;align-items:center}
-    .pitch .lead{max-width:32ch}
-    .pills{justify-content:center}
-    .cta-row{align-items:center;width:100%}
+    /* una sola columna; con display:contents intercalo el celular ENTRE el titular y el resto */
+    .show-in{display:flex;flex-direction:column;align-items:center;gap:18px;text-align:center}
+    .pitch{display:contents}
+    .eyebrow{order:1}
+    .pitch h2{order:2;margin:0;max-width:16ch}
+    .stageph{order:3}
+    .pitch .lead{order:4;margin:0;max-width:32ch}
+    .pills{order:5;justify-content:center;max-width:100%}
+    .cta-row{order:6;align-items:center;width:100%}
     .enter{width:100%;max-width:360px;justify-content:center}
-    .stageph{order:-1}
     .phone{width:min(280px,74vw)}
     .pflag{right:-6px}
   }
