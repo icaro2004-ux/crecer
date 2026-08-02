@@ -35,6 +35,11 @@
 
 if (!defined('CT_CONTRATO_VERSION')) define('CT_CONTRATO_VERSION', 'ct-v1');
 
+// Umbrales de SUFICIENCIA (CR-F03). Deliberadamente bajos: no se trata de exigirle
+// un ensayo al dueño, sino de no inventar cuando no hay absolutamente nada.
+if (!defined('CT_SENALES_MINIMAS')) define('CT_SENALES_MINIMAS', 2);   // señales sustantivas del genoma
+if (!defined('CT_VOZ_MINIMA'))      define('CT_VOZ_MINIMA', 60);       // caracteres de voz para que cuente
+
 // Vocabulario de ángulos (guía, no camisa de fuerza). Lo desconocido → 'otro'.
 function ct_angulos(): array {
     return ['historia','orgullo','nostalgia','humor','curiosidad','tradicion','comunidad','sorpresa',
@@ -80,8 +85,98 @@ function ct_result_abstained(string $motivo, array $brief): array {
     ];
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+//  SUFICIENCIA (CR-F03, 2026-08-02)
+//
+//  La trazabilidad sola no alcanza. Comprobar que la señal citada EXISTE deja
+//  pasar cualquier invento sobre un negocio del que no sabemos nada: un genoma
+//  vacío igual tiene señales triviales que citar (un producto llamado "varios",
+//  un eje de DNA, su propia frase de una línea). Verificado el 2026-08-02: tres
+//  narrativas inventadas distintas pasaron como `accepted` sobre "Mi Negocito".
+//
+//  Así que se exige que la aceptación descanse en HECHOS DEL NEGOCIO, no en
+//  señales formalmente existentes:
+//    · antes de inferir  → ct_genoma_suficiente(): si no hay de dónde sacar una
+//      idea verdadera, se abstiene sin gastar la llamada.
+//    · después de inferir → al menos UNA evidencia sustantiva.
+// ══════════════════════════════════════════════════════════════════════════
+
+/** Palabras que ocupan el campo pero no dicen nada del negocio. */
+function ct_genericos(): array {
+    return ['varios','varias','varios productos','varias cosas','cosas','producto','productos',
+            'servicio','servicios','articulo','articulos','artículo','artículos','de todo','todo',
+            'mercancia','mercancía','general','otro','otros','misc','miscelaneos','misceláneos',
+            'n/a','na','ninguno','nada','-','—','x'];
+}
+
+/** ¿Este texto es un relleno genérico? (normalizado, sin acentos ni mayúsculas) */
+function ct_es_generico(string $s): bool {
+    $n = _ct_norm($s);
+    if ($n === '' || mb_strlen($n) < 4) return true;
+    $sin_acento = strtr($n, ['á'=>'a','é'=>'e','í'=>'i','ó'=>'o','ú'=>'u','ü'=>'u']);
+    foreach (ct_genericos() as $g) {
+        $g = strtr(_ct_norm($g), ['á'=>'a','é'=>'e','í'=>'i','ó'=>'o','ú'=>'u','ü'=>'u']);
+        if ($sin_acento === $g) return true;
+    }
+    return false;
+}
+
+/**
+ * ¿Esta referencia de evidencia apunta a un HECHO del negocio, o solo a una
+ * señal que existe de forma?
+ *   observacion → sí: es algo aprendido del negocio.
+ *   producto    → solo si tiene nombre propio ("bizcocho de guayaba", no "varios").
+ *   voz         → solo si el dueño contó algo de verdad y se cita un trozo con carne.
+ *   eje_dna     → NUNCA por sí solo: un eje es CÓMO habla, no QUÉ es cierto de él.
+ */
+function ct_evidencia_sustantiva(array $ref, array $genome): bool {
+    if (!ct_evidencia_resuelve($ref, $genome)) return false;
+    $fuente = (string)($ref['fuente'] ?? '');
+    $clave  = trim((string)($ref['clave'] ?? ''));
+    switch ($fuente) {
+        case 'observacion': return true;
+        case 'producto':    return !ct_es_generico($clave);
+        case 'voz':
+            $voz = _ct_norm(((string)($genome['voz'] ?? '')) . ' ' . ((string)($genome['descripcion'] ?? '')));
+            return mb_strlen($voz) >= CT_VOZ_MINIMA && mb_strlen(_ct_norm($clave)) >= 20;
+        case 'eje_dna':     return false;
+    }
+    return false;
+}
+
+/**
+ * ¿Hay de dónde sacar una idea verdadera, ANTES de gastar una llamada al modelo?
+ * Cuenta señales sustantivas: cada observación, cada producto con nombre propio,
+ * y una voz con historia de verdad. Con menos de CT_SENALES_MINIMAS, el corillo
+ * se abstiene y pide más información — que es lo honesto y, además, gratis.
+ *
+ * @return array{ok:bool, señales:int, motivo:string}
+ */
+function ct_genoma_suficiente(array $genome): array {
+    $obs = 0;
+    foreach ((array)($genome['observaciones'] ?? []) as $o) {
+        $t = is_array($o) ? (string)($o['texto'] ?? '') : (string)$o;
+        if (_ct_norm($t) !== '') $obs++;
+    }
+    $prods = 0;
+    foreach ((array)($genome['productos'] ?? []) as $p) {
+        if (!ct_es_generico((string)$p)) $prods++;
+    }
+    $voz = _ct_norm(((string)($genome['voz'] ?? '')) . ' ' . ((string)($genome['descripcion'] ?? '')));
+    $voz_ok = mb_strlen($voz) >= CT_VOZ_MINIMA ? 1 : 0;
+
+    $senales = $obs + $prods + $voz_ok;
+    if ($senales >= CT_SENALES_MINIMAS) return ['ok' => true, 'señales' => $senales, 'motivo' => ''];
+
+    return ['ok' => false, 'señales' => $senales, 'motivo' =>
+        'todavía no sé lo suficiente de este negocio para decir algo verdadero '
+        . "(señales sustantivas: {$senales} de " . CT_SENALES_MINIMAS . ' — hacen falta productos con nombre propio, '
+        . 'algo que el dueño haya contado, u observaciones aprendidas)'];
+}
+
 // ── Validación determinista de una referencia de evidencia contra el Genome ──
-// Solo comprueba que la señal citada EXISTE. No juzga si "suena verdad".
+// Solo comprueba que la señal citada EXISTE. No juzga si "suena verdad" — de eso
+// se encarga ct_evidencia_sustantiva().
 function ct_evidencia_resuelve(array $ref, array $genome): bool {
     $fuente = (string)($ref['fuente'] ?? '');
     $clave  = trim((string)($ref['clave'] ?? ''));
@@ -143,6 +238,14 @@ function ct_validar($raw, array $genome, array $brief): array {
         if (!ct_evidencia_resuelve($ref, $genome)) {
             return ct_result_abstained("evidencia no trazable ({$ref['fuente']}:{$ref['clave']})", $b);
         }
+    }
+    // CR-F03: trazable no es suficiente. Al menos UNA evidencia tiene que apuntar a
+    // un hecho del negocio. Citar solo un eje de DNA, un producto llamado "varios" o
+    // media frase de una voz de una línea es formalmente correcto y materialmente vacío.
+    $sustantivas = 0;
+    foreach ($ev as $ref) { if (ct_evidencia_sustantiva($ref, $genome)) $sustantivas++; }
+    if ($sustantivas === 0) {
+        return ct_result_abstained('evidencia trazable pero trivial: no sostiene ningún hecho del negocio', $b);
     }
 
     return ct_result_accepted([
@@ -209,6 +312,13 @@ function ct_build_request(array $genome, array $brief): array {
 //  El mecanismo concreto (hoy un callable) NO es la dependencia arquitectónica.
 //  NO persiste, NO integra, NO conoce infraestructura.
 function creative_thesis(array $genome, array $brief, callable $inferir): array {
+    // CR-F03 · COMPUERTA PREVIA: si no hay de dónde sacar una idea verdadera, nos
+    // abstenemos ANTES de preguntarle al modelo. Dos razones, en este orden:
+    // (1) preguntarle a un modelo por una historia que no existe es pedirle que la
+    //     invente, y la inventa bien; (2) de paso no se gasta la llamada.
+    $suf = ct_genoma_suficiente($genome);
+    if (!$suf['ok']) return ct_result_abstained($suf['motivo'], ct_brief($brief));
+
     $req = ct_build_request($genome, $brief);
     try {
         $texto = (string)$inferir($req);               // proveedor de inferencia (mecanismo actual: un callable)
