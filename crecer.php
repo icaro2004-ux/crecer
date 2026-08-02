@@ -356,7 +356,6 @@ $feed = [
             Hecho por el Corillo
           </div>
         </div>
-        <p class="demo-note">Ejemplos de demostración · negocios ficticios</p>
       </div>
 
     </div>
