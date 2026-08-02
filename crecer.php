@@ -28,28 +28,28 @@ $h        = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 // Muestran QUÉ tipo de posts monta el Corillo, para CUALQUIER negocio. Ficticios.
 // El arte es un gráfico de marca (gradiente + ícono + oferta), no foto de terceros (IP).
 $feed = [
-  ['n'=>'Barbería El Corte','h'=>'barberia_elcorte','c1'=>'#1f2937','c2'=>'#0ea5e9',
+  ['n'=>'Barbería El Corte','h'=>'barberia_elcorte','img'=>'barberia.png','c1'=>'#1f2937','c2'=>'#0ea5e9',
    'ic'=>'<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/>',
    'kick'=>'Fade impecable','offer'=>'Lun–Sáb · sin cita','cap'=>'El finde se llena rápido — asegura tu turno. 💈✂️'],
-  ['n'=>'DJ Ritmo PR','h'=>'dj_ritmo_pr','c1'=>'#6d28d9','c2'=>'#ec4899',
+  ['n'=>'DJ Louie','h'=>'dj_louie','img'=>'dj.png','c1'=>'#6d28d9','c2'=>'#ec4899',
    'ic'=>'<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="2" y="14" width="4" height="6" rx="1.5"/><rect x="18" y="14" width="4" height="6" rx="1.5"/>',
    'kick'=>'Tu fiesta, perfecta','offer'=>'Bodas · Cumpleaños','cap'=>'Fechas de diciembre volando 🔥 Aparta la tuya.'],
-  ['n'=>'Grooming Patitas','h'=>'grooming_patitas','c1'=>'#0f766e','c2'=>'#22c55e',
+  ['n'=>'Patitas Felices','h'=>'patitas_felices','img'=>'grooming.png','c1'=>'#0f766e','c2'=>'#22c55e',
    'ic'=>'<circle cx="7" cy="9" r="1.6"/><circle cx="12" cy="7" r="1.6"/><circle cx="17" cy="9" r="1.6"/><ellipse cx="12" cy="15" rx="4.5" ry="3.5"/>',
    'kick'=>'Tu perro, consentido','offer'=>'Baño + corte','cap'=>'Se va lindo y oliendo rico 🐾 Reserva hoy.'],
-  ['n'=>'Electric Torres','h'=>'electric_torres','c1'=>'#b45309','c2'=>'#f59e0b',
+  ['n'=>'Electric Torres','h'=>'electric_torres','img'=>'electricista.png','c1'=>'#b45309','c2'=>'#f59e0b',
    'ic'=>'<path d="M13 2 3 14h7l-1 8 10-12h-7Z"/>',
    'kick'=>'Emergencias 24/7','offer'=>'Estimados gratis','cap'=>'¿Se te fue la luz en un breaker? Te resuelvo. ⚡'],
-  ['n'=>'Lcda. Rivera','h'=>'lcda_rivera','c1'=>'#1e3a5f','c2'=>'#a67c00',
+  ['n'=>'Lcda. Rivera','h'=>'lcda_rivera','img'=>'abogada.png','c1'=>'#1e3a5f','c2'=>'#a67c00',
    'ic'=>'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
    'kick'=>'¿Te chocaron?','offer'=>'Consulta gratis','cap'=>'No firmes nada sin hablar conmigo. Te oriento. ⚖️'],
-  ['n'=>'Dulce Encanto','h'=>'dulce_encanto','c1'=>'#be185d','c2'=>'#fb7185',
+  ['n'=>'Dulce Encanto','h'=>'dulce_encanto','img'=>'reposteria.png','c1'=>'#be185d','c2'=>'#fb7185',
    'ic'=>'<path d="M6 11h12l-1.5 8h-9zM6 11a4 4 0 0 1 .6-8 3 3 0 0 1 5-1 3 3 0 0 1 5 1 4 4 0 0 1 .6 8"/>',
    'kick'=>'Bizcochos que enamoran','offer'=>'Por encargo','cap'=>'¿Cumpleaños esta semana? Te lo hago a la medida 🎂'],
-  ['n'=>'La Guagua del Sabor','h'=>'guagua_sabor','c1'=>'#b91c1c','c2'=>'#f97316',
+  ['n'=>'La Guagua del Sabor','h'=>'guagua_sabor','img'=>'foodtruck.png','c1'=>'#b91c1c','c2'=>'#f97316',
    'ic'=>'<path d="M3 6h11v9H3zM14 9h4l3 3v3h-7z"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/>',
    'kick'=>'Sabor en la calle','offer'=>'Vie–Dom','cap'=>'Hoy toca pinchos y tostones 🔥 Búscanos en la 65.'],
-  ['n'=>'CPA Núñez','h'=>'cpa_nunez','c1'=>'#1d4ed8','c2'=>'#38bdf8',
+  ['n'=>'CPA Núñez','h'=>'cpa_nunez','img'=>'cpa.png','c1'=>'#1d4ed8','c2'=>'#38bdf8',
    'ic'=>'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M8 15h2M12 15h2"/>',
    'kick'=>'Planillas sin estrés','offer'=>'Individuos y negocios','cap'=>'Deadline cerca 📊 Deja que yo me encargue de los números.'],
 ];
@@ -330,11 +330,13 @@ $feed = [
                   <span class="fmeta"><b><?= $h($p['n']) ?></b><small>@<?= $h($p['h']) ?></small></span>
                   <span class="fmore" aria-hidden="true">•••</span>
                 </div>
-                <?php $imgf = __DIR__ . '/assets/landing/feed/' . $p['h'] . '.jpg'; $imgu = '/crecer/assets/landing/feed/' . $p['h'] . '.jpg'; $ph = is_file($imgf); ?>
-                <div class="fimg<?= $ph ? ' hasimg' : '' ?>" style="--c1:<?= $h($p['c1']) ?>;--c2:<?= $h($p['c2']) ?><?= $ph ? ";background-image:linear-gradient(to top,rgba(0,0,0,.58),rgba(0,0,0,.05) 46%,transparent 68%),url('" . $h($imgu) . "')" : '' ?>">
-                  <?php if (!$ph): ?><span class="fic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><?= $p['ic'] ?></svg></span><?php endif; ?>
-                  <div class="fk"><?= $h($p['kick']) ?></div>
-                  <span class="foffer"><?= $h($p['offer']) ?></span>
+                <?php $imgf = __DIR__ . '/assets/landing/feed/' . $p['img']; $imgu = '/crecer/assets/landing/feed/' . $p['img']; $ph = is_file($imgf); ?>
+                <div class="fimg<?= $ph ? ' hasimg' : '' ?>" style="--c1:<?= $h($p['c1']) ?>;--c2:<?= $h($p['c2']) ?><?= $ph ? ";background-image:url('" . $h($imgu) . "')" : '' ?>">
+                  <?php if (!$ph): /* respaldo si aún no está la imagen: gradiente + ícono + texto */ ?>
+                    <span class="fic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><?= $p['ic'] ?></svg></span>
+                    <div class="fk"><?= $h($p['kick']) ?></div>
+                    <span class="foffer"><?= $h($p['offer']) ?></span>
+                  <?php endif; ?>
                 </div>
                 <div class="facts" aria-hidden="true">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
