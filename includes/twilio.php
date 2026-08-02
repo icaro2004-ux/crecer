@@ -13,11 +13,23 @@
 
 class TwilioError extends RuntimeException {}
 
-/** ¿Hay credenciales de Twilio? (para degradar con gracia). */
-function twilio_configurado(): bool {
+/** ¿Hay cuenta de Twilio? (lo mínimo para hablarle a la API). */
+function twilio_cuenta_configurada(): bool {
     return defined('TWILIO_ACCOUNT_SID') && TWILIO_ACCOUNT_SID !== ''
-        && defined('TWILIO_AUTH_TOKEN')  && TWILIO_AUTH_TOKEN  !== ''
+        && defined('TWILIO_AUTH_TOKEN')  && TWILIO_AUTH_TOKEN  !== '';
+}
+
+/** ¿Hay credenciales de Twilio Verify? (códigos OTP; degrada con gracia). */
+function twilio_configurado(): bool {
+    return twilio_cuenta_configurada()
         && defined('TWILIO_VERIFY_SID')  && TWILIO_VERIFY_SID  !== '';
+}
+
+/** ¿Se puede mandar un SMS de texto libre? (hace falta un número/servicio emisor). */
+function twilio_sms_configurado(): bool {
+    return twilio_cuenta_configurada()
+        && ((defined('TWILIO_FROM') && TWILIO_FROM !== '')
+            || (defined('TWILIO_MESSAGING_SID') && TWILIO_MESSAGING_SID !== ''));
 }
 
 /**
@@ -37,7 +49,10 @@ function tel_e164(string $telefono): string {
  * $path relativo a https://{host}/... ; $host default = verify.
  */
 function twilio_api(string $metodo, string $path, array $params = [], string $host = 'verify.twilio.com'): array {
-    if (!twilio_configurado()) {
+    // Basta con la cuenta: el Verify SID solo hace falta para los endpoints de Verify
+    // (los valida sms_enviar_codigo/sms_verificar_codigo). Así Messages puede correr
+    // aunque Verify no esté montado.
+    if (!twilio_cuenta_configurada()) {
         throw new TwilioError('Twilio no está configurado (faltan credenciales).');
     }
     $url = "https://{$host}/" . ltrim($path, '/');
@@ -76,6 +91,7 @@ function twilio_api(string $metodo, string $path, array $params = [], string $ho
 function sms_enviar_codigo(string $telefono): array {
     $e164 = tel_e164($telefono);
     if ($e164 === '') return ['ok' => false, 'err' => 'Ese número no se ve válido (usa 10 dígitos, ej. 787-555-1234).', 'e164' => ''];
+    if (!twilio_configurado()) return ['ok' => false, 'err' => 'Verificación por SMS no disponible ahora.', 'e164' => $e164];
     try {
         $r = twilio_api('POST', 'v2/Services/' . TWILIO_VERIFY_SID . '/Verifications', [
             'To' => $e164, 'Channel' => 'sms',
@@ -107,6 +123,7 @@ function sms_verificar_codigo(string $telefono, string $codigo): array {
     $e164 = tel_e164($telefono);
     $codigo = preg_replace('/\D+/', '', $codigo) ?? '';
     if ($e164 === '' || $codigo === '') return ['ok' => false, 'err' => 'Falta el número o el código.', 'e164' => $e164];
+    if (!twilio_configurado()) return ['ok' => false, 'err' => 'Verificación por SMS no disponible ahora.', 'e164' => $e164];
     try {
         $r = twilio_api('POST', 'v2/Services/' . TWILIO_VERIFY_SID . '/VerificationCheck', [
             'To' => $e164, 'Code' => $codigo,
@@ -116,5 +133,40 @@ function sms_verificar_codigo(string $telefono, string $codigo): array {
     } catch (Throwable $e) {
         error_log('sms_verificar_codigo: ' . $e->getMessage());
         return ['ok' => false, 'err' => 'No pudimos verificar el código ahora. Intenta otra vez.', 'e164' => $e164];
+    }
+}
+
+/**
+ * SMS de TEXTO LIBRE (Messages API) — no es Verify: aquí mandamos un mensaje
+ * nuestro. Lo usa el Ayudante para avisarle al fundador cuando levanta un caso.
+ *
+ * Emisor: TWILIO_MESSAGING_SID (Messaging Service, preferido) o TWILIO_FROM
+ * (número comprado, formato +1XXXXXXXXXX).
+ *
+ * @return array{ok:bool, err:string, sid:string}
+ */
+function sms_texto(string $telefono, string $mensaje): array {
+    $e164 = tel_e164($telefono);
+    if ($e164 === '')  return ['ok' => false, 'err' => 'número inválido', 'sid' => ''];
+    $mensaje = trim($mensaje);
+    if ($mensaje === '') return ['ok' => false, 'err' => 'mensaje vacío', 'sid' => ''];
+    if (!twilio_sms_configurado()) {
+        return ['ok' => false, 'err' => 'falta TWILIO_FROM o TWILIO_MESSAGING_SID', 'sid' => ''];
+    }
+    $params = ['To' => $e164, 'Body' => mb_substr($mensaje, 0, 1500)];
+    if (defined('TWILIO_MESSAGING_SID') && TWILIO_MESSAGING_SID !== '') {
+        $params['MessagingServiceSid'] = TWILIO_MESSAGING_SID;
+    } else {
+        $params['From'] = TWILIO_FROM;
+    }
+    try {
+        $r = twilio_api('POST', '2010-04-01/Accounts/' . TWILIO_ACCOUNT_SID . '/Messages.json',
+                        $params, 'api.twilio.com');
+        $st = (string)($r['status'] ?? '');
+        $ok = in_array($st, ['queued', 'accepted', 'sending', 'sent', 'delivered'], true);
+        return ['ok' => $ok, 'err' => $ok ? '' : ('estado ' . $st), 'sid' => (string)($r['sid'] ?? '')];
+    } catch (Throwable $e) {
+        error_log('sms_texto: ' . $e->getMessage());
+        return ['ok' => false, 'err' => mb_substr($e->getMessage(), 0, 160), 'sid' => ''];
     }
 }

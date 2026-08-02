@@ -11,6 +11,9 @@ $_opl = fn($k) => 'opa' . ($k === $op_active ? ' on' : '');
 $_nom = isset($usuario['nombre']) ? (string)$usuario['nombre'] : '';
 $op_prob = 0;
 if (isset($pdo)) { try { $op_prob = (int)$pdo->query("SELECT COUNT(DISTINCT marca_id) FROM crecer_contenido WHERE estado='fallido'")->fetchColumn(); } catch (Throwable $e) {} }
+// Casos que el Ayudante no pudo arreglar solo (esperan mano humana).
+$op_casos = 0;
+if (isset($pdo)) { try { $op_casos = (int)$pdo->query("SELECT COUNT(*) FROM crecer_incidencias WHERE estado IN ('abierta','escalada')")->fetchColumn(); } catch (Throwable $e) {} }
 ?>
 <style>
   .optop{display:flex;align-items:center;flex-wrap:wrap;gap:8px 6px;padding:12px 18px;background:#140a16;color:#fff;position:sticky;top:0;z-index:50}
@@ -30,6 +33,7 @@ if (isset($pdo)) { try { $op_prob = (int)$pdo->query("SELECT COUNT(DISTINCT marc
   <nav>
     <a class="<?= $_opl('analitica') ?>" href="/crecer/panel/admin.php">Analítica</a>
     <a class="<?= $_opl('problemas') ?>" href="/crecer/panel/admin_alertas.php">Problemas<?php if ($op_prob>0): ?> <span class="opbadge"><?= $op_prob ?></span><?php endif; ?></a>
+    <a class="<?= $_opl('incidencias') ?>" href="/crecer/panel/admin_incidencias.php">Casos<?php if ($op_casos>0): ?> <span class="opbadge"><?= $op_casos ?></span><?php endif; ?></a>
     <a class="<?= $_opl('soporte') ?>"   href="/crecer/panel/admin_soporte.php">Soporte</a>
     <a class="<?= $_opl('equipo') ?>"    href="/crecer/panel/admin_equipo.php">Equipo</a>
     <a class="<?= $_opl('salud') ?>"     href="/crecer/panel/admin_salud.php">Salud</a>

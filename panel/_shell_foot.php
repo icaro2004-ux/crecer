@@ -13,9 +13,7 @@
 
 <div class="lightbox-ov" id="lightbox"><img src="" alt=""></div>
 
-<!-- Copiloto flotante retirado (2026-07-26): el app ya es intuitivo; su rol proactivo
-     (qué falta / próximo paso) vive ahora en el Inicio y en recomendaciones contextuales.
-     Backend panel/asistente.php queda inerte por si se reusa. -->
+<?php require_once __DIR__ . "/../includes/ayudante_widget.php"; ?>
 
 <?php if (!empty($guia)): ?>
 <!-- Guía del corillo (overlay flotante, una vez por página + botón "?") -->

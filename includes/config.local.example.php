@@ -76,6 +76,18 @@ define('CRON_TOKEN', '');
 // Si se deja vacío, cae a jmp.arch.eng@gmail.com.
 define('REPORTE_EMAIL', '');
 
+// ── EL AYUDANTE (helper que arregla y escala) ────────────────────────────────
+// Cuando el Ayudante no puede arreglar algo solo, levanta el caso y AVISA aquí:
+// email con la explicación completa + SMS corto. Sin estas constantes el caso
+// igual queda escrito en crecer_incidencias, pero el aviso no sale.
+//   define('CRECER_FUNDADOR_EMAIL', 'tucorreo@gmail.com');   // vacío → usa REPORTE_EMAIL
+//   define('CRECER_FUNDADOR_SMS',   '787-555-1234');         // tu celular
+//
+// Para el SMS hace falta un emisor de Twilio (Verify NO sirve: eso es solo para
+// códigos). Usa UNO de los dos:
+//   define('TWILIO_FROM',          '+17875550100');          // número comprado en Twilio
+//   define('TWILIO_MESSAGING_SID', 'MGxxxxxxxxxxxxxxxx');    // Messaging Service (preferido)
+
 // Llave secreta de los workers async internos (arte, carrusel, gen, reels, sala, publicar).
 // Vacío = cada worker usa su literal por defecto (solo dev). En PROD PONLE un valor ALEATORIO
 // (ej. bin2hex(random_bytes(16))) para que nadie dispare tus workers de generación desde el

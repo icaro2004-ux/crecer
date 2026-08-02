@@ -414,6 +414,64 @@ try {
         } catch (Throwable $e) { echo "REPORTE falló (¿corriste la migración crecer_generaciones?): " . $e->getMessage() . "\n"; }
     }
 
+    // EL AYUDANTE: ¿está montado y viendo bien?  &test=ayudante  (solo lectura)
+    //   Añade  &avisa=1  para mandarte un caso de PRUEBA por email + SMS (cuesta centavos).
+    if (($_GET['test'] ?? '') === 'ayudante') {
+        echo "\n--- EL AYUDANTE (soporte que arregla) ---\n";
+        require_once __DIR__ . '/includes/ayudante.php';
+        require_once __DIR__ . '/includes/twilio.php';
+        $tabla = true;
+        try { $pdo->query("SELECT COUNT(*) FROM crecer_incidencias"); }
+        catch (Throwable $e) { $tabla = false; }
+        echo "tabla crecer_incidencias      : " . ($tabla ? "SÍ ✅\n" : "NO ❌ (corre migrations/2026-08-01_ayudante.sql en phpMyAdmin)\n");
+        $c = ayudante_contacto_fundador();
+        echo "CRECER_FUNDADOR_EMAIL         : " . ($c['email'] !== '' ? ($c['email'] . " ✅\n") : "vacío ❌ (no sale el aviso por email)\n");
+        echo "CRECER_FUNDADOR_SMS           : " . ($c['sms'] !== '' ? ($c['sms'] . " ✅\n") : "vacío ❌ (no sale el aviso por texto)\n");
+        echo "SMS de texto libre montado    : " . (twilio_sms_configurado() ? "SÍ ✅\n" : "NO ❌ (falta TWILIO_FROM o TWILIO_MESSAGING_SID)\n");
+        if ($tabla) {
+            try {
+                $ab = (int)$pdo->query("SELECT COUNT(*) FROM crecer_incidencias WHERE estado IN ('abierta','escalada')")->fetchColumn();
+                echo "casos sin resolver            : {$ab}\n";
+                foreach ($pdo->query("SELECT id,codigo,estado,titulo,aviso_email,aviso_sms,created_at
+                                      FROM crecer_incidencias ORDER BY id DESC LIMIT 5")->fetchAll(PDO::FETCH_ASSOC) as $i) {
+                    echo "  #{$i['id']} [{$i['estado']}] {$i['codigo']} — " . substr((string)$i['titulo'],0,60)
+                       . " (email=" . ($i['aviso_email']?'sí':'no') . " sms=" . ($i['aviso_sms']?'sí':'no') . ") {$i['created_at']}\n";
+                }
+            } catch (Throwable $e) {}
+        }
+        // Escaneo REAL (sin arreglar nada) de los negocios con movimiento.
+        echo "\nESCANEO (solo lectura, no arregla):\n";
+        try {
+            $ms = $pdo->query("SELECT id,nombre_negocio FROM crecer_marca ORDER BY id DESC LIMIT 6")->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($ms as $m) {
+                $hh = ayudante_escanear($pdo, (int)$m['id']);
+                echo "  #{$m['id']} " . substr((string)$m['nombre_negocio'],0,28) . ": " . count($hh) . " hallazgo(s)\n";
+                foreach ($hh as $x) echo "      · {$x['codigo']} " . ($x['ref_id'] ? '#'.$x['ref_id'] : '')
+                                        . " → " . ($x['accion'] ?: 'sin arreglo automático') . "\n";
+            }
+        } catch (Throwable $e) { echo "  escaneo falló: " . $e->getMessage() . "\n"; }
+        // Aviso de prueba de punta a punta (email + SMS reales). Gasta centavos →
+        // exige la misma llave que el resto de las pruebas en vivo.
+        $__avisa_ok = (($_GET['avisa'] ?? '') === '1') && hash_equals($__imgkey, (string)($_GET['t'] ?? ''));
+        if (($_GET['avisa'] ?? '') === '1' && !$__avisa_ok) {
+            echo "\n(Para el aviso de prueba añade también  &t={$__imgkey} .)\n";
+        }
+        if ($__avisa_ok) {
+            echo "\nMandando CASO DE PRUEBA al fundador…\n";
+            $av = ayudante_avisar_fundador($pdo, 0, null, [
+                'titulo' => 'PRUEBA del canal de avisos (ignórala)',
+                'severidad' => 'baja',
+                'diagnostico' => 'Esto es una prueba disparada desde _cache.php?test=ayudante&avisa=1. No hay nada roto.',
+                'detalle' => 'origen=_cache.php · ' . date('Y-m-d H:i:s'),
+            ]);
+            echo "  email: " . ($av['email'] ? "✅ salió\n" : "❌ no salió\n");
+            echo "  SMS  : " . ($av['sms']   ? "✅ salió\n" : "❌ no salió\n");
+            if ($av['error'] !== '') echo "  detalle: {$av['error']}\n";
+        } else {
+            echo "\n(Para probar el aviso de verdad añade  &avisa=1  — te llega email + texto.)\n";
+        }
+    }
+
     // Prueba REAL del SMS: manda un código de verdad y muestra el ERROR CRUDO de Twilio.
     //    Añade  &test=sms&to=7875551234&s=crsms_7k2x  . Cuesta unos centavos.
     //    Llave FIJA (no el CRON_TOKEN) para no depender del config. Bórrala/rota luego.

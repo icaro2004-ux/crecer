@@ -73,7 +73,9 @@ require __DIR__ . '/_shell.php';
 
 <div class="sp-top">
   <h1>Soporte</h1>
-  <p>¿Una duda, una idea, algo trabado? Escríbele directo al equipo. Te contestamos por aquí.</p>
+  <p>¿Una duda, una idea, algo trabado? Escríbele directo al equipo. Te contestamos por aquí.
+     Si es algo que se trabó ahora mismo, el botón <b>Ayuda</b> (abajo a la derecha) lo revisa
+     y lo arregla al momento.</p>
 </div>
 
 <div class="sp-card">
