@@ -1229,7 +1229,8 @@ $credito  = $has_deck
 })();
 </script>
 <?php
-// EL RECIBIMIENTO — solo la primera vez de esta cuenta. Va aquí (antes del foot)
-// pero su JS espera al 'load', para que el botón Ayuda ya exista cuando lo ilumine.
-require __DIR__ . '/../includes/tour_home.php';
+// EL RECIBIMIENTO — la primera vez que esta cuenta entra a esta pantalla.
+// Su JS espera al 'load', así el botón Ayuda ya existe cuando lo ilumine.
+require_once __DIR__ . '/../includes/tour.php';
+tour_montar($pdo, $marca_id, 'inicio', ['hay_post' => !empty($hz_post)]);
 require __DIR__ . '/_shell_foot.php'; ?>

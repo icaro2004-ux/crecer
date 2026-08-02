@@ -115,13 +115,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ' . $volver . 'negocio&ok=1'); exit;
     }
 
-    // "Ver el recibimiento otra vez" — borra la marca y el Inicio lo vuelve a dar.
-    // Es de una sola vez por diseño, pero el dueño manda: si lo quiere repasar, puede.
+    // "Repasar el recorrido" — borra el visto de TODAS las pantallas, no solo del
+    // Inicio: si lo quiere repasar, que se lo den completo otra vez. Es de una sola
+    // vez por diseño, pero el dueño manda.
     if ($accion === 'tour_repetir') {
         try {
-            $pdo->prepare("UPDATE crecer_marca SET tour_home_at=NULL WHERE id=? AND usuario_id=?")
+            $pdo->prepare("DELETE t FROM crecer_tour_visto t
+                           JOIN crecer_marca m ON m.id = t.marca_id
+                           WHERE t.marca_id=? AND m.usuario_id=?")
                 ->execute([$marca_id, $USUARIO_ID]);
-        } catch (Throwable $e) { /* sin la columna todavía: el JS lo maneja con ?tour=1 */ }
+        } catch (Throwable $e) { /* sin la tabla todavía: el JS lo maneja con ?tour=1 */ }
         header('Location: /crecer/panel/index.php?marca=' . $marca_id . '&tour=1'); exit;
     }
 
@@ -370,7 +373,7 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
       <?= csrf_field() ?><input type="hidden" name="accion" value="tour_repetir">
       <div class="cfg-card">
         <h2><?= ico('compass') ?> Repasar el recorrido</h2>
-        <p class="sub">El paseo que te dimos la primera vez: qué hace tu corillo, dónde vive cada cosa y cómo pedir ayuda. Te lo damos de nuevo en tu Inicio.</p>
+        <p class="sub">El paseo de la primera vez: qué hace tu corillo y qué puedes pedir en cada pantalla. Se te vuelve a dar en Inicio, Crear, Calendario, Resultados, La Sala y Reels — cada uno cuando entres.</p>
         <button class="cfg-save" type="submit">Verlo otra vez</button>
       </div>
     </form>

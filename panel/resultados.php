@@ -441,4 +441,9 @@ $fnum = fn($n) => number_format((int)$n);
 })();
 </script>
 
-<?php require __DIR__ . '/_shell_foot.php'; ?>
+<?php
+// EL RECIBIMIENTO — la primera vez que esta cuenta entra a esta pantalla.
+// Su JS espera al 'load', así el botón Ayuda ya existe cuando lo ilumine.
+require_once __DIR__ . '/../includes/tour.php';
+tour_montar($pdo, $marca_id, 'resultados');
+require __DIR__ . '/_shell_foot.php'; ?>
