@@ -127,7 +127,9 @@ $nav_perfil = [
     <div class="side-legal" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:4px 12px;padding-left:12px;padding-right:12px">
       <a href="/crecer/privacidad.php" style="color:var(--muted);font-size:12px;text-decoration:none">Privacidad</a>
       <a href="/crecer/terminos.php" style="color:var(--muted);font-size:12px;text-decoration:none">Términos</a>
-      <a href="/crecer/eliminar-datos.php" style="color:var(--muted);font-size:12px;text-decoration:none">Eliminar datos</a>
+      <!-- "Eliminar datos" a secas parecía un gatillo que te vuela la cuenta. Es una
+           página que EXPLICA cómo pedirlo (Meta exige que esa URL sea visible). -->
+      <a href="/crecer/eliminar-datos.php" style="color:var(--muted);font-size:12px;text-decoration:none">Cómo eliminar mis datos</a>
       <span style="color:var(--muted);font-size:11.5px;width:100%;margin-top:4px">© Encuéntralo · Crecer</span>
     </div>
   </aside>
