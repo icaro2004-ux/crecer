@@ -83,10 +83,19 @@ define('REPORTE_EMAIL', '');
 //   define('CRECER_FUNDADOR_EMAIL', 'tucorreo@gmail.com');   // vacío → usa REPORTE_EMAIL
 //   define('CRECER_FUNDADOR_SMS',   '787-555-1234');         // tu celular
 //
-// Para el SMS hace falta un emisor de Twilio (Verify NO sirve: eso es solo para
-// códigos). Usa UNO de los dos:
-//   define('TWILIO_FROM',          '+17875550100');          // número comprado en Twilio
-//   define('TWILIO_MESSAGING_SID', 'MGxxxxxxxxxxxxxxxx');    // Messaging Service (preferido)
+// El TEXTO al celular sale por una de dos rutas (se intenta en este orden):
+//
+//  1) CORREO→TEXTO (gratis, sin papeleo) — RECOMENDADO para avisos al fundador.
+//     El buzón de tu compañía celular entrega el correo como SMS. Pon el dominio:
+//       define('CRECER_SMS_GATEWAY', 'tmomail.net');   // T-Mobile
+//     También acepta apodo ('tmobile', 'att', 'verizon') o la dirección completa.
+//     Otra compañía: busca "<tu compañía> email to SMS gateway" y pon ese dominio.
+//
+//  2) TWILIO MESSAGES — lo formal, si algún día hace falta mandarle a clientes.
+//     Verify NO sirve (solo manda códigos) y esto exige número propio + registro
+//     A2P 10DLC. Usa UNO de los dos:
+//       define('TWILIO_FROM',          '+17875550100');       // número comprado
+//       define('TWILIO_MESSAGING_SID', 'MGxxxxxxxxxxxxxxxx'); // Messaging Service
 
 // Llave secreta de los workers async internos (arte, carrusel, gen, reels, sala, publicar).
 // Vacío = cada worker usa su literal por defecto (solo dev). En PROD PONLE un valor ALEATORIO

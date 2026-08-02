@@ -489,6 +489,65 @@ function ayudante_contacto_fundador(): array {
 }
 
 /**
+ * Dirección correo→texto del fundador (la puerta de la compañía celular).
+ *
+ * Es el camino BARATO para avisarle al celular: Twilio Verify solo manda códigos,
+ * y mandar texto libre con Twilio exige número propio + registro A2P 10DLC — mucho
+ * aparato para avisarle a UNA persona. Casi toda compañía tiene un buzón que entra
+ * como SMS al teléfono.
+ *
+ * Config: CRECER_SMS_GATEWAY = el dominio de tu compañía ('tmomail.net'), o un
+ * apodo conocido ('tmobile'), o la dirección completa ya armada.
+ * Devuelve '' si no está configurado.
+ */
+function ayudante_sms_gateway(): string {
+    $tel = defined('CRECER_FUNDADOR_SMS') ? (preg_replace('/\D+/', '', (string)CRECER_FUNDADOR_SMS) ?? '') : '';
+    $g   = defined('CRECER_SMS_GATEWAY') ? trim(strtolower((string)CRECER_SMS_GATEWAY)) : '';
+    if ($g === '') return '';
+    if (strpos($g, '@') !== false) return $g;          // ya viene la dirección completa
+    // Apodos que sí conozco. Cualquier otra compañía: pon el dominio directo en el config.
+    $map = ['tmobile' => 'tmomail.net', 't-mobile' => 'tmomail.net',
+            'att' => 'txt.att.net', 'verizon' => 'vtext.com'];
+    $dom = $map[$g] ?? $g;
+    if (strpos($dom, '.') === false) return '';        // no parece dominio
+    if ($tel === '') return '';
+    if (strlen($tel) === 11 && $tel[0] === '1') $tel = substr($tel, 1);   // los gateways quieren 10 dígitos
+    if (strlen($tel) !== 10) return '';
+    return $tel . '@' . $dom;
+}
+
+/**
+ * Manda el aviso al celular del fundador. Primero Twilio (si algún día se monta
+ * el número); si no, la puerta correo→texto. Texto CORTO: los gateways cortan
+ * cerca de 160 caracteres.
+ * @return array{ok:bool, via:string, err:string}
+ */
+function ayudante_sms(string $texto): array {
+    $texto = mb_substr(trim($texto), 0, 155);
+
+    require_once __DIR__ . '/twilio.php';
+    if (function_exists('twilio_sms_configurado') && twilio_sms_configurado()) {
+        $tel = defined('CRECER_FUNDADOR_SMS') ? (string)CRECER_FUNDADOR_SMS : '';
+        if ($tel !== '') {
+            $r = sms_texto($tel, $texto);
+            if (!empty($r['ok'])) return ['ok' => true, 'via' => 'twilio', 'err' => ''];
+            // Si Twilio falla, todavía queda la puerta del correo: no se pierde el aviso.
+            $err_twilio = (string)($r['err'] ?? 'falló');
+        }
+    }
+    $dir = ayudante_sms_gateway();
+    if ($dir === '') {
+        return ['ok' => false, 'via' => 'ninguna',
+                'err' => ($err_twilio ?? '') !== '' ? ('twilio: ' . $err_twilio)
+                       : 'falta CRECER_SMS_GATEWAY (o TWILIO_FROM)'];
+    }
+    require_once __DIR__ . '/notificaciones.php';
+    // Texto pelado a propósito: el gateway lo entrega como SMS, el HTML sale sucio.
+    $ok = crecer_enviar_email($dir, 'Crecer', $texto);
+    return ['ok' => $ok, 'via' => 'gateway:' . $dir, 'err' => $ok ? '' : 'el correo al gateway no salió'];
+}
+
+/**
  * Levanta la INCIDENCIA: la escribe, avisa al fundador (email + SMS), deja la
  * nota en el hilo de Soporte del dueño y le notifica in-app.
  *
@@ -572,7 +631,7 @@ function ayudante_reportar(PDO $pdo, ?int $marca_id, array $inc): int {
 
 /** Manda el aviso al fundador: email con la explicación + SMS corto. */
 function ayudante_avisar_fundador(PDO $pdo, int $inc_id, ?int $marca_id, array $inc): array {
-    $out = ['email' => false, 'sms' => false, 'error' => ''];
+    $out = ['email' => false, 'sms' => false, 'via' => '', 'error' => ''];
     $c = ayudante_contacto_fundador();
 
     $negocio = '—';
@@ -621,17 +680,14 @@ function ayudante_avisar_fundador(PDO $pdo, int $inc_id, ?int $marca_id, array $
         $out['error'] .= 'sin CRECER_FUNDADOR_EMAIL. ';
     }
 
-    // ── SMS corto (lo que se lee de un vistazo) ──
+    // ── SMS corto (lo que se lee de un vistazo, sin abrir nada) ──
     if ($c['sms'] !== '') {
         try {
-            require_once __DIR__ . '/twilio.php';
-            if (function_exists('sms_texto')) {
-                $txt = 'Crecer · Caso #' . $inc_id . ' (' . $sev . ') — ' . $negocio . ': ' . $titulo
-                     . '. Detalle en el email.';
-                $rs = sms_texto($c['sms'], mb_substr($txt, 0, 300));
-                $out['sms'] = !empty($rs['ok']);
-                if (!$out['sms']) $out['error'] .= 'sms: ' . (string)($rs['err'] ?? 'falló') . ' ';
-            } else { $out['error'] .= 'sms_texto no disponible. '; }
+            $txt = 'Crecer Caso #' . $inc_id . ' (' . $sev . ') ' . $negocio . ': ' . $titulo . '. Detalle en el email.';
+            $rs = ayudante_sms($txt);
+            $out['sms'] = !empty($rs['ok']);
+            $out['via'] = (string)($rs['via'] ?? '');
+            if (!$out['sms']) $out['error'] .= 'sms: ' . (string)($rs['err'] ?? 'falló') . ' ';
         } catch (Throwable $ex) { $out['error'] .= 'sms: ' . mb_substr($ex->getMessage(), 0, 120) . ' '; }
     } else {
         $out['error'] .= 'sin CRECER_FUNDADOR_SMS. ';

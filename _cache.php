@@ -427,7 +427,11 @@ try {
         $c = ayudante_contacto_fundador();
         echo "CRECER_FUNDADOR_EMAIL         : " . ($c['email'] !== '' ? ($c['email'] . " ✅\n") : "vacío ❌ (no sale el aviso por email)\n");
         echo "CRECER_FUNDADOR_SMS           : " . ($c['sms'] !== '' ? ($c['sms'] . " ✅\n") : "vacío ❌ (no sale el aviso por texto)\n");
-        echo "SMS de texto libre montado    : " . (twilio_sms_configurado() ? "SÍ ✅\n" : "NO ❌ (falta TWILIO_FROM o TWILIO_MESSAGING_SID)\n");
+        $__gw = ayudante_sms_gateway();
+        echo "Ruta del texto al celular     : ";
+        if (twilio_sms_configurado())      echo "Twilio Messages ✅\n";
+        elseif ($__gw !== '')              echo "correo→texto ✅  ({$__gw})\n";
+        else                               echo "NINGUNA ❌ (pon CRECER_SMS_GATEWAY, ej. 'tmomail.net')\n";
         if ($tabla) {
             try {
                 $ab = (int)$pdo->query("SELECT COUNT(*) FROM crecer_incidencias WHERE estado IN ('abierta','escalada')")->fetchColumn();
@@ -465,7 +469,7 @@ try {
                 'detalle' => 'origen=_cache.php · ' . date('Y-m-d H:i:s'),
             ]);
             echo "  email: " . ($av['email'] ? "✅ salió\n" : "❌ no salió\n");
-            echo "  SMS  : " . ($av['sms']   ? "✅ salió\n" : "❌ no salió\n");
+            echo "  SMS  : " . ($av['sms']   ? ("✅ salió por " . ($av['via'] ?? '?') . "\n") : "❌ no salió\n");
             if ($av['error'] !== '') echo "  detalle: {$av['error']}\n";
         } elseif (($_GET['avisa'] ?? '') !== '1') {
             // Si ya puso &avisa=1 pero le falta la llave, arriba ya se lo dijo:
