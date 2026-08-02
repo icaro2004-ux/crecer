@@ -330,7 +330,8 @@ $feed = [
                   <span class="fmeta"><b><?= $h($p['n']) ?></b><small>@<?= $h($p['h']) ?></small></span>
                   <span class="fmore" aria-hidden="true">•••</span>
                 </div>
-                <?php $imgf = __DIR__ . '/assets/landing/feed/' . $p['img']; $imgu = '/crecer/assets/landing/feed/' . $p['img']; $ph = is_file($imgf); ?>
+                <?php $imgname = preg_replace('/\.png$/i', '.jpg', $p['img']); /* las PNG se comprimieron a JPG */
+                      $imgf = __DIR__ . '/assets/landing/feed/' . $imgname; $imgu = '/crecer/assets/landing/feed/' . $imgname; $ph = is_file($imgf); ?>
                 <div class="fimg<?= $ph ? ' hasimg' : '' ?>" style="--c1:<?= $h($p['c1']) ?>;--c2:<?= $h($p['c2']) ?><?= $ph ? ";background-image:url('" . $h($imgu) . "')" : '' ?>">
                   <?php if (!$ph): /* respaldo si aún no está la imagen: gradiente + ícono + texto */ ?>
                     <span class="fic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><?= $p['ic'] ?></svg></span>
