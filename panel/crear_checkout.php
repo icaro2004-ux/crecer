@@ -67,6 +67,21 @@ if (empty($plan['stripe_price_id'])) {
     volver_con_error($marca_id, 'Este plan aún no está conectado a Stripe (falta el price_id).');
 }
 
+// ── CR-F02b · GUARDIÁN DEL PRECIO ───────────────────────────────────────────
+// Antes de abrir el cobro, se compara lo que la app le prometió al cliente con lo
+// que Stripe le va a cobrar de verdad. Si no cuadra —o si no se puede comprobar—
+// NO se cobra. Ante la duda no se cobra: un cliente que no puede pagar hoy es un
+// problema; un cliente al que se le cobra de más es una traición.
+// El cliente ve SIEMPRE el mismo mensaje: ni montos contradictorios, ni ids, ni
+// errores crudos de Stripe. La causa técnica va al log y al aviso del fundador.
+require_once __DIR__ . '/../includes/precio_guardian.php';
+$chk_precio = precio_verificar($plan);
+if (empty($chk_precio['ok'])) {
+    error_log('[crecer checkout BLOQUEADO] ' . $chk_precio['motivo']);
+    precio_alertar($pdo, $plan, $chk_precio);          // deduplicado 6h por la incidencia
+    volver_con_error($marca_id, 'No pudimos preparar el pago ahora. No se realizó ningún cobro.');
+}
+
 // Reusar el customer de Stripe si la marca ya tiene uno
 $su = suscripcion_de_marca($pdo, $marca_id);
 $customer = $su['stripe_customer_id'] ?? null;

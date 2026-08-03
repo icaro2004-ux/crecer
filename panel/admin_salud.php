@@ -14,6 +14,7 @@ require_once __DIR__ . '/../includes/ia.php';       // ia_transporte(), openai_c
 require_once __DIR__ . '/../includes/meta.php';     // meta_configurado()
 require_once __DIR__ . '/../includes/stripe.php';   // stripe_configurado()
 require_once __DIR__ . '/../includes/worker_key.php'; // worker_key_configurada() — solo el booleano
+require_once __DIR__ . '/../includes/precio_guardian.php'; // CR-F02b: ¿lo anunciado = lo cobrado?
 require_once __DIR__ . '/../includes/metricas.php'; // refrescar insights de todos
 requiere_login();
 $usuario = usuario_actual($pdo);
@@ -53,6 +54,23 @@ $integraciones = [
         ? 'configurada'
         : 'FALTA CRECER_WORKER_KEY — los workers async están fallando cerrado (503)'],
 ];
+
+// ── CR-F02b · ¿el precio que anunciamos es el que Stripe cobra? ──
+// Aquí se ve sin esperar a que llegue un cliente. Esta pantalla ya es solo-admin,
+// así que el detalle técnico puede mostrarse; al cliente nunca se le enseña nada.
+$precio_filas = [];
+try {
+    foreach ($pdo->query("SELECT * FROM crecer_planes WHERE activo=1 ORDER BY orden")->fetchAll(PDO::FETCH_ASSOC) as $pl) {
+        $r = precio_verificar($pl);
+        $precio_filas[] = [
+            'plan'    => (string)$pl['nombre'],
+            'estado'  => $r['estado'],
+            'ok'      => (bool)$r['ok'],
+            'anuncia' => '$' . number_format((float)$pl['precio_mensual'], 2),
+            'motivo'  => $r['motivo'],
+        ];
+    }
+} catch (Throwable $e) { $precio_filas[] = ['plan'=>'—','estado'=>PRECIO_DUDA,'ok'=>false,'anuncia'=>'—','motivo'=>$e->getMessage()]; }
 
 // ── Actividad de crons (proxies honestos) ──
 $ult_pub  = $val("SELECT MAX(created_at) FROM crecer_publicaciones");
@@ -104,6 +122,26 @@ $err_pub = $pdo->query("SELECT p.created_at, p.plataforma, p.error_msg, m.nombre
     <?php foreach ($integraciones as $i): ?>
       <div class="row"><span class="k"><?= $h($i[0]) ?></span><span><span class="st <?= $i[1]?'ok':'bad' ?>"><?= $i[1]?'✓':'✕' ?> <?= $h($i[2]) ?></span></span></div>
     <?php endforeach; ?>
+  </div>
+
+  <div class="card">
+    <h2><?= ico('wallet') ?> Precio anunciado vs. cobrado</h2>
+    <?php foreach ($precio_filas as $pf):
+        $etq = $pf['estado'] === PRECIO_OK ? 'coincide'
+             : ($pf['estado'] === PRECIO_MAL ? 'NO COINCIDE' : 'no verificable');
+        $cls = $pf['ok'] ? 'ok' : ($pf['estado'] === PRECIO_MAL ? 'bad' : 'warn');
+    ?>
+      <div class="row">
+        <span class="k"><?= $h($pf['plan']) ?> · anuncia <?= $h($pf['anuncia']) ?></span>
+        <span><span class="st <?= $cls ?>"><?= $h($etq) ?></span></span>
+      </div>
+      <?php if (!$pf['ok'] && $pf['motivo'] !== ''): ?>
+        <div class="item err" style="border:0;padding:2px 0 8px"><?= $h($pf['motivo']) ?></div>
+      <?php endif; ?>
+    <?php endforeach; ?>
+    <p style="font-size:11.5px;color:var(--muted);margin:8px 0 0;line-height:1.45">
+      Si dice NO COINCIDE o no verificable, el checkout está <b>bloqueado</b> a propósito:
+      nadie puede pagar un precio distinto al que se le prometió.</p>
   </div>
 
   <div class="grid2">
