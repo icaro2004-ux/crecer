@@ -1,9 +1,62 @@
-# Crecer — Verificación final y freeze total
+# Crecer — Verificación final y gobernanza del cierre
 
-> Fecha de entrada en vigor: 2 de agosto de 2026  
-> Deadline XPRIZE: 17 de agosto de 2026, 1:00 p. m. PDT  
-> Responsable de decisión: Manuel  
-> Estado inicial: **FREEZE TOTAL PENDIENTE DE VERIFICACIÓN FINAL**
+> *(El archivo se sigue llamando `FREEZE-TOTAL-...` por los enlaces que ya apuntan aquí.
+> El estado vigente es el de abajo, no el del nombre.)*
+>
+> Deadline XPRIZE: 17 de agosto de 2026, 1:00 p. m. PDT
+> Responsable de decisión: Manuel
+
+## ESTADO VIGENTE · READY MODE (desde el 2 de agosto de 2026)
+
+**El freeze total se difiere hasta ~48–72 h antes de la entrega (≈ 14 de agosto).**
+
+Congelar hoy sería prematuro: todavía se está certificando producción, entran clientes y
+aparecen bugs reales. Un freeze aquí convertiría el proceso en burocracia y retrasaría
+correcciones necesarias. El objetivo de esta etapa **no es "no tocar código"** — es que
+**cada cambio tenga una razón observable** y acerque el producto a clientes o a una
+entrega confiable.
+
+### Se permite en READY MODE
+
+- Corregir bugs. **Basta con que el bug sea claro** — no hace falta que lo sufran dos
+  clientes. Esa regla, que estaba en la versión anterior de este documento, era demasiado
+  rígida: esperar a un segundo afectado es cobrarle a alguien el precio de nuestro proceso.
+- Seguridad, pagos, evidencia y confiabilidad.
+- Mejoras que salgan del uso real de un cliente.
+- Ajustes pequeños de UX que desbloqueen conversión.
+
+### Sigue fuera
+
+Features grandes · agentes nuevos · rediseños · ampliaciones de alcance · refactors de
+limpieza · dependencias nuevas · cambios de precio, onboarding o arquitectura sin motivo
+verificado.
+
+### Condiciones de cada cambio
+
+Aislado · probado · reversible · con su razón observable escrita en el commit. Los cambios
+de READY MODE se anotan en la bitácora del final de este documento — una línea cada uno.
+Sin esa línea, la regla es un deseo; con ella, es verificable (y de paso es evidencia de
+"qué cambió y por qué" para el jurado).
+
+## Estados y cuándo cambia cada uno
+
+```text
+Ahora              READY MODE          bugs, seguridad, pagos, evidencia, UX que convierte
+Antes de enviar    RELEASE CANDIDATE   solo lo que impida entregar
+Últimas 48–72 h    FREEZE TOTAL        solo P0/P1 · smoke completo tras cada commit
+Entrega            TAG                 XPRIZE-2026-FINAL
+```
+
+El **FREEZE TOTAL** se firma cuando estén los siete: precio reconciliado · producción
+certificada · clientes y evidencia capturados · cuenta de juez funcionando · video casi
+final · narrativa cerrada · backup y rollback verificados.
+
+Durante esas 48–72 h: solo P0/P1 · ningún cambio visual innecesario · ninguna migración no
+indispensable · no se tocan precios, onboarding ni arquitectura · smoke completo después
+de cada commit · tag del release final.
+
+> Lo que sigue abajo —la auditoría, la matriz de cierre y los criterios— **sigue vigente**:
+> es lo que hay que terminar para poder firmar el freeze.
 
 ## Propósito
 
@@ -21,6 +74,12 @@ Al terminar esta auditoría:
 ---
 
 ## Regla principal para Claude
+
+> **Estado de esta regla:** la auditoría ya se hizo (2026-08-02) y está en
+> `INFORME-VERIFICACION-FINAL-2026-08-02.md`. En READY MODE **sí se corrige código**,
+> bajo las condiciones de arriba: aislado, probado, reversible y con su línea en la
+> bitácora. Lo que sigue de este apartado gobierna cualquier auditoría futura y el modo
+> de reportar hallazgos, que no cambia.
 
 Primero audita y reporta. **No modifiques código durante la auditoría.**
 
@@ -42,7 +101,9 @@ No declares `PASS` basándote únicamente en que una página responde HTTP 200 o
 
 ## Definición del freeze total
 
-Después de aprobar la verificación final quedan prohibidos:
+> **Aplica en la VENTANA DE FREEZE (últimas 48–72 h), no ahora.** Hoy rige READY MODE.
+
+Durante la ventana de freeze quedan prohibidos:
 
 - features nuevas;
 - nuevas pantallas o agentes;
@@ -59,7 +120,9 @@ Solo se permiten cuatro excepciones:
 1. Un fallo impide registrar, cobrar, generar, aprobar o publicar a un cliente real.
 2. Existe riesgo de seguridad, privacidad, cobro incorrecto o pérdida de datos.
 3. Un requisito verificable del XPRIZE está incompleto.
-4. Un problema se repite con al menos dos clientes reales y bloquea activación o retención.
+4. Un bug claro bloquea activación o retención. *(Antes esto exigía **dos** clientes
+   afectados. Revocado el 2026-08-02: si el bug es claro, esperar a un segundo afectado
+   es cobrarle a alguien el precio de nuestro proceso.)*
 
 Toda excepción debe tener:
 
@@ -696,4 +759,26 @@ y registrar debajo:
 Desde ese momento, la prioridad oficial de Crecer es:
 
 > **Clientes reales → activación → pago → publicación → resultado → testimonio → evidencia XPRIZE.**
+
+---
+
+# Bitácora de READY MODE
+
+Una línea por cambio, con su **razón observable**. Sin esta línea la regla es un deseo;
+con ella es verificable — y de paso es la evidencia de "qué cambió y por qué" que pide
+la entrega.
+
+Formato: `fecha · commit · qué · razón observable · cómo se verificó`
+
+| Fecha | Commit | Qué cambió | Razón observable | Verificado |
+|---|---|---|---|---|
+| 2026-08-02 | `a14f9c2` | `_cache.php` exige admin y deja de imprimir la llave de workers | P0: el diagnóstico entregaba la `CRECER_WORKER_KEY` de producción a quien conociera `?k=crecer`, que está en el repo | 403 sin sesión en 5 URLs; con admin, la salida no contiene la llave |
+| 2026-08-02 | `b694bb8` | Los 8 workers fallan cerrado sin llave configurada | P0: si el config desaparecía, adoptaban en silencio una llave literal del repo | 503 en 8/8 sin llave · 403 en 8/8 con llave mala · pasan 8/8 con la buena |
+| 2026-08-02 | `3e14fa4` | Compuerta de suficiencia + smoke bloqueante | P1: la compuerta aceptaba narrativa inventada sobre negocios vacíos, y el smoke no podía fallar | 11 comprobaciones; corrido contra el módulo anterior da 4 fallos y exit 1 |
+| 2026-08-02 | `58fd3c5` | Deduplicación atómica de pagos | P1: dos entregas del mismo webhook podían inflar el revenue | 12 comprobaciones, incluida concurrencia con dos procesos reales |
+| 2026-08-02 | `f475d63` | Rótulo de ejemplos en la landing + README de jueces | P1: la landing insinuaba clientes reales; no había puerta de entrada para el jurado | Render con el rótulo; README con activo vs roadmap |
+| 2026-08-02 | `bd4c0a3` | El checkout se bloquea si Stripe no cuadra con el precio anunciado | P0: la app anuncia $39 y Stripe cobra $49 | 14 comprobaciones; el escenario de hoy bloquea y el corregido permite |
+
+**Pendiente de anotar aquí:** la corrección del Price ($39 en test y en live) y el cierre
+operacional de producción, cuando se verifiquen.
 
