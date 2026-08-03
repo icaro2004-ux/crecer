@@ -690,11 +690,19 @@ entorno "test" es el XAMPP local con llaves de Stripe de test y `stripe listen` 
 El guardián de CR-F02b hace cumplir esta regla solo: si el Price es de `livemode` distinto
 al de la llave configurada, bloquea el checkout.
 
+**Orden confirmado — el Price se corrige ANTES de desplegar el guardián.** El código
+actual ya consume `stripe_price_id`, así que actualizar la fila corrige el cobro de
+inmediato y la ventana sin checkout se reduce a cero. El guardián llega después a vigilar
+algo que ya está bien, en vez de a bloquear algo que está mal:
+
+1. Crear Price de $39 · 2. Actualizar la BD · 3. Confirmar que el checkout muestra $39 ·
+4. Archivar el de $49 · 5. Desplegar el guardián.
+
 ### Test (local)
-1. Deploy de `bd4c0a3` · 2. Salud → `NO COINCIDE` · 3. Crear Price test de $39 en el
-producto test existente · 4. Actualizar la fila en la BD de test · 5. Salud → `coincide` ·
-6. Archivar el Price test de $49 (**después** del paso 4) · 7. Checkout test → $39 ·
-8. Webhook test → fila identificable como prueba · 9. Reenviarlo y confirmar deduplicación.
+1. Crear Price test de $39 en el producto test existente · 2. Actualizar la fila en la BD
+de test · 3. Checkout test → $39 · 4. Archivar el Price test de $49 (**después** del
+paso 2) · 5. Desplegar · 6. Salud → `coincide` · 7. Webhook test → fila identificable como
+prueba · 8. Reenviarlo y confirmar deduplicación.
 
 ### Producción (live)
 1. Confirmar que config y BD son las de producción · 2. Crear Price live de $39 en el
@@ -730,6 +738,19 @@ El orden importa. La migración del índice va **antes** del deploy del webhook 
    quedaron jobs viejos atascados; revisar logs por 503 posteriores al deploy.
 10. Reenvío controlado de un webhook de prueba → **una fila y una sola notificación**.
 11. Invalidar definitivamente la llave anterior.
+
+> **La llave anterior NO es un plan de vuelta atrás.** Está quemada: la imprimió el
+> diagnóstico y salió de la máquina. Conservarla en un registro seguro para diagnóstico
+> está bien; **reactivarla en producción reabre CR-F01**. Producción acepta únicamente la
+> nueva desde el momento de la rotación.
+>
+> Si hay que revertir: se restaura código y configuración que funcionen, y **se genera
+> otra llave nueva** si hace falta. Nunca se vuelve a la quemada.
+>
+> Rotar es una sola edición: `worker_key()` es el único punto que lee `CRECER_WORKER_KEY`,
+> y las siete constantes de los disparadores derivan de ella. Los dos lados —quien dispara
+> y quien autoriza— cambian juntos; no hay un segundo sitio que pueda quedar desfasado.
+> Si un worker falla tras rotar, se diagnostica **con la nueva**.
 12. Registrar fecha, entorno y resultado en el informe de verificación.
 
 # Criterio final para activar el freeze
