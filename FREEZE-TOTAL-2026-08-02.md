@@ -601,7 +601,8 @@ Estado de los hallazgos de la verificación final (ver
 |---|---|---|---|---|
 | CR-F01 | P0 | `_cache.php` entregaba la llave de workers y la lista de clientes | `a14f9c2` | Corregido · **pendiente cierre en producción** |
 | CR-F01b | P0 | Los 8 workers adoptaban en silencio una llave del repo si faltaba el config | `b694bb8` | Corregido · **pendiente rotar llave y probar los 8** |
-| CR-F02 | **P0 CONFIRMADO** | La app anuncia $39 y el Price de Stripe cobra $49 | — | **ABIERTO** — bloquea a CR-F07 |
+| CR-F02 | **P0 CONFIRMADO** | La app anuncia $39 y el Price de Stripe cobra $49 | — | **ABIERTO** — cierre operacional · bloquea a CR-F07 |
+| CR-F02b | P0 (clase) | Nada cruzaba el precio anunciado con el cobrado | `bd4c0a3` | Corregido · **pendiente verificar en cada entorno** |
 | CR-F03 | P1 | La compuerta aceptaba narrativa inventada sobre negocios vacíos | `3e14fa4` | Corregido (flag OFF: no gobierna producción) |
 | CR-F04 | P1 | El smoke no podía fallar | `3e14fa4` | Corregido |
 | CR-F05 | P1 | Deduplicación de pagos no atómica | `58fd3c5` | Corregido · **pendiente migración en producción** |
@@ -611,6 +612,44 @@ Estado de los hallazgos de la verificación final (ver
 | CR-F09 | P1 | Sin README ni instrucciones para el jurado | este commit | Corregido |
 | CR-F10 | P2 | Crons sin lock de solape | — | Backlog |
 | CR-F11 | P2 | ~100 `catch` vacíos | — | Backlog |
+
+## Cierre operacional pendiente (CR-F02) — el precio
+
+**Regla que no se rompe:** test y live conservan **cada uno su propio `stripe_price_id`
+en su propia base de datos**. Nunca se cambia la llave de Stripe apuntando a la BD de
+producción "para probar los dos": eso cruza clientes, Prices y webhooks entre entornos.
+
+La arquitectura ya lo separa: `includes/db.php` resuelve el config por rutas distintas
+(prod fuera de `public_html`; local en `includes/config.local.php`), así que cada entorno
+tiene su BD y su fila de `crecer_planes`. **Ojo: no hay staging en el servidor** — el
+entorno "test" es el XAMPP local con llaves de Stripe de test y `stripe listen` del CLI.
+
+El guardián de CR-F02b hace cumplir esta regla solo: si el Price es de `livemode` distinto
+al de la llave configurada, bloquea el checkout.
+
+### Test (local)
+1. Deploy de `bd4c0a3` · 2. Salud → `NO COINCIDE` · 3. Crear Price test de $39 en el
+producto test existente · 4. Actualizar la fila en la BD de test · 5. Salud → `coincide` ·
+6. Archivar el Price test de $49 (**después** del paso 4) · 7. Checkout test → $39 ·
+8. Webhook test → fila identificable como prueba · 9. Reenviarlo y confirmar deduplicación.
+
+### Producción (live)
+1. Confirmar que config y BD son las de producción · 2. Crear Price live de $39 en el
+producto live existente · 3. Actualizar la fila de producción · 4. Salud → `coincide` con
+`livemode=true` · 5. Archivar el Price live anterior, solo entonces · 6. Checkout live
+controlado → $39 · 7. Completar un cobro autorizado · 8. Webhook → `pagos.monto=39` ·
+9. Reconciliar con Stripe · 10. Reembolsar solo si ése era el plan, y **registrarlo como
+prueba, no como revenue**.
+
+**No se mezclan pagos de prueba, reembolsados o del fundador con la evidencia de revenue
+externo.**
+
+⚠️ Entre el deploy y la corrección del Price, **el checkout queda cerrado** (el guardián
+bloquea, que es lo correcto). Hacer ambos pasos en una sesión corta para no dejar
+prospectos fuera más tiempo del necesario.
+
+Hasta que Salud muestre coincidencia y pasen checkout y webhook en cada entorno, **no se
+actualiza ningún documento afirmando que el precio está reconciliado**.
 
 ## Cierre operacional pendiente (CR-F08)
 
