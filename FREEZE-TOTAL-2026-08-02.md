@@ -601,7 +601,7 @@ Estado de los hallazgos de la verificación final (ver
 |---|---|---|---|---|
 | CR-F01 | P0 | `_cache.php` entregaba la llave de workers y la lista de clientes | `a14f9c2` | Corregido · **pendiente cierre en producción** |
 | CR-F01b | P0 | Los 8 workers adoptaban en silencio una llave del repo si faltaba el config | `b694bb8` | Corregido · **pendiente rotar llave y probar los 8** |
-| CR-F02 | P0 cond. | El precio mostrado ($39) puede no ser el que cobra Stripe | — | **ABIERTO** — bloquea a CR-F07 |
+| CR-F02 | **P0 CONFIRMADO** | La app anuncia $39 y el Price de Stripe cobra $49 | — | **ABIERTO** — bloquea a CR-F07 |
 | CR-F03 | P1 | La compuerta aceptaba narrativa inventada sobre negocios vacíos | `3e14fa4` | Corregido (flag OFF: no gobierna producción) |
 | CR-F04 | P1 | El smoke no podía fallar | `3e14fa4` | Corregido |
 | CR-F05 | P1 | Deduplicación de pagos no atómica | `58fd3c5` | Corregido · **pendiente migración en producción** |

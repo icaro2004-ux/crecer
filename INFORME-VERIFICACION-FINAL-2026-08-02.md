@@ -73,7 +73,46 @@ de IA que deja pasar narrativa inventada, y una landing que quitó su rótulo de
 - **Prueba de aceptación:** sin sesión admin, `?k=crecer` responde 403. Con sesión admin, la
   llave no aparece en ninguna parte del output. `grep -n 'imgkey}' _cache.php` = vacío.
 
-### CR-F02 · P0 condicional · El precio que se muestra puede no ser el que Stripe cobra
+### CR-F02 · P0 **CONFIRMADO** · La app anuncia $39 y Stripe cobra $49
+
+> **Verificado por Manuel el 2026-08-02, 20:26** (comprobación de solo lectura; no se
+> modificó Stripe ni la base de datos).
+>
+> | Plan | BD (`precio_mensual`) | Price de Stripe | |
+> |---|---|---|---|
+> | Crecer | $39/mes | **$49/mes** | ✗ no cuadra |
+> | Despegar | $89/mes | $89/mes | cuadra (inactivo) |
+>
+> El Price consultado está en **test mode** (`livemode=false`): esto confirma el defecto
+> en el entorno configurado. **El equivalente en live sigue sin verificar** y hay que
+> comprobarlo por separado.
+>
+> Consecuencia directa: un checkout de Crecer creado hoy con ese `stripe_price_id` le
+> **presenta y le cobra $49** a un cliente al que la aplicación le prometió $39.
+>
+> **Corrección (los Prices de Stripe son inmutables — no se edita, se sustituye):**
+> 1. Crear un Price recurrente nuevo de **$39 USD/mes** sobre el producto Crecer que ya
+>    existe. Recomendado hacerlo desde el dashboard, **no** con `scripts/stripe_setup.php`:
+>    ese script salta los planes que ya tienen `price_id`, y si se le vacía primero,
+>    crea un **producto nuevo** además del precio, dejando un "Crecer" duplicado.
+> 2. Archivar el Price de $49 (no reutilizarlo) para conservar la trazabilidad.
+> 3. `UPDATE crecer_planes SET stripe_price_id='price_NUEVO' WHERE slug='crecer';`
+> 4. Repetir por separado en **live mode**.
+> 5. No tocar suscripciones existentes automáticamente.
+> 6. Checkout de prueba: confirmar que Stripe muestra **$39 antes** de pedir tarjeta.
+> 7. Confirmar que el webhook registra `pagos.monto = 39`.
+>
+> **Verificación de cierre:**
+> ```sql
+> SELECT slug, nombre, precio_mensual, stripe_price_id, activo FROM crecer_planes;
+> ```
+> y en el Price remoto: `currency=usd` · `unit_amount=3900` ·
+> `recurring.interval=month` · `active=true` · `livemode` = el del entorno.
+>
+> Hasta cerrarlo, **CR-F07 sigue bloqueado**: unificar los documentos en $39 mientras
+> Stripe cobra $49 solo cambiaría una contradicción por otra.
+
+### (Diagnóstico original)
 
 - **Evidencia:** `migrations/2026-07-13_precio_crecer_39.sql:5-17` baja el display a $39 y
   advierte en el propio archivo: *"EL COBRO DE STRIPE NO CAMBIA CON ESTO. Los precios de
