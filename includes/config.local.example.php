@@ -76,6 +76,17 @@ define('CRON_TOKEN', '');
 // Si se deja vacío, cae a jmp.arch.eng@gmail.com.
 define('REPORTE_EMAIL', '');
 
+// ── META PIXEL (medición de conversión) ──────────────────────────────────────
+// El ID vive en includes/meta_pixel.php (no es secreto: va en claro en el HTML).
+// Estas dos líneas solo hacen falta si quieres CAMBIARLO por entorno:
+//
+//   define('META_PIXEL_ID',    '1514881943771970');  // '' lo apaga por completo
+//   define('META_PIXEL_PANEL', true);                // false = solo páginas públicas
+//
+// META_PIXEL_PANEL controla si el Pixel entra también al app del cliente. Ahí ya no
+// hay marketing que medir —es alguien que ya pagó— y cada pantalla que visita se le
+// reporta a Meta. Ponlo en false si prefieres medir solo el embudo.
+
 // ── EL AYUDANTE (helper que arregla y escala) ────────────────────────────────
 // Cuando el Ayudante no puede arreglar algo solo, levanta el caso y AVISA aquí:
 // email con la explicación completa + SMS corto. Sin estas constantes el caso

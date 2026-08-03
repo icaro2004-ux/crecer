@@ -66,6 +66,7 @@ $nf = fn($n) => number_format($n);
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<?php require_once __DIR__ . '/includes/meta_pixel.php'; meta_pixel_head(); ?>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Entrar · Encuéntralo Crecer</title>

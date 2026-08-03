@@ -15,6 +15,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<?php require_once __DIR__ . '/includes/meta_pixel.php'; meta_pixel_head(); ?>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Política de Privacidad · <?= $h($NEGOCIO) ?></title>
@@ -84,6 +85,12 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
         <a href="https://www.facebook.com/policy.php" target="_blank" rel="noopener">políticas de Meta</a>.</li>
     <li><b>Google (Gemini / Vertex AI):</b> para generar el texto y las imágenes de tu contenido.</li>
     <li><b>Stripe:</b> para procesar pagos de forma segura.</li>
+    <li><b>Meta Pixel (medición):</b> usamos el píxel de Meta para saber cuántas personas
+        llegan a nuestra página y cuántas se registran. Meta recibe la dirección de la
+        página que visitas y un identificador de tu navegador. <b>No le enviamos tu nombre,
+        tu correo, tu teléfono ni el contenido de tu negocio.</b> Puedes limitarlo desde la
+        configuración de anuncios de tu cuenta de Facebook o bloqueando cookies de terceros
+        en tu navegador.</li>
   </ul>
   <p>No vendemos tu información personal a nadie.</p>
 

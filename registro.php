@@ -72,6 +72,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 catch (Throwable $e) { error_log('registro crear_marca: ' . $e->getMessage()); }
             }
 
+            // Meta Pixel · CompleteRegistration. Se ENCOLA en vez de imprimirse aquí:
+            // las dos salidas de este bloque son redirects, así que un fbq() escrito en
+            // este punto no llegaría a ejecutarse nunca. Lo dispara la página siguiente.
+            require_once __DIR__ . '/includes/meta_pixel.php';
+            meta_pixel_encolar('CompleteRegistration');
+
             if ($es_prueba) {
                 login_usuario(['id'=>$nuevo_id, 'nombre'=>$val['nombre'], 'rol'=>'proveedor']);
                 header('Location: /crecer/onboarding.php'); exit;   // prueba: sin correo, directo
@@ -100,6 +106,7 @@ $plan_lbl = ['crecer'=>'Crecer','despegar'=>'Despegar'][$plan_intent] ?? '';
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<?php require_once __DIR__ . '/includes/meta_pixel.php'; meta_pixel_head(); ?>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Crear cuenta · Encuéntralo Crecer</title>
