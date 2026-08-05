@@ -161,7 +161,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($accion === 'poll_arte') {
         require_once __DIR__ . '/../includes/img_responses.php';
         header('Content-Type: application/json');
-        echo json_encode(img_resp_completar($pdo, $marca_id, (int)($_POST['id'] ?? 0)), JSON_UNESCAPED_UNICODE);
+        $pid = (int)($_POST['id'] ?? 0);
+        $res = img_resp_completar($pdo, $marca_id, $pid);
+        // AUTO-RESCATE: en Hostinger el worker de fondo a veces no arranca → el post
+        // se queda en 'queued' sin job para siempre. Si ya pasaron >15s así, lo genero
+        // por Gemini AQUÍ mismo (lock atómico para que solo un poll lo dispare).
+        if (($res['estado'] ?? '') !== 'ok' && function_exists('img_gemini_fallback')) {
+            try {
+                $lock = $pdo->prepare(
+                    "UPDATE crecer_contenido SET img_estado='rescatando', updated_at=NOW()
+                      WHERE id=? AND marca_id=? AND img_estado='queued' AND img_job IS NULL
+                        AND updated_at < (NOW() - INTERVAL 15 SECOND)");
+                $lock->execute([$pid, $marca_id]);
+                if ($lock->rowCount() === 1) {
+                    $cap = (string)($pdo->query("SELECT caption FROM crecer_contenido WHERE id=" . $pid)->fetchColumn() ?: '');
+                    $url = img_gemini_fallback($pdo, $marca_id, $pid, $cap);   // síncrono, fiable (~20s)
+                    if ($url !== '') { $res = ['estado' => 'ok', 'img' => $url]; }
+                    else { $pdo->prepare("UPDATE crecer_contenido SET img_estado='error' WHERE id=? AND marca_id=?")->execute([$pid, $marca_id]); $res = ['estado' => 'error', 'img' => null]; }
+                }
+            } catch (Throwable $e) { /* si el lock/rescate falla, el próximo poll reintenta */ }
+        }
+        echo json_encode($res, JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -1696,11 +1716,26 @@ $cf = [
   }
   function wizEsVideo(u){ return /\.(mp4|mov|m4v)(\?.*)?$/i.test(u||''); }
   function wizPintaArte(img){
+    if(!img){ return; }   // async: aún no hay imagen → NO pintar el icono roto
     wizImg=img;
     document.getElementById('wiz-art').innerHTML = wizEsVideo(img)
       ? '<video src="'+img+'?t='+Date.now()+'" controls muted playsinline style="width:100%;border-radius:14px;display:block"></video>'
       : '<img src="'+img+'?t='+Date.now()+'" alt="arte">';
     document.getElementById('wiz-next2').style.display='block';
+  }
+  // Sondea el arte async hasta que la imagen esté lista (worker o auto-rescate por Gemini).
+  function wizPollArte(){
+    var tries=0, MAX=70;   // ~3.5 min tope
+    (function poll(){
+      tries++;
+      var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','poll_arte'); fd.append('id',wizId);
+      fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+        if(d && d.estado==='ok' && d.img){ loaderHide(); wizPintaArte(d.img); return; }
+        if(d && d.estado==='error'){ loaderHide(); toast('No se pudo crear el arte. Intenta otra vez.'); return; }
+        if(tries>=MAX){ loaderHide(); toast('El arte está tardando. Ábrelo en un momento en tus propuestas.'); return; }
+        setTimeout(poll, 3000);
+      }).catch(function(){ if(tries>=MAX){ loaderHide(); return; } setTimeout(poll, 3000); });
+    })();
   }
   function wizArteErr(d){
     if(d && d.err==='post_limite') toast('⚠️ Llegaste al límite de generaciones de este post.');
@@ -1765,13 +1800,17 @@ $cf = [
     document.getElementById('wiz-arte-chat').addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); wizArteChat(); } });
     g.addEventListener('click', function(){
       if(!wizId) return;
+      document.getElementById('wiz-art').innerHTML='';   // limpia cualquier arte roto anterior
       loaderShow('Generando tu imagen…', ['Imaginando la escena…','Ajustando la luz y el encuadre…','Aplicando tu logo de marca…','Puliendo texturas y detalles…','Casi lista…']);
       var idea=document.getElementById('wiz-arteidea').value.trim();
       var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','arte'); fd.append('id',wizId); fd.append('con_logo','1');
       fd.append('estilo_arte', (Array.from(document.querySelectorAll('#wiz-estilo input:checked')).map(function(x){return x.value;}).join('+')||'realista'));
       if(idea) fd.append('instrucciones', idea);   // genera con la idea que ves/ajustaste
       fetch(location.pathname+location.search,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
-        loaderHide(); if(!d.ok){ wizArteErr(d); return; } wizPintaArte(d.img);
+        if(!d.ok){ loaderHide(); wizArteErr(d); return; }
+        if(d.img){ loaderHide(); wizPintaArte(d.img); return; }   // sync: ya está
+        if(d.async){ wizPollArte(); return; }                      // async: sondear hasta que esté
+        loaderHide(); wizArteErr({});
       }).catch(function(){ loaderHide(); toast('Error de conexión.'); });
     });
     document.getElementById('wiz-file').addEventListener('change', function(){
