@@ -420,6 +420,12 @@ function sugerir_arte(PDO $pdo, int $marca_id, string $caption, string $ajuste =
         . "- Detrás de cámara (manos, proceso, taller en acción)   - Humano/emoción (una persona real disfrutando/reaccionando)\n"
         . "- Contraste o giro visual sorpresa   - Escena de uso (el producto en la vida real del cliente)\n"
         . "- Gráfico audaz (composición tipográfica con colores de marca)   - Macro/textura (acercamiento que da deseo)\n"
+        . "ELIGE UNA TÁCTICA DISTINTA cada vez — no repitas la misma composición ni el mismo encuadre de siempre.\n"
+        . "MANTENTE AL DÍA CON EL DISEÑO ACTUAL (aplica lo que se ve MODERNO hoy en redes, no lo trillado de hace años): "
+        . "tipografía enorme y protagonista, bloques de color audaces, degradados/mesh, grano y textura, layouts tipo "
+        . "bento, colores saturados o duotono, estética retro/nostálgica o Y2K, 3D/claymorphism, collage y recortes tipo "
+        . "sticker, fotografía auténtica y espontánea (no stock tieso), mucho aire negativo. Escoge lo que le quede a "
+        . "ESTE negocio y hazlo ver ACTUAL, no de plantilla.\n"
         . "Sé CABRÓN y ESPECÍFICO: (1) sujeto principal, (2) entorno y props concretos, (3) ángulo/encuadre, (4) luz y "
         . "ambiente, (5) paleta. Nada genérico ni tibio. Deja aire arriba por si va texto. Evita clichés (café/amanecer/"
         . "escritorio, pantallas con apps flotantes) a menos que el post SEA literalmente de eso.\n"
@@ -467,22 +473,27 @@ function sugerir_temas(PDO $pdo, int $marca_id, int $n = 5): array {
     $recientes = array_values(array_filter(array_map(
         fn($c) => trim(mb_substr((string)$c, 0, 80)), $rec->fetchAll(PDO::FETCH_COLUMN))));
 
-    $sistema = "Eres el ESTRATEGA de contenido de Crecer para microempresas boricuas. "
-        . "Propones ideas de post ESPECÍFICAS y con gancho para que el dueño elija — un "
-        . "brainstorm de agencia, enfocado 100% en ESTE negocio. Varía los pilares "
-        . "(producto, proceso/detrás de cámara, prueba social, tip, promo, temporada, "
-        . "pregunta). Nada genérico. Responde SOLO JSON válido.";
+    $sistema = "Eres el ESTRATEGA de contenido de Crecer para microempresas boricuas — con mente de "
+        . "creativo de agencia top que ODIA repetirse. Propones ideas de post ESPECÍFICAS y con gancho.\n"
+        . "REGLA DE ORO: cada idea = un ÁNGULO CATEGÓRICAMENTE DISTINTO. NADA de la misma idea con palabras "
+        . "cambiadas; cada una de un PILAR diferente. Pilares (usa variados): producto estrella, detrás de "
+        . "cámara/proceso, prueba social/testimonio, tip educativo, mito vs verdad, antes/después, promo/oferta, "
+        . "temporada/efeméride, pregunta a la audiencia, reto/challenge, historia del dueño, colaboración local, "
+        . "tendencia del momento, comparación, UGC.\n"
+        . "Incluye SIEMPRE al menos 1 idea WILDCARD inesperada y atrevida (algo que la competencia NO haría). "
+        . "Innova — no te quedes en lo seguro ni en la primera idea buena. Nada genérico ni de plantilla. "
+        . "Responde SOLO JSON válido.";
     if (function_exists('tono_instruccion'))  $sistema .= tono_instruccion($m);
     // (la memoria aprendida ya viene dentro del cerebro_negocio, en el contexto)
 
     $prompt = "Perfil del negocio:\n{$ctx}\n";
     if ($recientes) $prompt .= "\nYA tiene esto (NO lo repitas, propón cosas distintas):\n- " . implode("\n- ", $recientes) . "\n";
-    $prompt .= "\nPropón {$n} ideas de post. Devuelve JSON EXACTO:\n"
+    $prompt .= "\nPropón {$n} ideas de post, cada una de un PILAR DISTINTO (incluye 1 wildcard atrevida). Devuelve JSON EXACTO:\n"
         . '{"ideas":[{"pilar":"producto","tema":"2-4 palabras","idea":"1 oración específica con el gancho"}]}';
 
     $r = ia_ejecutar($pdo, 'planificador', 'Sugerir temas de post', $prompt, [
         'marca_id' => $marca_id, 'sistema' => $sistema, 'json' => true,
-        'temperatura' => 0.95, 'max_tokens' => 1200, 'thinking_budget' => 0,
+        'temperatura' => 1.1, 'max_tokens' => 1200, 'thinking_budget' => 0,
         'mock_texto' => '{"ideas":[{"pilar":"producto","tema":"Bizcocho de guayaba","idea":"Primer plano del bizcocho recién cortado mostrando el relleno, con CTA por WhatsApp."},{"pilar":"prueba_social","tema":"Clienta feliz","idea":"Reseña real de una clienta que ordenó para un cumpleaños en Bayamón."},{"pilar":"proceso","tema":"Detrás de cámara","idea":"Video corto batiendo la mezcla a las 5am, para mostrar que todo es fresco."}]}',
     ]);
     $d = json_decode((string)$r['texto'], true);
