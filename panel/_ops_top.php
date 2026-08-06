@@ -37,6 +37,7 @@ if (isset($pdo)) { try { $op_casos = (int)$pdo->query("SELECT COUNT(*) FROM crec
     <a class="<?= $_opl('soporte') ?>"   href="/crecer/panel/admin_soporte.php">Soporte</a>
     <a class="<?= $_opl('equipo') ?>"    href="/crecer/panel/admin_equipo.php">Equipo</a>
     <a class="<?= $_opl('salud') ?>"     href="/crecer/panel/admin_salud.php">Salud</a>
+    <a class="<?= $_opl('prospector') ?>" href="/crecer/panel/admin_prospector.php">Prospector</a>
     <a class="<?= $_opl('evidencia') ?>" href="/crecer/panel/admin_evidencia.php">Evidencia</a>
     <a class="opa salir" href="/crecer/logout.php">Salir</a>
   </nav>
