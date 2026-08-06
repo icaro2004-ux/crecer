@@ -12,6 +12,7 @@ require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/suscripcion.php';
 require __DIR__ . '/../includes/iconos.php';
+require_once __DIR__ . '/../includes/baraja.php';   // La Baraja: el gesto de decidir (solo móvil, flag CRECER_BARAJA)
 requiere_login();
 require_once __DIR__ . '/../includes/panel_guard.php';
 requiere_suscripcion($pdo, isset($_GET['marca']) ? (int)$_GET['marca'] : null);
@@ -60,17 +61,23 @@ try {
 } catch (Throwable $e) { $biblioteca = []; }
 $UP_URL_BIB = (defined('UPLOADS_URL') ? UPLOADS_URL : '/crecer/uploads');
 
-// ── Las propuestas que esperan tu veredicto (borradores). Nada más. ──
+// ── El mazo. Normal: borradores que esperan tu veredicto. Con ?apartadas=1:
+//    la SEGUNDA VUELTA — las que dijiste "ahora no" (swipe izq o botón No),
+//    por si alguna merece otra oportunidad. Nada se pierde nunca. ──
+$deck_apartadas = (($_GET['apartadas'] ?? '') === '1');
 $props = [];
 try {
     $q = $pdo->prepare(
         "SELECT id, caption, plataforma, tipo, fecha_programada, grafica_path
          FROM crecer_contenido
-         WHERE marca_id=? AND estado='borrador' AND tipo<>'carrusel'
+         WHERE marca_id=? AND estado=? AND tipo<>'carrusel'
          ORDER BY COALESCE(fecha_programada, created_at) ASC, id ASC");
-    $q->execute([$marca_id]);
+    $q->execute([$marca_id, $deck_apartadas ? 'rechazado' : 'borrador']);
     $props = $q->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) { $props = []; }
+// Cuántas apartadas hay en total (para invitar a la segunda vuelta al cerrar el mazo)
+$n_apartadas = 0;
+try { $n_apartadas = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$marca_id} AND estado='rechazado' AND tipo<>'carrusel'")->fetchColumn(); } catch (Throwable $e) {}
 
 // Los que YA aprobaste (esperan publicación) — para que no "desaparezcan": banner con enlace.
 $n_listos = 0;
@@ -217,6 +224,10 @@ require __DIR__ . '/_shell.php';
 </style>
 
 <main class="est" id="est">
+  <?php if ($deck_apartadas): ?>
+  <p class="est-owner">Segunda vuelta — las que apartaste en <b><?= $h($negocio) ?></b></p>
+  <a class="est-b lnk" href="<?= $BASE ?>/propuestas.php?<?= $mid ?>" style="display:inline-block;padding:0 0 18px">← Volver a lo nuevo</a>
+  <?php else: ?>
   <p class="est-owner">El estudio de <b><?= $h($negocio) ?></b></p>
   <div class="est-crear-row">
     <a class="est-crear" href="<?= $CREAR_URL ?>"><?= ico('plus') ?> Post</a>
@@ -231,18 +242,30 @@ require __DIR__ . '/_shell.php';
     <span class="arr">→</span>
   </a>
   <?php endif; ?>
+  <?php endif; ?>
 
   <?php if (!$props): ?>
     <div class="est-done">
       <div class="mk"><?= ico('check-circle') ?></div>
+      <?php if ($deck_apartadas): ?>
+      <h2>No tienes nada apartado.</h2>
+      <p>Todo lo que el corillo propuso está decidido o esperando tu veredicto.</p>
+      <div class="acts">
+        <a href="<?= $BASE ?>/propuestas.php?<?= $mid ?>">← Volver al estudio</a>
+      </div>
+      <?php else: ?>
       <h2>Nada que revisar por ahora.</h2>
       <p>Tu equipo está preparando lo próximo. Vuelve en un rato.</p>
       <div class="acts">
         <a href="<?= $CREAR_URL ?>">Crear un post nuevo</a>
         <a href="<?= $BASE ?>/resultados.php?marca=<?= $marca_id ?>">Ver lo publicado</a>
+        <?php if ($n_apartadas > 0): ?><a href="<?= $BASE ?>/propuestas.php?<?= $mid ?>&apartadas=1">Revisar las <?= $n_apartadas ?> apartada<?= $n_apartadas === 1 ? '' : 's' ?></a><?php endif; ?>
       </div>
+      <?php endif; ?>
     </div>
   <?php else: ?>
+    <?php /* La pista del gesto: nace escondida; el motor la enciende solo en teléfono */ ?>
+    <p class="bj-pista" id="estPista"><i></i>Desliza: derecha aprueba · izquierda aparta<i></i></p>
     <?php foreach ($props as $i => $p):
       $cap  = trim((string)$p['caption']);
       $arte = !empty($p['grafica_path']);
@@ -317,12 +340,23 @@ require __DIR__ . '/_shell.php';
     <!-- El cierre en calma -->
     <div class="est-done" id="estDone" hidden>
       <div class="mk"><?= ico('check-circle') ?></div>
+      <?php if ($deck_apartadas): ?>
+      <h2>Segunda vuelta completa.</h2>
+      <p>Lo que rescataste ya está con lo aprobado; lo demás queda apartado, sin perderse.</p>
+      <div class="acts">
+        <a href="<?= $BASE ?>/propuestas.php?<?= $mid ?>">← Volver al estudio</a>
+        <a href="<?= $BASE ?>/resultados.php?marca=<?= $marca_id ?>">Ver lo publicado</a>
+      </div>
+      <?php else: ?>
       <h2>Ya revisaste todo lo que el corillo preparó.</h2>
+      <p class="bj-resumen" id="bjResumen" hidden style="font-weight:600;color:var(--tinta)"></p>
       <p>El corillo sigue trabajando por <?= $h($negocio) ?>.</p>
       <div class="acts">
+        <a href="<?= $BASE ?>/propuestas.php?<?= $mid ?>&apartadas=1" id="bjOtraVuelta" <?= $n_apartadas > 0 ? '' : 'hidden' ?>>¿Les damos otra vuelta a las apartadas?</a>
         <a href="<?= $CREAR_URL ?>">Crear un post nuevo</a>
         <a href="<?= $BASE ?>/resultados.php?marca=<?= $marca_id ?>">Ver lo publicado</a>
       </div>
+      <?php endif; ?>
     </div>
   <?php endif; ?>
 </main>
@@ -332,6 +366,8 @@ require __DIR__ . '/_shell.php';
 // Montarlo aquí = crear un post sin salir del Estudio (una sola superficie).
 include __DIR__ . '/_crear_wizard.php';
 ?>
+
+<?= baraja_assets() /* La Baraja (motor). Con el flag OFF esto es '' y nada cambia. */ ?>
 
 <script>
 (function () {
@@ -347,21 +383,56 @@ include __DIR__ . '/_crear_wizard.php';
     return fetch(BASE + '/aprobar2.php?marca=' + MARCA, { method: 'POST', body: fd }).then(function (r) { return r.json(); });
   }
 
+  // ── El marcador de la sesión (para el cierre y el Deshacer de La Baraja) ──
+  var nAprob = 0, nApart = 0;
+  var DECK = <?= $deck_apartadas ? 'true' : 'false' ?>;                 // ¿estamos en la segunda vuelta?
+  var APARTADAS_PREV = <?= (int)$n_apartadas ?>;                        // apartadas que ya existían al cargar
+  function cierre() {
+    done.hidden = false;
+    var res = document.getElementById('bjResumen');
+    if (res) {
+      var partes = [];
+      if (nAprob) partes.push('Aprobaste ' + nAprob);
+      if (nApart) partes.push('apartaste ' + nApart);
+      if (partes.length) { res.textContent = partes.join(' · ') + '.'; res.hidden = false; }
+    }
+    var ov = document.getElementById('bjOtraVuelta');
+    if (ov) {
+      var total = APARTADAS_PREV + nApart;
+      if (total > 0) {
+        ov.hidden = false;
+        ov.textContent = total === 1 ? '¿Le damos otra vuelta a la apartada?' : '¿Les damos otra vuelta a las ' + total + ' apartadas?';
+      } else ov.hidden = true;
+    }
+  }
+
   // El pase: la propuesta sale, la siguiente sube al mismo lugar. El único movimiento.
-  function pase() {
+  // yaSalio = la card ya voló con el gesto (La Baraja): no se re-anima la salida.
+  function pase(yaSalio) {
     var cur = props[idx];
     idx++;
     var next = props[idx];
     if (!next) {
-      if (reduce) { cur.style.display = 'none'; done.hidden = false; return; }
+      if (reduce || yaSalio) { cur.style.display = 'none'; cierre(); return; }
       cur.style.transition = 'opacity .34s ease, transform .34s ease';
       cur.style.opacity = '0'; cur.style.transform = 'translateY(-8px)';
-      setTimeout(function () { cur.style.display = 'none'; done.hidden = false; }, 320);
+      setTimeout(function () { cur.style.display = 'none'; cierre(); }, 320);
       return;
     }
     if (reduce) {
       cur.style.display = 'none';
       next.style.display = ''; next.classList.add('show');
+      return;
+    }
+    if (yaSalio) {
+      cur.style.display = 'none';
+      next.style.display = '';
+      next.style.opacity = '0'; next.style.transform = 'translateY(10px)';
+      next.classList.add('show');
+      requestAnimationFrame(function () {
+        next.style.transition = 'opacity .38s cubic-bezier(.22,1,.36,1), transform .38s cubic-bezier(.22,1,.36,1)';
+        next.style.opacity = '1'; next.style.transform = 'none';
+      });
       return;
     }
     cur.style.transition = 'opacity .30s ease, transform .30s ease';
@@ -390,7 +461,7 @@ include __DIR__ . '/_crear_wizard.php';
     go.addEventListener('click', function () {
       if (busy) return; busy = true; go.disabled = true; var old = go.textContent; go.textContent = 'Un momento…';
       post('aprobar', id).then(function (d) {
-        if (d && d.ok) { pase(); }
+        if (d && d.ok) { nAprob++; pase(); }
         else { go.disabled = false; go.textContent = old; alert((d && d.err) || 'No se pudo. Intenta otra vez.'); }
       }).catch(function () { go.disabled = false; go.textContent = old; alert('Se cayó la conexión.'); })
         .finally(function () { busy = false; });
@@ -432,7 +503,7 @@ include __DIR__ . '/_crear_wizard.php';
       b.addEventListener('click', function () {
         if (busy) return; busy = true;
         post('rechazar', id, { razon: b.getAttribute('data-razon') }).then(function (d) {
-          if (d && d.ok) { closePanels(); pase(); }
+          if (d && d.ok) { closePanels(); nApart++; pase(); }
           else alert((d && d.err) || 'No se pudo.');
         }).catch(function () { alert('Se cayó la conexión.'); })
           .finally(function () { busy = false; });
@@ -457,6 +528,60 @@ include __DIR__ . '/_crear_wizard.php';
         }).catch(function () { t.style.opacity = ''; t.dataset.busy = ''; alert('Se cayó la conexión.'); });
       });
     });
+  });
+
+  // ── LA BARAJA: el gesto de decidir (solo teléfono; los botones se quedan). ──
+  // Derecha = aprobar · izquierda = apartar (persiste; nada se recicla) ·
+  // Deshacer 5s en ambas. En la segunda vuelta (?apartadas=1): derecha rescata,
+  // izquierda la deja apartada (solo pasa la card, sin tocar el server).
+  if (window.Baraja) Baraja.montar({
+    pista: document.getElementById('estPista'),
+    ignorar: '.est-verdict,.est-panel,.est-bib,.est-crear-row,.est-listos',
+    activa: function () { return props[idx] || null; },
+    aprobar: function (card, hecho) {
+      if (busy) { hecho(false); return; }
+      busy = true;
+      post('aprobar', card.getAttribute('data-id')).then(function (d) {
+        var ok = !!(d && d.ok);
+        if (ok) { nAprob++; pase(true); }
+        hecho(ok);
+        if (!ok) alert((d && d.err) || 'No se pudo. Intenta otra vez.');
+      }).catch(function () { hecho(false); alert('Se cayó la conexión.'); })
+        .finally(function () { busy = false; });
+    },
+    apartar: function (card, hecho) {
+      if (busy) { hecho(false); return; }
+      if (DECK) { nApart++; pase(true); hecho(true); return; }   // ya estaba apartada: puro orden en pantalla
+      busy = true;
+      post('rechazar', card.getAttribute('data-id'), { razon: '' }).then(function (d) {
+        var ok = !!(d && d.ok);
+        if (ok) { nApart++; pase(true); }
+        hecho(ok);
+        if (!ok) alert((d && d.err) || 'No se pudo. Intenta otra vez.');
+      }).catch(function () { hecho(false); alert('Se cayó la conexión.'); })
+        .finally(function () { busy = false; });
+    },
+    deshacer: function (card, dir, hecho) {
+      // Devolver la card al frente del mazo (y al estado en que estaba).
+      var devolver = function () {
+        var i = props.indexOf(card);
+        if (i >= 0) { props.splice(i, 1); if (i < idx) idx--; }
+        var visible = props[idx];
+        if (visible) { visible.style.display = 'none'; visible.classList.remove('show'); }
+        props.splice(idx, 0, card);
+        done.hidden = true;
+        card.style.display = ''; card.classList.add('show');
+        if (dir > 0) nAprob = Math.max(0, nAprob - 1); else nApart = Math.max(0, nApart - 1);
+        hecho(true);
+      };
+      // Segunda vuelta: deshacer un rescate = re-apartar; deshacer un "sigue
+      // apartada" no tocó el server, así que tampoco al deshacer.
+      var accion = DECK ? (dir > 0 ? 'rechazar' : null) : 'reabrir';
+      if (!accion) { devolver(); return; }
+      post(accion, card.getAttribute('data-id'), accion === 'rechazar' ? { razon: '' } : undefined)
+        .then(function (d) { if (d && d.ok) devolver(); else hecho(false); })
+        .catch(function () { hecho(false); });
+    }
   });
 })();
 </script>

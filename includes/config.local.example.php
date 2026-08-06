@@ -153,3 +153,9 @@ define('SMTP_FROMNAME', 'Encuéntralo Crecer');
 // DENTRO de El Estudio (propuestas.php) — una sola superficie, una sola piel.
 // OFF/ausente: los enlaces van a aprobar2.php como siempre (comportamiento viejo).
 // define('CRECER_CREAR_UNIFICADO', true);
+
+// ── LA BARAJA (opcional) ──
+// ON: en telefono, las propuestas se deciden con swipe (derecha aprueba,
+// izquierda aparta) + Deshacer 5s. Desktop no cambia. Los botones se quedan.
+// OFF/ausente: cero cambios (el motor ni se emite).
+// define('CRECER_BARAJA', true);

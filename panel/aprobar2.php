@@ -9,6 +9,7 @@ require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/agentes.php';
 require __DIR__ . '/../includes/suscripcion.php';
+require_once __DIR__ . '/../includes/baraja.php';   // La Baraja: el gesto de decidir (solo móvil, flag CRECER_BARAJA)
 requiere_login();
 $usuario = usuario_actual($pdo);
 $marca = marca_del_usuario($pdo, (int)$usuario['id'], isset($_GET['marca']) ? (int)$_GET['marca'] : null);
@@ -1064,6 +1065,8 @@ $cf = [
     <div class="pn-mid"><span class="pn-count" id="postCount"></span><span class="pn-bar"><i id="postBar"></i></span></div>
     <button type="button" class="pn-arw" id="pnNext" aria-label="Siguiente post">›</button>
   </div>
+  <?php /* La pista de La Baraja: nace escondida; el motor la enciende solo en teléfono */ ?>
+  <p class="bj-pista" id="wizPista"><i></i>Desliza: derecha aprueba · izquierda aparta<i></i></p>
   <div class="postwiz" id="postWiz"><div class="postwiz-track" id="postTrack">
   <?php endif; ?>
 
@@ -1395,6 +1398,8 @@ $cf = [
   </div>
 </div>
 
+<?= baraja_assets() /* La Baraja (motor). Con el flag OFF esto es '' y nada cambia. */ ?>
+
 <script>
   var ICO_IMG = <?= json_encode(ico('image'), JSON_UNESCAPED_SLASHES) ?>;
   var PILL = {borrador:['Pendiente','wait'], aprobado:['Aprobado','ok'], rechazado:['Rechazado','no'], publicado:['Publicado','pub']};
@@ -1423,7 +1428,9 @@ $cf = [
     return fetch(location.pathname + location.search, {method:'POST', body:fd})
       .then(function(r){return r.json();})
       .then(function(d){
-        if(!d.ok) return;
+        // Devuelve SIEMPRE la respuesta: La Baraja necesita saber si salió bien
+        // (la card ya voló con el gesto y tiene que poder devolverla si no).
+        if(!d.ok) return d;
         var cp=document.getElementById('cnt-pend'), ca=document.getElementById('cnt-aprob'), cb=document.getElementById('cnt-bib');
         if(cp) cp.textContent=d.revisar; if(ca) ca.textContent=d.listos; if(cb) cb.textContent=d.biblioteca;
         var TAB='<?= $tab ?>';
@@ -1432,7 +1439,7 @@ $cf = [
                  || (TAB==='biblioteca' && d.estado==='publicado');
         if(!enTab){
           // Cola: la pieza decidida sale y el wizard avanza a la siguiente (con fade).
-          if(window.PW){ PW.retire(card); return; }
+          if(window.PW){ PW.retire(card); return d; }
           card.style.transition='opacity .3s, transform .3s'; card.style.opacity='0'; card.style.transform='translateX(24px)';
           setTimeout(function(){
             card.remove();
@@ -1440,16 +1447,54 @@ $cf = [
             if(!next){ location.reload(); return; }
             if(window.innerWidth<760) next.scrollIntoView({behavior:'smooth', block:'start'});
           }, 320);
-          return;
+          return d;
         }
         var pill = card.querySelector('.pill');
         if(pill){ pill.textContent = PILL[d.estado][0]; pill.className = 'pill '+PILL[d.estado][1]; }
         card.classList.toggle('done', d.estado !== 'borrador');
         card.querySelector('.post-actions').innerHTML = actionsHTML(d.id, d.estado);
         setChk(card,'ok', d.estado==='aprobado' || d.estado==='publicado');
+        return d;
       })
-      .catch(function(){ card.querySelectorAll('.post-actions button').forEach(function(b){b.disabled=false;}); });
+      .catch(function(){ card.querySelectorAll('.post-actions button').forEach(function(b){b.disabled=false;}); return null; });
   }
+
+  // ── LA BARAJA en la Lista (solo móvil, si el motor está montado). ──
+  // Derecha = aprobar (si no hay arte, la card vuelve y abre el estudio de arte,
+  // igual que el botón) · izquierda = apartar (estado 'rechazado', reversible) ·
+  // Deshacer 5s = reabrir. Los botones se quedan: esto es el atajo del pulgar.
+  if (window.Baraja && document.getElementById('postTrack')) Baraja.montar({
+    pista: document.getElementById('wizPista'),
+    ignorar: '.post-actions,.editform,.toolrow,.checklist,.postnav',
+    activa: function () {
+      var t = document.getElementById('postTrack'); if (!t) return null;
+      var vistas = [].slice.call(t.querySelectorAll('.post')).filter(function (c) {
+        return c.style.display !== 'none';
+      });
+      return vistas.length ? vistas[0] : null;
+    },
+    aprobar: function (card, hecho) {
+      // Aprobar inteligente (igual que el botón): sin arte → no se decide al aire;
+      // la card vuelve y se abre el estudio de arte en modo "crear y aprobar".
+      if (!card.dataset.img) { hecho(false); abrirArte(card, true); return; }
+      enviarAccion(card, 'aprobar').then(function (d) {
+        hecho(!!(d && d.ok));
+        if (!(d && d.ok)) alert((d && d.err) || 'No se pudo aprobar. Intenta otra vez.');
+      });
+    },
+    apartar: function (card, hecho) {
+      enviarAccion(card, 'rechazar').then(function (d) {
+        hecho(!!(d && d.ok));
+        if (!(d && d.ok)) alert((d && d.err) || 'No se pudo. Intenta otra vez.');
+      });
+    },
+    deshacer: function (card, dir, hecho) {
+      enviarAccion(card, 'reabrir').then(function (d) {
+        if (d && d.ok && window.PW && PW.devolver) PW.devolver(card);
+        hecho(!!(d && d.ok));
+      });
+    }
+  });
   if (feed) feed.addEventListener('submit', function(e){
     var f = e.target.closest('form');
     if (!f || !f.closest('.post-actions')) return;
@@ -2042,15 +2087,21 @@ $cf = [
   }
   if(prevB) prevB.addEventListener('click',function(){ go(idx-1); });
   if(nextB) nextB.addEventListener('click',function(){ go(idx+1); });
-  // swipe (no interfiere con inputs/editor/acciones/video)
+  // Swipe VIEJO (solo navegar). Con La Baraja activa NO va: dos manejadores
+  // peleándose por el mismo dedo hacían que la pieza se decidiera Y navegara
+  // a la vez. Navegar queda en las flechas; el gesto horizontal decide.
+  var _baraja = !!(window.Baraja && Baraja.activo);
+  if(!_baraja){
   var x0=null,y0=null,lock=null;
   view.addEventListener('touchstart',function(e){ if(e.target.closest('input,textarea,button,a,.editform,details,video,.post-actions')){x0=null;return;} var t=e.touches[0];x0=t.clientX;y0=t.clientY;lock=null; },{passive:true});
   view.addEventListener('touchmove',function(e){ if(x0===null)return; var t=e.touches[0],dx=t.clientX-x0,dy=t.clientY-y0; if(lock===null&&(Math.abs(dx)>8||Math.abs(dy)>8)) lock=Math.abs(dx)>Math.abs(dy)?'x':'y'; },{passive:true});
   view.addEventListener('touchend',function(e){ if(x0===null||lock!=='x'){x0=null;return;} var dx=e.changedTouches[0].clientX-x0; if(dx<-45)go(idx+1); else if(dx>45)go(idx-1); x0=null; },{passive:true});
+  }
   window.addEventListener('resize',fit); window.addEventListener('load',fit);
   // Cualquier cambio de altura de la card visible (editar/regenerar/arte) reajusta el alto
   if(window.ResizeObserver){ new ResizeObserver(function(){ fit(); }).observe(track); }
   // Expuesto a los handlers existentes (aprobar/rechazar/borrar): sacar card y avanzar con fade
+  var _reloadT=null;
   window.PW={
     refit: fit,
     retire: function(card){
@@ -2058,12 +2109,28 @@ $cf = [
       card.style.transition='opacity .2s ease, transform .2s ease'; card.style.opacity='0'; card.style.transform='translateX(-16px)';
       setTimeout(function(){
         card.remove(); var cs=cards();
-        if(!cs.length){ location.reload(); return; }
+        if(!cs.length){
+          // Con La Baraja: NO recargar de una — mataría el Deshacer (5s).
+          if(_baraja){ if(_reloadT) clearTimeout(_reloadT); _reloadT=setTimeout(function(){ location.reload(); }, 5600); }
+          else location.reload();
+          return;
+        }
         if(idx>cs.length-1) idx=cs.length-1;
         var b=cs[idx]; b.style.display=''; b.style.opacity='0'; b.style.transform='translateX(16px)'; view.style.height=b.offsetHeight+'px';
         requestAnimationFrame(function(){ b.style.transition='opacity .34s cubic-bezier(.22,1,.36,1), transform .34s cubic-bezier(.22,1,.36,1)'; b.style.opacity='1'; b.style.transform='none'; });
         paint();
       }, 190);
+    },
+    // Deshacer de La Baraja: la card salió del DOM (retire) — vuelve a entrar
+    // justo delante y se queda visible.
+    devolver: function(card){
+      if(_reloadT){ clearTimeout(_reloadT); _reloadT=null; }
+      var ref=cards()[idx]||null;
+      if(ref){ ref.style.display='none'; track.insertBefore(card, ref); }
+      else track.appendChild(card);
+      var j=cards().indexOf(card); if(j>=0) idx=j;
+      card.style.display=''; card.style.transition=''; card.style.transform=''; card.style.opacity='';
+      fit(); paint();
     }
   };
   // init: card 0 visible (las demás ya en display:none por el markup)
