@@ -436,6 +436,37 @@ if (!isset($redes_conectadas)) {
       : '<img src="'+img+'?t='+Date.now()+'" alt="arte">';
     document.getElementById('wiz-next2').style.display='block';
   }
+  // ── EL PROTOCOLO DE ESPERA: el arte async NO secuestra al dueño. ──
+  // El loader le dice la verdad (esto toma minutos), le da la salida ("Seguir
+  // con mi trabajo") y le promete el aviso (la campanita — el worker crea la
+  // notificación al terminar). Si se queda, el poll pinta la imagen como siempre.
+  var _wizArteTimer=null;
+  function wizArteLoader(){
+    var msgs=['Imaginando la escena…','Ajustando la luz y el encuadre…','Aplicando tu logo de marca…','Puliendo texturas y detalles…','Casi lista…'], i=0;
+    var card=document.getElementById('pubresCard'), ov=document.getElementById('pubresOv');
+    function paint(){
+      card.innerHTML='<div class="pubres-spin"></div><div class="pubres-t">Generando tu imagen…</div>'
+        +'<div class="pubres-msg">'+msgs[i%msgs.length]+'</div>'
+        +'<div class="pubres-msg" style="font-size:12.5px;margin-top:-8px">Esto toma 1–3 minutos. Puedes seguir con lo tuyo — la campanita te avisa cuando esté.</div>'
+        +'<button type="button" class="pubres-ver" id="wiz-espera-salir" style="cursor:pointer;font-family:inherit">Seguir con mi trabajo →</button>';
+      card.querySelector('#wiz-espera-salir').onclick=function(){
+        if(_wizArteTimer){ clearInterval(_wizArteTimer); _wizArteTimer=null; }
+        ov.classList.remove('show');
+        wizCerrar();
+        toast('El Diseñador sigue con tu imagen — la campanita te avisa cuando esté.');
+      };
+    }
+    // El loader genérico ya está en pantalla: tomamos el control de su timer.
+    if(typeof _loaderTimer!=='undefined' && _loaderTimer){ clearInterval(_loaderTimer); _loaderTimer=null; }
+    paint();
+    ov.classList.add('show');
+    if(_wizArteTimer){ clearInterval(_wizArteTimer); }
+    _wizArteTimer=setInterval(function(){
+      // Si algo más cerró u ocupó el overlay (llegó la imagen, publicar…), soltarlo.
+      if(!ov.classList.contains('show') || !document.getElementById('wiz-espera-salir')){ clearInterval(_wizArteTimer); _wizArteTimer=null; return; }
+      i++; paint();
+    }, 2600);
+  }
   // Sondea el arte async hasta que la imagen esté lista (worker o auto-rescate por Gemini).
   function wizPollArte(){
     var tries=0, MAX=70;   // ~3.5 min tope
@@ -443,7 +474,13 @@ if (!isset($redes_conectadas)) {
       tries++;
       var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','poll_arte'); fd.append('id',wizId);
       fetch(WIZ_EP,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
-        if(d && d.estado==='ok' && d.img){ loaderHide(); wizPintaArte(d.img); return; }
+        if(d && d.estado==='ok' && d.img){
+          if(_wizArteTimer){ clearInterval(_wizArteTimer); _wizArteTimer=null; }
+          loaderHide(); wizPintaArte(d.img);
+          // Si el dueño cerró el wizard y siguió en lo suyo, avisar suave aquí también.
+          if(!document.getElementById('wizov').classList.contains('show')) toast('Tu arte está listo — míralo en la campanita o en tus posts.');
+          return;
+        }
         if(d && d.estado==='error'){ loaderHide(); toast('No se pudo crear el arte. Intenta otra vez.'); return; }
         if(tries>=MAX){ loaderHide(); toast('El arte está tardando. Ábrelo en un momento en tus propuestas.'); return; }
         setTimeout(poll, 3000);
@@ -522,7 +559,7 @@ if (!isset($redes_conectadas)) {
       fetch(WIZ_EP,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
         if(!d.ok){ loaderHide(); wizArteErr(d); return; }
         if(d.img){ loaderHide(); wizPintaArte(d.img); return; }   // sync: ya está
-        if(d.async){ wizPollArte(); return; }                      // async: sondear hasta que esté
+        if(d.async){ wizArteLoader(); wizPollArte(); return; }     // async: protocolo de espera + sondear
         loaderHide(); wizArteErr({});
       }).catch(function(){ loaderHide(); toast('Error de conexión.'); });
     });
