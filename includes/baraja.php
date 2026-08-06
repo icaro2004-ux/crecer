@@ -70,7 +70,19 @@ function baraja_assets(): string {
   var REDUCE = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
   var EASE = 'cubic-bezier(.22,1,.36,1)';
 
+  // ── Prueba viva: &bj=1 en la URL pinta un chip con el estado del motor.
+  //    (Diagnóstico sin Inspect, funciona en el celular. La "v" delata OPcache viejo.)
+  var _chip=null;
+  if(/[?&]bj=1/.test(location.search)){
+    _chip=document.createElement('div');
+    _chip.style.cssText='position:fixed;top:8px;left:8px;z-index:999;background:#231F20;color:#fff;font:700 12px/1.4 system-ui;padding:8px 12px;border-radius:10px;opacity:.94;pointer-events:none';
+    _chip.textContent='Baraja v3 · dedo:'+(COARSE?'SI':'NO')+' · montada:NO';
+    if(document.body) document.body.appendChild(_chip);
+    else document.addEventListener('DOMContentLoaded',function(){ document.body.appendChild(_chip); });
+  }
+
   window.Baraja = { activo: COARSE, montar: function(cfg){
+    if(_chip && COARSE) _chip.textContent='Baraja v3 · dedo:SI · montada:SI';
     if (!COARSE) return;   // desktop: ni un listener
     var IGNORAR = 'input,textarea,select,button,a,video,details,summary,label' + (cfg.ignorar ? ',' + cfg.ignorar : '');
 
