@@ -921,7 +921,8 @@ $credito  = $has_deck
       if(d&&d.ok&&d.idea){
         it.textContent=d.idea; it.style.color=''; it.style.fontStyle='';
         // La idea YA está generada: tocar el card (o el botón) va directo a crearla.
-        var url=<?= json_encode($BASE.'/aprobar2.php?marca='.(int)$marca_id.'&crear=1&idea=') ?>+encodeURIComponent(d.idea);
+        <?php // CREAR unificado (flag): la Idea del día abre el wizard en El Estudio (una sola superficie) ?>
+        var url=<?= json_encode($BASE.'/'.((defined('CRECER_CREAR_UNIFICADO') && CRECER_CREAR_UNIFICADO) ? 'propuestas.php' : 'aprobar2.php').'?marca='.(int)$marca_id.'&crear=1&idea=') ?>+encodeURIComponent(d.idea);
         var go=document.getElementById('hzIdeaGo');
         if(go){ go.href=url; go.hidden=false; }
         var card=document.getElementById('hzIdea');

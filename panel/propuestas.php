@@ -21,6 +21,10 @@ if (!$marca) { header('Location: /crecer/onboarding.php'); exit; }
 $marca_id = (int)$marca['id'];
 $BASE = '/crecer/panel';
 $mid  = "marca={$marca_id}";
+// CREAR unificado (flag): ON → el wizard se abre AQUÍ mismo (El Estudio);
+// OFF → los enlaces van a aprobar2 como siempre. Reversa = quitar el define.
+$CREAR_UNIFICADO = defined('CRECER_CREAR_UNIFICADO') && CRECER_CREAR_UNIFICADO;
+$CREAR_URL = $CREAR_UNIFICADO ? "{$BASE}/propuestas.php?{$mid}&crear=1" : "{$BASE}/aprobar2.php?{$mid}&crear=1";
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 $negocio = $marca['nombre_negocio'] ?? 'tu negocio';
 // Recoge imágenes que terminaron en background + notifica (el worker muere en Hostinger).
@@ -215,7 +219,7 @@ require __DIR__ . '/_shell.php';
 <main class="est" id="est">
   <p class="est-owner">El estudio de <b><?= $h($negocio) ?></b></p>
   <div class="est-crear-row">
-    <a class="est-crear" href="<?= $BASE ?>/aprobar2.php?<?= $mid ?>&crear=1"><?= ico('plus') ?> Post</a>
+    <a class="est-crear" href="<?= $CREAR_URL ?>"><?= ico('plus') ?> Post</a>
     <a class="est-crear alt" href="<?= $BASE ?>/reels.php?marca=<?= $marca_id ?>"><?= ico('camera') ?> Reel</a>
     <a class="est-crear car" href="<?= $BASE ?>/carrusel.php?marca=<?= $marca_id ?>"><?= ico('list') ?> Carrusel</a>
   </div>
@@ -234,7 +238,7 @@ require __DIR__ . '/_shell.php';
       <h2>Nada que revisar por ahora.</h2>
       <p>Tu equipo está preparando lo próximo. Vuelve en un rato.</p>
       <div class="acts">
-        <a href="<?= $BASE ?>/aprobar2.php?<?= $mid ?>&crear=1">Crear un post nuevo</a>
+        <a href="<?= $CREAR_URL ?>">Crear un post nuevo</a>
         <a href="<?= $BASE ?>/resultados.php?marca=<?= $marca_id ?>">Ver lo publicado</a>
       </div>
     </div>
@@ -316,12 +320,18 @@ require __DIR__ . '/_shell.php';
       <h2>Ya revisaste todo lo que el corillo preparó.</h2>
       <p>El corillo sigue trabajando por <?= $h($negocio) ?>.</p>
       <div class="acts">
-        <a href="<?= $BASE ?>/aprobar2.php?<?= $mid ?>&crear=1">Crear un post nuevo</a>
+        <a href="<?= $CREAR_URL ?>">Crear un post nuevo</a>
         <a href="<?= $BASE ?>/resultados.php?marca=<?= $marca_id ?>">Ver lo publicado</a>
       </div>
     </div>
   <?php endif; ?>
 </main>
+
+<?php
+// El wizard de CREAR (compartido con aprobar2): con ?crear=1 se abre solo.
+// Montarlo aquí = crear un post sin salir del Estudio (una sola superficie).
+include __DIR__ . '/_crear_wizard.php';
+?>
 
 <script>
 (function () {

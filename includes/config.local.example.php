@@ -147,3 +147,9 @@ define('SMTP_USER',     '');                          // ej. hola@encuentraloaho
 define('SMTP_PASS',     '');                          // contraseña de esa cuenta
 define('SMTP_FROM',     'admin@encuentraloahora.com'); // remitente visible
 define('SMTP_FROMNAME', 'Encuéntralo Crecer');
+
+// ── CREAR unificado (opcional) ──
+// ON: todo "crear un post" (Idea del día, botones del Estudio) abre el wizard
+// DENTRO de El Estudio (propuestas.php) — una sola superficie, una sola piel.
+// OFF/ausente: los enlaces van a aprobar2.php como siempre (comportamiento viejo).
+// define('CRECER_CREAR_UNIFICADO', true);
