@@ -1494,6 +1494,7 @@ $cf = [
   // igual que el botón) · izquierda = apartar (estado 'rechazado', reversible) ·
   // Deshacer 5s = reabrir. Los botones se quedan: esto es el atajo del pulgar.
   if (window.Baraja && document.getElementById('postTrack')) Baraja.montar({
+    cartas: '#postTrack .post',   // touch-action pan-y: el dedo horizontal es de La Baraja
     pista: document.getElementById('wizPista'),
     ignorar: '.post-actions,.editform,.toolrow,.checklist,.postnav',
     activa: function () {

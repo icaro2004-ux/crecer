@@ -41,6 +41,8 @@ function baraja_assets(): string {
 <style>
   /* La pista del gesto: nace invisible; el motor la enciende solo en teléfono
      y solo hasta el primer swipe logrado. */
+  /* Sin esto, el swipe hacia el borde dispara el "atrás" del navegador. */
+  html,body{overscroll-behavior-x:none}
   .bj-pista{display:none;align-items:center;justify-content:center;gap:10px;font-size:12.5px;font-weight:700;color:var(--muted,#6E6A67);margin:0 0 14px;text-align:center}
   .bj-pista.on{display:flex}
   .bj-pista i{flex:0 0 26px;height:1.5px;background:var(--line,#E9E7E4);display:block}
@@ -76,14 +78,22 @@ function baraja_assets(): string {
   if(/[?&]bj=1/.test(location.search)){
     _chip=document.createElement('div');
     _chip.style.cssText='position:fixed;top:8px;left:8px;z-index:999;background:#231F20;color:#fff;font:700 12px/1.4 system-ui;padding:8px 12px;border-radius:10px;opacity:.94;pointer-events:none';
-    _chip.textContent='Baraja v3 · dedo:'+(COARSE?'SI':'NO')+' · montada:NO';
+    _chip.textContent='Baraja v4 · dedo:'+(COARSE?'SI':'NO')+' · montada:NO';
     if(document.body) document.body.appendChild(_chip);
     else document.addEventListener('DOMContentLoaded',function(){ document.body.appendChild(_chip); });
   }
 
   window.Baraja = { activo: COARSE, montar: function(cfg){
-    if(_chip && COARSE) _chip.textContent='Baraja v3 · dedo:SI · montada:SI';
+    if(_chip && COARSE) _chip.textContent='Baraja v4 · dedo:SI · montada:SI';
     if (!COARSE) return;   // desktop: ni un listener
+    // ── EL FIX DEL DEDO REAL: sin touch-action el navegador se ROBA el gesto
+    //    (decide que el arrastre horizontal es suyo y a JS no le llega nada).
+    //    pan-y = "lo vertical es tuyo (scroll); lo horizontal es mío".
+    if (cfg.cartas) {
+      var ta=document.createElement('style');
+      ta.textContent = cfg.cartas + '{touch-action:pan-y}';
+      document.head.appendChild(ta);
+    }
     var IGNORAR = 'input,textarea,select,button,a,video,details,summary,label' + (cfg.ignorar ? ',' + cfg.ignorar : '');
 
     // ── La pista: solo hasta que el gesto se aprenda (una vez por dispositivo) ──

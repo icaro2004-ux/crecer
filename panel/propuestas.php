@@ -535,6 +535,7 @@ include __DIR__ . '/_crear_wizard.php';
   // Deshacer 5s en ambas. En la segunda vuelta (?apartadas=1): derecha rescata,
   // izquierda la deja apartada (solo pasa la card, sin tocar el server).
   if (window.Baraja) Baraja.montar({
+    cartas: '.est-prop',   // touch-action pan-y: el dedo horizontal es de La Baraja
     pista: document.getElementById('estPista'),
     ignorar: '.est-verdict,.est-panel,.est-bib,.est-crear-row,.est-listos',
     activa: function () { return props[idx] || null; },
