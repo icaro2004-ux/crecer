@@ -44,10 +44,16 @@ function baraja_assets(): string {
   .bj-pista{display:none;align-items:center;justify-content:center;gap:10px;font-size:12.5px;font-weight:700;color:var(--muted,#6E6A67);margin:0 0 14px;text-align:center}
   .bj-pista.on{display:flex}
   .bj-pista i{flex:0 0 26px;height:1.5px;background:var(--line,#E9E7E4);display:block}
-  /* Veredictos que se revelan con el arrastre (estilo sello, sin emoji) */
-  .bj-v{position:absolute;top:14px;padding:7px 13px;border-radius:12px;font-weight:800;font-size:14px;letter-spacing:.02em;opacity:0;pointer-events:none;z-index:6;border:2.5px solid currentColor;background:rgba(255,255,255,.92)}
-  .bj-v.me{left:12px;color:var(--palma,#2e8b57);transform:rotate(-8deg)}
-  .bj-v.no{right:12px;color:var(--muted,#6E6A67);transform:rotate(8deg)}
+  /* Veredictos que se revelan con el arrastre: sellos GRANDES y rellenos,
+     FIJOS abajo al centro (cerca del pulgar) — NUNCA tapan la foto ni la
+     card. El pop de escala lo pone el motor con el progreso del dedo. */
+  .bj-v{position:fixed;bottom:96px;left:50%;padding:14px 24px;border-radius:18px;font-weight:800;font-size:20px;line-height:1;letter-spacing:.01em;opacity:0;pointer-events:none;z-index:230;color:#fff;white-space:nowrap;box-shadow:0 14px 34px -8px rgba(0,0,0,.45)}
+  .bj-v.me{background:var(--palma,#2e8b57)}          /* verde: vamos con este */
+  .bj-v.no{background:var(--noo-ink,#d64031)}        /* rojo: ahora no */
+  /* El lavado de color: entra por el borde que la card va dejando atrás
+     (derecha=verde por la izquierda, izquierda=rojo por la derecha).
+     Concentrado en el borde — el centro (la foto) queda limpio. */
+  .bj-wash{position:fixed;inset:0;pointer-events:none;z-index:150;opacity:0}
   /* Deshacer: píldora fija abajo con barra de tiempo */
   .bj-undo{position:fixed;left:50%;bottom:18px;transform:translate(-50%,90px);display:flex;align-items:center;gap:14px;background:var(--tinta,#231F20);color:#fff;border-radius:99px;padding:8px 8px 8px 18px;z-index:220;box-shadow:0 12px 30px rgba(0,0,0,.35);overflow:hidden;transition:transform .25s cubic-bezier(.22,1,.36,1);max-width:92vw}
   .bj-undo.on{transform:translate(-50%,0)}
@@ -77,7 +83,7 @@ function baraja_assets(): string {
     }
 
     // ── El arrastre ──
-    var card=null, x0=0, y0=0, t0=0, dx=0, lock=null, w=320, vibro=false, vMe=null, vNo=null;
+    var card=null, x0=0, y0=0, t0=0, dx=0, lock=null, w=320, vibro=false, vMe=null, vNo=null, wash=null;
 
     function sello(cls, txt){
       var s=document.createElement('span'); s.className='bj-v '+cls; s.textContent=txt; return s;
@@ -86,7 +92,8 @@ function baraja_assets(): string {
       if(!card) return;
       var c=card; card=null;
       if(vMe){ vMe.remove(); vMe=null; } if(vNo){ vNo.remove(); vNo=null; }
-      c.style.willChange='';
+      if(wash){ wash.remove(); wash=null; }
+      c.style.willChange=''; c.style.boxShadow='';
       if(anima && !REDUCE){
         c.style.transition='transform .32s '+EASE;
         c.style.transform='';
@@ -112,16 +119,29 @@ function baraja_assets(): string {
       e.preventDefault();                                        // horizontal = el dedo es nuestro
       dx=mx;
       if(!vMe){
-        if(getComputedStyle(card).position==='static') card.style.position='relative';
+        // Los sellos viven en el body (fijos abajo al centro): jamás tapan la card.
         vMe=sello('me','Vamos con este'); vNo=sello('no','Ahora no');
-        card.appendChild(vMe); card.appendChild(vNo);
+        document.body.appendChild(vMe); document.body.appendChild(vNo);
+        wash=document.createElement('div'); wash.className='bj-wash';
+        document.body.appendChild(wash);
         card.style.willChange='transform';
       }
       card.style.transition='none';
       card.style.transform='translateX('+dx+'px) rotate('+(dx*0.045)+'deg)';
       var p=Math.min(1, Math.abs(dx)/(w*0.28));
+      // El sello crece con el arrastre (pop) y la card brilla hacia la decisión.
+      var sc=0.85+0.3*p;
       vMe.style.opacity = dx>0 ? p : 0;
       vNo.style.opacity = dx<0 ? p : 0;
+      vMe.style.transform='translateX(-50%) rotate(-3deg) scale('+(dx>0?sc:0.85)+')';
+      vNo.style.transform='translateX(-50%) rotate(3deg) scale('+(dx<0?sc:0.85)+')';
+      card.style.boxShadow = dx>0
+        ? '0 18px 48px -12px rgba(46,139,87,'+(0.55*p).toFixed(3)+')'
+        : '0 18px 48px -12px rgba(214,64,49,'+(0.5*p).toFixed(3)+')';
+      wash.style.background = dx>0
+        ? 'linear-gradient(90deg, rgba(46,139,87,.38), rgba(46,139,87,0) 52%)'
+        : 'linear-gradient(270deg, rgba(214,64,49,.38), rgba(214,64,49,0) 52%)';
+      wash.style.opacity = p.toFixed(3);
       var cruzado = Math.abs(dx) >= umbral();
       if(cruzado && !vibro){ vibro=true; if(navigator.vibrate){ try{ navigator.vibrate(10); }catch(x){} } }
       if(!cruzado) vibro=false;
@@ -134,7 +154,8 @@ function baraja_assets(): string {
       if(!decide){ soltar(true); return; }           // rebote elástico: no era en serio
       var dir = dx>0 ? 1 : -1;
       var c=card, accion = dir>0 ? cfg.aprobar : cfg.apartar;
-      var badges=[vMe,vNo]; card=null; vMe=null; vNo=null;
+      var badges=[vMe,vNo,wash]; card=null; vMe=null; vNo=null;
+      if(wash){ wash.style.transition='opacity .28s ease'; wash.style.opacity='0'; wash=null; }
       pistaLista();
       // La card vuela en la dirección del dedo
       if(REDUCE){ c.style.transition='opacity .15s ease'; c.style.opacity='0'; }
@@ -149,7 +170,7 @@ function baraja_assets(): string {
         // No se pudo (server dijo no): la card vuelve a entrar
         c.style.transition = REDUCE ? '' : 'transform .34s '+EASE+', opacity .2s ease';
         c.style.opacity='1'; c.style.transform='';
-        c.style.willChange='';
+        c.style.willChange=''; c.style.boxShadow='';
         setTimeout(function(){ c.style.transition=''; }, 360);
       });
     }
@@ -175,7 +196,7 @@ function baraja_assets(): string {
         b.disabled=true;
         cfg.deshacer(c, dir, function(ok){
           if(ok){
-            c.style.transition='none'; c.style.transform=''; c.style.opacity='1'; c.style.willChange='';
+            c.style.transition='none'; c.style.transform=''; c.style.opacity='1'; c.style.willChange=''; c.style.boxShadow='';
             quitar();
           } else { b.disabled=false; }
         });
