@@ -76,45 +76,55 @@ if (!isset($redes_conectadas)) {
     </style>
     <div class="wiz-pane" data-pane="2" style="display:none">
       <h3>Ahora el arte</h3>
-      <div class="wiz-cap" id="wiz-cap"></div>
-      <div id="wiz-debate"></div>
-      <a href="#" class="wiz-editlink" id="wiz-edit"><?= ico('edit') ?> Corregir el texto a mano</a>
-      <div class="wiz-editbox" id="wiz-editbox" style="display:none">
-        <textarea id="wiz-capedit" rows="5"></textarea>
-        <div style="display:flex;gap:8px;margin-top:8px">
-          <button type="button" class="art-go wiz-ok" id="wiz-capsave" style="margin-top:0;flex:1">Guardar</button>
-          <button type="button" class="fbnew" id="wiz-capcancel">Cancelar</button>
+      <?php /* Desktop: dos columnas (texto | arte). Móvil: apilan igual que siempre. */ ?>
+      <div class="wiz-col wiz-col-txt">
+        <div class="wiz-cap" id="wiz-cap"></div>
+        <div id="wiz-debate"></div>
+        <a href="#" class="wiz-editlink" id="wiz-edit"><?= ico('edit') ?> Corregir el texto a mano</a>
+        <div class="wiz-editbox" id="wiz-editbox" style="display:none">
+          <textarea id="wiz-capedit" rows="5"></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button type="button" class="art-go wiz-ok" id="wiz-capsave" style="margin-top:0;flex:1">Guardar</button>
+            <button type="button" class="fbnew" id="wiz-capcancel">Cancelar</button>
+          </div>
+          <div class="art-note">Si cambias una palabra o el tono, la IA aprende tu preferencia para los próximos posts.</div>
         </div>
-        <div class="art-note">Si cambias una palabra o el tono, la IA aprende tu preferencia para los próximos posts.</div>
       </div>
-      <label class="fl" style="margin-top:4px"><?= ico('palette') ?> Estilo del arte <span style="color:var(--muted);font-weight:500">(puedes combinar varios — el Diseñador los funde)</span></label>
-      <div style="margin-bottom:10px"><?php $sel_id = 'wiz-estilo'; include __DIR__ . '/_estilo_arte.php'; ?></div>
-      <label class="fl" style="margin-top:4px"><?= ico('lightbulb') ?> Idea para la imagen <span style="color:var(--muted);font-weight:500">(el Diseñador la propone — ajústala a tu gusto)</span></label>
-      <textarea id="wiz-arteidea" rows="3" placeholder="El Diseñador está pensando la idea…"></textarea>
-      <button type="button" class="fbnew" id="wiz-arte-sug" style="width:100%;margin:8px 0 4px"><?= ico('refresh') ?> Sugiéreme otra idea</button>
-      <div style="display:flex;gap:8px;margin:2px 0 4px" id="wiz-arte-chatrow">
-        <input type="text" id="wiz-arte-chat" placeholder="O dile qué cambiar: 'más colorido', 'de noche', 'sin la playa'…" autocomplete="off"
-          style="flex:1;min-width:0;font-family:inherit;font-size:15px;border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;background:#fff">
-        <button type="button" class="art-go" id="wiz-arte-chat-go" style="flex:none;width:auto;margin:0;padding:0 16px" aria-label="Aplicar cambio"><?= ico('send') ?></button>
+      <div class="wiz-col wiz-col-arte">
+        <label class="fl" style="margin-top:4px"><?= ico('palette') ?> Estilo del arte <span style="color:var(--muted);font-weight:500">(puedes combinar varios — el Diseñador los funde)</span></label>
+        <div style="margin-bottom:10px"><?php $sel_id = 'wiz-estilo'; include __DIR__ . '/_estilo_arte.php'; ?></div>
+        <label class="fl" style="margin-top:4px"><?= ico('lightbulb') ?> Idea para la imagen <span style="color:var(--muted);font-weight:500">(el Diseñador la propone — ajústala a tu gusto)</span></label>
+        <textarea id="wiz-arteidea" rows="3" placeholder="El Diseñador está pensando la idea…"></textarea>
+        <button type="button" class="fbnew" id="wiz-arte-sug" style="width:100%;margin:8px 0 4px"><?= ico('refresh') ?> Sugiéreme otra idea</button>
+        <div style="display:flex;gap:8px;margin:2px 0 4px" id="wiz-arte-chatrow">
+          <input type="text" id="wiz-arte-chat" placeholder="O dile qué cambiar: 'más colorido', 'de noche', 'sin la playa'…" autocomplete="off"
+            style="flex:1;min-width:0;font-family:inherit;font-size:15px;border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;background:#fff">
+          <button type="button" class="art-go" id="wiz-arte-chat-go" style="flex:none;width:auto;margin:0;padding:0 16px" aria-label="Aplicar cambio"><?= ico('send') ?></button>
+        </div>
+        <div class="wiz-art" id="wiz-art"></div>
+        <div class="wiz-artbtns">
+          <button type="button" class="art-go" id="wiz-gen"><?= ico('palette') ?> Generar la imagen con esta idea</button>
+          <label class="fbnew wiz-upl"><?= ico('camera') ?> Subir mi foto<input type="file" id="wiz-file" accept="image/png,image/jpeg,image/webp" style="display:none"></label>
+          <label class="fbnew wiz-upl"><?= ico('camera') ?> Subir mi video<input type="file" id="wiz-video" accept="video/mp4,video/quicktime" style="display:none"></label>
+        </div>
+        <div style="font-size:11.5px;color:var(--muted);text-align:center;margin-top:-4px">No creamos video — lo subes tú (MP4/MOV, hasta 100MB). Sale como Reel/video.</div>
+        <button type="button" class="art-go wiz-ok" id="wiz-next2" style="display:none">Usar este arte →</button>
       </div>
-      <div class="wiz-art" id="wiz-art"></div>
-      <div class="wiz-artbtns">
-        <button type="button" class="art-go" id="wiz-gen"><?= ico('palette') ?> Generar la imagen con esta idea</button>
-        <label class="fbnew wiz-upl"><?= ico('camera') ?> Subir mi foto<input type="file" id="wiz-file" accept="image/png,image/jpeg,image/webp" style="display:none"></label>
-        <label class="fbnew wiz-upl"><?= ico('camera') ?> Subir mi video<input type="file" id="wiz-video" accept="video/mp4,video/quicktime" style="display:none"></label>
-      </div>
-      <div style="font-size:11.5px;color:var(--muted);text-align:center;margin-top:-4px">No creamos video — lo subes tú (MP4/MOV, hasta 100MB). Sale como Reel/video.</div>
-      <button type="button" class="art-go wiz-ok" id="wiz-next2" style="display:none">Usar este arte →</button>
-      <button type="button" class="art-skip" id="wiz-back2">← Volver a la idea</button>
+      <button type="button" class="art-skip wiz-full" id="wiz-back2">← Volver a la idea</button>
     </div>
 
     <div class="wiz-pane" data-pane="3" style="display:none">
       <h3>¡Listo para publicar!</h3>
-      <div class="wiz-prev" id="wiz-prev"></div>
-      <div class="wiz-pubh" id="wiz-pubh"><?= ico('share') ?> ¿Dónde lo publicamos?</div>
-      <div id="wiz-pub-choice"></div>
-      <button type="button" class="art-skip" id="wiz-later">Guardar para después</button>
-      <button type="button" class="art-skip" id="wiz-back3">← Volver al arte</button>
+      <?php /* Desktop: preview | destino. Móvil: apilan igual que siempre. */ ?>
+      <div class="wiz-col wiz-col-prev">
+        <div class="wiz-prev" id="wiz-prev"></div>
+      </div>
+      <div class="wiz-col wiz-col-pub">
+        <div class="wiz-pubh" id="wiz-pubh"><?= ico('share') ?> ¿Dónde lo publicamos?</div>
+        <div id="wiz-pub-choice"></div>
+        <button type="button" class="art-skip" id="wiz-later">Guardar para después</button>
+      </div>
+      <button type="button" class="art-skip wiz-full" id="wiz-back3">← Volver al arte</button>
     </div>
   </div>
 </div>
@@ -188,6 +198,28 @@ if (!isset($redes_conectadas)) {
   @media(max-width:560px){
     #wiz-arteidea,#wiz-arte-chat,.wiz-ov textarea{font-size:16px !important;padding:14px !important;line-height:1.5 !important}
     .wiz-ov .fl{font-size:15px !important}
+  }
+  /* ══ DESKTOP NATIVO (Native Design): no es el modal de teléfono agrandado —
+     es OTRA experiencia. Espacio, comparación, composición horizontal. ══ */
+  @media(min-width:761px){
+    .wiz-ov{padding:44px 28px}
+    .wiz-box{max-width:960px;padding:30px 36px 34px}
+    .wiz-steps{margin-bottom:22px}
+    .wiz-pane h3{font-size:25px;margin-bottom:8px}
+    .wiz-sub{font-size:14px}
+    /* Paso 1: las ideas SE COMPARAN — grid, todas a la vista. Cero carrusel. */
+    .wiz-swipe-hint{display:none !important}
+    .wiz-arrow{display:none}
+    .wiz-car{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;overflow:visible;scroll-snap-type:none;margin:0 0 8px;padding:2px 0;cursor:default}
+    .wiz-car:active{cursor:default}
+    .wiz-card{flex:none;min-height:0}
+    .wiz-card:hover{transform:translateY(-2px);box-shadow:0 20px 40px -18px rgba(40,25,12,.55);transition:transform .18s cubic-bezier(.22,1,.36,1),box-shadow .18s}
+    /* Pasos 2 y 3: dos columnas — el texto vive a la izquierda, el arte/destino a la derecha. */
+    .wiz-pane[data-pane="2"],.wiz-pane[data-pane="3"]{display:grid;grid-template-columns:1fr 1fr;gap:2px 32px;align-items:start}
+    .wiz-pane[data-pane="2"] h3,.wiz-pane[data-pane="3"] h3{grid-column:1/-1}
+    .wiz-full{grid-column:1/-1;max-width:340px;justify-self:center}
+    .wiz-col{min-width:0}
+    .wiz-pubh{justify-content:flex-start;text-align:left;margin-top:10px}
   }
 </style>
 
@@ -276,7 +308,8 @@ if (!isset($redes_conectadas)) {
   var wizId=null, wizImg='';
   function _esc(s){ var d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
   function wizPaso(n){
-    document.querySelectorAll('#wizov .wiz-pane').forEach(function(p){ p.style.display=(p.dataset.pane==String(n))?'block':'none'; });
+    // display '' (no 'block'): deja mandar al CSS — en desktop los panes son grid.
+    document.querySelectorAll('#wizov .wiz-pane').forEach(function(p){ p.style.display=(p.dataset.pane==String(n))?'':'none'; });
     document.querySelectorAll('#wizov .wiz-dot').forEach(function(d){ d.classList.toggle('on', (+d.dataset.s)<=n); });
     var b=document.querySelector('#wizov .wiz-box'); if(b) b.scrollTop=0;
   }
