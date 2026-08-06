@@ -1167,6 +1167,33 @@ $cf = [
     </article>
   <?php endforeach; ?>
   <?php if ($piezas): ?></div></div><?php endif; ?>
+  <?php if ($tab === 'revisar'): ?>
+  <?php /* EL CIERRE del mazo: al decidir la última pieza, esto reemplaza el vacío
+           — con caminos, no con una recarga ciega. Lo enseña PW/La Baraja. */ ?>
+  <div class="pw-cierre" id="pwCierre" hidden>
+    <div class="pwc-mk"><?= ico('check-circle') ?></div>
+    <h2>Revisaste todo lo de hoy.</h2>
+    <p>El corillo sigue preparando lo próximo. ¿Qué sigue?</p>
+    <div class="pwc-acts">
+      <a class="pwc-b pri" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=listos">Publicar los listos (<b id="pwcListos"><?= (int)$n_listos ?></b>)</a>
+      <a class="pwc-b" href="/crecer/panel/calendario.php?marca=<?= $marca_id ?>">Ver el calendario</a>
+      <a class="pwc-b" id="pwcApart" href="/crecer/panel/propuestas.php?marca=<?= $marca_id ?>&apartadas=1" <?= (int)$cnt['rechazado'] > 0 ? '' : 'hidden' ?>>Otra vuelta a las apartadas (<b id="pwcApartN"><?= (int)$cnt['rechazado'] ?></b>)</a>
+      <button type="button" class="pwc-b gho" onclick="wizAbrir()">Crear otro post</button>
+    </div>
+  </div>
+  <style>
+    .pw-cierre{text-align:center;padding:8vh 14px 6vh;max-width:600px}
+    .pwc-mk{width:54px;height:54px;border-radius:50%;display:grid;place-items:center;margin:0 auto 16px;background:color-mix(in srgb,var(--palma) 12%,#fff);color:var(--palma)}
+    .pwc-mk svg{width:27px;height:27px}
+    .pw-cierre h2{font-family:var(--font-display);font-weight:800;font-size:23px;color:var(--tinta);margin-bottom:6px}
+    .pw-cierre p{font-size:14px;color:var(--muted);margin-bottom:22px}
+    .pwc-acts{display:flex;flex-direction:column;gap:10px;max-width:340px;margin:0 auto}
+    .pwc-b{display:block;text-align:center;text-decoration:none;cursor:pointer;font-family:inherit;font-weight:800;font-size:14.5px;padding:14px;border-radius:14px;border:1.5px solid var(--line);background:#fff;color:var(--tinta)}
+    .pwc-b.pri{border:0;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta))}
+    .pwc-b.gho{background:none;border:0;color:var(--muted);font-weight:700}
+    .pwc-b:active{transform:scale(.98)}
+  </style>
+  <?php endif; ?>
 </div>
 <?php endif; /* fin vistas: hub | fábrica */ ?>
 
@@ -1459,7 +1486,10 @@ $cf = [
       .catch(function(){ card.querySelectorAll('.post-actions button').forEach(function(b){b.disabled=false;}); return null; });
   }
 
-  // ── LA BARAJA en la Lista (solo móvil, si el motor está montado). ──
+  <?php if ($tab === 'revisar'): /* La Baraja SOLO donde se DECIDE. En Listos/
+        Biblioteca el swipe vuelve a ser navegar (aquí no hay nada que decidir
+        con el dedo — aprobar de nuevo un aprobado dejaba la cola muerta). */ ?>
+  // ── LA BARAJA en la Lista (solo móvil, solo tab Revisar). ──
   // Derecha = aprobar (si no hay arte, la card vuelve y abre el estudio de arte,
   // igual que el botón) · izquierda = apartar (estado 'rechazado', reversible) ·
   // Deshacer 5s = reabrir. Los botones se quedan: esto es el atajo del pulgar.
@@ -1484,17 +1514,30 @@ $cf = [
     },
     apartar: function (card, hecho) {
       enviarAccion(card, 'rechazar').then(function (d) {
-        hecho(!!(d && d.ok));
-        if (!(d && d.ok)) alert((d && d.err) || 'No se pudo. Intenta otra vez.');
+        var ok = !!(d && d.ok);
+        if (ok) _bjApartadas(1);
+        hecho(ok);
+        if (!ok) alert((d && d.err) || 'No se pudo. Intenta otra vez.');
       });
     },
     deshacer: function (card, dir, hecho) {
       enviarAccion(card, 'reabrir').then(function (d) {
-        if (d && d.ok && window.PW && PW.devolver) PW.devolver(card);
-        hecho(!!(d && d.ok));
+        var ok = !!(d && d.ok);
+        if (ok && dir < 0) _bjApartadas(-1);
+        if (ok && window.PW && PW.devolver) PW.devolver(card);
+        hecho(ok);
       });
     }
   });
+  // El contador vivo de apartadas del cierre (aparece/crece según la sesión).
+  var _nApart = <?= (int)$cnt['rechazado'] ?>;
+  function _bjApartadas(delta){
+    _nApart = Math.max(0, _nApart + delta);
+    var n = document.getElementById('pwcApartN'), a = document.getElementById('pwcApart');
+    if (n) n.textContent = _nApart;
+    if (a) a.hidden = _nApart <= 0;
+  }
+  <?php endif; ?>
   if (feed) feed.addEventListener('submit', function(e){
     var f = e.target.closest('form');
     if (!f || !f.closest('.post-actions')) return;
@@ -2087,10 +2130,11 @@ $cf = [
   }
   if(prevB) prevB.addEventListener('click',function(){ go(idx-1); });
   if(nextB) nextB.addEventListener('click',function(){ go(idx+1); });
-  // Swipe VIEJO (solo navegar). Con La Baraja activa NO va: dos manejadores
-  // peleándose por el mismo dedo hacían que la pieza se decidiera Y navegara
-  // a la vez. Navegar queda en las flechas; el gesto horizontal decide.
-  var _baraja = !!(window.Baraja && Baraja.activo);
+  // Swipe VIEJO (solo navegar). En el tab REVISAR con La Baraja activa NO va:
+  // dos manejadores peleándose por el mismo dedo hacían que la pieza se
+  // decidiera Y navegara a la vez. En Listos/Biblioteca el swipe SIGUE siendo
+  // navegar (ahí no se decide nada con el dedo).
+  var _baraja = !!(window.Baraja && Baraja.activo) && <?= $tab === 'revisar' ? 'true' : 'false' ?>;
   if(!_baraja){
   var x0=null,y0=null,lock=null;
   view.addEventListener('touchstart',function(e){ if(e.target.closest('input,textarea,button,a,.editform,details,video,.post-actions')){x0=null;return;} var t=e.touches[0];x0=t.clientX;y0=t.clientY;lock=null; },{passive:true});
@@ -2101,7 +2145,6 @@ $cf = [
   // Cualquier cambio de altura de la card visible (editar/regenerar/arte) reajusta el alto
   if(window.ResizeObserver){ new ResizeObserver(function(){ fit(); }).observe(track); }
   // Expuesto a los handlers existentes (aprobar/rechazar/borrar): sacar card y avanzar con fade
-  var _reloadT=null;
   window.PW={
     refit: fit,
     retire: function(card){
@@ -2110,9 +2153,18 @@ $cf = [
       setTimeout(function(){
         card.remove(); var cs=cards();
         if(!cs.length){
-          // Con La Baraja: NO recargar de una — mataría el Deshacer (5s).
-          if(_baraja){ if(_reloadT) clearTimeout(_reloadT); _reloadT=setTimeout(function(){ location.reload(); }, 5600); }
-          else location.reload();
+          // EL CIERRE: al decidir la última pieza, caminos en vez de vacío o
+          // recarga ciega. (El Deshacer sigue vivo: devolver() lo revierte.)
+          var fin=document.getElementById('pwCierre');
+          if(fin){
+            var nl=document.getElementById('cnt-aprob'), pl=document.getElementById('pwcListos');
+            if(nl && pl) pl.textContent=nl.textContent;
+            view.style.display='none';
+            var nav=document.getElementById('postNav'); if(nav) nav.style.display='none';
+            var pis=document.getElementById('wizPista'); if(pis) pis.classList.remove('on');
+            fin.hidden=false;
+            paint();
+          } else location.reload();
           return;
         }
         if(idx>cs.length-1) idx=cs.length-1;
@@ -2122,9 +2174,13 @@ $cf = [
       }, 190);
     },
     // Deshacer de La Baraja: la card salió del DOM (retire) — vuelve a entrar
-    // justo delante y se queda visible.
+    // justo delante y se queda visible (y si el cierre ya salió, se esconde).
     devolver: function(card){
-      if(_reloadT){ clearTimeout(_reloadT); _reloadT=null; }
+      var fin=document.getElementById('pwCierre');
+      if(fin && !fin.hidden){
+        fin.hidden=true; view.style.display='';
+        var nav=document.getElementById('postNav'); if(nav) nav.style.display='';
+      }
       var ref=cards()[idx]||null;
       if(ref){ ref.style.display='none'; track.insertBefore(card, ref); }
       else track.appendChild(card);
