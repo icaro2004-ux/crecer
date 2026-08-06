@@ -20,12 +20,24 @@
 
 require_once __DIR__ . '/ia.php';
 
-/** Rubros y municipios por defecto del barrido semanal. */
+/** Rubros y municipios por defecto del barrido semanal (solo el arranque del cron). */
 function prospector_plan_default(): array {
     return [
         'categorias' => ['repostería', 'barbería', 'salón de belleza', 'food truck', 'panadería'],
         'municipios' => ['Bayamón', 'Caguas', 'Carolina', 'Ponce', 'San Juan'],
     ];
+}
+
+/**
+ * Los 78 pueblos de Puerto Rico, de la tabla `municipios` que ya vive en la BD
+ * (heredada de Encuéntralo). Si por lo que sea no está, cae al plan corto.
+ */
+function prospector_isla(PDO $pdo): array {
+    try {
+        $m = $pdo->query("SELECT nombre FROM municipios ORDER BY nombre")->fetchAll(PDO::FETCH_COLUMN);
+        if ($m) return $m;
+    } catch (Throwable $e) { /* cae abajo */ }
+    return prospector_plan_default()['municipios'];
 }
 
 function prospector_configurado(): bool {
@@ -302,11 +314,14 @@ function prospector_correr(PDO $pdo, array $opts = []): array {
     $aconsejar  = $opts['aconsejar'] ?? 3;   // cuántos de los mejores reciben consejo
     $t0         = microtime(true);
 
-    $cats  = $plan['categorias'];
-    $munis = $plan['municipios'];
-    $cat   = $opts['categoria'] ?? $cats[(int)date('W') % max(1, count($cats))];
-    $muni  = $opts['municipio'] ?? null;
-    $lista = $muni ? [$muni] : $munis;
+    $cats = $plan['categorias'];
+    $cat  = $opts['categoria'] ?? $cats[(int)date('W') % max(1, count($cats))];
+
+    // A dónde barrer:  isla = los 78 pueblos · un municipio suelto · el plan corto.
+    $muni = $opts['municipio'] ?? null;
+    if (!empty($opts['isla']))  $lista = prospector_isla($pdo);
+    elseif ($muni)              $lista = [$muni];
+    else                        $lista = $plan['municipios'];
 
     $run = $pdo->prepare("INSERT INTO prospector_runs (disparo, consulta) VALUES (?,?)");
     $run->execute([$disparo, $cat . ' · ' . implode(', ', $lista)]);

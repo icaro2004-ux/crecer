@@ -46,14 +46,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $instalado && csrf_ok()) {
             $txt = prospector_aconsejar($pdo, $id);
             $aviso = $txt !== '' ? 'El Prospector opinó.' : 'No se pudo generar el consejo.';
         } elseif ($accion === 'buscar') {
+            // Toda la isla son 78 llamadas seguidas: sin esto el barrido se corta
+            // a la mitad por el límite de ejecución de PHP.
+            @set_time_limit(0);
             $r = prospector_correr($pdo, [
                 'disparo'   => 'manual',
                 'categoria' => trim((string)($_POST['categoria'] ?? '')) ?: null,
                 'municipio' => trim((string)($_POST['municipio'] ?? '')) ?: null,
+                'isla'      => !empty($_POST['isla']),
                 'aconsejar' => 3,
             ]);
-            $aviso = "Barrido de {$r['categoria']}: {$r['encontrados']} encontrados, "
-                   . "{$r['nuevos']} nuevos, {$r['aconsejados']} con consejo ({$r['ms']} ms).";
+            $aviso = "Barrido de {$r['categoria']} en " . count($r['municipios']) . " pueblo(s): "
+                   . "{$r['encontrados']} encontrados, {$r['nuevos']} nuevos, "
+                   . "{$r['aconsejados']} con consejo (" . round($r['ms'] / 1000, 1) . " s).";
             if ($r['errores']) $error = implode(' | ', $r['errores']);
         } elseif ($accion === 'demo') {
             $n = prospector_demo($pdo);
@@ -98,6 +103,16 @@ if ($instalado) {
     $negocios = $q->fetchAll(PDO::FETCH_ASSOC);
 }
 $plan = prospector_plan_default();
+
+// Sugerencias para el buscador: los 78 pueblos y las categorías que YA viven en
+// la base (heredadas de Encuéntralo). El campo sigue siendo libre — esto es un
+// atajo para no escribir "Bayamón" con acento a mano, no una lista cerrada.
+$sug_mun = []; $sug_cat = [];
+try { $sug_mun = $pdo->query("SELECT nombre FROM municipios ORDER BY nombre")->fetchAll(PDO::FETCH_COLUMN); } catch (Throwable $e) {}
+try { $sug_cat = $pdo->query("SELECT nombre FROM categorias WHERE activa=1 ORDER BY nombre")->fetchAll(PDO::FETCH_COLUMN); } catch (Throwable $e) {}
+// Los rubros del plan van primero, y sin repetir.
+$sug_cat = array_values(array_unique(array_merge($plan['categorias'], $sug_cat)));
+if (!$sug_mun) $sug_mun = $plan['municipios'];
 ?>
 <!DOCTYPE html><html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -190,18 +205,33 @@ $plan = prospector_plan_default();
         <button class="btn g">Borrar ejemplos</button>
       </form>
     <?php else: ?>
+      <!-- Texto libre con sugerencias: la lista del plan es un atajo, no una jaula.
+           Puedes escribir cualquier rubro y cualquier pueblo de Puerto Rico. -->
       <form method="post" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><?= csrf_field() ?>
         <input type="hidden" name="accion" value="buscar">
-        <select name="categoria">
-          <option value="">Rubro de esta semana (<?= $h($plan['categorias'][(int)date('W') % count($plan['categorias'])]) ?>)</option>
-          <?php foreach ($plan['categorias'] as $c): ?><option value="<?= $h($c) ?>"><?= $h($c) ?></option><?php endforeach; ?>
-        </select>
-        <select name="municipio">
-          <option value="">Todos los pueblos del plan</option>
-          <?php foreach ($plan['municipios'] as $m): ?><option value="<?= $h($m) ?>"><?= $h($m) ?></option><?php endforeach; ?>
-        </select>
+        <input type="text" name="categoria" list="l-cat" autocomplete="off" style="min-width:230px"
+               placeholder="Rubro — vacío usa el de esta semana (<?= $h($plan['categorias'][(int)date('W') % count($plan['categorias'])]) ?>)">
+        <datalist id="l-cat">
+          <?php foreach ($sug_cat as $c): ?><option value="<?= $h($c) ?>"><?php endforeach; ?>
+        </datalist>
+        <input type="text" name="municipio" list="l-mun" autocomplete="off" style="min-width:200px"
+               id="p-mun" placeholder="Pueblo — vacío barre los <?= count($plan['municipios']) ?> del plan">
+        <datalist id="l-mun">
+          <?php foreach ($sug_mun as $m): ?><option value="<?= $h($m) ?>"><?php endforeach; ?>
+        </datalist>
+        <label style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:700;
+                      background:#fff4ef;border:1px solid #ffd9c9;border-radius:10px;padding:9px 13px;cursor:pointer">
+          <input type="checkbox" name="isla" value="1" id="p-isla"
+                 onchange="document.getElementById('p-mun').disabled=this.checked">
+          Toda la isla (<?= count($sug_mun) ?> pueblos)
+        </label>
         <button class="btn"><?= ico('bolt') ?> Barrer ahora</button>
       </form>
+      <p style="font-size:12px;color:var(--muted);margin:9px 0 0">
+        El rubro lo escribes tú — las sugerencias (<?= count($sug_cat) ?>) son un atajo, no una lista cerrada.
+        <b>Toda la isla</b> son <?= count($sug_mun) ?> llamadas a Google y tarda unos
+        <?= max(1, (int)round(count($sug_mun) * 1.8 / 60)) ?> minutos; si se corta a medias, lo encontrado
+        ya quedó guardado y puedes repetirlo sin duplicar nada.</p>
     <?php endif; ?>
     <?php if ($ultima): ?>
       <p style="font-size:12.5px;color:var(--muted);margin:12px 0 0">
