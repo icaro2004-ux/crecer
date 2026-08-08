@@ -69,8 +69,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $instalado && csrf_ok()) {
         if ($accion === 'estado' && $id) {
             if (in_array($extra, ['nuevo','contactado','interesado','cliente','descartado'], true)) {
                 $nom = (string)$pdo->query("SELECT nombre FROM prospector_negocios WHERE id={$id}")->fetchColumn();
-                $pdo->prepare("UPDATE prospector_negocios SET estado=?, contactado_at=IF(?='contactado' AND contactado_at IS NULL, NOW(), contactado_at) WHERE id=?")
-                    ->execute([$extra, $extra, $id]);
+                // OJO: antes esto era IF(?='contactado' …) — comparar un parámetro
+                // con un literal DENTRO del SQL revienta en prod con "1267 Illegal
+                // mix of collations" (la tabla es unicode_ci y la conexión
+                // general_ci). La decisión se toma en PHP y el SQL no compara nada.
+                if ($extra === 'contactado') {
+                    $pdo->prepare("UPDATE prospector_negocios SET estado=?, contactado_at=COALESCE(contactado_at, NOW()) WHERE id=?")
+                        ->execute([$extra, $id]);
+                } else {
+                    $pdo->prepare("UPDATE prospector_negocios SET estado=? WHERE id=?")
+                        ->execute([$extra, $id]);
+                }
                 // Decir A DÓNDE se fue: sale de la cola y vive en su pestaña.
                 $donde = ['contactado'=>'Contactados','interesado'=>'Interesados','cliente'=>'Clientes','descartado'=>'Descartados'][$extra] ?? null;
                 $aviso = $nom !== '' ? "{$nom}: " : '';
