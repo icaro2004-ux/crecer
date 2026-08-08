@@ -43,6 +43,14 @@ $ids_marcados = function (): array {
 };
 
 // ── Acciones ────────────────────────────────────────────────
+// El candado CSRF fallaba EN SILENCIO: la página recargaba igualita y
+// parecía que el botón no hacía nada. Ahora lo dice.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $instalado && !csrf_ok()) {
+    header('Location: ?' . http_build_query(array_filter([
+        'estado' => $_POST['f_estado'] ?? null, 'guardados' => $_POST['f_guardados'] ?? null,
+        'err' => 'La sesión expiró (candado de seguridad). Recarga la página e intenta otra vez.',
+    ]))); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $instalado && csrf_ok()) {
     // Acción de UNA fila: viene como "verbo:id" o "verbo:id:extra" (un solo
     // <form> en toda la página — nada de forms anidados).
@@ -134,6 +142,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $instalado && csrf_ok()) {
             $aviso = "$n ejemplos borrados.";
         }
     } catch (Throwable $e) { $error = $e->getMessage(); }
+
+    // Si llegó un POST y NINGUNA rama lo atendió, decirlo con los datos
+    // crudos: "no pasa nada" nunca debe ser una posibilidad muda.
+    if ($aviso === '' && $error === '') {
+        $error = 'No se aplicó ninguna acción (one="' . mb_substr($one, 0, 40) . '", accion="' . mb_substr($accion, 0, 40) . '").';
+    }
 
     // PRG: recargar limpio conservando TODOS los filtros de la vista.
     $keep = [];
@@ -245,6 +259,10 @@ if (!$sug_mun) $sug_mun = $plan['municipios'];
   .btn.peligro{background:#fff;color:#8c1d1d;border:1px solid #f3c2c2}
   .aviso{background:#e8f7ef;border:1px solid #b7e3c9;color:#155e35;padding:11px 14px;border-radius:11px;margin-bottom:14px;font-size:13.5px}
   .malo{background:#fdecec;border:1px solid #f3c2c2;color:#8c1d1d;padding:11px 14px;border-radius:11px;margin-bottom:14px;font-size:13.5px}
+  /* El aviso flotante: se ve estés donde estés en la página. */
+  .flota{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:80;margin:0;
+         max-width:min(92vw,620px);box-shadow:0 14px 34px -12px rgba(0,0,0,.35);font-weight:700}
+  .flota.ida{opacity:0;transition:opacity .5s;pointer-events:none}
   .chip{display:inline-block;padding:7px 13px;border-radius:99px;border:1px solid var(--line);background:#fff;color:var(--tinta);text-decoration:none;font-size:13px;font-weight:700}
   .chip.on{background:var(--tinta);color:#fff;border-color:var(--tinta)}
   select,input[type=text],input[type=search]{font-family:inherit;font-size:13.5px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:#fff;max-width:100%}
@@ -359,8 +377,10 @@ if (!$sug_mun) $sug_mun = $plan['municipios'];
   <p class="sub">Radar de oportunidades. Negocios públicos que podrían necesitar Crecer, puntuados con datos reales de Google.
      <b>No contacta a nadie</b> — prepara el trabajo y tú decides a quién llamar.</p>
 
-  <?php if ($aviso): ?><div class="aviso"><?= $h($aviso) ?></div><?php endif; ?>
-  <?php if ($error): ?><div class="malo"><?= $h($error) ?></div><?php endif; ?>
+  <?php /* El aviso viaja contigo: flota arriba aunque estés mirando la tarjeta
+           del turno a media página. El de éxito se va solo; el de error se queda. */ ?>
+  <?php if ($aviso): ?><div class="aviso flota" id="flash"><?= $h($aviso) ?></div><?php endif; ?>
+  <?php if ($error): ?><div class="malo flota" id="flash"><?= $h($error) ?></div><?php endif; ?>
 
   <?php if (!$instalado): ?>
     <div class="card">
@@ -677,6 +697,13 @@ if (!$sug_mun) $sug_mun = $plan['municipios'];
       var f = b.querySelector('span'); if(f) f.textContent = plegado ? '▾' : '▴';
     });
   });
+  // El aviso de éxito se retira solo a los 6s; el de error se queda hasta
+  // que lo leas (y se puede cerrar tocándolo).
+  var flash = document.getElementById('flash');
+  if (flash) {
+    flash.addEventListener('click', function(){ flash.classList.add('ida'); });
+    if (flash.classList.contains('aviso')) setTimeout(function(){ flash.classList.add('ida'); }, 6000);
+  }
   // Copiar "Nombre Pueblo" al portapapeles (para buscarlo en FB/IG).
   document.querySelectorAll('[data-copy]').forEach(function(b){
     b.addEventListener('click', function(){
