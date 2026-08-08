@@ -371,9 +371,10 @@ $hz_status = $hz_pend > 0 ? "Tienes {$hz_pend} post" . ($hz_pend==1?'':'s') . " 
 // Semana actual (Lun→Dom) con lo que hay cada día
 $hz_week = [];
 try {
+    // Lo rechazado NO cuenta en la semana: dijiste que no, no va a salir.
     $ws = $pdo->prepare("SELECT DAYOFWEEK(fecha_programada) dw, plataforma
                          FROM crecer_contenido
-                         WHERE marca_id=? AND fecha_programada IS NOT NULL
+                         WHERE marca_id=? AND estado<>'rechazado' AND fecha_programada IS NOT NULL
                            AND YEARWEEK(fecha_programada,3)=YEARWEEK(CURDATE(),3)");
     $ws->execute([$marca_id]);
     foreach ($ws->fetchAll(PDO::FETCH_ASSOC) as $r) { $hz_week[(int)$r['dw']][] = $r; }

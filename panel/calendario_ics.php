@@ -17,7 +17,8 @@ $lineas = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Encuentralo//Crecer//ES"
            "X-WR-CALNAME:" . ics_esc($marca['nombre_negocio'] . ' · Encuéntralo')];
 
 // Contenido programado
-$c = $pdo->prepare("SELECT id, plataforma, tipo, caption, fecha_programada FROM crecer_contenido WHERE marca_id=? AND fecha_programada IS NOT NULL");
+// Igual que el calendario en pantalla: lo rechazado NO se exporta.
+$c = $pdo->prepare("SELECT id, plataforma, tipo, caption, fecha_programada FROM crecer_contenido WHERE marca_id=? AND estado<>'rechazado' AND fecha_programada IS NOT NULL");
 $c->execute([$marca_id]);
 foreach ($c->fetchAll() as $p) {
     $dt = date('Ymd\THis', strtotime($p['fecha_programada']));

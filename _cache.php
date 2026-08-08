@@ -500,6 +500,49 @@ try {
         }
     }
 
+    // ── MÉTRICAS: por qué los números están (o no están). Solo lectura. ──
+    //    &test=metricas  · opcional &marca=ID  · con &gasta=1 refresca de verdad contra Meta.
+    if (($_GET['test'] ?? '') === 'metricas') {
+        echo "\n--- MÉTRICAS · de dónde salen los números ---\n";
+        require_once __DIR__ . '/includes/metricas.php';
+        require_once __DIR__ . '/includes/meta.php';
+        echo "App de Meta configurada        : " . (meta_configurado() ? "SÍ ✅\n" : "NO ❌ (sin app no hay insights)\n");
+        $__mid = (int)($_GET['marca'] ?? 0);
+        $__marcas = $__mid
+            ? [$__mid]
+            : $pdo->query("SELECT id FROM crecer_marca ORDER BY id")->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($__marcas as $__m) {
+            $__m = (int)$__m;
+            $nom = (string)$pdo->query("SELECT nombre_negocio FROM crecer_marca WHERE id={$__m}")->fetchColumn();
+            echo "\n[marca {$__m}] {$nom}\n";
+            // 1) ¿Hay conexión viva y de qué redes?
+            $cx = $pdo->query("SELECT ig_user_id, fb_page_id, estado FROM crecer_conexiones WHERE marca_id={$__m} ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+            echo "  conexión Meta                : " . ($cx ? (($cx['estado'] ?? '?') . " · IG:" . (!empty($cx['ig_user_id']) ? 'sí' : 'no') . " · FB:" . (!empty($cx['fb_page_id']) ? 'sí' : 'no')) : "ninguna ❌") . "\n";
+            // 2) Publicados vs publicados POR LA API (los únicos que pueden tener métricas)
+            $pub  = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$__m} AND estado='publicado'")->fetchColumn();
+            $conx = (int)$pdo->query("SELECT COUNT(DISTINCT p.contenido_id) FROM crecer_publicaciones p JOIN crecer_contenido c ON c.id=p.contenido_id AND c.estado='publicado' WHERE p.marca_id={$__m} AND p.estado='ok' AND p.external_id IS NOT NULL")->fetchColumn();
+            echo "  posts publicados             : {$pub}\n";
+            echo "  …de esos, por la API de Meta : {$conx}" . ($pub > $conx ? "  ← los otros " . ($pub - $conx) . " se marcaron a mano: NUNCA tendrán métricas\n" : "\n");
+            // 3) Métricas guardadas y qué tan frescas
+            try {
+                $mt = $pdo->query("SELECT plataforma, COUNT(*) n, MAX(actualizado_at) ult FROM crecer_metricas WHERE marca_id={$__m} GROUP BY plataforma")->fetchAll(PDO::FETCH_ASSOC);
+                if (!$mt) echo "  métricas guardadas           : NINGUNA (por eso ves ceros)\n";
+                foreach ($mt as $r) {
+                    echo "  métricas guardadas [{$r['plataforma']}] : {$r['n']} · última actualización {$r['ult']}\n";
+                }
+                $sum = $pdo->query("SELECT COALESCE(SUM(alcance),0) a, COALESCE(SUM(me_gusta),0) g, COALESCE(SUM(comentarios),0) c FROM crecer_metricas WHERE marca_id={$__m}")->fetch(PDO::FETCH_ASSOC);
+                if ($mt) echo "  suma                         : alcance {$sum['a']} · me gusta {$sum['g']} · comentarios {$sum['c']}\n";
+            } catch (Throwable $e) { echo "  métricas: tabla no disponible (" . $e->getMessage() . ")\n"; }
+            // 4) Refresco real contra Meta (solo si lo pides)
+            if ($__gasta) {
+                $r = metricas_refrescar_insights($pdo, $__m, 5, 0);
+                echo "  REFRESCO EN VIVO             : " . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n";
+            }
+        }
+        if (!$__gasta) echo "\n(Para pedirle datos frescos a Meta de verdad añade  &gasta=1 .)\n";
+        echo "\nRecordatorio: el cron scripts/cron_metricas.php es quien mantiene esto al día solo.\n";
+    }
+
     // Prueba REAL del SMS: manda un código de verdad y muestra el ERROR CRUDO de Twilio.
     //    Añade  &test=sms&to=7875551234&gasta=1  . Cuesta unos centavos.
     //    Llave FIJA (no el CRON_TOKEN) para no depender del config. Bórrala/rota luego.

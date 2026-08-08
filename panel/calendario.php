@@ -91,7 +91,9 @@ if ($vista === 'mes') {
 
 // Eventos del rango, agrupados por fecha 'Y-m-d'
 $eventos = [];
-$c = $pdo->prepare("SELECT id, plataforma, tipo, estado, caption, grafica_path, DATE_FORMAT(fecha_programada,'%Y-%m-%d') fk, TIME_FORMAT(fecha_programada,'%H:%i') hora FROM crecer_contenido WHERE marca_id=? AND DATE(fecha_programada) BETWEEN ? AND ?");
+// Lo RECHAZADO no va al calendario: si dijiste que no, no debe seguir
+// apareciendo como si fuera a salir (confunde y no se publica).
+$c = $pdo->prepare("SELECT id, plataforma, tipo, estado, caption, grafica_path, DATE_FORMAT(fecha_programada,'%Y-%m-%d') fk, TIME_FORMAT(fecha_programada,'%H:%i') hora FROM crecer_contenido WHERE marca_id=? AND estado<>'rechazado' AND DATE(fecha_programada) BETWEEN ? AND ?");
 $c->execute([$marca_id,$rangoIni,$rangoFin]);
 foreach ($c->fetchAll() as $p) $eventos[$p['fk']][] = ['tipo'=>'contenido']+$p;
 $o = $pdo->prepare("SELECT id, cliente_nombre, descripcion, monto, estado, DATE_FORMAT(fecha_entrega,'%Y-%m-%d') fk, TIME_FORMAT(fecha_entrega,'%H:%i') hora FROM crecer_ordenes WHERE marca_id=? AND fecha_entrega IS NOT NULL AND DATE(fecha_entrega) BETWEEN ? AND ?");
