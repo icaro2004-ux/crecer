@@ -240,6 +240,177 @@ function prospector_guardar(PDO $pdo, array $n, ?int $run_id = null, string $ori
 }
 
 // ─────────────────────────────────────────────────────────────
+//  2.5) EL RASTREADOR — de dónde sale el email
+//
+//  Google Places NO da email: ese campo no existe en su API. Lo único
+//  que da es el sitio web. Así que el email (y las redes) se buscan
+//  donde el negocio los PUBLICÓ él mismo: su propia página. Solo se
+//  lee lo público, no se envía nada, y queda registrado qué se miró.
+//
+//  Ojo con la ironía del embudo: los mejores prospectos son justo los
+//  que NO tienen web (+25 en el score), y a esos no hay dónde ir a
+//  buscarles el email — con ellos el camino es el teléfono, que Google
+//  sí da. Por eso el rastreo COMPLEMENTA la lista, no la sustituye.
+// ─────────────────────────────────────────────────────────────
+
+/** Baja una página pública (con tope de tamaño y tiempo). '' si no se pudo. */
+function prospector_bajar(string $url, int $max_bytes = 400000): string {
+    if (!preg_match('#^https?://#i', $url)) $url = 'https://' . $url;
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS      => 4,
+        CURLOPT_TIMEOUT        => 12,
+        CURLOPT_CONNECTTIMEOUT => 6,
+        CURLOPT_SSL_VERIFYPEER => false,   // hosting de microempresa: certificados flojos son la norma
+        CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; CrecerProspector/1.0; +https://encuentraloahora.com)',
+        CURLOPT_BUFFERSIZE     => 16384,
+        CURLOPT_NOPROGRESS     => false,
+        CURLOPT_PROGRESSFUNCTION => function ($r, $dl) use ($max_bytes) { return $dl > $max_bytes ? 1 : 0; },
+    ]);
+    $html = curl_exec($ch);
+    $http = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return ($html !== false && $http >= 200 && $http < 400) ? (string)$html : '';
+}
+
+/** ¿La "web" que Google trae es en realidad su Instagram/Facebook? (pasa muchísimo) */
+function prospector_web_social(string $url): ?array {
+    if ($url === '') return null;
+    if (preg_match('#instagram\.com/([A-Za-z0-9._]{2,30})#i', $url, $m)) return ['instagram', $m[1]];
+    if (preg_match('#facebook\.com/([A-Za-z0-9.\-]{3,60})#i', $url, $m)) return ['facebook', $m[1]];
+    return null;
+}
+
+/** Saca emails/redes del HTML. Filtra la basura típica (assets, trackers, ejemplos). */
+function prospector_extraer(string $html): array {
+    $out = ['emails' => [], 'instagram' => null, 'facebook' => null, 'whatsapp' => null];
+    if ($html === '') return $out;
+
+    // Emails: los de mailto: primero (son los que el negocio puso a propósito).
+    $mailto = [];
+    if (preg_match_all('#mailto:([^"\'>?\s]+)#i', $html, $m)) $mailto = $m[1];
+    $sueltos = [];
+    if (preg_match_all('#[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}#', $html, $m)) $sueltos = $m[0];
+
+    $basura = '#(sentry|wixpress|example\.|\.png|\.jpg|\.jpeg|\.gif|\.svg|\.webp|@2x|godaddy|squarespace|shopify|cloudflare|sentry\.io|domain\.com|email\.com|yoursite|tu-?correo)#i';
+    $vistos = [];
+    foreach (array_merge($mailto, $sueltos) as $e) {
+        $e = strtolower(trim(rawurldecode($e), " \t\n\r\0\x0B.,;:<>()[]\"'"));
+        if ($e === '' || preg_match($basura, $e)) continue;
+        if (!filter_var($e, FILTER_VALIDATE_EMAIL)) continue;
+        if (isset($vistos[$e])) continue;
+        $vistos[$e] = true;
+        $out['emails'][] = $e;
+        if (count($out['emails']) >= 6) break;
+    }
+    // El más "de contacto" primero (info@, contacto@, hola@…).
+    usort($out['emails'], function ($a, $b) {
+        $pref = '#^(info|contacto|contact|hola|ventas|pedidos|orders|hello)@#i';
+        return (preg_match($pref, $b) ? 1 : 0) - (preg_match($pref, $a) ? 1 : 0);
+    });
+
+    if (preg_match('#instagram\.com/([A-Za-z0-9._]{2,30})#i', $html, $m)
+        && !in_array(strtolower($m[1]), ['p','reel','explore','accounts','embed'], true)) {
+        $out['instagram'] = $m[1];
+    }
+    if (preg_match('#facebook\.com/((?!sharer|share|plugins|tr\?)[A-Za-z0-9.\-]{3,60})#i', $html, $m)) {
+        $out['facebook'] = $m[1];
+    }
+    if (preg_match('#(?:wa\.me/|api\.whatsapp\.com/send\?phone=)(\+?[0-9]{7,15})#i', $html, $m)) {
+        $out['whatsapp'] = $m[1];
+    }
+    return $out;
+}
+
+/**
+ * Rastrea el contacto de UN negocio: su portada + hasta 2 páginas de
+ * contacto. Guarda lo hallado y deja el rastro de qué se miró.
+ * @return array{email:?string,instagram:?string,facebook:?string,whatsapp:?string,miradas:array,nota:string}
+ */
+function prospector_contacto(PDO $pdo, int $id): array {
+    $q = $pdo->prepare("SELECT id, nombre, website FROM prospector_negocios WHERE id=?");
+    $q->execute([$id]);
+    $n = $q->fetch();
+    $vacio = ['email'=>null,'instagram'=>null,'facebook'=>null,'whatsapp'=>null,'miradas'=>[],'nota'=>''];
+    if (!$n) return $vacio;
+
+    $web = trim((string)$n['website']);
+    $res = $vacio;
+
+    // Caso 1: su "web" ES su red social. No hay nada que bajar: ya está el dato.
+    $social = prospector_web_social($web);
+    if ($social) {
+        $res[$social[0]] = $social[1];
+        $res['nota'] = 'Su “web” en Google es su ' . ($social[0] === 'instagram' ? 'Instagram' : 'Facebook')
+                     . ' — no tienen sitio propio, así que no hay email publicado. Entra por ahí o por teléfono.';
+        $pdo->prepare("UPDATE prospector_negocios SET instagram=COALESCE(?,instagram), facebook=COALESCE(?,facebook),
+                       web_es_social=1, contacto_at=NOW(), contacto_log=? WHERE id=?")
+            ->execute([$res['instagram'], $res['facebook'],
+                       json_encode(['web_social'=>$web], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES), $id]);
+        return $res;
+    }
+
+    // Caso 2: sin web. No hay dónde buscar — y es la mayoría de los buenos prospectos.
+    if ($web === '') {
+        $res['nota'] = 'No tienen sitio web, así que no hay email público que rastrear. '
+                     . 'Con este el camino es el teléfono (Google sí lo da).';
+        $pdo->prepare("UPDATE prospector_negocios SET contacto_at=NOW(), contacto_log=? WHERE id=?")
+            ->execute([json_encode(['sin_web'=>true], JSON_UNESCAPED_UNICODE), $id]);
+        return $res;
+    }
+
+    // Caso 3: tienen sitio. Portada + las páginas que huelen a contacto.
+    $miradas = [];
+    $html = prospector_bajar($web);
+    $miradas[] = ['url'=>$web, 'bytes'=>strlen($html)];
+    $hall = prospector_extraer($html);
+
+    if (!$hall['emails'] && $html !== '') {
+        $base = rtrim(preg_replace('#(https?://[^/]+).*#i', '$1', (preg_match('#^https?://#i',$web)?$web:'https://'.$web)), '/');
+        $cand = [];
+        if (preg_match_all('#href=["\']([^"\']*(contact|contacto|nosotros|about|conocenos)[^"\']*)["\']#i', $html, $m)) {
+            foreach (array_slice(array_unique($m[1]), 0, 2) as $href) {
+                $cand[] = preg_match('#^https?://#i', $href) ? $href : $base . '/' . ltrim($href, '/');
+            }
+        }
+        if (!$cand) $cand = [$base . '/contacto', $base . '/contact'];
+        foreach (array_slice($cand, 0, 2) as $u) {
+            $h2 = prospector_bajar($u);
+            $miradas[] = ['url'=>$u, 'bytes'=>strlen($h2)];
+            if ($h2 === '') continue;
+            $e2 = prospector_extraer($h2);
+            if ($e2['emails']) $hall['emails'] = $e2['emails'];
+            foreach (['instagram','facebook','whatsapp'] as $k) if (!$hall[$k] && $e2[$k]) $hall[$k] = $e2[$k];
+            if ($hall['emails']) break;
+        }
+    }
+
+    $res['email']     = $hall['emails'][0] ?? null;
+    $res['instagram'] = $hall['instagram'];
+    $res['facebook']  = $hall['facebook'];
+    $res['whatsapp']  = $hall['whatsapp'];
+    $res['miradas']   = $miradas;
+    $res['nota']      = $res['email']
+        ? 'Email hallado en su propio sitio.'
+        : 'Tienen sitio pero no publican email. Queda el teléfono o el formulario de su página.';
+
+    $pdo->prepare(
+        "UPDATE prospector_negocios SET email=?, emails_todos=?, instagram=COALESCE(?,instagram),
+            facebook=COALESCE(?,facebook), whatsapp=COALESCE(?,whatsapp), contacto_at=NOW(), contacto_log=?
+         WHERE id=?"
+    )->execute([
+        $res['email'],
+        $hall['emails'] ? json_encode($hall['emails'], JSON_UNESCAPED_UNICODE) : null,
+        $res['instagram'], $res['facebook'], $res['whatsapp'],
+        json_encode(['miradas'=>$miradas], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),
+        $id,
+    ]);
+    return $res;
+}
+
+// ─────────────────────────────────────────────────────────────
 //  3) ACONSEJAR — una sola llamada, y solo sobre datos reales
 // ─────────────────────────────────────────────────────────────
 
@@ -264,6 +435,8 @@ function prospector_aconsejar(PDO $pdo, int $id): string {
             . "Teléfono público: " . ($n['telefono'] ?: 'no') . "\n"
             . "Fotos en su perfil: {$n['fotos']}\n"
             . "Horario publicado: " . ($n['tiene_horario'] ? 'sí' : 'no') . "\n"
+            . "Email público: " . (!empty($n['email']) ? $n['email'] : 'no se le encontró') . "\n"
+            . "Instagram: " . (!empty($n['instagram']) ? '@' . $n['instagram'] : 'no se le encontró') . "\n"
             . "Puntuación calculada: {$n['score']}/100\n"
             . "Señales: " . implode(' · ', $motivos);
 
@@ -273,7 +446,8 @@ Abajo tienes los datos PÚBLICOS y VERIFICADOS de un negocio.
 
 Escribe en español boricua, natural y directo, MÁXIMO 3 oraciones:
 1) por qué este negocio es (o no es) buen prospecto,
-2) con qué ángulo concreto entrarle en la primera llamada.
+2) con qué ángulo concreto entrarle, y POR QUÉ CANAL según lo que se le encontró
+   (email si lo hay; si no, teléfono o Instagram).
 
 Reglas estrictas:
 - Usa SOLO los datos de abajo. No inventes nada que no esté ahí.
@@ -340,6 +514,25 @@ function prospector_correr(PDO $pdo, array $opts = []): array {
         }
     }
 
+    // Rastrear el contacto (email/redes) de los mejores de esta corrida.
+    // Antes del consejo: así el agente ya sabe por dónde se le puede entrar.
+    $rastreados = 0;
+    $cuantos_rastreo = $opts['rastrear'] ?? 10;
+    if ($cuantos_rastreo > 0 && $nuevos > 0) {
+        $rq = $pdo->prepare(
+            "SELECT id FROM prospector_negocios
+             WHERE run_id=? AND contacto_at IS NULL AND estado='nuevo'
+             ORDER BY score DESC LIMIT ?"
+        );
+        $rq->bindValue(1, $run_id, PDO::PARAM_INT);
+        $rq->bindValue(2, (int)$cuantos_rastreo, PDO::PARAM_INT);
+        $rq->execute();
+        foreach ($rq->fetchAll(PDO::FETCH_COLUMN) as $rid) {
+            try { $r = prospector_contacto($pdo, (int)$rid); if ($r['email']) $rastreados++; }
+            catch (Throwable $e) { error_log('prospector contacto: ' . $e->getMessage()); }
+        }
+    }
+
     // El consejo solo para los mejores de ESTA corrida que aún no lo tienen.
     $aconsejados = 0;
     if ($aconsejar > 0 && $nuevos > 0) {
@@ -371,7 +564,7 @@ function prospector_correr(PDO $pdo, array $opts = []): array {
     return [
         'run_id' => $run_id, 'categoria' => $cat, 'municipios' => $lista,
         'encontrados' => $enc, 'nuevos' => $nuevos, 'actualizados' => $act,
-        'aconsejados' => $aconsejados, 'ms' => $ms, 'errores' => $errores,
+        'aconsejados' => $aconsejados, 'con_email' => $rastreados, 'ms' => $ms, 'errores' => $errores,
     ];
 }
 

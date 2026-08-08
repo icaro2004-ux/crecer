@@ -45,6 +45,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $instalado && csrf_ok()) {
         } elseif ($accion === 'consejo' && $id) {
             $txt = prospector_aconsejar($pdo, $id);
             $aviso = $txt !== '' ? 'El Prospector opinó.' : 'No se pudo generar el consejo.';
+        } elseif ($accion === 'contacto' && $id) {
+            // El Rastreador: email/redes desde el sitio del propio negocio.
+            @set_time_limit(60);
+            $c = prospector_contacto($pdo, $id);
+            $aviso = $c['email']
+                ? 'Contacto hallado: ' . $c['email']
+                : ($c['nota'] ?: 'No se le encontró email público.');
         } elseif ($accion === 'buscar') {
             // Toda la isla son 78 llamadas seguidas: sin esto el barrido se corta
             // a la mitad por el límite de ejecución de PHP.
@@ -55,10 +62,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $instalado && csrf_ok()) {
                 'municipio' => trim((string)($_POST['municipio'] ?? '')) ?: null,
                 'isla'      => !empty($_POST['isla']),
                 'aconsejar' => 3,
+                'rastrear'  => 10,   // a los 10 mejores se les busca email/redes
             ]);
             $aviso = "Barrido de {$r['categoria']} en " . count($r['municipios']) . " pueblo(s): "
                    . "{$r['encontrados']} encontrados, {$r['nuevos']} nuevos, "
-                   . "{$r['aconsejados']} con consejo (" . round($r['ms'] / 1000, 1) . " s).";
+                   . "{$r['con_email']} con email, {$r['aconsejados']} con consejo (" . round($r['ms'] / 1000, 1) . " s).";
             if ($r['errores']) $error = implode(' | ', $r['errores']);
         } elseif ($accion === 'demo') {
             $n = prospector_demo($pdo);
@@ -294,16 +302,28 @@ if (!$sug_mun) $sug_mun = $plan['municipios'];
 
         <div class="cont">
           <?php if ($n['telefono']): ?><a href="tel:<?= $h(preg_replace('/[^0-9+]/','',$n['telefono'])) ?>"><?= $h($n['telefono']) ?></a><?php endif; ?>
+          <?php if (!empty($n['email'])): ?><a href="mailto:<?= $h($n['email']) ?>" style="font-weight:800;color:#0a6b4f"><?= $h($n['email']) ?></a><?php endif; ?>
+          <?php if (!empty($n['instagram'])): ?><a href="https://instagram.com/<?= $h($n['instagram']) ?>" target="_blank" rel="noopener">@<?= $h($n['instagram']) ?></a><?php endif; ?>
+          <?php if (!empty($n['facebook'])): ?><a href="https://facebook.com/<?= $h($n['facebook']) ?>" target="_blank" rel="noopener">Facebook</a><?php endif; ?>
           <?php if ($n['direccion']): ?><span><?= $h($n['direccion']) ?></span><?php endif; ?>
-          <?php if ($n['website']): ?><a href="<?= $h($n['website']) ?>" target="_blank" rel="noopener">web</a><?php else: ?><span style="color:#8c1d1d;font-weight:700">sin web</span><?php endif; ?>
+          <?php if ($n['website']): ?><a href="<?= $h($n['website']) ?>" target="_blank" rel="noopener"><?= !empty($n['web_es_social']) ? 'su “web” = su red' : 'web' ?></a><?php else: ?><span style="color:#8c1d1d;font-weight:700">sin web</span><?php endif; ?>
           <?php if ($n['maps_url']): ?><a href="<?= $h($n['maps_url']) ?>" target="_blank" rel="noopener">Google Maps</a><?php endif; ?>
         </div>
+        <?php if (!empty($n['contacto_at']) && empty($n['email'])): ?>
+          <div class="meta" style="margin-top:4px;color:#8c1d1d">Rastreado y sin email público — entra por teléfono<?= !empty($n['instagram']) ? ' o Instagram' : '' ?>.</div>
+        <?php endif; ?>
 
         <?php if ($n['consejo']): ?>
           <div class="consejo"><?= $h($n['consejo']) ?></div>
         <?php endif; ?>
 
         <div class="acc">
+          <?php if (empty($n['contacto_at'])): ?>
+            <form method="post" style="display:inline"><?= csrf_field() ?>
+              <input type="hidden" name="accion" value="contacto"><input type="hidden" name="id" value="<?= (int)$n['id'] ?>">
+              <button class="btn g sm">Buscarle el contacto</button>
+            </form>
+          <?php endif; ?>
           <?php if (!$n['consejo']): ?>
             <form method="post" style="display:inline"><?= csrf_field() ?>
               <input type="hidden" name="accion" value="consejo"><input type="hidden" name="id" value="<?= (int)$n['id'] ?>">
