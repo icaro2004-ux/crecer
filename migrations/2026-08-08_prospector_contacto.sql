@@ -24,3 +24,11 @@ ALTER TABLE prospector_negocios
 -- Para filtrar "los que ya tienen email" sin escanear toda la tabla.
 ALTER TABLE prospector_negocios
   ADD KEY IF NOT EXISTS idx_email (email);
+
+-- ── MI LISTA: la lista corta de "a estos llamo hoy". Es ortogonal al
+--    estado (un guardado puede estar nuevo o ya contactado). ──
+ALTER TABLE prospector_negocios
+  ADD COLUMN IF NOT EXISTS guardado TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = en Mi lista (a quién llamo hoy)';
+
+ALTER TABLE prospector_negocios
+  ADD KEY IF NOT EXISTS idx_guardado (guardado);
