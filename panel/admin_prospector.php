@@ -60,10 +60,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $instalado && csrf_ok()) {
         // ── Una fila ──
         if ($accion === 'estado' && $id) {
             if (in_array($extra, ['nuevo','contactado','interesado','cliente','descartado'], true)) {
+                $nom = (string)$pdo->query("SELECT nombre FROM prospector_negocios WHERE id={$id}")->fetchColumn();
                 $pdo->prepare("UPDATE prospector_negocios SET estado=?, contactado_at=IF(?='contactado' AND contactado_at IS NULL, NOW(), contactado_at) WHERE id=?")
                     ->execute([$extra, $extra, $id]);
-                $aviso = 'Marcado como ' . $extra . '.';
+                // Decir A DÓNDE se fue: sale de la cola y vive en su pestaña.
+                $donde = ['contactado'=>'Contactados','interesado'=>'Interesados','cliente'=>'Clientes','descartado'=>'Descartados'][$extra] ?? null;
+                $aviso = $nom !== '' ? "{$nom}: " : '';
+                $aviso .= $donde ? "salió de la cola → está en {$donde}." : "vuelve a la cola.";
             }
+        } elseif ($accion === 'borrar' && $id) {
+            $nom = (string)$pdo->query("SELECT nombre FROM prospector_negocios WHERE id={$id}")->fetchColumn();
+            $pdo->prepare("DELETE FROM prospector_negocios WHERE id=?")->execute([$id]);
+            $aviso = ($nom !== '' ? $nom : 'El negocio') . ' se borró para siempre.';
         } elseif ($accion === 'estrella' && $id && $hay_guardado) {
             $pdo->prepare("UPDATE prospector_negocios SET guardado = 1 - guardado WHERE id=?")->execute([$id]);
             $aviso = 'Mi lista actualizada.';
@@ -246,9 +254,35 @@ if (!$sug_mun) $sug_mun = $plan['municipios'];
   .barra2{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
   .cuenta{font-size:12.5px;color:var(--muted);margin-left:auto;font-weight:700}
 
+  /* ── EL TURNO: el de arriba es el que decides. Sale, y sube el siguiente. ── */
+  .turno{background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px 20px;margin-bottom:14px;
+         box-shadow:0 10px 30px -14px rgba(40,25,12,.45);border-top:4px solid var(--coral,#ff5c39)}
+  .t-top{display:flex;gap:14px;align-items:flex-start;margin-bottom:12px}
+  .t-sc{flex:none;width:56px;height:56px;border-radius:14px;display:grid;place-items:center;color:#fff;
+        font-family:'Poppins',sans-serif;font-weight:800;font-size:24px}
+  .t-eyebrow{font-size:10.5px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:var(--coral,#ff5c39)}
+  .turno h2{font-family:'Poppins',sans-serif;font-size:22px;margin:2px 0 3px;text-transform:none;letter-spacing:0}
+  .t-meta{font-size:13px;color:var(--muted)}
+  .t-cont{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+  .t-tel{display:inline-flex;align-items:center;gap:7px;background:var(--tinta);color:#fff;text-decoration:none;
+         font-weight:800;font-size:15px;padding:11px 16px;border-radius:11px}
+  .t-tel svg{width:15px;height:15px}
+  .t-lnk{font-size:12.5px;background:#f6f3f0;border-radius:8px;padding:8px 11px;color:var(--tinta);text-decoration:none}
+  .t-lnk.mail{background:#e8f7ef;color:#0a6b4f;font-weight:800}
+  .t-acc{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .t-b{flex:1 1 150px;border:1.5px solid var(--line);background:#fff;color:var(--tinta);cursor:pointer;
+       font-family:inherit;font-weight:800;font-size:14px;padding:13px 14px;border-radius:12px;
+       display:inline-flex;align-items:center;justify-content:center;gap:7px}
+  .t-b svg{width:16px;height:16px}
+  .t-b.ok{border-color:transparent;color:#fff;background:linear-gradient(135deg,var(--coral,#ff5c39),var(--magenta,#c0395f));flex:2 1 220px}
+  .t-b.del{color:#8c1d1d;border-color:#f3c2c2;flex:0 1 110px}
+  .t-b:active{transform:scale(.99)}
+  .t-menor{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+  .t-quedan{margin-left:auto;font-size:12px;font-weight:800;color:var(--muted)}
+  .turno .mot{margin:6px 0 8px}
   /* ── La cola: fila densa en desktop, tarjeta en móvil ── */
   .cola{background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:var(--shadow-sm)}
-  .fila{display:grid;grid-template-columns:34px 52px minmax(190px,1.6fr) 110px minmax(150px,1fr) minmax(160px,1fr) 96px 62px;
+  .fila{display:grid;grid-template-columns:34px 52px minmax(180px,1.6fr) 104px minmax(140px,1fr) minmax(150px,1fr) 90px 88px;
         gap:10px;align-items:center;padding:9px 14px;border-top:1px solid var(--line);font-size:13.5px}
   .fila:hover{background:#fffdfb}
   .fin{display:flex;align-items:center;justify-content:flex-end;gap:2px}
@@ -270,6 +304,11 @@ if (!$sug_mun) $sug_mun = $plan['municipios'];
   .est{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)}
   .star{border:0;background:none;cursor:pointer;font-size:19px;line-height:1;color:#d8d2cc;padding:4px}
   .star.on{color:#e8a51c}
+  /* Copiar "Nombre Pueblo" — el pegue directo al buscador de FB/IG. */
+  .cp.mini{border:0;background:none;cursor:pointer;color:#b3aca6;padding:5px;border-radius:7px;display:inline-flex;align-items:center}
+  .cp.mini svg{width:15px;height:15px}
+  .cp.mini:hover{background:#f2efec;color:var(--tinta)}
+  .cp.ok,.cp.mini.ok{color:#0a6b4f;background:#e8f7ef}
   .mas{border:0;background:none;cursor:pointer;color:#b3aca6;font-size:15px;font-weight:800;padding:4px 6px;border-radius:7px}
   .mas:hover{background:#f2efec;color:var(--tinta)}
   .nm b{cursor:pointer}
@@ -435,9 +474,71 @@ if (!$sug_mun) $sug_mun = $plan['municipios'];
     <span class="cuenta"><?= number_format($total_filtrado) ?> negocio<?= $total_filtrado===1?'':'s' ?><?= $total_filtrado > $POR_PAGINA ? ' · página '.$f['pag'].' de '.$paginas : '' ?></span>
   </form>
 
-  <!-- ── La cola de trabajo (un solo form: filas + bloques) ── -->
+  <!-- ── La cola de trabajo (un solo form: turno + filas + bloques) ── -->
   <form method="post" id="cola"><?= csrf_field() ?>
     <?php foreach ($f as $k=>$v): ?><input type="hidden" name="f_<?= $k ?>" value="<?= $h($v) ?>"><?php endforeach; ?>
+
+    <?php
+    // EL TURNO: en la cola de "sin tocar", el primero se saca de la tabla y se
+    // presenta grande arriba. Decides, sale de la lista y el siguiente sube
+    // solo — sin bajar la página nunca.
+    $turno = null;
+    if ($f['estado'] === 'nuevo' && $f['guardados'] !== '1' && $f['pag'] == 1 && $negocios) {
+        $turno = array_shift($negocios);
+    }
+    if ($turno):
+        $tid = (int)$turno['id'];
+        $tsc = (int)$turno['score'];
+        $tcol = $tsc >= 80 ? '#c0395f' : ($tsc >= 60 ? '#ff5c39' : ($tsc >= 40 ? '#c9a227' : '#9b93a6'));
+        $tmot = json_decode((string)$turno['motivos'], true) ?: [];
+    ?>
+    <div class="turno">
+      <div class="t-top">
+        <div class="t-sc" style="background:<?= $tcol ?>"><?= $tsc ?></div>
+        <div style="min-width:0">
+          <div class="t-eyebrow">Te toca decidir</div>
+          <h2><?= $h($turno['nombre']) ?></h2>
+          <div class="t-meta"><?= $h($turno['tipo_google'] ?: $turno['categoria']) ?><?= $turno['municipio'] ? ' · '.$h($turno['municipio']) : '' ?><?= $turno['rating'] ? ' · '.$h($turno['rating']).'★ ('.(int)$turno['reviews'].' reseñas)' : '' ?></div>
+        </div>
+        <?php if ($hay_guardado): ?>
+          <button class="star <?= !empty($turno['guardado'])?'on':'' ?>" name="one" value="estrella:<?= $tid ?>" title="Guardar en Mi lista">★</button>
+        <?php endif; ?>
+      </div>
+
+      <div class="t-cont">
+        <?php if ($turno['telefono']): ?>
+          <a class="t-tel" href="tel:<?= $h(preg_replace('/[^0-9+]/','',$turno['telefono'])) ?>"><?= ico('phone') ?> <?= $h($turno['telefono']) ?></a>
+        <?php endif; ?>
+        <?php if (!empty($turno['email'])): ?><a class="t-lnk mail" href="mailto:<?= $h($turno['email']) ?>"><?= $h($turno['email']) ?></a><?php endif; ?>
+        <?php if (!empty($turno['instagram'])): ?><a class="t-lnk" href="https://instagram.com/<?= $h($turno['instagram']) ?>" target="_blank" rel="noopener">@<?= $h($turno['instagram']) ?></a><?php endif; ?>
+        <?php if (!empty($turno['facebook'])): ?><a class="t-lnk" href="https://facebook.com/<?= $h($turno['facebook']) ?>" target="_blank" rel="noopener">Facebook</a><?php endif; ?>
+        <?php if ($turno['maps_url']): ?><a class="t-lnk" href="<?= $h($turno['maps_url']) ?>" target="_blank" rel="noopener">Google Maps</a><?php endif; ?>
+        <?php if ($turno['website']): ?><a class="t-lnk" href="<?= $h($turno['website']) ?>" target="_blank" rel="noopener"><?= !empty($turno['web_es_social']) ? 'su “web” = su red' : 'su web' ?></a>
+        <?php else: ?><span class="tag mal">sin web</span><?php endif; ?>
+      </div>
+
+      <?php if ($tmot): ?><ul class="mot"><?php foreach (array_slice($tmot,0,3) as $m): ?><li><?= $h($m) ?></li><?php endforeach; ?></ul><?php endif; ?>
+      <?php if ($turno['consejo']): ?><div class="consejo"><?= $h($turno['consejo']) ?></div><?php endif; ?>
+
+      <div class="t-acc">
+        <button class="t-b ok" name="one" value="estado:<?= $tid ?>:contactado"><?= ico('check-circle') ?> Ya lo contacté</button>
+        <button class="t-b" name="one" value="estado:<?= $tid ?>:descartado">No me sirve</button>
+        <button class="t-b del" name="one" value="borrar:<?= $tid ?>"
+                onclick="return confirm('¿Borrar <?= $h(addslashes($turno['nombre'])) ?> para siempre?')">Borrar</button>
+      </div>
+      <div class="t-menor">
+        <?php /* Copiar "Nombre Pueblo": es lo que se pega en el buscador de FB/IG. */ ?>
+        <button type="button" class="btn g sm cp" data-copy="<?= $h(trim($turno['nombre'] . ' ' . $turno['municipio'])) ?>">Copiar nombre + pueblo</button>
+        <?php if (empty($turno['contacto_at'])): ?>
+          <button class="btn g sm" name="one" value="contacto:<?= $tid ?>">Buscarle el email</button>
+        <?php endif; ?>
+        <?php if (!$turno['consejo']): ?>
+          <button class="btn g sm" name="one" value="consejo:<?= $tid ?>">Que opine el Prospector</button>
+        <?php endif; ?>
+        <span class="t-quedan"><?= number_format(max(0,$total_filtrado-1)) ?> más esperando</span>
+      </div>
+    </div>
+    <?php endif; ?>
 
     <?php if (!$negocios): ?>
       <div class="card vacio">
@@ -481,6 +582,9 @@ if (!$sug_mun) $sug_mun = $plan['municipios'];
           </div>
           <div class="est"><?= $h($n['estado']) ?></div>
           <div class="fin">
+            <?php /* Copia "Nombre Pueblo" para buscarlo en FB/IG de un pegue. */ ?>
+            <button type="button" class="cp mini" data-copy="<?= $h(trim($n['nombre'] . ' ' . $n['municipio'])) ?>"
+                    title="Copiar nombre y pueblo (para buscarlo en FB/IG)"><?= ico('copy') ?></button>
             <?php if ($hay_guardado): ?>
               <button class="star <?= !empty($n['guardado'])?'on':'' ?>" name="one" value="estrella:<?= $id ?>"
                       title="<?= !empty($n['guardado']) ? 'Quitar de Mi lista' : 'Guardar en Mi lista' ?>">★</button>
@@ -571,6 +675,28 @@ if (!$sug_mun) $sug_mun = $plan['municipios'];
       var c = document.getElementById(b.dataset.plega); if(!c) return;
       var plegado = c.classList.toggle('oculto-m');
       var f = b.querySelector('span'); if(f) f.textContent = plegado ? '▾' : '▴';
+    });
+  });
+  // Copiar "Nombre Pueblo" al portapapeles (para buscarlo en FB/IG).
+  document.querySelectorAll('[data-copy]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var txt = b.dataset.copy || '';
+      var listo = function(){
+        var antes = b.innerHTML;
+        b.classList.add('ok');
+        if (!b.classList.contains('mini')) b.textContent = '✓ Copiado';
+        setTimeout(function(){ b.classList.remove('ok'); b.innerHTML = antes; }, 1300);
+      };
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(txt).then(listo).catch(function(){ viejo(); });
+      } else { viejo(); }
+      function viejo(){   // http o navegador viejo: el truco del textarea
+        var t = document.createElement('textarea');
+        t.value = txt; t.style.position = 'fixed'; t.style.opacity = '0';
+        document.body.appendChild(t); t.select();
+        try { document.execCommand('copy'); listo(); } catch(e){ prompt('Copia esto:', txt); }
+        t.remove();
+      }
     });
   });
   // Detalle por fila (divulgación progresiva: la cola se lee de un vistazo).
