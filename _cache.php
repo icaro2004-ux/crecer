@@ -291,6 +291,48 @@ if (($_GET['test'] ?? '') === 'conserje') {
     exit;
 }
 
+// ── WHATSAPP: ¿el Conserje del número está listo?  &test=whatsapp
+//    Muestra la config, el webhook esperado y los últimos mensajes procesados.
+//    Con &to=17875551234&gasta=1 manda un texto de prueba (solo funciona si ese
+//    número le escribió al negocio en las últimas 24h — regla de Meta).
+if (($_GET['test'] ?? '') === 'whatsapp') {
+    require_once __DIR__ . '/includes/whatsapp.php';
+    echo "EL CONSERJE DE WHATSAPP\n" . str_repeat('=', 40) . "\n\n";
+    echo "WHATSAPP_TOKEN        : " . (defined('WHATSAPP_TOKEN') && WHATSAPP_TOKEN !== '' ? 'definido' : 'FALTA') . "\n";
+    echo "WHATSAPP_PHONE_ID     : " . (defined('WHATSAPP_PHONE_ID') && WHATSAPP_PHONE_ID !== '' ? WHATSAPP_PHONE_ID : 'FALTA') . "\n";
+    echo "WHATSAPP_VERIFY_TOKEN : " . (defined('WHATSAPP_VERIFY_TOKEN') && WHATSAPP_VERIFY_TOKEN !== '' ? 'definido' : 'FALTA') . "\n";
+    echo "WHATSAPP_MARCA_ID     : " . (defined('WHATSAPP_MARCA_ID') ? (int)WHATSAPP_MARCA_ID : 'FALTA') . "\n";
+    echo "Webhook a configurar en Meta:\n";
+    echo "  Callback URL : https://" . ($_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com') . "/crecer/webhook_whatsapp.php\n";
+    echo "  Verify token : (el valor de WHATSAPP_VERIFY_TOKEN)\n";
+    echo "  Suscripción  : messages\n\n";
+    if (wa_configurado()) {
+        if (($_GET['to'] ?? '') !== '' && $__gasta) {
+            echo "Enviando texto de prueba a {$_GET['to']}…\n";
+            try {
+                $r = wa_enviar_texto((string)$_GET['to'], 'Prueba del Conserje de WhatsApp de Crecer — si lees esto, el canal está vivo.');
+                echo "  ENVIADO ✅ (id: " . ($r['messages'][0]['id'] ?? '?') . ")\n\n";
+            } catch (Throwable $e) {
+                echo "  FALLO: " . $e->getMessage() . "\n";
+                echo "  (Si dice re-engagement/24h: ese número tiene que escribirle al negocio primero.)\n\n";
+            }
+        }
+        $ult = $pdo->prepare("SELECT remitente, mensaje_entrante, respuesta_ia, estado, created_at
+                              FROM crecer_mensajes WHERE plataforma='whatsapp' ORDER BY id DESC LIMIT 10");
+        $ult->execute();
+        $filas = $ult->fetchAll(PDO::FETCH_ASSOC);
+        echo "Últimos mensajes procesados: " . count($filas) . "\n";
+        foreach ($filas as $m) {
+            echo "  [{$m['estado']}] {$m['remitente']}: \"" . mb_substr($m['mensaje_entrante'], 0, 70) . "\"\n";
+            if ($m['respuesta_ia']) echo "      → \"" . mb_substr($m['respuesta_ia'], 0, 90) . "\"\n";
+        }
+        if (!$filas) echo "  (ninguno todavía — escríbele al número desde tu WhatsApp personal y recarga)\n";
+    } else {
+        echo "Completa la config de arriba en config.local.php del server y recarga.\n";
+    }
+    exit;
+}
+
 echo "CRECER · limpiar caché + diagnóstico\n";
 echo str_repeat('=', 44) . "\n\n";
 

@@ -67,6 +67,13 @@ define('META_APP_SECRET',    '');
 define('META_REDIRECT_URI', BASE_URL . '/panel/conectar.php');
 define('META_GRAPH_VERSION', 'v21.0');
 
+// ── WhatsApp Cloud API (el Conserje de WhatsApp) ─────────────
+// V1: UN número → UNA marca. El webhook es webhook_whatsapp.php.
+define('WHATSAPP_TOKEN',        '');   // token Cloud API (temporal 24h para probar; permanente vía System User)
+define('WHATSAPP_PHONE_ID',     '');   // Phone Number ID del número del negocio (NO el de prueba de Meta)
+define('WHATSAPP_VERIFY_TOKEN', '');   // palabra secreta que TÚ inventas; la misma va en el webhook de Meta
+define('WHATSAPP_MARCA_ID',     0);    // marca que atiende este número (ej. 1)
+
 // ── Cron del publicador ──
 // Si corres el cron por URL (no CLI), protégelo con este token:
 //   https://tu-dominio/crecer/scripts/cron_publicar.php?key=XXXX
