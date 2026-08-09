@@ -29,11 +29,15 @@ const META_SCOPES = [
     'pages_show_list',
     'pages_read_engagement',
     'pages_manage_posts',
-    'pages_manage_engagement',      // EL CONSERJE: responder comentarios en FB
     'instagram_basic',
     'instagram_content_publish',
-    'instagram_manage_comments',    // EL CONSERJE: leer/responder comentarios en IG
     'business_management',
+    // EL CONSERJE necesita ademas: pages_manage_engagement +
+    // instagram_manage_comments. Se REVIRTIERON (2026-08-09): pedirlos sin
+    // habilitarlos antes en la app rompia el login completo ("something went
+    // wrong") y desconecto a Manuel. NO re-anadirlos hasta habilitarlos en
+    // developers.facebook.com → App Review → Permissions and features
+    // (standard access basta para cuentas con rol en la app).
 ];
 
 class MetaError extends RuntimeException {}
