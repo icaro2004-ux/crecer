@@ -17,6 +17,16 @@
 
 require __DIR__ . '/includes/db.php';
 
+// Bitácora de CADA toque (diagnóstico): quién llamó, qué método, si la firma
+// pasó. Así "no llegan mensajes" se separa en "Meta no llama" vs "llamó y lo
+// rechazamos". Se lee en _cache.php?test=whatsapp.
+$__wa_log = function (string $linea): void {
+    $dir = __DIR__ . '/storage/logs';
+    if (!is_dir($dir)) @mkdir($dir, 0775, true);
+    @file_put_contents($dir . '/webhook_whatsapp.log',
+        '[' . date('Y-m-d H:i:s') . '] ' . $linea . "\n", FILE_APPEND);
+};
+
 // ── GET: el apretón de manos de Meta al configurar el webhook ──
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $mode  = $_GET['hub_mode']         ?? ($_GET['hub.mode'] ?? '');
@@ -24,10 +34,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $chal  = $_GET['hub_challenge']    ?? ($_GET['hub.challenge'] ?? '');
     $esperado = defined('WHATSAPP_VERIFY_TOKEN') ? WHATSAPP_VERIFY_TOKEN : '';
     if ($mode === 'subscribe' && $esperado !== '' && hash_equals($esperado, (string)$tok)) {
+        $__wa_log('GET verificación OK (handshake de Meta)');
         header('Content-Type: text/plain; charset=utf-8');
         echo $chal;
         exit;
     }
+    $__wa_log('GET verificación FALLIDA (mode=' . $mode . ')');
     http_response_code(403);
     echo 'verificación fallida';
     exit;
@@ -46,10 +58,12 @@ if (defined('META_APP_SECRET') && META_APP_SECRET !== '') {
     $sig = (string)($_SERVER['HTTP_X_HUB_SIGNATURE_256'] ?? '');
     $esperada = 'sha256=' . hash_hmac('sha256', $raw, META_APP_SECRET);
     if ($sig === '' || !hash_equals($esperada, $sig)) {
+        $__wa_log('POST RECHAZADO por firma (' . ($sig === '' ? 'sin firma' : 'firma no cuadra — ¿APP_SECRET distinto?') . ') · ' . strlen($raw) . ' bytes');
         http_response_code(403);
         exit;
     }
 }
+$__wa_log('POST aceptado · ' . strlen($raw) . ' bytes');
 
 http_response_code(200);           // responder rápido: Meta reintenta si no ve 200
 header('Content-Type: text/plain; charset=utf-8');

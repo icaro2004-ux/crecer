@@ -317,6 +317,15 @@ if (($_GET['test'] ?? '') === 'whatsapp') {
                 echo "  (Si dice re-engagement/24h: ese número tiene que escribirle al negocio primero.)\n\n";
             }
         }
+        // La bitácora del webhook: CADA toque que recibió (aceptado o rechazado).
+        $wlog = __DIR__ . '/storage/logs/webhook_whatsapp.log';
+        echo "Bitácora del webhook (últimas 15 líneas):\n";
+        if (is_file($wlog)) {
+            $lineas = array_slice(file($wlog, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [], -15);
+            echo $lineas ? '  ' . implode("\n  ", $lineas) . "\n\n" : "  (vacía)\n\n";
+        } else {
+            echo "  (sin toques todavía — si mandas un mensaje y esto sigue vacío, Meta NO nos está llamando)\n\n";
+        }
         $ult = $pdo->prepare("SELECT remitente, mensaje_entrante, respuesta_ia, estado, created_at
                               FROM crecer_mensajes WHERE plataforma='whatsapp' ORDER BY id DESC LIMIT 10");
         $ult->execute();
