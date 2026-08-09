@@ -29,8 +29,10 @@ const META_SCOPES = [
     'pages_show_list',
     'pages_read_engagement',
     'pages_manage_posts',
+    'pages_manage_engagement',      // EL CONSERJE: responder comentarios en FB
     'instagram_basic',
     'instagram_content_publish',
+    'instagram_manage_comments',    // EL CONSERJE: leer/responder comentarios en IG
     'business_management',
 ];
 

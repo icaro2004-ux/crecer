@@ -232,6 +232,65 @@ if (($_GET['test'] ?? '') === 'optimizador') {
     exit;
 }
 
+// ── EL CONSERJE: ¿qué comentarios hay y qué haría?  &test=conserje
+//    Solo lectura por defecto: lista los comentarios frescos de los posts
+//    publicados (llamadas de LECTURA a Meta, gratis). Escalones:
+//      &gasta=1          → además DECIDE con el modelo y guarda la propuesta
+//                          (sin publicar nada en las redes)
+//      &gasta=1&envia=1  → la ronda REAL: responde/escala de verdad
+//    Requiere reconectar la cuenta tras añadir los scopes de comentarios.
+if (($_GET['test'] ?? '') === 'conserje') {
+    require_once __DIR__ . '/includes/conserje.php';
+    echo "EL CONSERJE — comentarios de tus posts\n" . str_repeat('=', 44) . "\n\n";
+    $mids = isset($_GET['marca'])
+        ? [(int)$_GET['marca']]
+        : array_map('intval', $pdo->query("SELECT marca_id FROM crecer_conexiones WHERE estado='activa'")->fetchAll(PDO::FETCH_COLUMN));
+    if (!$mids) { echo "Ninguna marca con conexión Meta activa.\n"; exit; }
+    $envia = (($_GET['envia'] ?? '') === '1');
+    foreach ($mids as $mid) {
+        echo "[marca {$mid}]\n";
+        if (!$__gasta) {
+            // Solo lectura: qué posts monitorea y qué comentarios frescos hay.
+            $conx = conexion_de_marca($pdo, $mid);
+            if (!$conx || empty($conx['page_access_token'])) { echo "  sin conexión Meta.\n\n"; continue; }
+            $posts = conserje_posts($pdo, $mid);
+            echo "  posts monitoreados (últimos " . CONSERJE_DIAS_POSTS . " días): " . count($posts) . "\n";
+            $frescos = 0; $vistos = 0; $lim = time() - CONSERJE_VENTANA_HORAS * 3600;
+            foreach ($posts as $p) {
+                try { $coms = conserje_comentarios($conx, (string)$p['plataforma'], (string)$p['external_id']); }
+                catch (Throwable $e) { echo "  ! leer {$p['plataforma']} #{$p['contenido_id']}: " . substr($e->getMessage(), 0, 140) . "\n"; continue; }
+                foreach ($coms as $c) {
+                    if ($c['texto'] === '' || ($c['ts'] && $c['ts'] < $lim)) continue;
+                    $chk = $pdo->prepare("SELECT 1 FROM crecer_mensajes WHERE plataforma=? AND external_id=?");
+                    $chk->execute([$p['plataforma'], $c['id']]);
+                    if ($chk->fetchColumn()) { $vistos++; continue; }
+                    $frescos++;
+                    echo "  · {$p['plataforma']} @" . $c['autor'] . ": \"" . mb_substr($c['texto'], 0, 90) . "\"\n";
+                }
+            }
+            echo "  comentarios NUEVOS: {$frescos} · ya procesados: {$vistos}\n";
+            echo "  (Con &gasta=1 el Conserje DECIDE cada uno; con &gasta=1&envia=1 responde de verdad.)\n\n";
+            continue;
+        }
+        $r = conserje_correr($pdo, $mid, $envia);
+        if (empty($r['ok'])) { echo "  " . ($r['motivo'] ?? 'error') . "\n\n"; continue; }
+        echo "  modo: " . ($envia ? "EN VIVO (publicó respuestas)" : "prueba (decidió sin publicar)") . "\n";
+        echo "  nuevos={$r['nuevos']} respondidos={$r['respondidos']} escalados={$r['escalados']} ignorados={$r['ignorados']}\n";
+        foreach ($r['errores'] as $e) echo "  ! {$e}\n";
+        // Enséñame lo decidido en esta ronda:
+        $ult = $pdo->prepare("SELECT plataforma, remitente, mensaje_entrante, respuesta_ia, estado
+                              FROM crecer_mensajes WHERE marca_id=? ORDER BY id DESC LIMIT 8");
+        $ult->execute([$mid]);
+        foreach ($ult->fetchAll(PDO::FETCH_ASSOC) as $m) {
+            echo "  [{$m['estado']}] {$m['plataforma']} @{$m['remitente']}: \"" . mb_substr($m['mensaje_entrante'], 0, 70) . "\"\n";
+            if ($m['respuesta_ia']) echo "      → \"" . mb_substr($m['respuesta_ia'], 0, 90) . "\"\n";
+        }
+        echo "\n";
+    }
+    echo "(El cron scripts/cron_conserje.php corre la ronda en vivo cada 30 min una vez lo agendes.)\n";
+    exit;
+}
+
 echo "CRECER · limpiar caché + diagnóstico\n";
 echo str_repeat('=', 44) . "\n\n";
 
