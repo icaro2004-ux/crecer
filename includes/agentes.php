@@ -257,6 +257,29 @@ SYS;
 }
 
 /**
+ * VOZ → TEXTO (la Entrevista habla): transcripción FIEL de una respuesta corta
+ * del dueño. No corrige su gramática ni sus palabras — esa forma de hablar es
+ * la materia prima de su voz de marca. Queda logueada en crecer_ia_log como
+ * toda llamada (evidencia del criterio #2).
+ */
+function voz_a_texto(PDO $pdo, ?int $marca_id, string $audio_b64, string $audio_mime): string {
+    $r = ia_ejecutar($pdo, 'intake', 'Transcribir respuesta (entrevista)',
+        "Transcribe EXACTAMENTE lo que dice la persona, en español puertorriqueño tal como habla "
+        . "(no corrijas su gramática ni cambies sus palabras; si mezcla inglés, déjalo). "
+        . "Devuelve SOLO la transcripción, sin comillas ni comentarios. "
+        . "Si no se escucha voz, devuelve una cadena vacía.",
+        [
+            'marca_id'        => $marca_id,
+            'thinking_budget' => 0,
+            'temperatura'     => 0.0,
+            'max_tokens'      => 400,
+            'audio'           => ['data' => $audio_b64, 'mime' => $audio_mime],
+            'mock_texto'      => '[MOCK] soy la repostera y vendo bizcochos de guayaba',
+        ]);
+    return trim(trim((string)$r['texto']), "\"'");
+}
+
+/**
  * Variante por TEXTO (respaldo del onboarding por voz): el dueño escribe
  * de su negocio en vez de grabarse. Misma salida que perfil_desde_voz.
  */

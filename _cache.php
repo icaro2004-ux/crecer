@@ -36,6 +36,75 @@ if (($__usuario['rol'] ?? '') !== 'admin') {
 // SMS, correo real). No es un secreto: es un "sí, quiero gastar".
 $__gasta = (($_GET['gasta'] ?? '') === '1');
 
+// ── LA VOZ DE LA ENTREVISTA: prueba viva de la transcripción (Gemini escucha).
+//    &test=voz  → esta página graba unos segundos AQUÍ MISMO y los manda por el
+//    camino REAL: MediaRecorder → voz_a_texto() → ia_ejecutar → crecer_ia_log.
+//    El POST gasta una llamada; el botón añade &gasta=1 solo.
+if (($_GET['test'] ?? '') === 'voz') {
+    require_once __DIR__ . '/includes/agentes.php';
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        header('Content-Type: application/json; charset=utf-8');
+        if (!$__gasta) { echo json_encode(['ok'=>false,'err'=>'Falta &gasta=1 (la transcripción gasta una llamada).']); exit; }
+        if (empty($_FILES['audio']['tmp_name']) || ($_FILES['audio']['error'] ?? 1) !== UPLOAD_ERR_OK) {
+            echo json_encode(['ok'=>false,'err'=>'No llegó el audio.']); exit;
+        }
+        $mime_in = (string)($_FILES['audio']['type'] ?: 'audio/webm');
+        try {
+            $texto = voz_a_texto($pdo, null,
+                base64_encode((string)file_get_contents($_FILES['audio']['tmp_name'])), $mime_in);
+            $log = [];
+            try {
+                $log = $pdo->query("SELECT modelo, tokens_in, tokens_out, costo_usd, latencia_ms, estado, error_msg
+                                      FROM crecer_ia_log WHERE agente='intake' AND accion LIKE 'Transcribir%'
+                                     ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC) ?: [];
+            } catch (Throwable $e) {}
+            echo json_encode(($texto !== ''
+                    ? ['ok'=>true,  'texto'=>$texto]
+                    : ['ok'=>false, 'err'=>'Transcripción vacía — mira estado/error_msg del log.'])
+                + ['mime_in'=>$mime_in, 'log'=>$log], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['ok'=>false,'err'=>get_class($e).': '.$e->getMessage(),'mime_in'=>$mime_in], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+    header('Content-Type: text/html; charset=utf-8');
+    echo <<<'HTMLVOZ'
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prueba viva: la voz de la entrevista</title>
+<style>body{font-family:ui-monospace,Consolas,monospace;max-width:640px;margin:40px auto;padding:0 16px;color:#231F20}
+button{font:inherit;padding:12px 18px;border:1.5px solid #231F20;background:#fff;border-radius:10px;cursor:pointer}
+button.rec{background:#EF4375;color:#fff;border-color:#EF4375}
+pre{background:#f6f4f1;padding:14px;border-radius:10px;white-space:pre-wrap;word-break:break-word}</style></head><body>
+<h2>La voz de la entrevista — prueba viva</h2>
+<p>Graba unos segundos y esto corre el camino REAL: MediaRecorder → voz_a_texto() → Gemini → crecer_ia_log. Gasta UNA llamada.</p>
+<button id="b">Grabar</button>
+<pre id="out">Toca Grabar, habla 3-5 segundos, y toca de nuevo para transcribir.</pre>
+<script>
+var b=document.getElementById('b'),out=document.getElementById('out'),mr=null,st=null,ch=[],on=false;
+b.onclick=function(){
+  if(on){ try{mr.stop();}catch(e){} return; }
+  navigator.mediaDevices.getUserMedia({audio:true}).then(function(s){
+    st=s; ch=[]; mr=new MediaRecorder(s);
+    mr.ondataavailable=function(e){ if(e.data.size) ch.push(e.data); };
+    mr.onstop=function(){
+      on=false; b.textContent='Grabar'; b.classList.remove('rec');
+      st.getTracks().forEach(function(t){t.stop();});
+      var blob=new Blob(ch,{type:mr.mimeType||'audio/webm'});
+      out.textContent='Transcribiendo ('+(mr.mimeType||'audio/webm')+', '+blob.size+' bytes)...';
+      var fd=new FormData(); fd.append('audio', blob, 'prueba.webm');
+      fetch(location.pathname+'?test=voz&gasta=1',{method:'POST',body:fd})
+        .then(function(r){return r.json();})
+        .then(function(d){ out.textContent=JSON.stringify(d,null,2); })
+        .catch(function(e){ out.textContent='FALLO de red: '+e; });
+    };
+    mr.start(); on=true; b.textContent='Detener y transcribir'; b.classList.add('rec');
+  }).catch(function(e){ out.textContent='Sin permiso de microfono: '+e; });
+};
+</script></body></html>
+HTMLVOZ;
+    exit;
+}
+
 echo "CRECER · limpiar caché + diagnóstico\n";
 echo str_repeat('=', 44) . "\n\n";
 

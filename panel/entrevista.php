@@ -53,6 +53,33 @@ if (empty($_GET['otra']) && $_SERVER['REQUEST_METHOD'] !== 'POST') {
     if ($ya_post > 0) { header('Location: /crecer/panel/gateway_post.php?marca=' . $marca_id . $gw); exit; }
 }
 
+// ── AJAX: VOZ → texto. El dueño CONTESTA HABLANDO; Gemini transcribe fiel y el
+//    texto entra al chat como si lo hubiera escrito. (Antes esto era dictado del
+//    navegador: no existía en Firefox, fallaba mudo y escuchaba en es-US. Ahora
+//    graba MediaRecorder — universal — y transcribe el mismo motor multimodal
+//    del corillo, que sí entiende boricua. Cada transcripción queda en
+//    crecer_ia_log.) Prueba viva: _cache.php?test=voz ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'voz') {
+    header('Content-Type: application/json; charset=utf-8');
+    if (!csrf_ok()) { echo json_encode(['ok'=>false,'err'=>'Sesión expiró. Recarga.']); exit; }
+    if (empty($_FILES['audio']['tmp_name']) || ($_FILES['audio']['error'] ?? 1) !== UPLOAD_ERR_OK) {
+        echo json_encode(['ok'=>false,'err'=>'No llegó el audio — intenta de nuevo o escribe.']); exit;
+    }
+    if ((int)$_FILES['audio']['size'] > 10 * 1024 * 1024) {
+        echo json_encode(['ok'=>false,'err'=>'El audio quedó muy largo — contesta en pedazos más cortos.']); exit;
+    }
+    try {
+        $texto = voz_a_texto($pdo, $marca_id,
+            base64_encode((string)file_get_contents($_FILES['audio']['tmp_name'])),
+            (string)($_FILES['audio']['type'] ?: 'audio/webm'));
+        if ($texto === '') { echo json_encode(['ok'=>false,'err'=>'No te escuché bien — prueba otra vez o escribe.']); exit; }
+        echo json_encode(['ok'=>true, 'texto'=>$texto], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        echo json_encode(['ok'=>false,'err'=>'La transcripción falló: ' . substr($e->getMessage(), 0, 120)], JSON_UNESCAPED_UNICODE);
+    }
+    exit;
+}
+
 // ── AJAX: el CIERRE va en 2 pasos separados para que NINGÚN request pase del
 //    timeout del proxy (~60s). Antes se hacía perfil + radiografía + imagen en un
 //    solo request (40-70s) → "se cayó la conexión". Ahora: (1) perfil, (2) post. ──
@@ -238,6 +265,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   .en-mic svg{width:22px;height:22px}
   .en-mic.rec{background:var(--magenta,#EF4375);border-color:transparent;color:#fff;animation:enpulse 1.1s infinite}
   .en-mic.rec svg{color:#fff}
+  .en-mic.on{border-color:var(--teal,#00A49F);color:var(--teal,#00A49F);box-shadow:0 0 0 3px color-mix(in srgb,var(--teal,#00A49F) 14%,transparent)}
   @keyframes enpulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--magenta,#EF4375) 45%,transparent)}70%{box-shadow:0 0 0 12px transparent}}
   .en-send{border:0;cursor:pointer;background:linear-gradient(135deg,var(--coral,#FF6B3D),var(--magenta,#EF4375));color:#fff;font-weight:800;height:52px;padding:0 22px;border-radius:99px;font-family:inherit;font-size:15px;flex:none;
     box-shadow:0 10px 22px -8px color-mix(in srgb,var(--magenta,#EF4375) 60%,transparent);transition:transform .15s,box-shadow .2s}
@@ -271,6 +299,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
 <form class="en-form" id="enForm" autocomplete="off">
   <button type="button" class="en-mic" id="enMic" title="Hablar" aria-label="Hablar"><?= ico('mic') ?></button>
+  <button type="button" class="en-mic" id="enTts" title="Escuchar al corillo" aria-label="Escuchar al corillo"><?= ico('volume') ?></button>
   <input type="text" class="en-input" id="enInput" placeholder="Escribe o toca el micrófono…" maxlength="1200" aria-label="Tu respuesta">
   <button type="submit" class="en-send" id="enSend">Enviar</button>
 </form>
@@ -285,7 +314,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
   function scroll(el){el.scrollIntoView({behavior:'smooth',block:'end'});}
   function me(t){var r=document.createElement('div');r.className='en-row me';r.innerHTML='<div class="en-b">'+esc(t)+'</div>';msgs.appendChild(r);scroll(r);}
-  function ia(t){var r=document.createElement('div');r.className='en-row ia';r.innerHTML='<div class="en-face">'+FACE+'</div><div class="en-b">'+esc(t)+'</div>';msgs.appendChild(r);scroll(r);}
+  function ia(t){var r=document.createElement('div');r.className='en-row ia';r.innerHTML='<div class="en-face">'+FACE+'</div><div class="en-b">'+esc(t)+'</div>';msgs.appendChild(r);scroll(r);di(t);}
   function loading(){var r=document.createElement('div');r.className='en-row ia';r.innerHTML='<div class="en-face">'+FACE+'</div><div class="en-b load"><span class="en-dots"><span></span><span></span><span></span></span></div>';msgs.appendChild(r);scroll(r);return r;}
   function done(resumen, redirect){
     cerrado=true; form.style.display='none'; listen.textContent='';
@@ -411,17 +440,51 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   }
   form.addEventListener('submit',function(e){ e.preventDefault(); enviar(input.value); });
 
-  // Voz: dictado (Web Speech). Habla y se manda solo.
-  var SR=window.SpeechRecognition||window.webkitSpeechRecognition, mic=document.getElementById('enMic'), rec=null, grabando=false;
-  if(!SR){ mic.style.display='none'; }
+  // ── VOZ (entrada): GRABAS tu respuesta y Gemini la transcribe — el mismo motor
+  //    multimodal del corillo, que sí entiende boricua. (El dictado del navegador
+  //    se quitó: no existía en Firefox, fallaba MUDO y escuchaba en es-US.)
+  //    Si el mic no da permiso, se escribe y ya — nunca tranca.
+  var mic=document.getElementById('enMic'), mrec=null, mstream=null, mchunks=[], grabando=false, mTimer=null, msecs=0;
+  if(!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder){ mic.style.display='none'; }
   else {
-    rec=new SR(); rec.lang='es-US'; rec.interimResults=true; rec.continuous=false;
-    rec.onresult=function(e){ var f='',i2=''; for(var i=0;i<e.results.length;i++){ var t=e.results[i][0].transcript; if(e.results[i].isFinal)f+=t; else i2+=t; } input.value=(f||i2); };
-    rec.onerror=function(){ parar(); }; rec.onend=function(){ parar(); if((input.value||'').trim()) enviar(input.value); };
-    function arrancar(){ try{ input.value=''; rec.start(); grabando=true; mic.classList.add('rec'); listen.textContent='Escuchando… habla y para cuando termines.'; }catch(e){} }
-    function parar(){ grabando=false; mic.classList.remove('rec'); listen.textContent=''; }
-    mic.addEventListener('click',function(){ if(grabando){ try{rec.stop();}catch(e){} } else { arrancar(); } });
+    mic.addEventListener('click', function(){
+      if(cerrado) return;
+      if(grabando){ try{mrec.stop();}catch(e){} return; }
+      navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+        mstream=stream; mchunks=[];
+        try{ mrec=new MediaRecorder(stream); }
+        catch(e){ listen.textContent='Este navegador no puede grabar — escribe tu respuesta, tranqui.'; return; }
+        mrec.ondataavailable=function(e){ if(e.data&&e.data.size) mchunks.push(e.data); };
+        mrec.onstop=function(){
+          grabando=false; mic.classList.remove('rec'); if(mTimer){clearInterval(mTimer);mTimer=null;}
+          mstream.getTracks().forEach(function(t){t.stop();});
+          var blob=new Blob(mchunks,{type:(mrec.mimeType||'audio/webm')});
+          if(blob.size<800){ listen.textContent='No se grabó nada — intenta otra vez.'; return; }
+          listen.textContent='El corillo te está escuchando…';
+          input.disabled=true; send.disabled=true;
+          post({accion:'voz', audio:blob}, 45000).then(function(d){
+            reenable();
+            if(!d||!d.ok){ listen.textContent=(d&&d.err)||'No pude transcribirte — escríbelo, tranqui.'; return; }
+            listen.textContent=''; if(!ttsUser) ttsSet(true);   // me hablaste → te hablo
+            input.value=d.texto; enviar(d.texto);
+          }).catch(function(){ reenable(); listen.textContent='Se cayó la conexión — toca el micrófono otra vez o escribe.'; });
+        };
+        mrec.start(); grabando=true; msecs=0; mic.classList.add('rec');
+        listen.textContent='Grabando… toca el micrófono otra vez cuando termines.';
+        mTimer=setInterval(function(){ if(++msecs>=90){ try{mrec.stop();}catch(e){} } },1000);
+      }).catch(function(){ listen.textContent='El navegador no dio permiso de micrófono — escribe tu respuesta, tranqui.'; });
+    });
   }
+
+  // ── VOZ (salida): "si me hablas, te hablo" — la primera vez que usas el
+  //    micrófono, el corillo empieza a LEER sus preguntas en voz alta (voz del
+  //    sistema, $0, sin red). La bocina lo prende/apaga cuando quieras.
+  var ttsBtn=document.getElementById('enTts'), ttsOn=false, ttsUser=false, ttsVoz=null;
+  function ttsPick(){ if(ttsVoz) return ttsVoz; var vs=window.speechSynthesis?window.speechSynthesis.getVoices():[]; ttsVoz=vs.find(function(v){return /es[-_](PR|US|419)/i.test(v.lang);})||vs.find(function(v){return /^es/i.test(v.lang);})||null; return ttsVoz; }
+  if(window.speechSynthesis){ try{ window.speechSynthesis.onvoiceschanged=function(){ ttsVoz=null; ttsPick(); }; }catch(e){} }
+  function di(t){ if(!ttsOn||!window.speechSynthesis||!t) return; try{ window.speechSynthesis.cancel(); var u=new SpeechSynthesisUtterance(t); var v=ttsPick(); if(v) u.voice=v; u.lang=(v&&v.lang)||'es-US'; u.rate=1.02; window.speechSynthesis.speak(u); }catch(e){} }
+  function ttsSet(on){ ttsOn=!!on&&!!window.speechSynthesis; if(ttsBtn){ ttsBtn.classList.toggle('on',ttsOn); ttsBtn.title=ttsOn?'El corillo lee en voz alta — toca para callarlo':'Escuchar al corillo'; } if(!ttsOn&&window.speechSynthesis){ try{window.speechSynthesis.cancel();}catch(e){} } }
+  if(ttsBtn){ if(!window.speechSynthesis){ ttsBtn.style.display='none'; } else { ttsBtn.addEventListener('click', function(){ ttsUser=true; ttsSet(!ttsOn); }); } }
 })();
 </script>
 

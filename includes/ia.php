@@ -85,11 +85,18 @@ function gemini_generar(string $prompt, array $opts = []): array {
         $headers = ['Content-Type: application/json', 'Authorization: Bearer ' . $token];
     }
 
-    // Parts: texto + (opcional) audio de entrada (multimodal — onboarding por voz).
+    // Parts: texto + (opcional) audio de entrada (multimodal — la voz del dueño).
     $parts = [['text' => $prompt]];
     if (!empty($opts['audio']['data'])) {
+        // El navegador reporta cosas como 'audio/webm;codecs=opus' — Gemini quiere
+        // el tipo LIMPIO. Se normaliza AQUÍ para todo el que mande audio (la
+        // entrevista, el wizard viejo, la prueba viva). Era la causa probable de
+        // que la voz del onboarding original "nunca funcionara".
+        $mimeAudio = strtolower(trim(explode(';', (string)($opts['audio']['mime'] ?? 'audio/webm'))[0]));
+        if ($mimeAudio === '') $mimeAudio = 'audio/webm';
+        if ($mimeAudio === 'audio/x-m4a') $mimeAudio = 'audio/mp4';   // Safari/iOS
         $parts[] = ['inlineData' => [
-            'mimeType' => $opts['audio']['mime'] ?? 'audio/webm',
+            'mimeType' => $mimeAudio,
             'data'     => $opts['audio']['data'],   // base64
         ]];
     }
