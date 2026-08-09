@@ -307,6 +307,38 @@ if (($_GET['test'] ?? '') === 'whatsapp') {
     echo "  Verify token : (el valor de WHATSAPP_VERIFY_TOKEN)\n";
     echo "  Suscripción  : messages\n\n";
     if (wa_configurado()) {
+        // ¿La app está DE VERDAD suscrita a la cuenta de WhatsApp? (el toggle a
+        // veces no pega — causa clásica de "webhook verificado pero nada llega").
+        // Requiere WHATSAPP_WABA_ID en el config. Con &suscribe=1 la suscribe aquí.
+        if (defined('WHATSAPP_WABA_ID') && WHATSAPP_WABA_ID !== '') {
+            $version = defined('META_GRAPH_VERSION') ? META_GRAPH_VERSION : 'v21.0';
+            $waba = rawurlencode(WHATSAPP_WABA_ID);
+            $llama = function (string $metodo, string $url) {
+                $ch = curl_init($url);
+                curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_CUSTOMREQUEST=>$metodo,
+                    CURLOPT_HTTPHEADER=>['Authorization: Bearer ' . WHATSAPP_TOKEN], CURLOPT_TIMEOUT=>20]);
+                $o = curl_exec($ch); curl_close($ch);
+                return json_decode((string)$o, true) ?: [];
+            };
+            if (($_GET['suscribe'] ?? '') === '1') {
+                $r = $llama('POST', "https://graph.facebook.com/{$version}/{$waba}/subscribed_apps");
+                echo "SUSCRIBIENDO la app a la WABA… " . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n\n";
+            }
+            $r = $llama('GET', "https://graph.facebook.com/{$version}/{$waba}/subscribed_apps");
+            $apps = $r['data'] ?? null;
+            if ($apps === null) {
+                echo "Suscripción a la WABA: NO SE PUDO LEER — " . json_encode($r['error']['message'] ?? $r, JSON_UNESCAPED_UNICODE) . "\n\n";
+            } elseif (!$apps) {
+                echo "Suscripción a la WABA: ❌ NINGUNA APP SUSCRITA — ESTA es la causa de que nada llegue.\n";
+                echo "  → Corre esta misma URL con &suscribe=1 y se arregla aquí mismo.\n\n";
+            } else {
+                echo "Suscripción a la WABA: ✅ " . count($apps) . " app(s):\n";
+                foreach ($apps as $a) echo "  · " . ($a['whatsapp_business_api_data']['name'] ?? ($a['name'] ?? json_encode($a))) . "\n";
+                echo "\n";
+            }
+        } else {
+            echo "WHATSAPP_WABA_ID: no definido — añádelo al config para el chequeo de suscripción.\n\n";
+        }
         if (($_GET['to'] ?? '') !== '' && $__gasta) {
             echo "Enviando texto de prueba a {$_GET['to']}…\n";
             try {
