@@ -397,6 +397,36 @@ $fnum = fn($n) => number_format((int)$n);
     </section>
     <?php endif; ?>
 
+    <?php
+      // ── LO QUE EL CORILLO APRENDIÓ DE TUS NÚMEROS (el Optimizador) ──
+      // Lecciones medidas de los posts reales de ESTA marca. Solo activas y
+      // vigentes; si no hay evidencia suficiente, la tarjeta no aparece.
+      $lecciones_opt = [];
+      try {
+          $lq = $pdo->prepare(
+              "SELECT titulo, detalle, updated_at FROM crecer_memoria
+                WHERE marca_id=? AND fuente='optimizador' AND estado='activa'
+                  AND (valid_until IS NULL OR valid_until > NOW())
+                ORDER BY peso DESC, confianza DESC LIMIT 5");
+          $lq->execute([$marca_id]);
+          $lecciones_opt = $lq->fetchAll(PDO::FETCH_ASSOC);
+      } catch (Throwable $e) { $lecciones_opt = []; }
+    ?>
+    <?php if ($lecciones_opt): ?>
+    <section class="rzc" data-k="lecciones"<?= $disp() ?>>
+      <div class="rzc-eyebrow"><?= ico('lightbulb') ?> Lo que aprendí de tus números</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
+        <?php foreach ($lecciones_opt as $lo): ?>
+        <div style="border:1px solid var(--line);border-left:3px solid var(--teal);border-radius:12px;padding:11px 13px;background:#fff">
+          <div style="font-weight:800;font-size:13.5px;color:var(--tinta)"><?= $h($lo['titulo']) ?></div>
+          <div style="font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.45"><?= $h($lo['detalle']) ?></div>
+        </div>
+        <?php endforeach; ?>
+      </div>
+      <div class="rzc-sub" style="margin-top:12px">Medido de tus posts reales — no es opinión. El plan de cada semana usa estas lecciones solo.</div>
+    </section>
+    <?php endif; ?>
+
     <?php if ($top): ?>
     <!-- Post estrella -->
     <section class="rzc" data-k="estrella"<?= $disp() ?>>
