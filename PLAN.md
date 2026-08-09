@@ -1,5 +1,10 @@
 # PLAN — Crecer (Build with Gemini XPRIZE)
 
+> ⚠️ **DOCUMENTO HISTÓRICO (congelado 2026-08-08).** Refleja sesiones de junio 2026
+> y contiene datos superados — p. ej. el precio: **la única verdad vigente es
+> Crecer $39/mes (founder $29 vía cupón); Despegar $89 congelado (`activo=0`)**.
+> Para el estado actual: CLAUDE.md + README.md. (Cierre de CR-F07.)
+
 > Estado de avance y próximos pasos. Se actualiza al cerrar cada sesión.
 > Si se pierde el contexto de la conversación, EMPIEZA LEYENDO ESTO + CLAUDE.md + MAPA.md + ESTRUCTURA.md + FLUJO.md.
 

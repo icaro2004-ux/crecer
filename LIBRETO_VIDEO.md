@@ -21,8 +21,8 @@ Emoción objetivo: **"Tengo gente trabajando para mí."**
 
 | # | Pantalla / archivo | Qué hace | Agente | Qué se registra |
 |---|---|---|---|---|
-| 1 | Landing `crecer.php` | Explica el producto y los planes (Gratis / Crecer $49 / Despegar $89) | — | — |
-| 2 | Registro → `onboarding.php` | Graba voz **o** escribe + sube 1 foto → la IA extrae el perfil del negocio, crea la marca y genera **1 post de muestra** | Intake (voz) + Creativa + Diseñador | `crecer_ia_log` (perfil desde voz/texto, caption, imagen) |
+| 1 | Landing `crecer.php` | Explica el producto y los planes (Gratis / **Crecer $39**; founder $29 vía cupón; Despegar $89 congelado `activo=0` — no se muestra como oferta) | — | — |
+| 2 | Registro → **La Entrevista** `panel/entrevista.php` | El corillo **entrevista** al dueño por chat adaptativo. Puede contestar **hablando** (Gemini transcribe — entiende boricua) y el corillo le **lee sus preguntas en voz alta** ("si me hablas, te hablo"). Al cerrar: perfil rico + Radiografía + su primer post | Intake (entrevista + transcripción) + Creativa + Diseñador | `crecer_ia_log` (cada turno, cada transcripción, caption, imagen) |
 | 3 | Dashboard `index.php` | "Centro del Corillo": 6 agentes con estado real, KPIs, "lo que hizo el corillo hoy", actividad | Todos | Lee `crecer_ia_log` |
 | 4 | Contenido `aprobar2.php` | Fábrica de posts: pedir a la IA (tema/borrador/al azar), multi-plataforma, aprobar, editar → **la IA aprende tu vocabulario** | La Creativa | Cada caption + la lección de vocabulario al glosario |
 | 5 | Gráficas `graficas.php` | Sube **foto real** → arte de post profesional (la IA nunca inventa el producto), preview IG/FB | El Diseñador | Cada imagen (modelo, costo) |
@@ -30,8 +30,10 @@ Emoción objetivo: **"Tengo gente trabajando para mí."**
 | 7 | Órdenes `ordenes.php` | Tablero de pedidos + **página pública con QR** (el cliente ordena sin cuenta) + **flywheel de reseñas** | La Agenda | — |
 | 8 | Precios → Stripe `precios.php` / `crear_checkout.php` / `webhook_stripe.php` | Activar plan → cobro real con Stripe → webhook confirma → desbloquea todo | — | `pagos` (revenue), webhook |
 
-**Modelo freemium (el candado):** gratis = **1 post de muestra** (1 imagen + 1 caption).
-El logo y el volumen se **desbloquean pagando**. Nadie extrae lo caro gratis.
+**Modelo freemium (el candado):** el trial vive y muere en el **Gateway** — 1 post
+de muestra (imagen + caption), verificado por **SMS (1 gratis por número)** para
+descargarlo/publicarlo. Al app real **solo se cruza pagando** (`panel_guard.php`).
+Nadie extrae lo caro gratis.
 
 **Evidencia núcleo (criterio #2):** TODA llamada a Gemini se registra en
 `crecer_ia_log` con agente, acción, modelo, tokens, costo y latencia.
@@ -44,21 +46,27 @@ El logo y el volumen se **desbloquean pagando**. Nadie extrae lo caro gratis.
 > en producción. **[JURADO]** = qué criterio demuestra esa escena.
 
 ### ESCENA 1 — El problema y la promesa · 0:00–0:20
-- **Pantalla:** landing `crecer.php`. Scroll lento por los 3 planes y el corillo.
+- **Pantalla:** landing `crecer.php`. Scroll lento por los planes y el corillo.
 - **Narración:** "En Puerto Rico, miles de negocios pequeños saben que tienen que
   estar en las redes… pero no tienen tiempo, ni saben qué publicar, ni dinero para
   una agencia. Crecer les da un corillo digital: un equipo de IA que les trabaja
   el negocio."
 - **[JURADO]** Impacto de categoría (microempresa boricua) + modelo de negocio (planes).
 
-### ESCENA 2 — El "wow" de 5 minutos: onboarding por voz · 0:20–0:50
-- **Pantalla:** registro → `onboarding.php`. El dueño escribe el nombre, **graba ~40s
-  hablando de su negocio** (o usa "prefiero escribir") y sube 1 foto. Overlay:
-  "El corillo está escuchando… aprendiendo tu negocio… escribiendo tu caption…".
-- **Resultado:** cae al dashboard con su **primer post listo** (caption en su voz + arte con su foto).
-- **Narración:** "No llenas formularios. Le hablas. La IA escucha, aprende tu voz,
-  tus productos, tu gente — y te entrega tu primer post hecho. En menos de cinco minutos."
-- **[JURADO]** AI-native (Gemini multimodal: audio→perfil estructurado) + tiempo al primer valor.
+### ESCENA 2 — El "wow": LA ENTREVISTA (hablas con el corillo) · 0:20–0:50
+- **Pantalla:** registro → `panel/entrevista.php`. El corillo entrevista al dueño
+  como una conversación de verdad: toca el micrófono y **contesta hablando** — su
+  respuesta aparece transcrita en el chat (Gemini, entiende boricua) — y el corillo
+  le **lee la siguiente pregunta en voz alta** ("si me hablas, te hablo"). Las
+  preguntas se adaptan a lo que va contando.
+- **Resultado:** al cerrar, el corillo arma el perfil en pantalla (voz/público/
+  productos — todo real, extraído de la conversación), el dueño elige su tono, y
+  cae en su **primer post montado**.
+- **Narración:** "No llenas formularios. Te entrevistan — como a un negocio que
+  importa. Hablas, te escuchan, te contestan. Y cuando terminas de hablar, tu
+  primer post ya está hecho."
+- **[JURADO]** AI-native (Gemini multimodal: voz→texto→perfil estructurado, cada
+  turno y cada transcripción en `crecer_ia_log`) + tiempo al primer valor.
 
 ### ESCENA 3 — El Centro del Corillo (dashboard) · 0:50–1:25
 - **Pantalla:** `index.php`. Mostrar los **6 agentes** con su estado real
@@ -124,19 +132,28 @@ El logo y el volumen se **desbloquean pagando**. Nadie extrae lo caro gratis.
 
 ## 4. PENDIENTE PARA QUE EL VIDEO QUEDE FUERTE (producción)
 
-- [ ] **Pantalla de evidencia IA** (`evidencia.php`) que muestre `crecer_ia_log`
-      bonito (agente, acción, modelo, tokens, costo, latencia). **NO está construida**
-      — sin ella habría que mostrar el log por phpMyAdmin (feo). *Recomiendo construirla:
-      es media nota del criterio #2 y es barata (los datos ya existen).*
-- [ ] **Cuenta + datos demo limpios** (un negocio sembrado que se vea real).
-- [ ] **Stripe en modo live** (o test claramente rotulado) para mostrar el cobro;
-      y al menos **1 cliente real que pague** dentro de la ventana de 90 días
-      (el revenue real lo gana el negocio, no el código).
+- [x] **Pantalla de evidencia IA** — CONSTRUIDA: `evidencia.php` muestra `crecer_ia_log`
+      (agente, acción, modelo, tokens, costo, latencia) y tiene la **demo EN VIVO**
+      "Correr el corillo ahora" (se entra por `admin_evidencia.php` → "Ver el corillo
+      EN VIVO"): agentes ejecutando en tiempo real con tokens y costo subiendo.
+      **Esa es la escena estrella del criterio #2.**
+- [x] **Stripe en modo LIVE** (activo desde 2026-07-31, verificado con `cs_live_`).
+      Pendiente antes de grabar la Escena 7: **price de $39 corregido en live**
+      (CR-F02) — hoy el checkout se bloquea si el price no cuadra.
+- [ ] **Cuenta + datos demo limpios** (un negocio sembrado que se vea real —
+      rotulado como demo, nunca presentado como cliente real).
 - [ ] **Micrófono funcionando** en la máquina de grabación (o usar la vía de texto).
 - [ ] Grabar en **producción (Hostinger)**, no localhost — el jurado pide live en prod.
 
 ## 5. HONESTIDAD (no afirmar en el video lo que no está)
-- **Publicación automática a IG/FB y agente de WhatsApp = ROADMAP**, no construido.
-  Hoy "publicar" entrega el caption + imagen para subir a mano. No decir que postea solo.
-- El **motor de auto-edición de reels** (Creatomate) se exploró y **se quitó**. No mencionarlo.
+- **Publicación automática a IG/FB = REAL** (app de Meta montada; publica posts y
+  Reels vía `meta_publicar_ig_reel`). Se puede mostrar publicando de verdad.
+  **El agente de WhatsApp con IA sigue siendo ROADMAP** (falta Cloud API + número
+  dedicado) — no afirmarlo como vivo.
+- Reels: Creatomate se exploró y **se quitó** — no mencionarlo. Existe el
+  **Reels Studio** (Gemini + Shotstack, módulo aislado): mostrarlo **solo si está
+  encendido en prod** al momento de grabar.
 - Las ~430 reseñas semilla en `reviews` son ficticias — **nunca** presentarlas como reales.
+- Revenue en el video: el cobro que se muestra es real (Stripe live), y el founder
+  es el **primer cliente** (se cobra igual que cualquiera). En la entrega ese revenue
+  se reporta como **related-party**, separado del arms-length. No se infla nada.
