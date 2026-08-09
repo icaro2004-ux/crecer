@@ -293,6 +293,7 @@ if (!isset($redes_conectadas)) {
   function loaderHide(){ if(_loaderTimer){ clearInterval(_loaderTimer); _loaderTimer=null; } document.getElementById('pubresOv').classList.remove('show'); }
   function pubOk(msg, verUrl){
     if(_loaderTimer){ clearInterval(_loaderTimer); _loaderTimer=null; }
+    _pubRetry=null;
     var ver = verUrl ? '<a class="pubres-ver" href="'+verUrl+'" target="_blank" rel="noopener">Ver publicación ↗</a>' : '';
     _pubCard().innerHTML = '<div class="pubres-ico">🎉</div>'
       + '<div class="pubres-t">¡Publicado en tus redes!</div>'
@@ -300,21 +301,25 @@ if (!isset($redes_conectadas)) {
       + '<div class="pubres-btns">'+ver+'<button type="button" class="pubres-cerrar" onclick="pubCerrar(true)">Cerrar</button></div>';
     document.getElementById('pubresOv').classList.add('show');
   }
-  var _errCard=null;
+  var _errCard=null, _pubRetry=null;
   function pubErr(msg, card){
     if(_loaderTimer){ clearInterval(_loaderTimer); _loaderTimer=null; }
     _errCard = card || null;
     var manualBtn = _errCard
       ? '<button type="button" onclick="pubManual()" style="border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:15px;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));padding:12px 22px;border-radius:99px;margin-right:8px">Publícalo tú mismo →</button>'
       : '';
+    var retryBtn = _pubRetry
+      ? '<button type="button" onclick="_pubRetry()" style="border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:15px;color:#fff;background:linear-gradient(135deg,var(--teal),var(--teal-700,#00827e));padding:12px 22px;border-radius:99px;margin-right:8px">Reintentar ahora</button>'
+      : '';
+    var verBtn = '<a class="pubres-ver" href="/crecer/panel/index.php?marca=<?= $marca_id ?>">Ver mi post guardado</a>';
     var tip = _errCard
       ? '<div class="pubres-msg" style="font-size:12.5px;color:var(--muted);margin-top:4px">Tranqui: lo publicas a mano en un momento — te copiamos el texto y bajas la imagen.</div>'
-      : '';
+      : '<div class="pubres-msg" style="font-size:12.5px;color:var(--muted);margin-top:4px">Tranqui: tu post quedó <b>guardado</b> — no se perdió. Reintenta ahora, o publícalo después desde tu panel cuando haya mejor conexión.</div>';
     _pubCard().innerHTML = '<div class="pubres-ico">⚠️</div>'
       + '<div class="pubres-t">No se pudo publicar solo</div>'
       + '<div class="pubres-msg">'+(msg||'La conexión con tus redes falló.')+'</div>'
       + tip
-      + '<div class="pubres-btns">'+manualBtn+'<button type="button" class="pubres-cerrar" onclick="pubCerrar(false)">Cerrar</button></div>';
+      + '<div class="pubres-btns">'+retryBtn+manualBtn+verBtn+'<button type="button" class="pubres-cerrar" onclick="pubCerrar(false)">Cerrar</button></div>';
     document.getElementById('pubresOv').classList.add('show');
   }
   function pubManual(){ var c=_errCard; pubCerrar(false); if(c && typeof abrirPublicar==='function') abrirPublicar(c); }
@@ -783,6 +788,7 @@ if (!isset($redes_conectadas)) {
     }
     function wizPublicar(plataformas){
       if(!wizId) return;
+      _pubRetry = function(){ wizPublicar(plataformas); };   // el error ofrece "Reintentar ahora"
       wizCerrar();
       loaderShow('Publicando…', 'Subiendo tu post a las redes. No cierres la app.');
       var fa=new FormData(); fa.append('ajax','1'); fa.append('accion','aprobar'); fa.append('id',wizId);
