@@ -280,6 +280,43 @@ function voz_a_texto(PDO $pdo, ?int $marca_id, string $audio_b64, string $audio_
 }
 
 /**
+ * CAPTION DESDE VIDEO (post con video ya listo): el dueño subió un video que
+ * él mismo editó; la Creativa VE sus fotogramas y escribe el texto del post en
+ * la voz del dueño. Fiel a lo que se ve — no inventa productos ni promesas.
+ */
+function caption_desde_video(PDO $pdo, int $marca_id, array $frames_b64, ?int $dur_seg, string $contexto = ''): string {
+    $m = leer_marca($pdo, $marca_id) ?: [];
+    $negocio = trim((string)($m['nombre_negocio'] ?? 'el negocio'));
+    $voz     = trim((string)($m['voz'] ?? ''));
+    $wa      = trim((string)($m['whatsapp'] ?? ''));
+    $cta_via = $wa !== '' ? 'WhatsApp' : 'DM/mensaje directo';
+
+    $sistema = "Eres la Creativa de \"{$negocio}\". El dueño subió un VIDEO que él mismo "
+        . "editó y ya está listo para publicarse; tu ÚNICO trabajo es escribir el texto del "
+        . "post que lo acompaña. SIGUE su voz"
+        . ($voz !== '' ? " (así habla: {$voz})" : '')
+        . ". No inventes productos, precios ni promesas que no se vean en el video.";
+    $prompt = "Estos fotogramas son del video del dueño"
+        . ($dur_seg ? " (dura ~{$dur_seg}s)" : '') . ".\n"
+        . ($contexto !== '' ? "El dueño dice de qué va: {$contexto}\n" : '')
+        . "Mira los fotogramas y escribe el caption del post: 2-4 líneas con chispa, "
+        . "fieles a LO QUE SE VE, 1 llamada a la acción por {$cta_via}, y 4-6 hashtags "
+        . "relevantes al final. Devuelve SOLO el texto del post, sin comillas ni explicación.";
+
+    $imgs = array_map(fn($b) => ['mime' => 'image/jpeg', 'data' => $b], $frames_b64);
+    $r = ia_ejecutar($pdo, 'creativa', 'Caption desde video (post)', $prompt, [
+        'marca_id'        => $marca_id,
+        'sistema'         => $sistema,
+        'imagenes'        => $imgs,
+        'temperatura'     => 0.8,
+        'max_tokens'      => 600,
+        'thinking_budget' => 0,
+        'mock_texto'      => '[MOCK] Llegó lo bueno al mostrador. Escríbenos por WhatsApp y te lo apartamos. #PuertoRico #ApoyaLoLocal',
+    ]);
+    return trim(trim((string)$r['texto']), "\"'");
+}
+
+/**
  * Variante por TEXTO (respaldo del onboarding por voz): el dueño escribe
  * de su negocio en vez de grabarse. Misma salida que perfil_desde_voz.
  */

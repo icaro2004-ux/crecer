@@ -326,6 +326,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo json_encode(['ok'=>true,'id'=>$id,'video'=>$url]); exit;
     }
 
+    // ── POST DESDE VIDEO: el dueño sube su video YA LISTO (editado por él) y el
+    //    corillo LO VE (fotogramas que extrae el navegador) y le escribe el texto
+    //    en su voz. Crea la pieza completa de un tiro → cae al paso 2 del wizard.
+    //    Reels Studio queda para MONTAR reels desde clips; esto es "ya lo edité
+    //    yo — ponle el texto". Publica como Reel (IG) / video (FB), camino que
+    //    ya existe en publicador.php. ──
+    if ($accion === 'post_desde_video') {
+        header('Content-Type: application/json');
+        @set_time_limit(0);
+        // Mismo candado freemium que pedir_post: la muestra gratis es UNA.
+        if (!$acceso_full && !$puede_crear) { echo json_encode(['ok'=>false,'err'=>'paywall']); exit; }
+        $MAXV = 100 * 1024 * 1024;
+        $f = $_FILES['video'] ?? null;
+        if (!$f || ($f['error'] ?? 1) !== UPLOAD_ERR_OK || empty($f['tmp_name'])) {
+            $why = ($f && in_array($f['error'] ?? 0, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true))
+                 ? 'El video excede el límite del servidor. Prueba uno más liviano.'
+                 : 'No se recibió el video. Intenta de nuevo.';
+            echo json_encode(['ok'=>false,'err'=>$why]); exit;
+        }
+        if ($f['size'] > $MAXV) { echo json_encode(['ok'=>false,'err'=>'El video es muy grande (máx 100 MB).']); exit; }
+        $ext = strtolower(pathinfo((string)$f['name'], PATHINFO_EXTENSION));
+        $mime = '';
+        if (function_exists('finfo_open')) { $fi = finfo_open(FILEINFO_MIME_TYPE); $mime = (string)@finfo_file($fi, $f['tmp_name']); finfo_close($fi); }
+        if (!in_array($ext, ['mp4','mov','m4v'], true) || ($mime !== '' && !in_array($mime, ['video/mp4','video/quicktime','video/x-m4v'], true))) {
+            echo json_encode(['ok'=>false,'err'=>'Formato no válido. Sube un video MP4 o MOV.']); exit;
+        }
+        // Los OJOS del corillo: fotogramas (1-3, base64) que el navegador extrajo.
+        $frames = [];
+        foreach ((array)($_POST['frames'] ?? []) as $fr) {
+            if (!is_string($fr) || strpos($fr, 'base64,') === false) continue;
+            $bin = base64_decode(substr($fr, strpos($fr, 'base64,') + 7), true);
+            if ($bin !== false && strlen($bin) > 500) $frames[] = base64_encode($bin);
+            if (count($frames) >= 3) break;
+        }
+        if (!$frames) { echo json_encode(['ok'=>false,'err'=>'No pude ver el video (sin fotogramas). Prueba con un MP4.']); exit; }
+        $dur = ($_POST['dur'] ?? '') !== '' ? (int)round((float)$_POST['dur']) : null;
+        $contexto = mb_substr(trim((string)($_POST['contexto'] ?? '')), 0, 300);
+
+        // Guardar el video (mismo destino y reglas que video_directo).
+        $dir = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/videos";
+        @mkdir($dir, 0775, true);
+        $fn  = 'vid_' . uniqid() . '.' . ($ext === 'mov' ? 'mov' : 'mp4');
+        if (!move_uploaded_file($f['tmp_name'], $dir . '/' . $fn)) { echo json_encode(['ok'=>false,'err'=>'No se pudo guardar el video.']); exit; }
+        $url = rtrim(UPLOADS_URL, '/') . "/marca_{$marca_id}/videos/" . $fn;
+
+        // La Creativa VE los fotogramas y escribe el caption en la voz del dueño.
+        try {
+            $caption = caption_desde_video($pdo, $marca_id, $frames, $dur, $contexto);
+        } catch (Throwable $e) {
+            @unlink($dir . '/' . $fn);
+            echo json_encode(['ok'=>false,'err'=>'No pude escribir el texto: ' . substr($e->getMessage(), 0, 120)]); exit;
+        }
+        if ($caption === '') {
+            @unlink($dir . '/' . $fn);
+            echo json_encode(['ok'=>false,'err'=>'El texto salió vacío — intenta de nuevo.']); exit;
+        }
+
+        // La pieza, como cualquier borrador del wizard (calendario del mes + hoy).
+        $fecha_dt = date('Y-m-d H:i:s');
+        $fa = (int)date('Y'); $fm = (int)date('n');
+        $pdo->prepare("INSERT INTO crecer_calendario (marca_id, anio, mes, estado, generado_por_ia) VALUES (?,?,?, 'borrador', 1) ON DUPLICATE KEY UPDATE updated_at=NOW()")->execute([$marca_id, $fa, $fm]);
+        $calid = (int)$pdo->query("SELECT id FROM crecer_calendario WHERE marca_id={$marca_id} AND anio={$fa} AND mes={$fm}")->fetchColumn();
+        $pdo->prepare("INSERT INTO crecer_contenido (calendario_id, marca_id, plataforma, tipo, caption, fecha_programada, estado, grafica_path) VALUES (?,?,?,?,?,?, 'borrador', ?)")
+            ->execute([$calid, $marca_id, 'instagram', 'post', $caption, $fecha_dt, $url]);
+        $nid = (int)$pdo->lastInsertId();
+        echo json_encode(['ok'=>true, 'id'=>$nid, 'caption'=>$caption, 'video'=>$url], JSON_UNESCAPED_UNICODE); exit;
+    }
+
     // ── Pedir un post a la IA (tema sugerido / borrador a pulir / random) ──
     if ($accion === 'pedir_post') {
         @set_time_limit(0);

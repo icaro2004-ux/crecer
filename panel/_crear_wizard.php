@@ -55,6 +55,13 @@ if (!isset($redes_conectadas)) {
       <label class="fl">O escribe tu propia idea</label>
       <textarea id="wiz-tema" rows="2" placeholder="Ej: promo del bizcocho de guayaba para el Día de las Madres"></textarea>
       <button type="button" class="art-go" id="wiz-crear">Crear el post →</button>
+      <div style="display:flex;align-items:center;gap:10px;margin:14px 0 6px;color:var(--muted);font-size:12px">
+        <span style="flex:1;height:1px;background:var(--line)"></span>o<span style="flex:1;height:1px;background:var(--line)"></span>
+      </div>
+      <label class="fbnew wiz-upl" style="width:100%;justify-content:center;box-sizing:border-box"><?= ico('play') ?> Tengo mi video listo — ponle el texto
+        <input type="file" id="wiz-video-directo" accept="video/mp4,video/quicktime" style="display:none">
+      </label>
+      <div style="font-size:11.5px;color:var(--muted);text-align:center;margin-top:6px">Tu video tal cual (MP4/MOV, hasta 100MB). El corillo lo ve, escribe el caption en tu voz, y sale como Reel en IG / video en FB. Si escribiste algo arriba, lo usa de contexto.</div>
     </div>
 
     <style>
@@ -614,6 +621,60 @@ if (!isset($redes_conectadas)) {
       fetch(WIZ_EP,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
         loaderHide(); if(!d.ok){ toast(d.err||'No se pudo subir el video.'); return; } wizPintaArte(d.video);
       }).catch(function(){ loaderHide(); toast('Error de conexión (¿video muy pesado?).'); });
+    });
+
+    // ── "TENGO MI VIDEO LISTO" (paso 1): subes tu video ya editado, el navegador
+    //    le saca 2 fotogramas aquí mismo (canvas — mismo truco del Reels Studio),
+    //    el corillo LOS VE y escribe el caption → caes al paso 2 con texto + video.
+    function wizFramesDeVideo(file, cb){
+      var v=document.createElement('video'); v.preload='auto'; v.muted=true; v.playsInline=true;
+      var url=URL.createObjectURL(file); v.src=url;
+      var frames=[], puntos=[0.2,0.65], pi=0, dur=0, hecho=false;
+      function fin(){ if(hecho) return; hecho=true; URL.revokeObjectURL(url); cb(frames, dur); }
+      v.onerror=fin;
+      setTimeout(fin, 20000);   // red de seguridad: nunca dejar el loader colgado
+      v.onloadedmetadata=function(){
+        dur=v.duration||0;
+        if(!isFinite(dur)||dur<=0){ fin(); return; }
+        v.currentTime=Math.max(0.1, dur*puntos[pi]);
+      };
+      v.onseeked=function(){
+        try{
+          var vw=v.videoWidth||640, vh=v.videoHeight||640;
+          var w=Math.min(640, vw), h=Math.round(w*vh/vw);
+          var c=document.createElement('canvas'); c.width=w; c.height=h;
+          c.getContext('2d').drawImage(v,0,0,w,h);
+          var d=c.toDataURL('image/jpeg',.8);
+          if(d && d.length>1000) frames.push(d);
+        }catch(e){}
+        pi++;
+        if(pi<puntos.length){ v.currentTime=Math.max(0.1, dur*puntos[pi]); } else { fin(); }
+      };
+    }
+    var wvd=document.getElementById('wiz-video-directo');
+    if(wvd) wvd.addEventListener('change', function(){
+      var f=wvd.files[0]; wvd.value=''; if(!f) return;
+      if(f.size > 100*1024*1024){ toast('El video es muy grande (máx 100MB).'); return; }
+      loaderShow('El corillo está viendo tu video…', ['Mirando lo que grabaste…','Escribiendo el caption en tu voz…','Casi listo…']);
+      wizFramesDeVideo(f, function(frames, dur){
+        if(!frames.length){ loaderHide(); toast('No pude leer el video en este navegador — prueba con un MP4.'); return; }
+        var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','post_desde_video'); fd.append('video',f); fd.append('dur',dur||'');
+        fd.append('contexto', document.getElementById('wiz-tema').value.trim());
+        for(var i=0;i<frames.length;i++) fd.append('frames[]', frames[i]);
+        fetch(WIZ_EP,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+          loaderHide();
+          if(!d.ok){ toast(d.err==='paywall' ? 'Usaste tu muestra. Actívate para crear más.' : (d.err||'No se pudo. Intenta otra vez.')); return; }
+          wizId=d.id; wizImg='';
+          document.getElementById('wiz-cap').textContent=d.caption||'';
+          renderDebate(null,null);
+          document.getElementById('wiz-editbox').style.display='none';
+          document.getElementById('wiz-edit').style.display='inline-block';
+          document.getElementById('wiz-art').innerHTML='';
+          document.getElementById('wiz-arteidea').value='';
+          wizPaso(2);
+          wizPintaArte(d.video);   // pinta el <video> y muestra "Usar este arte →"
+        }).catch(function(){ loaderHide(); toast('Error de conexión (¿video muy pesado?).'); });
+      });
     });
     document.getElementById('wiz-next2').addEventListener('click', function(){
       var cap=document.getElementById('wiz-cap').textContent;
