@@ -18,8 +18,10 @@ $viendo_como_admin = ($es_admin && (int)$marca['usuario_id'] !== (int)($u_actual
 require_once __DIR__ . '/../includes/notif.php';
 $notif_nl = function_exists('notif_no_leidas') ? notif_no_leidas($pdo, $marca_id) : 0;
 // Navegación PRINCIPAL — solo el loop del producto (contenido para redes).
-// Gráficas, Órdenes, Clientela, Cuentas, Analítica y Evidencia salieron del
-// menú (siguen accesibles por URL / por el perfil; reversible).
+// Gráficas, Clientela, Cuentas, Analítica y Evidencia salieron del menú
+// (siguen accesibles por URL / por el perfil; reversible).
+// ÓRDENES VOLVIÓ (2026-08-08, decisión de Manuel): el link público + QR de
+// órdenes es un ASSET del negocio, no exceso — no se esconde.
 $nav = [
   ['key'=>'inicio',    'ic'=>'home',    'lb'=>'Inicio',     'hr'=>"$BASE/index.php?marca=$marca_id"],
   ['key'=>'contenido', 'ic'=>'list', 'lb'=>'Tus Posts',  'hr'=>"$BASE/propuestas.php?marca=$marca_id"],
@@ -81,6 +83,9 @@ $nav_perfil = [
       <?php endforeach; ?>
       <a href="<?= $BASE ?>/calendario.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='calendario'?'on':'' ?>">
         <?= ico('calendar') ?>Calendario
+      </a>
+      <a href="<?= $BASE ?>/ordenes.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='ordenes'?'on':'' ?>">
+        <?= ico('qr') ?>Órdenes
       </a>
       <a href="<?= $BASE ?>/finanzas.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='finanzas'?'on':'' ?>">
         <?= ico('dollar') ?>Finanzas
