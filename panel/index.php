@@ -137,8 +137,8 @@ try {
     $tq = $pdo->prepare(
         "SELECT id, estado, caption, plataforma, tipo, fecha_programada, grafica_path
          FROM crecer_contenido
-         WHERE marca_id=? AND estado IN ('fallido','borrador','aprobado','programado','publicado')
-         ORDER BY FIELD(estado,'fallido','borrador','aprobado','programado','publicado'),
+         WHERE marca_id=? AND estado IN ('fallido','publicando','borrador','aprobado','programado','publicado')
+         ORDER BY FIELD(estado,'fallido','publicando','borrador','aprobado','programado','publicado'),
                   COALESCE(fecha_programada, created_at) ASC, id DESC
          LIMIT 4");
     $tq->execute([$marca_id]);
@@ -188,8 +188,8 @@ try {
     $dq = $pdo->prepare(
         "SELECT id, estado, caption, plataforma, grafica_path
          FROM crecer_contenido
-         WHERE marca_id=? AND estado IN ('fallido','borrador','aprobado')
-         ORDER BY FIELD(estado,'fallido','borrador','aprobado'), id DESC
+         WHERE marca_id=? AND estado IN ('fallido','publicando','borrador','aprobado')
+         ORDER BY FIELD(estado,'fallido','publicando','borrador','aprobado'), id DESC
          LIMIT 8");
     $dq->execute([$marca_id]);
     $dec_pieces = $dq->fetchAll(PDO::FETCH_ASSOC);
@@ -208,7 +208,14 @@ foreach ($dec_pieces as $p) {
     if ($p['estado'] === 'fallido') {
         $decisiones[] = $base + ['tipo'=>'reintentar','kick'=>'No se pudo publicar','ico'=>'bolt',
             'titulo'=>'Reintentar este post',
-            'acciones'=>[['t'=>'Reintentar','cls'=>'pri','href'=>"{$BASE}/aprobar2.php?tab=aprobados&{$mid}"]]];
+            'acciones'=>[['t'=>'Reintentar','cls'=>'pri','href'=>"{$BASE}/aprobar2.php?tab=listos&{$mid}"]]];
+    } elseif ($p['estado'] === 'publicando') {
+        // Quedó a mitad de camino (ej. la conexión se cayó publicando un video).
+        // El lock se libera solo a los 10 min; reintentar antes es inofensivo
+        // (el publicador dice "ya tomado" y no duplica).
+        $decisiones[] = $base + ['tipo'=>'publicando','kick'=>'Saliendo a tus redes','ico'=>'clock',
+            'titulo'=>'Este post se está publicando…',
+            'acciones'=>[['t'=>'Ver / Reintentar','cls'=>'pri','href'=>"{$BASE}/aprobar2.php?tab=listos&{$mid}"]]];
     } elseif ($p['estado'] === 'borrador') {
         $decisiones[] = $base + ['tipo'=>'aprobar','kick'=>'Listo para tu OK','ico'=>'check-circle',
             'titulo'=>'¿Apruebas este post?',
@@ -221,7 +228,7 @@ foreach ($dec_pieces as $p) {
         if ($meta_ok) {
             $decisiones[] = $base + ['tipo'=>'publicar','kick'=>'Aprobado','ico'=>'image',
                 'titulo'=>'Publicar este post',
-                'acciones'=>[['t'=>'Publicar','cls'=>'pri','href'=>"{$BASE}/aprobar2.php?tab=aprobados&{$mid}"]]];
+                'acciones'=>[['t'=>'Publicar','cls'=>'pri','href'=>"{$BASE}/aprobar2.php?tab=listos&{$mid}"]]];
         } elseif (!$conectar_listo) {
             $conectar_listo = true;
             $decisiones[] = ['tipo'=>'conectar','kick'=>'Falta un paso','ico'=>'bolt','id'=>0,
@@ -259,6 +266,7 @@ $estado_lbl = [
   'borrador'   => 'espera tu OK',
   'aprobado'   => 'listo para publicar',
   'programado' => 'programado',
+  'publicando' => 'publicándose…',
   'fallido'    => 'requiere atencion',
   'publicado'  => 'publicado',
 ];
