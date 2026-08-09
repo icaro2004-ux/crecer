@@ -82,7 +82,7 @@ if (!isset($redes_conectadas)) {
       .dbt-nota{font-size:12.5px;color:var(--tinta);background:#fff;border:1px solid var(--line);border-radius:9px;padding:8px 10px;margin-top:6px;line-height:1.45}
     </style>
     <div class="wiz-pane" data-pane="2" style="display:none">
-      <h3>Ahora el arte</h3>
+      <h3 id="wiz-p2-t">Ahora el arte</h3>
       <?php /* Desktop: dos columnas (texto | arte). Móvil: apilan igual que siempre. */ ?>
       <div class="wiz-col wiz-col-txt">
         <div class="wiz-cap" id="wiz-cap"></div>
@@ -98,6 +98,9 @@ if (!isset($redes_conectadas)) {
         </div>
       </div>
       <div class="wiz-col wiz-col-arte">
+      <?php /* .wiz-arte-tools se ESCONDE cuando el media es un video (modo simple:
+              texto + video + seguir). Generar/estilos aquí pisarían el video. */ ?>
+      <div class="wiz-arte-tools">
         <label class="fl" style="margin-top:4px"><?= ico('palette') ?> Estilo del arte <span style="color:var(--muted);font-weight:500">(puedes combinar varios — el Diseñador los funde)</span></label>
         <div style="margin-bottom:10px"><?php $sel_id = 'wiz-estilo'; include __DIR__ . '/_estilo_arte.php'; ?></div>
         <label class="fl" style="margin-top:4px"><?= ico('lightbulb') ?> Idea para la imagen <span style="color:var(--muted);font-weight:500">(el Diseñador la propone — ajústala a tu gusto)</span></label>
@@ -108,13 +111,16 @@ if (!isset($redes_conectadas)) {
             style="flex:1;min-width:0;font-family:inherit;font-size:15px;border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;background:#fff">
           <button type="button" class="art-go" id="wiz-arte-chat-go" style="flex:none;width:auto;margin:0;padding:0 16px" aria-label="Aplicar cambio"><?= ico('send') ?></button>
         </div>
+      </div>
         <div class="wiz-art" id="wiz-art"></div>
+      <div class="wiz-arte-tools">
         <div class="wiz-artbtns">
           <button type="button" class="art-go" id="wiz-gen"><?= ico('palette') ?> Generar la imagen con esta idea</button>
           <label class="fbnew wiz-upl"><?= ico('camera') ?> Subir mi foto<input type="file" id="wiz-file" accept="image/png,image/jpeg,image/webp" style="display:none"></label>
           <label class="fbnew wiz-upl"><?= ico('camera') ?> Subir mi video<input type="file" id="wiz-video" accept="video/mp4,video/quicktime" style="display:none"></label>
         </div>
         <div style="font-size:11.5px;color:var(--muted);text-align:center;margin-top:-4px">No creamos video — lo subes tú (MP4/MOV, hasta 100MB). Sale como Reel/video.</div>
+      </div>
         <button type="button" class="art-go wiz-ok" id="wiz-next2" style="display:none">Usar este arte →</button>
       </div>
       <button type="button" class="art-skip wiz-full" id="wiz-back2">← Volver a la idea</button>
@@ -416,6 +422,7 @@ if (!isset($redes_conectadas)) {
       document.getElementById('wiz-edit').style.display='inline-block';
       document.getElementById('wiz-art').innerHTML=''; document.getElementById('wiz-next2').style.display='none';
       document.getElementById('wiz-arteidea').value='';
+      wizVideoUI(false);   // camino normal: las herramientas de arte visibles
       wizPaso(2);
       wizSugerirArte();   // el Diseñador propone la idea del arte (texto) para que la veas/ajustes
     }).catch(function(){ loaderHide(); toast('Error de conexión. Intenta otra vez.'); });
@@ -468,9 +475,18 @@ if (!isset($redes_conectadas)) {
     }).catch(function(){ if(b){ b.disabled=false; } ta.placeholder='Describe qué debe mostrar la imagen…'; });
   }
   function wizEsVideo(u){ return /\.(mp4|mov|m4v)(\?.*)?$/i.test(u||''); }
+  // MODO VIDEO del paso 2: si el media es un video, se esconden TODAS las
+  // herramientas de arte (generar/estilos/foto — pisarían el video) y queda
+  // lo esencial: el texto, el video y seguir. Keep it simple.
+  function wizVideoUI(on){
+    document.querySelectorAll('.wiz-arte-tools').forEach(function(el){ el.style.display=on?'none':''; });
+    var t=document.getElementById('wiz-p2-t'); if(t) t.textContent = on ? 'Tu video está listo' : 'Ahora el arte';
+    var n=document.getElementById('wiz-next2'); if(n) n.textContent = on ? 'Usar este video →' : 'Usar este arte →';
+  }
   function wizPintaArte(img){
     if(!img){ return; }   // async: aún no hay imagen → NO pintar el icono roto
     wizImg=img;
+    wizVideoUI(wizEsVideo(img));
     document.getElementById('wiz-art').innerHTML = wizEsVideo(img)
       ? '<video src="'+img+'?t='+Date.now()+'" controls muted playsinline style="width:100%;border-radius:14px;display:block"></video>'
       : '<img src="'+img+'?t='+Date.now()+'" alt="arte">';
