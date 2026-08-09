@@ -16,6 +16,7 @@
 
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/metricas.php';
+require __DIR__ . '/../includes/optimizador.php';
 
 $es_cli = (PHP_SAPI === 'cli');
 
@@ -46,7 +47,12 @@ try {
         $tot['marcas']++;
         $tot['guardadas'] += (int)($r['n'] ?? 0);
         $tot['errores']   += count($r['errores'] ?? []);
-        $detalle[] = ['marca'=>(int)$mid] + $r;
+        // EL OPTIMIZADOR: con los números frescos, re-aprende las lecciones de
+        // esta marca (determinista, $0) y las deja en su memoria para el plan.
+        $opt = ['lecciones'=>0];
+        try { $opt = optimizador_correr($pdo, (int)$mid); }
+        catch (Throwable $e) { error_log('optimizador marca ' . $mid . ': ' . $e->getMessage()); }
+        $detalle[] = ['marca'=>(int)$mid, 'lecciones'=>$opt['lecciones']] + $r;
     }
     $tot['ms'] = (int)round((microtime(true) - $inicio) * 1000);
 

@@ -193,6 +193,45 @@ if (($_GET['test'] ?? '') === 'publicador') {
     exit;
 }
 
+// ── EL OPTIMIZADOR: ¿qué aprendió el corillo de TUS resultados?  &test=optimizador
+//    Determinista y GRATIS (cero llamadas a modelos): analiza las métricas reales
+//    y muestra las lecciones con su evidencia. Solo opina con ≥5 posts medidos y
+//    patrones de ≥3 posts con ≥30% de diferencia. &marca=ID para una sola;
+//    &guarda=1 para escribirlas en la memoria del negocio (lo que hace el cron).
+if (($_GET['test'] ?? '') === 'optimizador') {
+    require_once __DIR__ . '/includes/optimizador.php';
+    echo "EL OPTIMIZADOR — lecciones desde tus resultados reales\n" . str_repeat('=', 52) . "\n\n";
+    $mids = isset($_GET['marca'])
+        ? [(int)$_GET['marca']]
+        : array_map('intval', $pdo->query("SELECT DISTINCT marca_id FROM crecer_metricas ORDER BY marca_id")->fetchAll(PDO::FETCH_COLUMN));
+    if (!$mids) { echo "No hay ninguna marca con métricas capturadas todavía.\n"; exit; }
+    foreach ($mids as $mid) {
+        $lec = optimizador_analizar($pdo, $mid);
+        echo "Marca {$mid}: " . (count($lec) ? count($lec) . " lección(es)" : "sin lecciones") . "\n";
+        foreach ($lec as $l) {
+            echo "  · [{$l['clave']}] {$l['detalle']}\n";
+        }
+        if (!$lec) {
+            echo "  (menos de 5 posts con métricas, o ningún patrón con ≥3 posts y ≥30% de\n"
+               . "   diferencia — honesto: sin evidencia no se opina)\n";
+        }
+        if (($_GET['guarda'] ?? '') === '1' && $lec) {
+            $g = optimizador_guardar($pdo, $mid, $lec);
+            echo "  → {$g} guardada(s) en la memoria del negocio (el plan del lunes las usa).\n";
+        }
+        $mom = optimizador_mejor_momento($pdo, $mid);
+        if ($mom['dow'] !== null || $mom['hora'] !== null) {
+            $DOW = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+            echo "  Mejor momento medido: "
+               . ($mom['dow'] !== null ? $DOW[$mom['dow']] : '(día: sin patrón)')
+               . ($mom['hora'] !== null ? " a las {$mom['hora']}:00" : '') . "\n";
+        }
+        echo "\n";
+    }
+    echo "(Sin &guarda=1 esto es solo lectura. El cron de métricas de las 6 AM lo corre y guarda solo.)\n";
+    exit;
+}
+
 echo "CRECER · limpiar caché + diagnóstico\n";
 echo str_repeat('=', 44) . "\n\n";
 

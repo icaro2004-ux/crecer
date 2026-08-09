@@ -1274,6 +1274,12 @@ function grounding_producto_instruccion(array $m): string {
 function planificar_mes(PDO $pdo, int $marca_id, int $anio, int $mes, int $n_piezas = 8, string $enfoque = ''): array {
     $m = leer_marca($pdo, $marca_id);
     $ctx = cerebro_negocio($pdo, (int)$m['id'], $m);   // el CEREBRO del negocio permea cada decisión
+    // EL OPTIMIZADOR: las lecciones medidas de los resultados REALES de esta
+    // marca entran al plan (días/horarios/tipos que rinden), y la hora de
+    // publicación sale de lo medido, no del "10:00 porque sí".
+    require_once __DIR__ . '/optimizador.php';
+    $lecciones_txt = optimizador_para_prompt($pdo, $marca_id);
+    $momento_opt   = optimizador_mejor_momento($pdo, $marca_id);
 
     $sistema = <<<SYS
 Eres el ESTRATEGA de contenido de Crecer, un departamento de marketing con IA
@@ -1297,6 +1303,7 @@ SYS;
     $enfoque = trim($enfoque);
     $prompt = "Perfil del negocio:\n{$ctx}\n\n"
         . ($enfoque !== '' ? "ENFOQUE DE LA SEMANA (lo fijó la Estratega — alinea las piezas a esto):\n\"{$enfoque}\"\n\n" : '')
+        . ($lecciones_txt !== '' ? $lecciones_txt . "\n" : '')
         . "Diseña la estrategia de {$n_piezas} piezas para el mes {$mes}/{$anio}, con pilares variados.\n"
         . "Devuelve un JSON con esta forma EXACTA:\n"
         . '{"piezas":[{"dia":1,"plataforma":"instagram","tipo":"post","pilar":"producto","tema":"...","idea":"..."}]}'
@@ -1344,7 +1351,9 @@ SYS;
     $creadas = [];
     foreach ($piezas as $p) {
         $dia = max(1, min(28, (int)($p['dia'] ?? 1)));
-        $fecha = sprintf('%04d-%02d-%02d 10:00:00', $anio, $mes, $dia);
+        // Hora: la MEDIDA de esta marca si el Optimizador la tiene; si no, 10 AM.
+        $hora_pub = ($momento_opt['hora'] ?? null) !== null ? (int)$momento_opt['hora'] : 10;
+        $fecha = sprintf('%04d-%02d-%02d %02d:00:00', $anio, $mes, $dia, $hora_pub);
         $plat = in_array($p['plataforma'] ?? '', ['instagram','facebook'], true) ? $p['plataforma'] : 'instagram';
         $tipo = in_array($p['tipo'] ?? '', ['post','story','reel'], true) ? $p['tipo'] : 'post';
         // Guardamos la IDEA en el caption provisional (el creador lo reemplaza luego).
