@@ -75,6 +75,15 @@ $nav_perfil = [
 <div class="layout">
   <aside class="side" id="side">
     <a class="sbrand" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="text-decoration:none;color:inherit"><img src="/crecer/assets/brand/crecer-icon.png" alt="Inicio"><b style="display:inline-flex;flex-direction:column;line-height:1;gap:0"><span style="color:var(--teal)">Crecer</span><span style="font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.02em;margin-top:1px">by Encuéntralo</span></b></a>
+    <?php
+      // CREAR con paridad desktop: el móvil tiene su botón central en el bottom
+      // nav; el sidebar tiene ESTE. Abre el wizard directo (?crear=1) donde toque
+      // según el flag (mismo criterio que propuestas.php).
+      $crear_url_shell = (defined('CRECER_CREAR_UNIFICADO') && CRECER_CREAR_UNIFICADO)
+          ? "$BASE/propuestas.php?marca=$marca_id&crear=1"
+          : "$BASE/aprobar2.php?marca=$marca_id&crear=1";
+    ?>
+    <a href="<?= $crear_url_shell ?>" class="side-crear" style="display:flex;align-items:center;justify-content:center;gap:8px;margin:10px 0 6px;padding:12px 14px;border-radius:14px;text-decoration:none;color:#fff;font-weight:800;font-size:14.5px;background:linear-gradient(135deg,var(--teal),var(--teal-700,#00827e));box-shadow:0 8px 18px -8px rgba(0,164,159,.55)"><?= ico('pen') ?> Crear</a>
     <nav>
       <?php foreach ($nav as $n): ?>
         <a href="<?= $n['hr'] ?>" class="<?= $n['key']===$active?'on':'' ?>">
