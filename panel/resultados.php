@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'refre
         @set_time_limit(90);
         @ignore_user_abort(true);
         try {
-            $r = metricas_refrescar_insights($pdo, $marca_id, 6, 0); // lote chico; el cron completa el resto
+            $r = metricas_refrescar_insights($pdo, $marca_id, 12, 0); // lote generoso; el cron completa el resto
             if (!empty($r['ok'])) {
                 $flash = ['ok', $r['n'] > 0
                     ? "Métricas al día · traje datos de {$r['n']} post" . ($r['n']==1?'':'s') . " de Meta."
@@ -355,6 +355,48 @@ $fnum = fn($n) => number_format((int)$n);
       <?php $ai('facebook'); ?>
     </section>
 
+    <?php
+      // ── IG vs FB frente a frente: números derivados SOLO de lo capturado. ──
+      $int_net = function(array $n): int { return (int)$n['me_gusta'] + (int)$n['comentarios'] + (int)$n['guardados'] + (int)$n['compartidos']; };
+      $ig_i = $int_net($net['instagram']); $fb_i = $int_net($net['facebook']);
+      $ig_eng = $net['instagram']['alcance'] > 0 ? round($ig_i / $net['instagram']['alcance'] * 100, 1) : null;
+      $fb_eng = $net['facebook']['alcance']  > 0 ? round($fb_i / $net['facebook']['alcance']  * 100, 1) : null;
+      $ig_avg = $net['instagram']['n'] > 0 ? (int)round($net['instagram']['alcance'] / $net['instagram']['n']) : null;
+      $fb_avg = $net['facebook']['n']  > 0 ? (int)round($net['facebook']['alcance']  / $net['facebook']['n'])  : null;
+    ?>
+    <?php if ($has_ig || $has_fb): ?>
+    <!-- El cara a cara de tus redes -->
+    <section class="rzc" data-k="carasacara"<?= $disp() ?>>
+      <div class="rzc-eyebrow"><?= ico('chart') ?> IG vs FB — el cara a cara</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+        <?php foreach ([['instagram','Instagram','#c837ab',$ig_i,$ig_eng,$ig_avg], ['facebook','Facebook','#0a7cff',$fb_i,$fb_eng,$fb_avg]] as [$k,$nm,$cc,$ii,$ee,$aa]): ?>
+        <div style="border:1px solid var(--line);border-radius:14px;padding:12px;background:#fff">
+          <div style="font-weight:800;font-size:13px;color:<?= $cc ?>;display:flex;align-items:center;gap:6px"><?= ico($k) ?> <?= $nm ?></div>
+          <?php if ((int)$net[$k]['vistas'] > 0): ?>
+          <div style="margin-top:8px;font-size:12px;color:var(--muted)">Vistas<b style="display:block;font-size:20px;color:var(--tinta)"><?= $fnum($net[$k]['vistas']) ?></b></div>
+          <?php endif; ?>
+          <div style="margin-top:8px;font-size:12px;color:var(--muted)">Alcance<b style="display:block;font-size:20px;color:var(--tinta)"><?= $fnum($net[$k]['alcance']) ?></b></div>
+          <div style="margin-top:8px;font-size:12px;color:var(--muted)">Interacciones<b style="display:block;font-size:20px;color:var(--tinta)"><?= $fnum($ii) ?></b></div>
+          <?php if ($ee !== null): ?><div style="margin-top:8px;font-size:12px;color:var(--muted)">Engagement<b style="display:block;font-size:20px;color:var(--tinta)"><?= $ee ?>%</b></div><?php endif; ?>
+          <?php if ($aa !== null): ?><div style="margin-top:8px;font-size:12px;color:var(--muted)">Alcance por post<b style="display:block;font-size:16px;color:var(--tinta)"><?= $fnum($aa) ?></b></div><?php endif; ?>
+          <div style="margin-top:8px;font-size:11.5px;color:var(--muted)"><?= (int)$net[$k]['n'] ?> post(s) con datos</div>
+        </div>
+        <?php endforeach; ?>
+      </div>
+      <?php if ($ig_avg !== null && $fb_avg !== null && $ig_eng !== null && $fb_eng !== null): ?>
+      <div class="rzc-sub" style="margin-top:12px">
+        <?php
+          $gana_alc = $ig_avg >= $fb_avg ? 'Instagram' : 'Facebook';
+          $gana_eng = $ig_eng >= $fb_eng ? 'Instagram' : 'Facebook';
+          echo $gana_alc === $gana_eng
+            ? "Por post, <b>{$gana_alc}</b> te está dando más alcance y más interacción."
+            : "Por post, <b>{$gana_alc}</b> te alcanza más gente y <b>{$gana_eng}</b> te da más interacción.";
+        ?>
+      </div>
+      <?php endif; ?>
+    </section>
+    <?php endif; ?>
+
     <?php if ($top): ?>
     <!-- Post estrella -->
     <section class="rzc" data-k="estrella"<?= $disp() ?>>
@@ -379,41 +421,131 @@ $fnum = fn($n) => number_format((int)$n);
     <?php endif; ?>
 
     <?php if ($pubs): ?>
-    <!-- POR POST: los números de cada post publicado, red por red. Lo que el
-         dueño ve en la app de IG (vistas) por fin cuadra con lo de aquí. -->
+    <!-- POST POR POST, EN CAPAS: la fila compacta es el vistazo; tocas el post y
+         se abre el expediente completo — cada red con TODOS sus números, el
+         engagement de ESE post, y el link directo a verlo publicado. Se puede
+         ordenar por recientes / más vistos / más interacción. Todo real: lo que
+         no se ha capturado no se pinta. -->
+    <style>
+      .pp-sort{display:flex;gap:6px;margin:12px 0 10px}
+      .pp-sort button{font-family:inherit;font-size:12px;font-weight:700;border:1.5px solid var(--line);background:#fff;color:var(--muted);border-radius:99px;padding:6px 12px;cursor:pointer}
+      .pp-sort button.on{border-color:var(--teal);color:var(--teal)}
+      .pp-row{border:1px solid var(--line);border-radius:14px;background:#fff;overflow:hidden;margin-bottom:10px}
+      .pp-head{display:flex;gap:12px;align-items:center;padding:10px 12px;cursor:pointer}
+      .pp-head:hover{background:var(--crema,#F7F5F1)}
+      .pp-row.open .pp-head{background:var(--crema,#F7F5F1)}
+      .pp-th{width:52px;height:52px;object-fit:cover;border-radius:10px;flex:none}
+      .pp-cap{font-size:13px;color:var(--tinta);line-height:1.35;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical}
+      .pp-meta{font-size:11.5px;color:var(--muted);margin-top:3px;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
+      .pp-meta b{color:var(--tinta)}
+      .pp-caret{flex:none;color:var(--muted);transition:transform .2s}
+      .pp-row.open .pp-caret{transform:rotate(90deg)}
+      .pp-det{border-top:1px solid var(--line);padding:12px;display:flex;flex-direction:column;gap:12px;background:#fff}
+      .pp-net .nt{font-weight:800;font-size:12.5px;display:flex;align-items:center;gap:6px;margin-bottom:7px}
+      .pp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+      .pp-kv{border:1px solid var(--line);border-radius:10px;padding:7px 9px}
+      .pp-kv .k{font-size:10.5px;color:var(--muted);letter-spacing:.02em;text-transform:uppercase}
+      .pp-kv .v{font-size:16px;font-weight:800;color:var(--tinta);margin-top:1px}
+      .pp-vernet{font-size:12px;font-weight:700;text-decoration:none;color:var(--teal)}
+    </style>
     <section class="rzc" data-k="porpost"<?= $disp() ?>>
       <div class="rzc-eyebrow"><?= ico('list') ?> Post por post</div>
-      <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
-      <?php foreach (array_slice($pubs, 0, 8) as $pp): $pid=(int)$pp['id']; $rows=$insights[$pid] ?? []; ?>
-        <div style="display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-radius:14px;padding:10px 12px;background:#fff">
-          <?php $g=(string)($pp['grafica_path'] ?? ''); if ($g !== '' && preg_match('#\.(mp4|mov|m4v)(\?.*)?$#i',$g)): ?>
-            <video src="<?= $h($g) ?>" muted playsinline style="width:52px;height:52px;object-fit:cover;border-radius:10px;flex:none"></video>
-          <?php elseif ($g !== ''): ?>
-            <img src="<?= $h($g) ?>" alt="" style="width:52px;height:52px;object-fit:cover;border-radius:10px;flex:none">
-          <?php else: ?>
-            <div style="width:52px;height:52px;border-radius:10px;flex:none;display:grid;place-items:center;background:var(--crema-2,#f0e7d8);color:var(--muted)"><?= ico('image') ?></div>
-          <?php endif; ?>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:13px;color:var(--tinta);line-height:1.35;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical"><?= $h(mb_strimwidth(trim((string)$pp['caption']) ?: '(sin texto)', 0, 70, '…')) ?></div>
-            <div style="font-size:11.5px;color:var(--muted);margin-top:2px"><?= $pp['publicado_at'] ? date('d/m', strtotime($pp['publicado_at'])) : '' ?><?php if (!empty($pp['permalink'])): ?> · <a href="<?= $h($pp['permalink']) ?>" target="_blank" rel="noopener" style="color:var(--teal)">ver ↗</a><?php endif; ?></div>
-            <?php if ($rows): foreach ($rows as $plat => $rw):
-              $esIg = in_array($plat, ['instagram','ig'], true); ?>
-              <div style="display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:6px;font-size:12px;color:var(--tinta)">
-                <span style="font-weight:800;color:<?= $esIg ? '#c837ab' : '#0a7cff' ?>"><?= $esIg ? 'IG' : 'FB' ?></span>
-                <?php if ((int)($rw['impresiones'] ?? 0) > 0): ?><span><b><?= $fnum((int)$rw['impresiones']) ?></b> vistas</span><?php endif; ?>
-                <?php if (($rw['alcance'] ?? null) !== null): ?><span><b><?= $fnum((int)$rw['alcance']) ?></b> alcance</span><?php endif; ?>
-                <span><b><?= $fnum((int)($rw['me_gusta'] ?? 0)) ?></b> me gusta</span>
-                <span><b><?= $fnum((int)($rw['comentarios'] ?? 0)) ?></b> coment.</span>
-                <?php if ((int)($rw['compartidos'] ?? 0) > 0): ?><span><b><?= $fnum((int)$rw['compartidos']) ?></b> comp.</span><?php endif; ?>
+      <div class="pp-sort" id="pp-sort">
+        <button type="button" data-s="fecha" class="on">Recientes</button>
+        <button type="button" data-s="vistas">Más vistos</button>
+        <button type="button" data-s="inter">Más interacción</button>
+      </div>
+      <div id="pp-list">
+      <?php foreach (array_slice($pubs, 0, 12) as $pp):
+        $pid  = (int)$pp['id'];
+        $rows = $insights[$pid] ?? [];
+        $rnet = $redes[$pid] ?? [];
+        $tv = 0; $ta = 0; $ti = 0;
+        foreach ($rows as $rw) {
+            $tv += (int)($rw['impresiones'] ?? 0);
+            $ta += (int)($rw['alcance'] ?? 0);
+            $ti += (int)($rw['interacciones'] ?? ((int)($rw['me_gusta'] ?? 0) + (int)($rw['comentarios'] ?? 0) + (int)($rw['guardados'] ?? 0) + (int)($rw['compartidos'] ?? 0)));
+        }
+        $g = (string)($pp['grafica_path'] ?? '');
+      ?>
+        <div class="pp-row" data-fecha="<?= $pp['publicado_at'] ? strtotime($pp['publicado_at']) : 0 ?>" data-vistas="<?= max($tv, $ta) ?>" data-inter="<?= $ti ?>">
+          <div class="pp-head">
+            <?php if ($g !== '' && preg_match('#\.(mp4|mov|m4v)(\?.*)?$#i', $g)): ?>
+              <video src="<?= $h($g) ?>" muted playsinline class="pp-th"></video>
+            <?php elseif ($g !== ''): ?>
+              <img src="<?= $h($g) ?>" alt="" class="pp-th">
+            <?php else: ?>
+              <div class="pp-th" style="display:grid;place-items:center;background:var(--crema-2,#f0e7d8);color:var(--muted)"><?= ico('image') ?></div>
+            <?php endif; ?>
+            <div style="flex:1;min-width:0">
+              <div class="pp-cap"><?= $h(mb_strimwidth(trim((string)$pp['caption']) ?: '(sin texto)', 0, 70, '…')) ?></div>
+              <div class="pp-meta">
+                <span><?= $pp['publicado_at'] ? date('d/m', strtotime($pp['publicado_at'])) : '' ?></span>
+                <?php foreach ($rows as $plat => $rw): $esIg = in_array($plat, ['instagram','ig'], true); ?>
+                  <span style="font-weight:800;color:<?= $esIg ? '#c837ab' : '#0a7cff' ?>"><?= $esIg ? 'IG' : 'FB' ?></span>
+                <?php endforeach; ?>
+                <?php if ($tv > 0): ?><span><b><?= $fnum($tv) ?></b> vistas</span><?php elseif ($ta > 0): ?><span><b><?= $fnum($ta) ?></b> alcance</span><?php endif; ?>
+                <?php if ($ti > 0): ?><span><b><?= $fnum($ti) ?></b> interacciones</span><?php endif; ?>
+                <?php if (!$rows): ?><span>sin números todavía</span><?php endif; ?>
               </div>
+            </div>
+            <span class="pp-caret">›</span>
+          </div>
+          <div class="pp-det" style="display:none">
+            <?php if ($rows): foreach ($rows as $plat => $rw):
+              $esIg = in_array($plat, ['instagram','ig'], true);
+              $al   = ($rw['alcance'] ?? null) !== null ? (int)$rw['alcance'] : null;
+              $it   = (int)($rw['interacciones'] ?? ((int)($rw['me_gusta'] ?? 0) + (int)($rw['comentarios'] ?? 0) + (int)($rw['guardados'] ?? 0) + (int)($rw['compartidos'] ?? 0)));
+              $eng  = ($al !== null && $al > 0) ? round($it / $al * 100, 1) : null;
+              $lnk  = $rnet[$plat]['permalink'] ?? null;
+            ?>
+            <div class="pp-net">
+              <div class="nt" style="color:<?= $esIg ? '#c837ab' : '#0a7cff' ?>">
+                <?= ico($esIg ? 'instagram' : 'facebook') ?> <?= $esIg ? 'Instagram' : 'Facebook' ?>
+                <?php if ($lnk): ?><a class="pp-vernet" href="<?= $h($lnk) ?>" target="_blank" rel="noopener" style="margin-left:auto">Ver publicado ↗</a><?php endif; ?>
+              </div>
+              <div class="pp-grid">
+                <?php if ((int)($rw['impresiones'] ?? 0) > 0): ?><div class="pp-kv"><div class="k">Vistas</div><div class="v"><?= $fnum((int)$rw['impresiones']) ?></div></div><?php endif; ?>
+                <?php if ($al !== null): ?><div class="pp-kv"><div class="k">Alcance</div><div class="v"><?= $fnum($al) ?></div></div><?php endif; ?>
+                <div class="pp-kv"><div class="k"><?= $esIg ? 'Me gusta' : 'Reacciones' ?></div><div class="v"><?= $fnum((int)($rw['me_gusta'] ?? 0)) ?></div></div>
+                <div class="pp-kv"><div class="k">Comentarios</div><div class="v"><?= $fnum((int)($rw['comentarios'] ?? 0)) ?></div></div>
+                <?php if ($esIg): ?><div class="pp-kv"><div class="k">Guardados</div><div class="v"><?= $fnum((int)($rw['guardados'] ?? 0)) ?></div></div><?php endif; ?>
+                <div class="pp-kv"><div class="k">Compartidos</div><div class="v"><?= $fnum((int)($rw['compartidos'] ?? 0)) ?></div></div>
+                <?php if ($eng !== null): ?><div class="pp-kv"><div class="k">Engagement</div><div class="v"><?= $eng ?>%</div></div><?php endif; ?>
+              </div>
+              <?php if (!empty($rw['actualizado_at'])): ?><div style="font-size:11px;color:var(--muted);margin-top:6px">números capturados el <?= date('d/m H:i', strtotime($rw['actualizado_at'])) ?></div><?php endif; ?>
+            </div>
             <?php endforeach; else: ?>
-              <div style="font-size:12px;color:var(--muted);margin-top:6px">Sin números todavía — dale a <b>Actualizar</b> arriba.</div>
+              <div style="font-size:12.5px;color:var(--muted)">Sin números todavía — dale a <b>Actualizar</b> arriba y vuelve en un momento.</div>
             <?php endif; ?>
           </div>
         </div>
       <?php endforeach; ?>
       </div>
+      <?php if (count($pubs) > 12): ?><div class="rzc-sub" style="margin-top:4px">Mostrando los 12 más recientes de <?= count($pubs) ?> publicados.</div><?php endif; ?>
     </section>
+    <script>
+    (function(){
+      var wrap=document.getElementById('pp-list'); if(!wrap) return;
+      function refit(){ try{ window.dispatchEvent(new Event('resize')); }catch(e){} }
+      wrap.addEventListener('click', function(e){
+        if(e.target.closest('a')) return;                      // los links navegan, no abren
+        var head=e.target.closest('.pp-head'); if(!head) return;
+        var row=head.parentNode, det=row.querySelector('.pp-det'), on=det.style.display!=='none';
+        det.style.display=on?'none':''; row.classList.toggle('open',!on); refit();
+      });
+      var bar=document.getElementById('pp-sort');
+      if(bar) bar.addEventListener('click', function(e){
+        var b=e.target.closest('button[data-s]'); if(!b) return;
+        bar.querySelectorAll('button').forEach(function(x){ x.classList.remove('on'); }); b.classList.add('on');
+        var k=b.getAttribute('data-s');
+        var rows=[].slice.call(wrap.querySelectorAll('.pp-row'));
+        rows.sort(function(a,c){ return (parseFloat(c.getAttribute('data-'+k))||0)-(parseFloat(a.getAttribute('data-'+k))||0); });
+        rows.forEach(function(r){ wrap.appendChild(r); });
+        refit();
+      });
+    })();
+    </script>
     <?php endif; ?>
 
   <?php if (!$meta_ok): ?>
