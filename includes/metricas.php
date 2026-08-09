@@ -166,7 +166,7 @@ function metricas_insights_de_posts(PDO $pdo, int $marca_id, array $ids): array 
     $out = [];
     try {
         $q = $pdo->prepare(
-            "SELECT contenido_id, plataforma, alcance, me_gusta, comentarios,
+            "SELECT contenido_id, plataforma, alcance, impresiones, me_gusta, comentarios,
                     guardados, compartidos, interacciones, actualizado_at
              FROM crecer_metricas
              WHERE marca_id=? AND contenido_id IN ($in)");
@@ -183,6 +183,7 @@ function metricas_totales_insights(PDO $pdo, int $marca_id): array {
     try {
         $q = $pdo->prepare(
             "SELECT COALESCE(SUM(m.alcance),0)       AS alcance,
+                    COALESCE(SUM(m.impresiones),0)   AS vistas,
                     COALESCE(SUM(m.interacciones),0) AS interacciones,
                     COUNT(*)                         AS n
              FROM crecer_metricas m
@@ -193,11 +194,12 @@ function metricas_totales_insights(PDO $pdo, int $marca_id): array {
         $r = $q->fetch(PDO::FETCH_ASSOC) ?: [];
         return [
             'alcance'       => (int)($r['alcance']       ?? 0),
+            'vistas'        => (int)($r['vistas']        ?? 0),
             'interacciones' => (int)($r['interacciones'] ?? 0),
             'n'             => (int)($r['n']             ?? 0),
         ];
     } catch (Throwable $e) {
-        return ['alcance'=>0, 'interacciones'=>0, 'n'=>0];
+        return ['alcance'=>0, 'vistas'=>0, 'interacciones'=>0, 'n'=>0];
     }
 }
 
@@ -206,15 +208,16 @@ function metricas_guardar_insight(PDO $pdo, int $contenido_id, int $marca_id, st
     $pdo->prepare(
         "INSERT INTO crecer_metricas
             (contenido_id, marca_id, plataforma, external_id,
-             alcance, me_gusta, comentarios, guardados, compartidos, interacciones, crudo)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?)
+             alcance, impresiones, me_gusta, comentarios, guardados, compartidos, interacciones, crudo)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
          ON DUPLICATE KEY UPDATE
-            external_id=VALUES(external_id), alcance=VALUES(alcance), me_gusta=VALUES(me_gusta),
+            external_id=VALUES(external_id), alcance=VALUES(alcance), impresiones=VALUES(impresiones),
+            me_gusta=VALUES(me_gusta),
             comentarios=VALUES(comentarios), guardados=VALUES(guardados), compartidos=VALUES(compartidos),
             interacciones=VALUES(interacciones), crudo=VALUES(crudo), actualizado_at=NOW()"
     )->execute([
         $contenido_id, $marca_id, $plataforma, $external_id,
-        $ins['alcance'] ?? null, $ins['me_gusta'] ?? null, $ins['comentarios'] ?? null,
+        $ins['alcance'] ?? null, $ins['impresiones'] ?? null, $ins['me_gusta'] ?? null, $ins['comentarios'] ?? null,
         $ins['guardados'] ?? null, $ins['compartidos'] ?? null, $ins['interacciones'] ?? null,
         $ins['crudo'] ?? null,
     ]);

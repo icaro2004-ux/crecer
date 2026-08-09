@@ -105,6 +105,94 @@ HTMLVOZ;
     exit;
 }
 
+// ── EL RELOJ DEL PUBLICADOR: ¿el calendario de verdad dispara?  &test=publicador
+//    Contesta la duda completa: qué venció (saldría en la próxima corrida), qué
+//    viene, qué está en borrador CON fecha (espera tu OK — NO sale solo), si el
+//    cron puede correr (CRON_TOKEN), y la PUNTUALIDAD histórica (fecha sugerida
+//    vs. hora real de publicación). Con &corre=1&gasta=1 ejecuta el publicador
+//    AHORA MISMO (publica de verdad lo vencido).
+if (($_GET['test'] ?? '') === 'publicador') {
+    require_once __DIR__ . '/includes/publicador.php';
+    echo "EL RELOJ DEL PUBLICADOR\n" . str_repeat('=', 40) . "\n\n";
+    $tok_ok = defined('CRON_TOKEN') && CRON_TOKEN !== '';
+    echo "CRON_TOKEN definido: " . ($tok_ok ? "SÍ\n" : "NO — el cron por URL da 403: NADA se publica solo hasta definirlo en config.local.php y agendar el cron en hPanel.\n");
+    echo "  (El cron de hPanel debe llamar: scripts/cron_publicar.php?key=<CRON_TOKEN> cada ~10 min.)\n\n";
+
+    $fmt = function(array $r): string {
+        $con = !empty($r['con']) ? '' : '  ⚠ SIN redes conectadas — el cron la IGNORA';
+        return "  #{$r['id']} · marca {$r['marca_id']} · {$r['estado']} · {$r['plataforma']} · fecha {$r['fecha_programada']}{$con}\n";
+    };
+    $venc = $pdo->query(
+        "SELECT c.id, c.marca_id, c.estado, c.plataforma, c.fecha_programada,
+                (x.id IS NOT NULL) AS con
+           FROM crecer_contenido c
+           LEFT JOIN crecer_conexiones x ON x.marca_id=c.marca_id AND x.estado='activa'
+          WHERE c.estado IN ('aprobado','programado') AND c.fecha_programada IS NOT NULL
+            AND c.fecha_programada <= NOW()
+          ORDER BY c.fecha_programada LIMIT 20")->fetchAll(PDO::FETCH_ASSOC);
+    echo "VENCIDOS (la próxima corrida del cron los publica):\n";
+    echo $venc ? implode('', array_map($fmt, $venc)) : "  (nada vencido)\n";
+
+    $prox = $pdo->query(
+        "SELECT c.id, c.marca_id, c.estado, c.plataforma, c.fecha_programada,
+                (x.id IS NOT NULL) AS con
+           FROM crecer_contenido c
+           LEFT JOIN crecer_conexiones x ON x.marca_id=c.marca_id AND x.estado='activa'
+          WHERE c.estado IN ('aprobado','programado') AND c.fecha_programada > NOW()
+            AND c.fecha_programada <= (NOW() + INTERVAL 7 DAY)
+          ORDER BY c.fecha_programada LIMIT 20")->fetchAll(PDO::FETCH_ASSOC);
+    echo "\nPRÓXIMOS 7 DÍAS (aprobados — saldrán solos a su hora):\n";
+    echo $prox ? implode('', array_map($fmt, $prox)) : "  (nada agendado aprobado)\n";
+
+    $borr = $pdo->query(
+        "SELECT c.id, c.marca_id, c.estado, c.plataforma, c.fecha_programada, 1 AS con
+           FROM crecer_contenido c
+          WHERE c.estado='borrador' AND c.fecha_programada IS NOT NULL
+            AND c.fecha_programada <= (NOW() + INTERVAL 14 DAY)
+          ORDER BY c.fecha_programada LIMIT 25")->fetchAll(PDO::FETCH_ASSOC);
+    echo "\nBORRADORES CON FECHA (⚠ ESPERAN TU OK — el calendario los muestra pero NO salen solos):\n";
+    echo $borr ? implode('', array_map($fmt, $borr)) : "  (ninguno)\n";
+
+    $stuck = $pdo->query(
+        "SELECT id, marca_id, estado, plataforma, fecha_programada, 1 AS con
+           FROM crecer_contenido
+          WHERE estado='publicando'
+          ORDER BY id DESC LIMIT 10")->fetchAll(PDO::FETCH_ASSOC);
+    if ($stuck) { echo "\nATASCADOS EN 'publicando' (el cron los rescata si el lock pasa de 10 min):\n" . implode('', array_map($fmt, $stuck)); }
+
+    $punt = $pdo->query(
+        "SELECT id, marca_id, fecha_programada, publicado_at,
+                TIMESTAMPDIFF(MINUTE, fecha_programada, publicado_at) AS delta_min
+           FROM crecer_contenido
+          WHERE estado='publicado' AND publicado_at IS NOT NULL AND fecha_programada IS NOT NULL
+          ORDER BY publicado_at DESC LIMIT 10")->fetchAll(PDO::FETCH_ASSOC);
+    echo "\nPUNTUALIDAD (últimos 10 publicados: fecha sugerida vs. hora real):\n";
+    if ($punt) {
+        foreach ($punt as $r) {
+            $d = (int)$r['delta_min'];
+            $lbl = $d <= 15 ? 'a tiempo' : ($d < 60 ? "+{$d} min" : '+' . round($d/60, 1) . ' h');
+            if ($d < -5) $lbl = 'ANTES de la fecha (publicado a mano)';
+            echo "  #{$r['id']} · sugerido {$r['fecha_programada']} · salió {$r['publicado_at']} · {$lbl}\n";
+        }
+        echo "  (Deltas grandes y consistentes = el cron NO está corriendo a su ritmo.)\n";
+    } else { echo "  (ningún publicado tenía fecha sugerida)\n"; }
+
+    if (($_GET['corre'] ?? '') === '1') {
+        if (!$__gasta) { echo "\nPara CORRER el publicador ahora añade &gasta=1 (publica de verdad lo vencido).\n"; }
+        else {
+            echo "\nCORRIENDO el publicador AHORA (máx 10 piezas)…\n";
+            $res = correr_publicador($pdo, 10);
+            echo "  revisadas: {$res['revisadas']} · publicadas: {$res['publicadas']} · fallidas: {$res['fallidas']}\n";
+            foreach (($res['detalle'] ?? []) as $d) {
+                echo "  #{$d['contenido_id']} → {$d['estado']}" . (!empty($d['motivo']) ? " · {$d['motivo']}" : '') . "\n";
+            }
+        }
+    } else {
+        echo "\n(Para ejecutar la corrida ya mismo: &corre=1&gasta=1)\n";
+    }
+    exit;
+}
+
 echo "CRECER · limpiar caché + diagnóstico\n";
 echo str_repeat('=', 44) . "\n\n";
 

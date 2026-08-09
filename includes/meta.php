@@ -400,33 +400,44 @@ function _meta_interacciones(array $o): ?int {
  * @return array claves alcance,me_gusta,comentarios,guardados,compartidos,interacciones,crudo
  */
 function meta_insights_ig(string $media_id, string $token): array {
-    $o = ['alcance'=>null,'me_gusta'=>null,'comentarios'=>null,'guardados'=>null,'compartidos'=>null,'crudo'=>null];
+    $o = ['alcance'=>null,'impresiones'=>null,'me_gusta'=>null,'comentarios'=>null,'guardados'=>null,'compartidos'=>null,'crudo'=>null];
     // 1) Conteos directos del nodo (siempre disponibles).
     try {
         $n = meta_api('GET', $media_id, ['fields'=>'like_count,comments_count','access_token'=>$token]);
         if (isset($n['like_count']))     $o['me_gusta']    = (int)$n['like_count'];
         if (isset($n['comments_count'])) $o['comentarios'] = (int)$n['comments_count'];
     } catch (MetaError $e) { /* nodo sin permiso: seguimos con insights */ }
-    // 2) Insights: reach + saved + shares (tolerante a métricas ausentes).
+    // 2) Insights: VIEWS (la métrica titular de IG desde 2025 — la que el dueño ve
+    //    en la app) + reach + saved + shares. Tolerante a métricas ausentes; si
+    //    'views' no existe en esta cuenta/versión, cae a la petición clásica.
+    //    Las views se guardan en la columna 'impresiones' (su sucesora).
     $crudo = null;
-    try {
-        $r = meta_api('GET', "$media_id/insights", ['metric'=>'reach,saved,shares','access_token'=>$token]);
+    $leer = function(array $r) use (&$o) {
         foreach ($r['data'] ?? [] as $m) {
             $val = $m['values'][0]['value'] ?? null;
             if ($val === null) continue;
+            if ($m['name']==='views')  $o['impresiones'] = (int)$val;
             if ($m['name']==='reach')  $o['alcance']     = (int)$val;
             if ($m['name']==='saved')  $o['guardados']   = (int)$val;
             if ($m['name']==='shares') $o['compartidos'] = (int)$val;
         }
-        $crudo = $r;
+    };
+    try {
+        $r = meta_api('GET', "$media_id/insights", ['metric'=>'views,reach,saved,shares','access_token'=>$token]);
+        $leer($r); $crudo = $r;
     } catch (MetaError $e) {
-        // Fallback: pedir solo reach (la métrica más universal).
         try {
-            $r = meta_api('GET', "$media_id/insights", ['metric'=>'reach','access_token'=>$token]);
-            $val = $r['data'][0]['values'][0]['value'] ?? null;
-            if ($val !== null) $o['alcance'] = (int)$val;
-            $crudo = $r;
-        } catch (MetaError $e2) { /* sin insights: quedan null */ }
+            $r = meta_api('GET', "$media_id/insights", ['metric'=>'reach,saved,shares','access_token'=>$token]);
+            $leer($r); $crudo = $r;
+        } catch (MetaError $e1) {
+            // Fallback final: solo reach (la métrica más universal).
+            try {
+                $r = meta_api('GET', "$media_id/insights", ['metric'=>'reach','access_token'=>$token]);
+                $val = $r['data'][0]['values'][0]['value'] ?? null;
+                if ($val !== null) $o['alcance'] = (int)$val;
+                $crudo = $r;
+            } catch (MetaError $e2) { /* sin insights: quedan null */ }
+        }
     }
     $o['crudo']         = $crudo ? json_encode($crudo, JSON_UNESCAPED_UNICODE) : null;
     $o['interacciones'] = _meta_interacciones($o);

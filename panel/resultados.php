@@ -98,8 +98,8 @@ $total_pub_8sem = array_sum(array_column($semanas, 'n'));
 // ── Agregados para el análisis (de lo YA capturado en crecer_metricas) ──
 $mix = ['me_gusta'=>0,'comentarios'=>0,'guardados'=>0,'compartidos'=>0];
 $net = [
-  'instagram'=>['alcance'=>0,'me_gusta'=>0,'comentarios'=>0,'guardados'=>0,'compartidos'=>0,'n'=>0],
-  'facebook' =>['alcance'=>0,'me_gusta'=>0,'comentarios'=>0,'guardados'=>0,'compartidos'=>0,'n'=>0],
+  'instagram'=>['alcance'=>0,'vistas'=>0,'me_gusta'=>0,'comentarios'=>0,'guardados'=>0,'compartidos'=>0,'n'=>0],
+  'facebook' =>['alcance'=>0,'vistas'=>0,'me_gusta'=>0,'comentarios'=>0,'guardados'=>0,'compartidos'=>0,'n'=>0],
 ];
 $cap_by = []; $graf_by = [];
 foreach ($pubs as $pp) { $cap_by[(int)$pp['id']] = (string)($pp['caption'] ?? ''); $graf_by[(int)$pp['id']] = (string)($pp['grafica_path'] ?? ''); }
@@ -111,6 +111,7 @@ foreach ($insights as $pid => $rows) {
         foreach (['me_gusta','comentarios','guardados','compartidos'] as $k) $mix[$k] += (int)($row[$k] ?? 0);
         if ($pl) {
             foreach (['alcance','me_gusta','comentarios','guardados','compartidos'] as $k) $net[$pl][$k] += (int)($row[$k] ?? 0);
+            $net[$pl]['vistas'] += (int)($row['impresiones'] ?? 0);   // views de IG (columna impresiones)
             if (($row['alcance'] ?? null) !== null) $net[$pl]['n']++;
         }
         $palc += (int)($row['alcance'] ?? 0);
@@ -274,6 +275,9 @@ $fnum = fn($n) => number_format((int)$n);
   <section class="rzc" data-k="resumen"<?= $disp() ?>>
     <div class="rzc-eyebrow"><?= ico('sparkles') ?> Resumen del mes</div>
     <div class="rzc-chips">
+      <?php if ((int)($tot_ins['vistas'] ?? 0) > 0): ?>
+      <div class="rzc-chip"><div class="n"><?= $fnum($tot_ins['vistas']) ?></div><div class="l">vistas</div></div>
+      <?php endif; ?>
       <div class="rzc-chip"><div class="n"><?= $fnum($tot_ins['alcance']) ?></div><div class="l">personas te vieron</div></div>
       <div class="rzc-chip"><div class="n"><?= $fnum($tot_ins['interacciones']) ?></div><div class="l">interacciones</div></div>
       <div class="rzc-chip"><div class="n"><?= (int)$prod['publicados_mes'] ?></div><div class="l">posts publicados</div></div>
@@ -326,6 +330,9 @@ $fnum = fn($n) => number_format((int)$n);
       <div class="rzc-num" style="font-size:clamp(34px,10vw,46px)"><?= $fnum($net['instagram']['alcance']) ?></div>
       <div class="rzc-sub">de alcance en Instagram</div>
       <div class="rzc-mets">
+        <?php if ((int)$net['instagram']['vistas'] > 0): ?>
+        <div class="rzc-met"><span class="k">Vistas</span><span class="v"><?= $fnum($net['instagram']['vistas']) ?></span></div>
+        <?php endif; ?>
         <div class="rzc-met"><span class="k">Me gusta</span><span class="v"><?= $fnum($net['instagram']['me_gusta']) ?></span></div>
         <div class="rzc-met"><span class="k">Comentarios</span><span class="v"><?= $fnum($net['instagram']['comentarios']) ?></span></div>
         <div class="rzc-met"><span class="k">Guardados</span><span class="v"><?= $fnum($net['instagram']['guardados']) ?></span></div>
@@ -368,6 +375,44 @@ $fnum = fn($n) => number_format((int)$n);
         </div>
       </div>
       <?php $ai('estrella'); ?>
+    </section>
+    <?php endif; ?>
+
+    <?php if ($pubs): ?>
+    <!-- POR POST: los números de cada post publicado, red por red. Lo que el
+         dueño ve en la app de IG (vistas) por fin cuadra con lo de aquí. -->
+    <section class="rzc" data-k="porpost"<?= $disp() ?>>
+      <div class="rzc-eyebrow"><?= ico('list') ?> Post por post</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
+      <?php foreach (array_slice($pubs, 0, 8) as $pp): $pid=(int)$pp['id']; $rows=$insights[$pid] ?? []; ?>
+        <div style="display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-radius:14px;padding:10px 12px;background:#fff">
+          <?php $g=(string)($pp['grafica_path'] ?? ''); if ($g !== '' && preg_match('#\.(mp4|mov|m4v)(\?.*)?$#i',$g)): ?>
+            <video src="<?= $h($g) ?>" muted playsinline style="width:52px;height:52px;object-fit:cover;border-radius:10px;flex:none"></video>
+          <?php elseif ($g !== ''): ?>
+            <img src="<?= $h($g) ?>" alt="" style="width:52px;height:52px;object-fit:cover;border-radius:10px;flex:none">
+          <?php else: ?>
+            <div style="width:52px;height:52px;border-radius:10px;flex:none;display:grid;place-items:center;background:var(--crema-2,#f0e7d8);color:var(--muted)"><?= ico('image') ?></div>
+          <?php endif; ?>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;color:var(--tinta);line-height:1.35;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical"><?= $h(mb_strimwidth(trim((string)$pp['caption']) ?: '(sin texto)', 0, 70, '…')) ?></div>
+            <div style="font-size:11.5px;color:var(--muted);margin-top:2px"><?= $pp['publicado_at'] ? date('d/m', strtotime($pp['publicado_at'])) : '' ?><?php if (!empty($pp['permalink'])): ?> · <a href="<?= $h($pp['permalink']) ?>" target="_blank" rel="noopener" style="color:var(--teal)">ver ↗</a><?php endif; ?></div>
+            <?php if ($rows): foreach ($rows as $plat => $rw):
+              $esIg = in_array($plat, ['instagram','ig'], true); ?>
+              <div style="display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:6px;font-size:12px;color:var(--tinta)">
+                <span style="font-weight:800;color:<?= $esIg ? '#c837ab' : '#0a7cff' ?>"><?= $esIg ? 'IG' : 'FB' ?></span>
+                <?php if ((int)($rw['impresiones'] ?? 0) > 0): ?><span><b><?= $fnum((int)$rw['impresiones']) ?></b> vistas</span><?php endif; ?>
+                <?php if (($rw['alcance'] ?? null) !== null): ?><span><b><?= $fnum((int)$rw['alcance']) ?></b> alcance</span><?php endif; ?>
+                <span><b><?= $fnum((int)($rw['me_gusta'] ?? 0)) ?></b> me gusta</span>
+                <span><b><?= $fnum((int)($rw['comentarios'] ?? 0)) ?></b> coment.</span>
+                <?php if ((int)($rw['compartidos'] ?? 0) > 0): ?><span><b><?= $fnum((int)$rw['compartidos']) ?></b> comp.</span><?php endif; ?>
+              </div>
+            <?php endforeach; else: ?>
+              <div style="font-size:12px;color:var(--muted);margin-top:6px">Sin números todavía — dale a <b>Actualizar</b> arriba.</div>
+            <?php endif; ?>
+          </div>
+        </div>
+      <?php endforeach; ?>
+      </div>
     </section>
     <?php endif; ?>
 
