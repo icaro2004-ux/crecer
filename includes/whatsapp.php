@@ -60,11 +60,35 @@ function wa_enviar_texto(string $telefono, string $texto): array {
 }
 
 /**
+ * La CONVERSACIÓN previa con este teléfono (para que el agente tenga memoria
+ * y no se repita como perico — el defecto de la primera prueba en vivo).
+ */
+function wa_historial(PDO $pdo, int $marca_id, string $telefono, int $limit = 8, int $excluir_id = 0): string {
+    $tel = preg_replace('/\D+/', '', $telefono);
+    if ($tel === '') return '';
+    try {
+        $q = $pdo->prepare(
+            "SELECT mensaje_entrante, respuesta_ia FROM crecer_mensajes
+              WHERE marca_id=? AND plataforma='whatsapp' AND remitente LIKE ? AND id<>?
+              ORDER BY id DESC LIMIT " . max(1, (int)$limit));
+        $q->execute([$marca_id, '%' . $tel, $excluir_id]);
+        $filas = array_reverse($q->fetchAll(PDO::FETCH_ASSOC));
+    } catch (Throwable $e) { return ''; }
+    if (!$filas) return '';
+    $out = [];
+    foreach ($filas as $f) {
+        $out[] = 'CLIENTE: ' . mb_substr((string)$f['mensaje_entrante'], 0, 200);
+        if (!empty($f['respuesta_ia'])) $out[] = 'TÚ: ' . mb_substr((string)$f['respuesta_ia'], 0, 200);
+    }
+    return implode("\n", $out);
+}
+
+/**
  * La decisión para un MENSAJE DIRECTO de WhatsApp — misma compuerta que el
  * Conserje de comentarios, con el arma extra del canal: puede mandar el LINK
  * de órdenes del negocio cuando el cliente quiere ordenar.
  */
-function wa_decidir(PDO $pdo, array $marca, string $mensaje, string $telefono): array {
+function wa_decidir(PDO $pdo, array $marca, string $mensaje, string $telefono, int $excluir_id = 0): array {
     $negocio = trim((string)($marca['nombre_negocio'] ?? 'el negocio'));
     $voz     = trim((string)($marca['voz'] ?? ''));
     $desc    = trim((string)($marca['descripcion'] ?? ''));
@@ -74,21 +98,29 @@ function wa_decidir(PDO $pdo, array $marca, string $mensaje, string $telefono): 
         ? (defined('BASE_URL') ? rtrim(BASE_URL, '/') : 'https://encuentraloahora.com/crecer') . '/ordenar.php?n=' . rawurlencode($slug)
         : '';
 
+    $link_cta = defined('WHATSAPP_LINK_CTA') ? trim((string)WHATSAPP_LINK_CTA) : '';
+    $historial = wa_historial($pdo, (int)$marca['id'], $telefono, 8, $excluir_id);
+
     $sistema = "Eres quien atiende el WhatsApp de \"{$negocio}\" — contestas EN SU VOZ"
         . ($voz !== '' ? " (así habla: {$voz})" : '') . ".\n"
         . "REGLAS DURAS:\n"
+        . "- CONTESTA LA PREGUNTA ESPECÍFICA del cliente. Nada de discursos genéricos de venta.\n"
+        . "- NUNCA repitas lo que ya dijiste en la conversación (te la doy abajo). Si ya explicaste qué es el negocio, NO lo vuelvas a explicar — avanza.\n"
         . "- USA SOLO los hechos del perfil. NO inventes precios, fechas, sabores, disponibilidad ni promesas.\n"
         . "- Piden un dato que NO está (precio, cita, encargo a la medida) → accion \"escalar\" con una respuesta puente corta tipo \"déjame confirmarte eso y te escribo ahorita\".\n"
         . "- Queja o tema delicado → accion \"escalar\" SIEMPRE (con puente amable).\n"
-        . ($link_ordenes !== '' ? "- Si quieren ORDENAR algo del perfil → incluye este link para ordenar: {$link_ordenes}\n" : '')
-        . "- Saludo o pregunta general → responde corto, cálido y útil.\n"
+        . ($link_cta !== '' ? "- Si quiere EMPEZAR, registrarse o que lo ayuden → dale el paso concreto con este link: {$link_cta}\n" : '')
+        . ($link_ordenes !== '' ? "- Si quiere ORDENAR algo del perfil → incluye este link para ordenar: {$link_ordenes}\n" : '')
+        . "- NO llames \"corillo\" ni apodos al cliente. Trátalo cálido y normal (o por su nombre si lo dio).\n"
         . "- Máximo 3 frases. Humano, en el tono del negocio. Sin hashtags.\n"
         . "Devuelve SOLO JSON válido: {\"accion\":\"responder|escalar\",\"respuesta\":\"...\",\"porque\":\"...\"}";
     $prompt = "PERFIL DEL NEGOCIO (los únicos hechos que puedes usar):\n"
         . "- Qué es: " . ($desc !== '' ? $desc : '(sin descripción)') . "\n"
         . "- Ofertas documentadas: " . ($ofertas !== '' ? $ofertas : '(ninguna)') . "\n"
+        . ($link_cta !== '' ? "- Link para empezar/registrarse: {$link_cta}\n" : '')
         . ($link_ordenes !== '' ? "- Link para ordenar: {$link_ordenes}\n" : '')
-        . "\nMENSAJE del cliente:\n\"{$mensaje}\"\n\nDecide.";
+        . ($historial !== '' ? "\nCONVERSACIÓN RECIENTE (lo ya dicho — NO te repitas):\n{$historial}\n" : '')
+        . "\nMENSAJE NUEVO del cliente:\n\"{$mensaje}\"\n\nDecide y responde a LO QUE PREGUNTÓ.";
 
     $r = ia_ejecutar($pdo, 'conserje', 'Responder WhatsApp', $prompt, [
         'marca_id'        => (int)$marca['id'],
@@ -131,7 +163,7 @@ function wa_procesar_entrante(PDO $pdo, string $wamid, string $telefono, string 
     $msg_id = (int)$pdo->lastInsertId();
 
     try {
-        $d = wa_decidir($pdo, $marca, $texto, $telefono);
+        $d = wa_decidir($pdo, $marca, $texto, $telefono, $msg_id);
     } catch (Throwable $e) {
         $pdo->prepare("UPDATE crecer_mensajes SET estado='escalado' WHERE id=?")->execute([$msg_id]);
         notif_crear($pdo, $marca_id, 'whatsapp', 'Un WhatsApp espera TU respuesta',

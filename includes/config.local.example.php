@@ -73,6 +73,8 @@ define('WHATSAPP_TOKEN',        '');   // token Cloud API (temporal 24h para pro
 define('WHATSAPP_PHONE_ID',     '');   // Phone Number ID del número del negocio (NO el de prueba de Meta)
 define('WHATSAPP_VERIFY_TOKEN', '');   // palabra secreta que TÚ inventas; la misma va en el webhook de Meta
 define('WHATSAPP_MARCA_ID',     0);    // marca que atiende este número (ej. 1)
+define('WHATSAPP_WABA_ID',      '');   // WhatsApp Business Account ID (chequeo de suscripción)
+define('WHATSAPP_LINK_CTA',     '');   // link concreto para "quiero empezar" (ej. https://encuentraloahora.com/crecer)
 
 // ── Cron del publicador ──
 // Si corres el cron por URL (no CLI), protégelo con este token:
