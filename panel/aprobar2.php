@@ -394,6 +394,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo json_encode(['ok'=>true, 'id'=>$nid, 'caption'=>$caption, 'video'=>$url], JSON_UNESCAPED_UNICODE); exit;
     }
 
+    // ── OTRA VERSIÓN / DIRECCIÓN del texto de un post con video: la Creativa
+    //    vuelve a mirar los fotogramas y reescribe el caption — otra toma, o con
+    //    la dirección que pida el dueño ("más de promo", "menciona el especial").
+    //    Los fotogramas viven en el navegador durante la sesión del wizard. ──
+    if ($accion === 'recaption_video') {
+        header('Content-Type: application/json');
+        @set_time_limit(0);
+        $vid = (int)($_POST['id'] ?? 0);
+        $q = $pdo->prepare("SELECT caption FROM crecer_contenido WHERE id=? AND marca_id=?");
+        $q->execute([$vid, $marca_id]);
+        $prev = $q->fetchColumn();
+        if ($prev === false) { echo json_encode(['ok'=>false,'err'=>'Pieza no encontrada.']); exit; }
+        $frames = [];
+        foreach ((array)($_POST['frames'] ?? []) as $fr) {
+            if (!is_string($fr) || strpos($fr, 'base64,') === false) continue;
+            $bin = base64_decode(substr($fr, strpos($fr, 'base64,') + 7), true);
+            if ($bin !== false && strlen($bin) > 500) $frames[] = base64_encode($bin);
+            if (count($frames) >= 3) break;
+        }
+        if (!$frames) { echo json_encode(['ok'=>false,'err'=>'No tengo los fotogramas de este video — súbelo de nuevo desde el paso 1.']); exit; }
+        $dur = ($_POST['dur'] ?? '') !== '' ? (int)round((float)$_POST['dur']) : null;
+        $direccion = mb_substr(trim((string)($_POST['direccion'] ?? '')), 0, 200);
+        try {
+            $caption = caption_desde_video($pdo, $marca_id, $frames, $dur, '', $direccion, (string)$prev);
+        } catch (Throwable $e) {
+            echo json_encode(['ok'=>false,'err'=>'No pude reescribir: ' . substr($e->getMessage(), 0, 120)]); exit;
+        }
+        if ($caption === '') { echo json_encode(['ok'=>false,'err'=>'El texto salió vacío — intenta de nuevo.']); exit; }
+        $pdo->prepare("UPDATE crecer_contenido SET caption=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$caption, $vid, $marca_id]);
+        echo json_encode(['ok'=>true, 'caption'=>$caption], JSON_UNESCAPED_UNICODE); exit;
+    }
+
     // ── Pedir un post a la IA (tema sugerido / borrador a pulir / random) ──
     if ($accion === 'pedir_post') {
         @set_time_limit(0);

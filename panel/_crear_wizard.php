@@ -96,6 +96,16 @@ if (!isset($redes_conectadas)) {
           </div>
           <div class="art-note">Si cambias una palabra o el tono, la IA aprende tu preferencia para los próximos posts.</div>
         </div>
+        <?php /* MODO VIDEO: pedirle a la Creativa otra toma del texto, o darle
+                la dirección. Ella vuelve a mirar los fotogramas y reescribe. */ ?>
+        <div id="wiz-vid-tools" style="display:none">
+          <div style="display:flex;gap:8px;margin:10px 0 4px">
+            <input type="text" id="wiz-vid-dir" placeholder="Dile la dirección: 'más de promo', 'menciona el especial'…" autocomplete="off"
+              style="flex:1;min-width:0;font-family:inherit;font-size:15px;border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;background:#fff">
+            <button type="button" class="art-go" id="wiz-vid-dir-go" style="flex:none;width:auto;margin:0;padding:0 16px" aria-label="Reescribir con esa dirección"><?= ico('send') ?></button>
+          </div>
+          <button type="button" class="fbnew" id="wiz-vid-otra" style="width:100%;margin:4px 0 0"><?= ico('refresh') ?> Otra versión del texto</button>
+        </div>
       </div>
       <div class="wiz-col wiz-col-arte">
       <?php /* .wiz-arte-tools se ESCONDE cuando el media es un video (modo simple:
@@ -319,6 +329,7 @@ if (!isset($redes_conectadas)) {
   var WIZ_EP = <?= json_encode('/crecer/panel/aprobar2.php?marca=' . (int)$marca_id) ?>;
   // ===== WIZARD: Crear un post guiado (Idea → Arte → Publicar) =====
   var wizId=null, wizImg='';
+  var wizVidFrames=[], wizVidDur=0;   // fotogramas del video subido (los ojos de la Creativa, viven en esta sesión)
   function _esc(s){ var d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
   function wizPaso(n){
     // display '' (no 'block'): deja mandar al CSS — en desktop los panes son grid.
@@ -482,6 +493,7 @@ if (!isset($redes_conectadas)) {
     document.querySelectorAll('.wiz-arte-tools').forEach(function(el){ el.style.display=on?'none':''; });
     var t=document.getElementById('wiz-p2-t'); if(t) t.textContent = on ? 'Tu video está listo' : 'Ahora el arte';
     var n=document.getElementById('wiz-next2'); if(n) n.textContent = on ? 'Usar este video →' : 'Usar este arte →';
+    var vt=document.getElementById('wiz-vid-tools'); if(vt) vt.style.display = on ? '' : 'none';
   }
   function wizPintaArte(img){
     if(!img){ return; }   // async: aún no hay imagen → NO pintar el icono roto
@@ -633,10 +645,13 @@ if (!isset($redes_conectadas)) {
       var f=this.files[0]; this.value='';
       if(f.size > 100*1024*1024){ toast('El video es muy grande (máx 100MB).'); return; }
       loaderShow('Subiendo tu video…', 'Puede tardar según el tamaño. Un momento…');
-      var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','video_directo'); fd.append('id',wizId); fd.append('video',f);
-      fetch(WIZ_EP,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
-        loaderHide(); if(!d.ok){ toast(d.err||'No se pudo subir el video.'); return; } wizPintaArte(d.video);
-      }).catch(function(){ loaderHide(); toast('Error de conexión (¿video muy pesado?).'); });
+      wizFramesDeVideo(f, function(frames, dur){
+        wizVidFrames=frames; wizVidDur=dur;   // también aquí: habilita "otra versión del texto"
+        var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','video_directo'); fd.append('id',wizId); fd.append('video',f);
+        fetch(WIZ_EP,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+          loaderHide(); if(!d.ok){ toast(d.err||'No se pudo subir el video.'); return; } wizPintaArte(d.video);
+        }).catch(function(){ loaderHide(); toast('Error de conexión (¿video muy pesado?).'); });
+      });
     });
 
     // ── "TENGO MI VIDEO LISTO" (paso 1): subes tu video ya editado, el navegador
@@ -674,6 +689,7 @@ if (!isset($redes_conectadas)) {
       loaderShow('El corillo está viendo tu video…', ['Mirando lo que grabaste…','Escribiendo el caption en tu voz…','Casi listo…']);
       wizFramesDeVideo(f, function(frames, dur){
         if(!frames.length){ loaderHide(); toast('No pude leer el video en este navegador — prueba con un MP4.'); return; }
+        wizVidFrames=frames; wizVidDur=dur;   // guardarlos: sirven para pedir otra toma del texto
         var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','post_desde_video'); fd.append('video',f); fd.append('dur',dur||'');
         fd.append('contexto', document.getElementById('wiz-tema').value.trim());
         for(var i=0;i<frames.length;i++) fd.append('frames[]', frames[i]);
@@ -688,10 +704,37 @@ if (!isset($redes_conectadas)) {
           document.getElementById('wiz-art').innerHTML='';
           document.getElementById('wiz-arteidea').value='';
           wizPaso(2);
-          wizPintaArte(d.video);   // pinta el <video> y muestra "Usar este arte →"
+          wizPintaArte(d.video);   // pinta el <video> y muestra "Usar este video →"
         }).catch(function(){ loaderHide(); toast('Error de conexión (¿video muy pesado?).'); });
       });
     });
+
+    // ── Otra toma / dirección del TEXTO (modo video): la Creativa vuelve a
+    //    mirar los fotogramas y reescribe el caption — distinta de verdad, o
+    //    con la dirección que el dueño le dé. ──
+    function wizRecap(dir){
+      if(!wizId) return;
+      if(!wizVidFrames.length){ toast('No tengo los fotogramas de este video — súbelo de nuevo desde el paso 1.'); return; }
+      loaderShow('La Creativa está pensando otro texto…', ['Mirando tu video otra vez…','Buscando otro ángulo…','Casi…']);
+      var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','recaption_video'); fd.append('id',wizId);
+      fd.append('dur', wizVidDur||''); fd.append('direccion', dir||'');
+      for(var i=0;i<wizVidFrames.length;i++) fd.append('frames[]', wizVidFrames[i]);
+      fetch(WIZ_EP,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+        loaderHide();
+        if(!d.ok){ toast(d.err||'No se pudo reescribir. Intenta otra vez.'); return; }
+        document.getElementById('wiz-cap').textContent=d.caption||'';
+        document.getElementById('wiz-editbox').style.display='none';
+        document.getElementById('wiz-edit').style.display='inline-block';
+      }).catch(function(){ loaderHide(); toast('Error de conexión. Intenta otra vez.'); });
+    }
+    var wvo=document.getElementById('wiz-vid-otra');
+    if(wvo) wvo.addEventListener('click', function(){ wizRecap(''); });
+    var wvg=document.getElementById('wiz-vid-dir-go'), wvi=document.getElementById('wiz-vid-dir');
+    if(wvg) wvg.addEventListener('click', function(){
+      var v=(wvi.value||'').trim(); if(!v){ toast('Escribe la dirección que quieres.'); wvi.focus(); return; }
+      wizRecap(v); wvi.value='';
+    });
+    if(wvi) wvi.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); wvg.click(); } });
     document.getElementById('wiz-next2').addEventListener('click', function(){
       var cap=document.getElementById('wiz-cap').textContent;
       var wmedia = wizImg ? (wizEsVideo(wizImg)
