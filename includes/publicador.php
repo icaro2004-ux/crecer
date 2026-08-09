@@ -373,6 +373,28 @@ function finalizar_pieza(PDO $pdo, int $contenido_id, string $tok, bool $ok, arr
             $mid = (int)($pdo->query("SELECT marca_id FROM crecer_contenido WHERE id=" . (int)$contenido_id)->fetchColumn() ?: 0);
             if ($mid) cupo_registrar_publicacion($pdo, $mid, $contenido_id, 'api');
         }
+        // La CAMPANITA se entera: aviso in-app de que el post salió. Clave cuando
+        // la conexión del dueño se cayó a mitad y la pantalla le dijo "no se pudo"
+        // — el servidor terminó igual y esto es lo que se lo cuenta. Solo si esta
+        // llamada de verdad publicó algo (los reintentos "ya publicada" no repiten).
+        if ($salio) {
+            try {
+                require_once __DIR__ . '/notif.php';
+                $mid2 = (int)($pdo->query("SELECT marca_id FROM crecer_contenido WHERE id=" . (int)$contenido_id)->fetchColumn() ?: 0);
+                if ($mid2 && function_exists('notif_crear')) {
+                    $redes = [];
+                    foreach ($resultados as $pl => $rp) {
+                        if ($rp !== '' && $rp !== null && $rp !== 'ya publicada') {
+                            $redes[] = $pl === 'instagram' ? 'Instagram' : ($pl === 'facebook' ? 'Facebook' : ucfirst((string)$pl));
+                        }
+                    }
+                    $donde = $redes ? implode(' y ', $redes) : 'tus redes';
+                    notif_crear($pdo, $mid2, 'publicado', "Tu post salió a {$donde}",
+                        'El corillo lo publicó y ya está en la calle.',
+                        '/crecer/panel/aprobar2.php?tab=biblioteca&marca=' . $mid2, 'check-circle');
+                }
+            } catch (Throwable $e) { error_log('notif publicado #' . $contenido_id . ': ' . $e->getMessage()); }
+        }
         return ['ok' => true, 'estado' => 'publicado', 'resultados' => $resultados, 'motivo' => ''];
     }
     $err = implode(' | ', array_map(fn($k, $v) => "$k: $v", array_keys($errores), array_values($errores)));
