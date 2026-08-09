@@ -55,6 +55,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // personal del teléfono). Solo si la marca tiene conexión activa.
     if ($accion === 'publicar_api') {
         header('Content-Type: application/json');
+        // Si la conexión del dueño se cae a mitad (video pesado + datos móviles),
+        // PHP por defecto MUERE al detectar el abort → la pieza queda trancada en
+        // 'publicando' aunque Meta ya la hubiera aceptado (caso real 2026-08-09,
+        // piezas #115-120 y #184). Con esto el servidor TERMINA el trabajo igual
+        // y finaliza el estado + la notificación.
+        @ignore_user_abort(true);
+        @set_time_limit(0);
         // CSRF: publicar postea a redes reales del cliente → exige token válido.
         if (!csrf_ok()) { echo json_encode(['ok'=>false,'err'=>'Sesión expiró. Recarga la página e intenta de nuevo.']); exit; }
         // GATE del post gratis: publicar a redes reales exige celular verificado (1 gratis por número).
