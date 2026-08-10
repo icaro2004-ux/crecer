@@ -103,7 +103,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $nf = ($files && isset($files['name']) && is_array($files['name'])) ? count($files['name']) : 0;
         if ($nf < 2) $jout(['ok' => false, 'err' => 'Sube al menos 2 fotos (hasta 8).']);
         if ($nf > 8) $jout(['ok' => false, 'err' => 'Máximo 8 fotos por carrusel.']);
-        $frames = (array)($_POST['frames'] ?? []);
         $dir = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/fotos";
         @mkdir($dir, 0775, true);
         $fotos = [];
@@ -114,12 +113,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$ext || (int)$files['size'][$i] > 12*1024*1024) $jout(['ok' => false, 'err' => 'Fotos JPG/PNG/WebP de hasta 12 MB cada una.']);
             $fn = 'carr_' . uniqid() . '.' . $ext;
             if (!move_uploaded_file($files['tmp_name'][$i], $dir . '/' . $fn)) $jout(['ok' => false, 'err' => 'No se pudo guardar una foto.']);
-            // La vista previa (ojos del Guionista) la manda el navegador ya achicada.
+            // Los ojos del Guionista: la foto misma (el navegador ya la achicó a
+            // ~1440px JPEG, así que cabe de sobra en la llamada al modelo).
             $b64 = null;
-            $fr = $frames[$i] ?? '';
-            if (is_string($fr) && strpos($fr, 'base64,') !== false) {
-                $bin = base64_decode(substr($fr, strpos($fr, 'base64,') + 7), true);
-                if ($bin !== false && strlen($bin) > 500) $b64 = base64_encode($bin);
+            if ((int)$files['size'][$i] <= 4*1024*1024) {
+                $b64 = base64_encode((string)file_get_contents($dir . '/' . $fn));
             }
             $fotos[] = ['url' => rtrim(UPLOADS_URL, '/') . "/marca_{$marca_id}/fotos/" . $fn, 'b64' => $b64];
         }
@@ -448,35 +446,38 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
     var fs=[].slice.call(crF.files||[]); crF.value='';
     if(fs.length<2){ say('Elige al menos 2 fotos.'); return; }
     if(fs.length>8){ say('Máximo 8 fotos por carrusel.'); return; }
-    for(var i=0;i<fs.length;i++){
-      if(fs[i].size>12*1024*1024){ say('Cada foto puede pesar hasta 12MB.'); return; }
-    }
     ovShow('El Guionista está mirando tus fotos…','Eligiendo el orden y escribiendo la historia en tu voz.');
-    var frames=new Array(fs.length), left=fs.length;
+    // Las fotos del celular pesan 8-12MB — el navegador las ACHICA aquí a
+    // 1440px JPEG (lo que IG muestra de todos modos) y sube ESAS: el paquete
+    // pasa de ~50MB a ~2MB y ningún límite del servidor lo mata.
+    var blobs=new Array(fs.length), left=fs.length, fallo=false;
     fs.forEach(function(f,ix){
       var img=new Image(), url=URL.createObjectURL(f);
-      function fin(fr){ frames[ix]=fr||''; URL.revokeObjectURL(url); if(--left===0) manda(); }
+      function fin(b){
+        blobs[ix]=b||null; if(!b) fallo=true;
+        URL.revokeObjectURL(url); if(--left===0) manda();
+      }
       img.onload=function(){
         try{
-          var vw=img.naturalWidth||1024, vh=img.naturalHeight||1024;
-          var w=Math.min(1024,vw), h=Math.round(w*vh/vw);
+          var vw=img.naturalWidth||1440, vh=img.naturalHeight||1440;
+          var w=Math.min(1440,vw), h=Math.round(w*vh/vw);
           var c=document.createElement('canvas'); c.width=w; c.height=h;
           c.getContext('2d').drawImage(img,0,0,w,h);
-          fin(c.toDataURL('image/jpeg',.8));
-        }catch(e){ fin(''); }
+          c.toBlob(function(b){ fin(b); }, 'image/jpeg', .85);
+        }catch(e){ fin(null); }
       };
-      img.onerror=function(){ fin(''); };
+      img.onerror=function(){ fin(null); };
       img.src=url;
     });
     function manda(){
+      if(fallo){ ovHide(); say('Una foto no se pudo leer — ¿es HEIC? Conviértela a JPG e intenta.'); return; }
       var fd=new FormData(); fd.append('csrf',CSRF); fd.append('ajax','1'); fd.append('accion','generar_desde_fotos');
       var t=document.getElementById('crTema'); fd.append('contexto', t ? t.value.trim() : '');
-      fs.forEach(function(f){ fd.append('fotos[]', f); });
-      frames.forEach(function(fr){ fd.append('frames[]', fr); });
+      blobs.forEach(function(b,ix){ fd.append('fotos[]', b, 'foto'+(ix+1)+'.jpg'); });
       post(fd).then(function(d){
         if(d&&d.ok&&d.url){ location.href=d.url; }
         else { ovHide(); say((d&&d.err)||'No se pudo crear.'); }
-      }).catch(function(){ ovHide(); say('Error de conexión (¿fotos muy pesadas?).'); });
+      }).catch(function(){ ovHide(); say('Se cayó la conexión — intenta otra vez.'); });
     }
   });
 
