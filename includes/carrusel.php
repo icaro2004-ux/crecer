@@ -399,3 +399,89 @@ function carrusel_estado(PDO $pdo, int $contenido_id): array {
     }
     return ['total' => $total, 'listos' => $listos, 'completo' => ($total > 0 && $listos === $total)];
 }
+
+/**
+ * CARRUSEL DESDE LAS FOTOS DEL DUEÑO (fotos-primero, 2026-08-10).
+ * Las fotos van TAL CUAL como slides — cero IA sobre las imágenes. El
+ * Guionista las MIRA (vistas previas JPEG) y arma la historia ALREDEDOR:
+ * el ORDEN que mejor cuenta (gancho → beats → CTA), el caption en la voz
+ * del negocio, y el beat de cada slide. Como todo: queda en crecer_ia_log.
+ *
+ * $fotos: [['url' => URL pública del original, 'b64' => vista previa JPEG
+ *          en base64 (o null)], ...] en el orden en que el dueño las subió.
+ */
+function carrusel_desde_fotos(PDO $pdo, int $marca_id, array $fotos, string $contexto = ''): array {
+    $n = count($fotos);
+    if ($n < 2) return ['ok' => false, 'err' => 'min'];
+    $m = leer_marca($pdo, $marca_id);
+    if (!$m) return ['ok' => false, 'err' => 'marca'];
+    $ctx    = cerebro_negocio($pdo, $marca_id, $m);
+    $nombre = equipo_nombre($m, 'guionista');
+
+    // Los OJOS: vista previa por foto. Numeramos "Imagen #k" por el orden real
+    // en que se envían (las fotos sin vista previa igual se listan por posición).
+    $imgs = []; $lista = []; $k = 0;
+    foreach ($fotos as $i => $f) {
+        if (!empty($f['b64'])) {
+            $k++;
+            $imgs[]  = ['mime' => 'image/jpeg', 'data' => (string)$f['b64']];
+            $lista[] = 'Foto ' . ($i + 1) . ' = Imagen #' . $k . '.';
+        } else {
+            $lista[] = 'Foto ' . ($i + 1) . ': (sin vista previa — úsala igual por su posición).';
+        }
+    }
+
+    $sys = "Eres {$nombre}, EL GUIONISTA DE CARRUSELES del corillo de Crecer. HOY es distinto: el dueño trajo "
+        . "SUS PROPIAS FOTOS y van TAL CUAL como slides — tú NO diseñas imágenes; tu trabajo es MIRARLAS y armar "
+        . "la historia ALREDEDOR de ellas:\n"
+        . "• Elegir el ORDEN que mejor cuenta la historia (slide 1 = la foto que más frena el scroll; último = la que cierra con acción).\n"
+        . "• Escribir el CAPTION del post: hook, la historia que HILAN las fotos, CTA clara; hashtags al final.\n"
+        . "• Un BEAT cortito por slide (qué aporta ESA foto a la historia).\n"
+        . "VOZ DE LA MARCA (respétala SIEMPRE):\n" . tono_instruccion($m) . "\n" . reglas_idioma($m) . "\n"
+        . "REGLA DE ORO: HONESTO — habla de lo que SE VE; nunca inventes precios, productos ni promesas. Responde SOLO JSON.";
+    $prompt = "Negocio:\n{$ctx}\n\n"
+        . ($contexto !== '' ? "El dueño dice de qué va: \"{$contexto}\"\n\n" : '')
+        . "El dueño subió {$n} fotos (numeradas por su orden de subida):\n" . implode("\n", $lista) . "\n\n"
+        . 'Devuelve JSON EXACTO: {"orden":[los números de foto en el ORDEN final del carrusel — usa CADA foto UNA sola vez],'
+        . '"caption":"el pie del post completo","beats":["beat del slide 1 en el orden FINAL","beat del slide 2",...]} '
+        . "con EXACTAMENTE {$n} posiciones en orden y {$n} beats.";
+
+    try {
+        $r = ia_ejecutar($pdo, 'carruselista', 'Carrusel desde fotos del dueño', $prompt, [
+            'marca_id' => $marca_id, 'sistema' => $sys, 'json' => true, 'imagenes' => $imgs,
+            'temperatura' => 0.8, 'max_tokens' => 1200, 'thinking_budget' => 0,
+            'mock_texto' => '{"orden":[1,2],"caption":"[MOCK] Desliza y mira esto de cerca","beats":["el gancho","el cierre con CTA"]}',
+        ]);
+        $d = json_decode((string)$r['texto'], true) ?: [];
+    } catch (Throwable $e) {
+        error_log('carrusel_desde_fotos: ' . $e->getMessage());
+        return ['ok' => false, 'err' => 'ia'];
+    }
+
+    $caption  = trim((string)($d['caption'] ?? ''));
+    if ($caption === '') return ['ok' => false, 'err' => 'sin_caption'];
+    $orden_ia = array_values(array_filter(array_map('intval', (array)($d['orden'] ?? [])), fn($x) => $x >= 1 && $x <= $n));
+    // Orden válido = permutación completa; si el modelo la daña, el orden de
+    // subida del dueño (seguro y honesto — sus fotos, su orden).
+    if (count($orden_ia) !== $n || count(array_unique($orden_ia)) !== $n) $orden_ia = range(1, $n);
+    $beats = array_values((array)($d['beats'] ?? []));
+
+    $ca = (int)date('Y'); $cm = (int)date('n');
+    $pdo->prepare("INSERT INTO crecer_calendario (marca_id,anio,mes,estado,generado_por_ia) VALUES (?,?,?, 'borrador',1) ON DUPLICATE KEY UPDATE updated_at=NOW()")->execute([$marca_id, $ca, $cm]);
+    $calid = (int)$pdo->query("SELECT id FROM crecer_calendario WHERE marca_id={$marca_id} AND anio={$ca} AND mes={$cm}")->fetchColumn();
+    $pdo->prepare("INSERT INTO crecer_contenido (calendario_id,marca_id,plataforma,tipo,caption,fecha_programada,estado) VALUES (?,?, 'instagram','carrusel',?,?, 'borrador')")
+        ->execute([$calid, $marca_id, $caption, date('Y-m-d 10:00:00')]);
+    $cid = (int)$pdo->lastInsertId();
+
+    // Slides = las fotos TAL CUAL, en el orden elegido, listas al instante.
+    $ins = $pdo->prepare("INSERT INTO crecer_carrusel (contenido_id,marca_id,orden,idea,grafica_path,img_estado) VALUES (?,?,?,?,?, 'ok')");
+    $pos = 1;
+    foreach ($orden_ia as $ix) {
+        $beat = trim((string)($beats[$pos - 1] ?? ''));
+        $ins->execute([$cid, $marca_id, $pos,
+            ($beat !== '' ? $beat : 'Foto del dueño — va tal cual') . ' [foto-propia]',
+            (string)$fotos[$ix - 1]['url']]);
+        $pos++;
+    }
+    return ['ok' => true, 'contenido_id' => $cid, 'caption' => $caption];
+}

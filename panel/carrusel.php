@@ -83,6 +83,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $jout(['ok' => true, 'id' => (int)$r['contenido_id'], 'url' => "{$BASE}/carrusel.php?marca={$marca_id}&id=" . (int)$r['contenido_id']]);
     }
 
+    // Crear DESDE LAS FOTOS del dueño (fotos-primero): van TAL CUAL como
+    // slides; el Guionista las MIRA y arma orden + caption + beats alrededor.
+    if ($accion === 'generar_desde_fotos') {
+        if (!$carr_ok) $jout(['ok' => false, 'err' => 'El carrusel aún no está activo (falta correr la migración en la base de datos).']);
+        @ignore_user_abort(true);
+        // Mismo límite que el carrusel normal: 1 por semana (admin exento).
+        if (($usuario['rol'] ?? '') !== 'admin') {
+            $w = $pdo->prepare("SELECT COUNT(*) n, MIN(created_at) f FROM crecer_contenido
+                                WHERE marca_id=? AND tipo='carrusel' AND created_at >= (NOW() - INTERVAL 7 DAY)");
+            $w->execute([$marca_id]); $wr = $w->fetch(PDO::FETCH_ASSOC);
+            if ((int)($wr['n'] ?? 0) >= 1) {
+                $reset = !empty($wr['f']) ? date('d/m', strtotime($wr['f'] . ' +7 day')) : '';
+                $jout(['ok' => false, 'err' => 'Puedes crear 1 carrusel por semana.' . ($reset ? " Vuelve el {$reset}." : ''), 'limite' => true]);
+            }
+        }
+        @set_time_limit(0);
+        $files = $_FILES['fotos'] ?? null;
+        $nf = ($files && isset($files['name']) && is_array($files['name'])) ? count($files['name']) : 0;
+        if ($nf < 2) $jout(['ok' => false, 'err' => 'Sube al menos 2 fotos (hasta 8).']);
+        if ($nf > 8) $jout(['ok' => false, 'err' => 'Máximo 8 fotos por carrusel.']);
+        $frames = (array)($_POST['frames'] ?? []);
+        $dir = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/fotos";
+        @mkdir($dir, 0775, true);
+        $fotos = [];
+        for ($i = 0; $i < $nf; $i++) {
+            if (($files['error'][$i] ?? 1) !== UPLOAD_ERR_OK) $jout(['ok' => false, 'err' => 'Una foto no se pudo leer. Intenta de nuevo.']);
+            $info = @getimagesize($files['tmp_name'][$i]);
+            $ext = ['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp'][$info['mime'] ?? ''] ?? null;
+            if (!$ext || (int)$files['size'][$i] > 12*1024*1024) $jout(['ok' => false, 'err' => 'Fotos JPG/PNG/WebP de hasta 12 MB cada una.']);
+            $fn = 'carr_' . uniqid() . '.' . $ext;
+            if (!move_uploaded_file($files['tmp_name'][$i], $dir . '/' . $fn)) $jout(['ok' => false, 'err' => 'No se pudo guardar una foto.']);
+            // La vista previa (ojos del Guionista) la manda el navegador ya achicada.
+            $b64 = null;
+            $fr = $frames[$i] ?? '';
+            if (is_string($fr) && strpos($fr, 'base64,') !== false) {
+                $bin = base64_decode(substr($fr, strpos($fr, 'base64,') + 7), true);
+                if ($bin !== false && strlen($bin) > 500) $b64 = base64_encode($bin);
+            }
+            $fotos[] = ['url' => rtrim(UPLOADS_URL, '/') . "/marca_{$marca_id}/fotos/" . $fn, 'b64' => $b64];
+        }
+        $contexto = mb_substr(trim((string)($_POST['contexto'] ?? '')), 0, 300);
+        $r = carrusel_desde_fotos($pdo, $marca_id, $fotos, $contexto);
+        if (empty($r['ok'])) $jout(['ok' => false, 'err' => 'El Guionista no pudo ahora. Intenta otra vez.']);
+        $jout(['ok' => true, 'id' => (int)$r['contenido_id'], 'url' => "{$BASE}/carrusel.php?marca={$marca_id}&id=" . (int)$r['contenido_id']]);
+    }
+
     // Editar caption.
     if ($accion === 'caption' && $cid) {
         $cap = trim($_POST['caption'] ?? '');
@@ -295,6 +341,14 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
     <button type="button" class="cr-go" id="crGo"><?= ico('sparkles') ?> Que el Guionista lo arme</button>
     <p class="cr-note">Deja el tema vacío y el Guionista elige el mejor ángulo para tu negocio.</p>
   </div>
+
+  <div class="cr-new" style="margin-top:14px">
+    <label class="cr-lbl">O con TUS fotos — van tal cual</label>
+    <p style="margin:2px 0 12px;color:var(--muted);font-size:13px;line-height:1.5">Sube de 2 a 8 fotos tuyas. El Guionista <b>las mira</b>, elige el mejor orden para contar la historia, y escribe el caption en tu voz — <b>sin tocar tus imágenes</b>. Si escribiste el tema arriba, lo usa de contexto.</p>
+    <label class="cr-go" style="margin-top:0;background:linear-gradient(135deg,var(--teal),#0a7d76);cursor:pointer"><?= ico('camera') ?> Elegir mis fotos
+      <input type="file" id="crFotos" accept="image/png,image/jpeg,image/webp" multiple style="display:none">
+    </label>
+  </div>
   <?php endif; ?>
 <?php else: ?>
   <!-- ══ EDITAR / PREVIEW ══ -->
@@ -386,6 +440,45 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
       }).catch(function(){ ovHide(); go.disabled=false; say('Error de conexión.'); });
     });
   }
+
+  // ── CREAR CON MIS FOTOS (fotos-primero): tus fotos tal cual; el Guionista
+  //    las mira (vistas previas JPEG hechas aquí mismo) y arma la historia. ──
+  var crF=document.getElementById('crFotos');
+  if(crF) crF.addEventListener('change', function(){
+    var fs=[].slice.call(crF.files||[]); crF.value='';
+    if(fs.length<2){ say('Elige al menos 2 fotos.'); return; }
+    if(fs.length>8){ say('Máximo 8 fotos por carrusel.'); return; }
+    for(var i=0;i<fs.length;i++){
+      if(fs[i].size>12*1024*1024){ say('Cada foto puede pesar hasta 12MB.'); return; }
+    }
+    ovShow('El Guionista está mirando tus fotos…','Eligiendo el orden y escribiendo la historia en tu voz.');
+    var frames=new Array(fs.length), left=fs.length;
+    fs.forEach(function(f,ix){
+      var img=new Image(), url=URL.createObjectURL(f);
+      function fin(fr){ frames[ix]=fr||''; URL.revokeObjectURL(url); if(--left===0) manda(); }
+      img.onload=function(){
+        try{
+          var vw=img.naturalWidth||1024, vh=img.naturalHeight||1024;
+          var w=Math.min(1024,vw), h=Math.round(w*vh/vw);
+          var c=document.createElement('canvas'); c.width=w; c.height=h;
+          c.getContext('2d').drawImage(img,0,0,w,h);
+          fin(c.toDataURL('image/jpeg',.8));
+        }catch(e){ fin(''); }
+      };
+      img.onerror=function(){ fin(''); };
+      img.src=url;
+    });
+    function manda(){
+      var fd=new FormData(); fd.append('csrf',CSRF); fd.append('ajax','1'); fd.append('accion','generar_desde_fotos');
+      var t=document.getElementById('crTema'); fd.append('contexto', t ? t.value.trim() : '');
+      fs.forEach(function(f){ fd.append('fotos[]', f); });
+      frames.forEach(function(fr){ fd.append('frames[]', fr); });
+      post(fd).then(function(d){
+        if(d&&d.ok&&d.url){ location.href=d.url; }
+        else { ovHide(); say((d&&d.err)||'No se pudo crear.'); }
+      }).catch(function(){ ovHide(); say('Error de conexión (¿fotos muy pesadas?).'); });
+    }
+  });
 
   // ── EDITAR ──
   var track=document.getElementById('crTrack');

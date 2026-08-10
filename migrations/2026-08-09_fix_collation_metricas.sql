@@ -13,6 +13,11 @@
 ALTER TABLE crecer_metricas      CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 ALTER TABLE crecer_publicaciones CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 
+-- 2026-08-10 · PREVENTIVO: crecer_carrusel también nació unicode_ci (misma
+-- familia del bug). Hoy no revienta (sus joins son por id), pero se alinea
+-- al estándar antes de que alguien escriba el join de texto que explote.
+ALTER TABLE crecer_carrusel      CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+
 -- Verificación (ambas deben decir utf8mb4_general_ci):
 -- SELECT TABLE_NAME, TABLE_COLLATION FROM information_schema.TABLES
 --  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('crecer_metricas','crecer_publicaciones');
