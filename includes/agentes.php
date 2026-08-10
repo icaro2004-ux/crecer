@@ -284,28 +284,34 @@ function voz_a_texto(PDO $pdo, ?int $marca_id, string $audio_b64, string $audio_
  * él mismo editó; la Creativa VE sus fotogramas y escribe el texto del post en
  * la voz del dueño. Fiel a lo que se ve — no inventa productos ni promesas.
  */
-function caption_desde_video(PDO $pdo, int $marca_id, array $frames_b64, ?int $dur_seg, string $contexto = '', string $direccion = '', string $anterior = ''): string {
+function caption_desde_video(PDO $pdo, int $marca_id, array $frames_b64, ?int $dur_seg, string $contexto = '', string $direccion = '', string $anterior = '', string $tipo = 'video'): string {
     $m = leer_marca($pdo, $marca_id) ?: [];
     $negocio = trim((string)($m['nombre_negocio'] ?? 'el negocio'));
     $voz     = trim((string)($m['voz'] ?? ''));
     $wa      = trim((string)($m['whatsapp'] ?? ''));
     $cta_via = $wa !== '' ? 'WhatsApp' : 'DM/mensaje directo';
 
-    $sistema = "Eres la Creativa de \"{$negocio}\". El dueño subió un VIDEO que él mismo "
-        . "editó y ya está listo para publicarse; tu ÚNICO trabajo es escribir el texto del "
-        . "post que lo acompaña. SIGUE su voz"
+    $es_foto = ($tipo === 'foto');
+    $sistema = "Eres la Creativa de \"{$negocio}\". El dueño subió "
+        . ($es_foto ? "su FOTO, ya lista para publicarse" : "un VIDEO que él mismo editó y ya está listo para publicarse")
+        . "; tu ÚNICO trabajo es escribir el texto del post que " . ($es_foto ? "la" : "lo") . " acompaña. SIGUE su voz"
         . ($voz !== '' ? " (así habla: {$voz})" : '')
-        . ". No inventes productos, precios ni promesas que no se vean en el video.";
-    $prompt = "Estos fotogramas son del video del dueño"
-        . ($dur_seg ? " (dura ~{$dur_seg}s)" : '') . ".\n"
+        . ". No inventes productos, precios ni promesas que no se vean en " . ($es_foto ? "la foto" : "el video") . ".";
+    $prompt = ($es_foto
+            ? "Esta imagen es la FOTO del dueño (va tal cual, sin tocar).\n"
+            : "Estos fotogramas son del video del dueño" . ($dur_seg ? " (dura ~{$dur_seg}s)" : '') . ".\n")
         . ($contexto !== '' ? "El dueño dice de qué va: {$contexto}\n" : '')
         . ($direccion !== '' ? "El dueño pide esta dirección para el texto: {$direccion}.\n" : '')
         . ($anterior !== '' ? "Ya tiene esta versión y quiere una DISTINTA (cambia el ángulo de verdad, no la parafrasees):\n---\n{$anterior}\n---\n" : '')
-        . "Mira los fotogramas y escribe el caption del post: 2-4 líneas con chispa, "
+        . "Mira " . ($es_foto ? "la foto" : "los fotogramas") . " y escribe el caption del post: 2-4 líneas con chispa, "
         . "fieles a LO QUE SE VE, 1 llamada a la acción por {$cta_via}, y 4-6 hashtags "
         . "relevantes al final. Devuelve SOLO el texto del post, sin comillas ni explicación.";
 
-    $imgs = array_map(fn($b) => ['mime' => 'image/jpeg', 'data' => $b], $frames_b64);
+    // Cada frame: string base64 (se asume JPEG — los canvas del wizard exportan JPEG)
+    // o array ['mime'=>..., 'data'=>...] cuando el mime real importa.
+    $imgs = array_map(fn($b) => is_array($b)
+        ? ['mime' => (string)($b['mime'] ?? 'image/jpeg'), 'data' => (string)($b['data'] ?? '')]
+        : ['mime' => 'image/jpeg', 'data' => $b], $frames_b64);
     $r = ia_ejecutar($pdo, 'creativa', 'Caption desde video (post)', $prompt, [
         'marca_id'        => $marca_id,
         'sistema'         => $sistema,

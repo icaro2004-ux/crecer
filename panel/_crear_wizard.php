@@ -58,10 +58,10 @@ if (!isset($redes_conectadas)) {
       <div style="display:flex;align-items:center;gap:10px;margin:14px 0 6px;color:var(--muted);font-size:12px">
         <span style="flex:1;height:1px;background:var(--line)"></span>o<span style="flex:1;height:1px;background:var(--line)"></span>
       </div>
-      <label class="fbnew wiz-upl" style="width:100%;justify-content:center;box-sizing:border-box"><?= ico('play') ?> Tengo mi video listo — ponle el texto
-        <input type="file" id="wiz-video-directo" accept="video/mp4,video/quicktime" style="display:none">
+      <label class="fbnew wiz-upl" style="width:100%;justify-content:center;box-sizing:border-box"><?= ico('camera') ?> Tengo mi foto o video listo — ponle el texto
+        <input type="file" id="wiz-media-directo" accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime" style="display:none">
       </label>
-      <div style="font-size:11.5px;color:var(--muted);text-align:center;margin-top:6px">Tu video tal cual (MP4/MOV, hasta 100MB). El corillo lo ve, escribe el caption en tu voz, y sale como Reel en IG / video en FB. Si escribiste algo arriba, lo usa de contexto.</div>
+      <div style="font-size:11.5px;color:var(--muted);text-align:center;margin-top:6px">Tu foto o video va <b>tal cual</b> — el corillo solo lo mira y escribe el texto en tu voz. (El video sale como Reel en IG / video en FB.) Si escribiste algo arriba, lo usa de contexto.</div>
     </div>
 
     <style>
@@ -126,8 +126,9 @@ if (!isset($redes_conectadas)) {
       <div class="wiz-arte-tools">
         <div class="wiz-artbtns">
           <button type="button" class="art-go" id="wiz-gen"><?= ico('palette') ?> Generar la imagen con esta idea</button>
-          <label class="fbnew wiz-upl"><?= ico('camera') ?> Subir mi foto<input type="file" id="wiz-file" accept="image/png,image/jpeg,image/webp" style="display:none"></label>
-          <label class="fbnew wiz-upl"><?= ico('camera') ?> Subir mi video<input type="file" id="wiz-video" accept="video/mp4,video/quicktime" style="display:none"></label>
+          <label class="fbnew wiz-upl"><?= ico('camera') ?> Mi foto TAL CUAL<input type="file" id="wiz-foto-talcual" accept="image/png,image/jpeg,image/webp" style="display:none"></label>
+          <label class="fbnew wiz-upl"><?= ico('sparkles') ?> Mi foto, realzada<input type="file" id="wiz-file" accept="image/png,image/jpeg,image/webp" style="display:none"></label>
+          <label class="fbnew wiz-upl"><?= ico('play') ?> Subir mi video<input type="file" id="wiz-video" accept="video/mp4,video/quicktime" style="display:none"></label>
         </div>
         <div style="font-size:11.5px;color:var(--muted);text-align:center;margin-top:-4px">No creamos video — lo subes tú (MP4/MOV, hasta 100MB). Sale como Reel/video.</div>
       </div>
@@ -334,7 +335,8 @@ if (!isset($redes_conectadas)) {
   var WIZ_EP = <?= json_encode('/crecer/panel/aprobar2.php?marca=' . (int)$marca_id) ?>;
   // ===== WIZARD: Crear un post guiado (Idea → Arte → Publicar) =====
   var wizId=null, wizImg='';
-  var wizVidFrames=[], wizVidDur=0;   // fotogramas del video subido (los ojos de la Creativa, viven en esta sesión)
+  var wizVidFrames=[], wizVidDur=0;   // fotogramas del media subido (los ojos de la Creativa, viven en esta sesión)
+  var wizMediaListo=false, wizMediaTipo='video';   // "media tal cual" (foto o video del dueño) → paso 2 en modo simple
   function _esc(s){ var d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
   function wizPaso(n){
     // display '' (no 'block'): deja mandar al CSS — en desktop los panes son grid.
@@ -438,7 +440,8 @@ if (!isset($redes_conectadas)) {
       document.getElementById('wiz-edit').style.display='inline-block';
       document.getElementById('wiz-art').innerHTML=''; document.getElementById('wiz-next2').style.display='none';
       document.getElementById('wiz-arteidea').value='';
-      wizVideoUI(false);   // camino normal: las herramientas de arte visibles
+      wizMediaListo=false; wizMediaTipo='video';
+      wizVideoUI(false, false);   // camino normal: las herramientas de arte visibles
       wizPaso(2);
       wizSugerirArte();   // el Diseñador propone la idea del arte (texto) para que la veas/ajustes
     }).catch(function(){ loaderHide(); toast('Error de conexión. Intenta otra vez.'); });
@@ -494,16 +497,17 @@ if (!isset($redes_conectadas)) {
   // MODO VIDEO del paso 2: si el media es un video, se esconden TODAS las
   // herramientas de arte (generar/estilos/foto — pisarían el video) y queda
   // lo esencial: el texto, el video y seguir. Keep it simple.
-  function wizVideoUI(on){
+  function wizVideoUI(on, esVid){
     document.querySelectorAll('.wiz-arte-tools').forEach(function(el){ el.style.display=on?'none':''; });
-    var t=document.getElementById('wiz-p2-t'); if(t) t.textContent = on ? 'Tu video está listo' : 'Ahora el arte';
-    var n=document.getElementById('wiz-next2'); if(n) n.textContent = on ? 'Usar este video →' : 'Usar este arte →';
+    var t=document.getElementById('wiz-p2-t'); if(t) t.textContent = on ? (esVid ? 'Tu video está listo' : 'Tu foto está lista') : 'Ahora el arte';
+    var n=document.getElementById('wiz-next2'); if(n) n.textContent = on ? (esVid ? 'Usar este video →' : 'Usar esta foto →') : 'Usar este arte →';
     var vt=document.getElementById('wiz-vid-tools'); if(vt) vt.style.display = on ? '' : 'none';
   }
   function wizPintaArte(img){
     if(!img){ return; }   // async: aún no hay imagen → NO pintar el icono roto
     wizImg=img;
-    wizVideoUI(wizEsVideo(img));
+    var esv=wizEsVideo(img);
+    wizVideoUI(esv || wizMediaListo, esv);
     document.getElementById('wiz-art').innerHTML = wizEsVideo(img)
       ? '<video src="'+img+'?t='+Date.now()+'" controls muted playsinline style="width:100%;border-radius:14px;display:block"></video>'
       : '<img src="'+img+'?t='+Date.now()+'" alt="arte">';
@@ -687,10 +691,57 @@ if (!isset($redes_conectadas)) {
         if(pi<puntos.length){ v.currentTime=Math.max(0.1, dur*puntos[pi]); } else { fin(); }
       };
     }
-    var wvd=document.getElementById('wiz-video-directo');
+    // Foto → un frame JPEG (canvas, máx 1280px): los "ojos" para pedir otra
+    // versión del texto sin re-subir la imagen.
+    function wizFotoFrame(file, cb){
+      var img=new Image(), url=URL.createObjectURL(file);
+      img.onload=function(){
+        try{
+          var vw=img.naturalWidth||1280, vh=img.naturalHeight||1280;
+          var w=Math.min(1280, vw), h=Math.round(w*vh/vw);
+          var c=document.createElement('canvas'); c.width=w; c.height=h;
+          c.getContext('2d').drawImage(img,0,0,w,h);
+          cb(c.toDataURL('image/jpeg',.85));
+        }catch(e){ cb(null); }
+        URL.revokeObjectURL(url);
+      };
+      img.onerror=function(){ URL.revokeObjectURL(url); cb(null); };
+      img.src=url;
+    }
+    // Llegada al paso 2 en "modo media listo" (foto o video del dueño, tal cual).
+    function wizMediaOk(d, url){
+      wizId=d.id; wizImg=''; wizMediaListo=true;
+      document.getElementById('wiz-cap').textContent=d.caption||'';
+      renderDebate(null,null);
+      document.getElementById('wiz-editbox').style.display='none';
+      document.getElementById('wiz-edit').style.display='inline-block';
+      document.getElementById('wiz-art').innerHTML='';
+      document.getElementById('wiz-arteidea').value='';
+      wizPaso(2);
+      wizPintaArte(url);
+    }
+    var wvd=document.getElementById('wiz-media-directo');
     if(wvd) wvd.addEventListener('change', function(){
       var f=wvd.files[0]; wvd.value=''; if(!f) return;
-      if(f.size > 100*1024*1024){ toast('El video es muy grande (máx 100MB).'); return; }
+      var esImg=(f.type||'').indexOf('image')===0;
+      if(esImg && f.size > 12*1024*1024){ toast('La foto es muy grande (máx 12MB).'); return; }
+      if(!esImg && f.size > 100*1024*1024){ toast('El video es muy grande (máx 100MB).'); return; }
+      if(esImg){
+        // FOTO TAL CUAL: se sube tal como es (cero realce); la Creativa la MIRA y escribe.
+        wizMediaTipo='foto'; wizVidDur=0;
+        wizFotoFrame(f, function(fr){ if(fr) wizVidFrames=[fr]; });
+        loaderShow('El corillo está mirando tu foto…', ['Viendo lo que trajiste…','Escribiendo el caption en tu voz…','Casi listo…']);
+        var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','post_desde_foto'); fd.append('foto',f);
+        fd.append('contexto', document.getElementById('wiz-tema').value.trim());
+        fetch(WIZ_EP,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+          loaderHide();
+          if(!d.ok){ toast(d.err==='paywall' ? 'Usaste tu muestra. Actívate para crear más.' : (d.err||'No se pudo. Intenta otra vez.')); return; }
+          wizMediaOk(d, d.foto);
+        }).catch(function(){ loaderHide(); toast('Error de conexión.'); });
+        return;
+      }
+      // VIDEO listo (flujo original)
+      wizMediaTipo='video';
       loaderShow('El corillo está viendo tu video…', ['Mirando lo que grabaste…','Escribiendo el caption en tu voz…','Casi listo…']);
       wizFramesDeVideo(f, function(frames, dur){
         if(!frames.length){ loaderHide(); toast('No pude leer el video en este navegador — prueba con un MP4.'); return; }
@@ -701,17 +752,25 @@ if (!isset($redes_conectadas)) {
         fetch(WIZ_EP,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
           loaderHide();
           if(!d.ok){ toast(d.err==='paywall' ? 'Usaste tu muestra. Actívate para crear más.' : (d.err||'No se pudo. Intenta otra vez.')); return; }
-          wizId=d.id; wizImg='';
-          document.getElementById('wiz-cap').textContent=d.caption||'';
-          renderDebate(null,null);
-          document.getElementById('wiz-editbox').style.display='none';
-          document.getElementById('wiz-edit').style.display='inline-block';
-          document.getElementById('wiz-art').innerHTML='';
-          document.getElementById('wiz-arteidea').value='';
-          wizPaso(2);
-          wizPintaArte(d.video);   // pinta el <video> y muestra "Usar este video →"
+          wizMediaOk(d, d.video);
         }).catch(function(){ loaderHide(); toast('Error de conexión (¿video muy pesado?).'); });
       });
+    });
+
+    // Paso 2 · MI FOTO TAL CUAL: reemplaza el arte con tu foto SIN realce.
+    var wft=document.getElementById('wiz-foto-talcual');
+    if(wft) wft.addEventListener('change', function(){
+      if(!wizId || !this.files[0]) return;
+      var f=this.files[0]; this.value='';
+      if(f.size > 12*1024*1024){ toast('La foto es muy grande (máx 12MB).'); return; }
+      loaderShow('Subiendo tu foto…', 'Tal cual, sin tocarla. Un momento…');
+      wizMediaTipo='foto';
+      wizFotoFrame(f, function(fr){ if(fr) wizVidFrames=[fr]; });
+      var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','foto_directa'); fd.append('id',wizId); fd.append('foto',f);
+      fetch(WIZ_EP,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+        loaderHide(); if(!d.ok){ toast(d.err||'No se pudo subir la foto.'); return; }
+        wizMediaListo=true; wizPintaArte(d.foto);
+      }).catch(function(){ loaderHide(); toast('Error de conexión.'); });
     });
 
     // ── Otra toma / dirección del TEXTO (modo video): la Creativa vuelve a
@@ -722,7 +781,7 @@ if (!isset($redes_conectadas)) {
       if(!wizVidFrames.length){ toast('No tengo los fotogramas de este video — súbelo de nuevo desde el paso 1.'); return; }
       loaderShow('La Creativa está pensando otro texto…', ['Mirando tu video otra vez…','Buscando otro ángulo…','Casi…']);
       var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','recaption_video'); fd.append('id',wizId);
-      fd.append('dur', wizVidDur||''); fd.append('direccion', dir||'');
+      fd.append('dur', wizVidDur||''); fd.append('direccion', dir||''); fd.append('tipo', wizMediaTipo);
       for(var i=0;i<wizVidFrames.length;i++) fd.append('frames[]', wizVidFrames[i]);
       fetch(WIZ_EP,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
         loaderHide();

@@ -423,14 +423,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$frames) { echo json_encode(['ok'=>false,'err'=>'No tengo los fotogramas de este video — súbelo de nuevo desde el paso 1.']); exit; }
         $dur = ($_POST['dur'] ?? '') !== '' ? (int)round((float)$_POST['dur']) : null;
         $direccion = mb_substr(trim((string)($_POST['direccion'] ?? '')), 0, 200);
+        $tipo_m = (($_POST['tipo'] ?? 'video') === 'foto') ? 'foto' : 'video';
         try {
-            $caption = caption_desde_video($pdo, $marca_id, $frames, $dur, '', $direccion, (string)$prev);
+            $caption = caption_desde_video($pdo, $marca_id, $frames, $dur, '', $direccion, (string)$prev, $tipo_m);
         } catch (Throwable $e) {
             echo json_encode(['ok'=>false,'err'=>'No pude reescribir: ' . substr($e->getMessage(), 0, 120)]); exit;
         }
         if ($caption === '') { echo json_encode(['ok'=>false,'err'=>'El texto salió vacío — intenta de nuevo.']); exit; }
         $pdo->prepare("UPDATE crecer_contenido SET caption=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$caption, $vid, $marca_id]);
         echo json_encode(['ok'=>true, 'caption'=>$caption], JSON_UNESCAPED_UNICODE); exit;
+    }
+
+    // ── Usar FOTO propia TAL CUAL (paso 2): el dueño manda, la IA no la toca.
+    //    (El "Subir mi foto" clásico la manda al realce; ESTE botón no.) ──
+    if ($accion === 'foto_directa') {
+        header('Content-Type: application/json');
+        $f = $_FILES['foto'] ?? null;
+        if (!$f || ($f['error'] ?? 1) !== UPLOAD_ERR_OK || empty($f['tmp_name'])) { echo json_encode(['ok'=>false,'err'=>'No se recibió la foto.']); exit; }
+        $info = @getimagesize($f['tmp_name']);
+        $ext = ['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp'][$info['mime'] ?? ''] ?? null;
+        if (!$ext || (int)$f['size'] > 12*1024*1024) { echo json_encode(['ok'=>false,'err'=>'Sube una foto JPG/PNG/WebP de hasta 12 MB.']); exit; }
+        $dir = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/fotos";
+        @mkdir($dir, 0775, true);
+        $fn = 'propia_' . uniqid() . '.' . $ext;
+        if (!move_uploaded_file($f['tmp_name'], $dir . '/' . $fn)) { echo json_encode(['ok'=>false,'err'=>'No se pudo guardar la foto.']); exit; }
+        $url = rtrim(UPLOADS_URL, '/') . "/marca_{$marca_id}/fotos/" . $fn;
+        if ($id) $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$url, $id, $marca_id]);
+        echo json_encode(['ok'=>true, 'id'=>$id, 'foto'=>$url]); exit;
+    }
+
+    // ── POST DESDE FOTO (paso 1): la foto YA LISTA del dueño entra primero y el
+    //    corillo escribe el texto MIRÁNDOLA. La foto va TAL CUAL — cero realce,
+    //    cero IA sobre la imagen (regla real-photos-first). Espejo del flujo
+    //    post_desde_video. ──
+    if ($accion === 'post_desde_foto') {
+        header('Content-Type: application/json');
+        @set_time_limit(0);
+        if (!$acceso_full && !$puede_crear) { echo json_encode(['ok'=>false,'err'=>'paywall']); exit; }
+        $f = $_FILES['foto'] ?? null;
+        if (!$f || ($f['error'] ?? 1) !== UPLOAD_ERR_OK || empty($f['tmp_name'])) { echo json_encode(['ok'=>false,'err'=>'No se recibió la foto. Intenta de nuevo.']); exit; }
+        $info = @getimagesize($f['tmp_name']);
+        $ext = ['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp'][$info['mime'] ?? ''] ?? null;
+        if (!$ext || (int)$f['size'] > 12*1024*1024) { echo json_encode(['ok'=>false,'err'=>'Sube una foto JPG/PNG/WebP de hasta 12 MB.']); exit; }
+        $contexto = mb_substr(trim((string)($_POST['contexto'] ?? '')), 0, 300);
+
+        $dir = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/fotos";
+        @mkdir($dir, 0775, true);
+        $fn = 'propia_' . uniqid() . '.' . $ext;
+        if (!move_uploaded_file($f['tmp_name'], $dir . '/' . $fn)) { echo json_encode(['ok'=>false,'err'=>'No se pudo guardar la foto.']); exit; }
+        $url = rtrim(UPLOADS_URL, '/') . "/marca_{$marca_id}/fotos/" . $fn;
+
+        // La Creativa VE la foto (mime real) y escribe el caption en la voz del dueño.
+        try {
+            $b64 = base64_encode((string)file_get_contents($dir . '/' . $fn));
+            $caption = caption_desde_video($pdo, $marca_id, [['mime' => (string)$info['mime'], 'data' => $b64]], null, $contexto, '', '', 'foto');
+        } catch (Throwable $e) {
+            @unlink($dir . '/' . $fn);
+            echo json_encode(['ok'=>false,'err'=>'No pude escribir el texto: ' . substr($e->getMessage(), 0, 120)]); exit;
+        }
+        if ($caption === '') {
+            @unlink($dir . '/' . $fn);
+            echo json_encode(['ok'=>false,'err'=>'El texto salió vacío — intenta de nuevo.']); exit;
+        }
+
+        $fecha_dt = date('Y-m-d H:i:s');
+        $fa = (int)date('Y'); $fm = (int)date('n');
+        $pdo->prepare("INSERT INTO crecer_calendario (marca_id, anio, mes, estado, generado_por_ia) VALUES (?,?,?, 'borrador', 1) ON DUPLICATE KEY UPDATE updated_at=NOW()")->execute([$marca_id, $fa, $fm]);
+        $calid = (int)$pdo->query("SELECT id FROM crecer_calendario WHERE marca_id={$marca_id} AND anio={$fa} AND mes={$fm}")->fetchColumn();
+        $pdo->prepare("INSERT INTO crecer_contenido (calendario_id, marca_id, plataforma, tipo, caption, fecha_programada, estado, grafica_path) VALUES (?,?,?,?,?,?, 'borrador', ?)")
+            ->execute([$calid, $marca_id, 'instagram', 'post', $caption, $fecha_dt, $url]);
+        $nid = (int)$pdo->lastInsertId();
+        echo json_encode(['ok'=>true, 'id'=>$nid, 'caption'=>$caption, 'foto'=>$url], JSON_UNESCAPED_UNICODE); exit;
     }
 
     // ── Pedir un post a la IA (tema sugerido / borrador a pulir / random) ──
