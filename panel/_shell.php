@@ -55,6 +55,9 @@ $nav_perfil = [
 <style>
   /* Fondo blanco unificado (el bottom-nav lo renderiza _shell_foot.php, uno solo) */
   .main{background:#fff}
+  /* El menú creció (Crear, Órdenes, WhatsApp…) y en desktop el sidebar es
+     height:100vh SIN overflow → se cortaba. Scroll propio, discreto. */
+  .side{overflow-y:auto;scrollbar-width:thin}
   /* Logo del app 25% más grande para que el ícono resalte (override del CSS compartido) */
   .side .sbrand img{height:38px}
   .ptop img{height:35px}
