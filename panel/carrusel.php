@@ -46,7 +46,20 @@ if (($_GET['ajax'] ?? '') === 'estado' && $cid) {
         'img' => trim((string)$s['grafica_path']), 'estado' => (string)$s['img_estado'],
     ], $slides);
     $est = carrusel_estado($pdo, $cid);
-    echo json_encode(['ok' => true] + $est + ['slides' => $out], JSON_UNESCAPED_UNICODE);
+    // Estado del POST (publicando → publicado/fallido) + permalink si ya salió:
+    // el poll de después de Publicar cuenta la verdad en vez de botar a inicio.
+    $pe = $pdo->prepare("SELECT estado FROM crecer_contenido WHERE id=? AND marca_id=?");
+    $pe->execute([$cid, $marca_id]);
+    $post_estado = (string)$pe->fetchColumn();
+    $permalink = null;
+    try {
+        $pl = $pdo->prepare("SELECT permalink FROM crecer_publicaciones
+                             WHERE contenido_id=? AND estado='ok' AND permalink IS NOT NULL AND permalink <> ''
+                             ORDER BY id DESC LIMIT 1");
+        $pl->execute([$cid]);
+        $permalink = $pl->fetchColumn() ?: null;
+    } catch (Throwable $e) {}
+    echo json_encode(['ok' => true] + $est + ['slides' => $out, 'post_estado' => $post_estado, 'permalink' => $permalink], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -584,13 +597,46 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
       var fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion','publicar'); fd.append('ajax','1');
       post(fd).then(function(d){
         if(d&&d.ok&&d.publicando){
-          ovShow('Publicando tu carrusel…','Lo estamos soltando a tus redes. Te avisamos por la campanita cuando salga — puedes seguir en lo tuyo.');
-          setTimeout(function(){ location.href=BASE+'/index.php?marca='+MARCA; },2600);
+          pubCamino();   // la verdad en pantalla: en camino → publicado/fallido, con link
         } else if(d&&d.err==='no_conectado'){
           okBtn.disabled=false; say('Conecta Instagram/Facebook primero.'); if(d.url) setTimeout(function(){location.href=d.url;},1100);
         } else { okBtn.disabled=false; say((d&&d.err)||'No se pudo publicar.'); }
       }).catch(function(){ okBtn.disabled=false; say('Error de conexión.'); });
     });
+  }
+
+  // ── DESPUÉS DE PUBLICAR, LA VERDAD: primero "en camino", y el poll (~90s)
+  //    lo convierte en "¡Publicado!" con el link real, o en el aviso honesto
+  //    de que quedó guardado para reintentar. Nada de botarte a inicio mudo. ──
+  function cardOv(html){
+    var bx=document.querySelector('#crOv .bx');
+    if(bx) bx.innerHTML=html;
+    document.getElementById('crOv').classList.add('on');
+  }
+  function pubCamino(){
+    cardOv('<div class="sp"></div><h3>En camino a tus redes</h3><p>El corillo lo está publicando — IG como carrusel, FB como álbum. Esto toma un momento…</p>');
+    var tries=0;
+    var t=setInterval(function(){
+      tries++;
+      fetch(location.pathname+'?marca='+MARCA+'&id='+CID+'&ajax=estado').then(function(r){return r.json();}).then(function(d){
+        var e=(d&&d.post_estado)||'';
+        if(e==='publicado'){
+          clearInterval(t);
+          cardOv('<h3>¡Publicado!</h3><p>Tu carrusel ya está en la calle.</p>'
+            +'<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px">'
+            +((d.permalink)?'<a class="cr-fbgo" style="text-decoration:none" href="'+d.permalink+'" target="_blank" rel="noopener">Verlo en la red ↗</a>':'')
+            +'<button type="button" class="cr-fbgo" onclick="location.href=\''+BASE+'/index.php?marca='+MARCA+'\'">Ir al inicio</button></div>');
+        } else if(e==='fallido'){
+          clearInterval(t);
+          cardOv('<h3>No salió esta vez</h3><p>Tranquilo: tu carrusel quedó <b>guardado</b> — no se perdió. Reintenta cuando quieras.</p>'
+            +'<button type="button" class="cr-fbgo" style="margin-top:14px" onclick="location.href=\''+BASE+'/aprobar2.php?tab=listos&marca='+MARCA+'\'">Ver y reintentar</button>');
+        } else if(tries>=22){
+          clearInterval(t);
+          cardOv('<h3>Sigue en camino</h3><p>Está tomando más de lo normal — la campanita te avisa cuando salga a la calle.</p>'
+            +'<button type="button" class="cr-fbgo" style="margin-top:14px" onclick="location.href=\''+BASE+'/index.php?marca='+MARCA+'\'">Ir al inicio</button>');
+        }
+      }).catch(function(){ /* siguiente intento del poll */ });
+    }, 4000);
   }
 })();
 </script>
