@@ -79,6 +79,9 @@ El producto ya corre; ahora que nada dependa de suerte:
 - **DMs de IG/FB** (permiso de mensajería) — el Conserje completo.
 - **Encuéntralo fase 2**: el directorio, poblado por los clientes que Crecer hizo
   fuertes — el plan original, por fin al derecho.
+- **Análisis de mercado y competencia para los clientes** (pedido 2026-08-10):
+  el corillo estudia el mercado local del negocio (municipio + categoría — data
+  de Encuéntralo ya existente) y aconseja con hechos, no con humo.
 - **Finanzas del micronegocio** (mismo cerebro, otro dominio — fuera del XPRIZE).
 
 ## Principios que no se negocian
