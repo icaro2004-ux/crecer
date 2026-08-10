@@ -77,7 +77,7 @@ function wa_historial(PDO $pdo, int $marca_id, string $telefono, int $limit = 8,
     if (!$filas) return '';
     $out = [];
     foreach ($filas as $f) {
-        $out[] = 'CLIENTE: ' . mb_substr((string)$f['mensaje_entrante'], 0, 200);
+        if ((string)$f['mensaje_entrante'] !== '') $out[] = 'CLIENTE: ' . mb_substr((string)$f['mensaje_entrante'], 0, 200);
         if (!empty($f['respuesta_ia'])) $out[] = 'TÚ: ' . mb_substr((string)$f['respuesta_ia'], 0, 200);
     }
     return implode("\n", $out);
@@ -167,7 +167,8 @@ function wa_procesar_entrante(PDO $pdo, string $wamid, string $telefono, string 
     } catch (Throwable $e) {
         $pdo->prepare("UPDATE crecer_mensajes SET estado='escalado' WHERE id=?")->execute([$msg_id]);
         notif_crear($pdo, $marca_id, 'whatsapp', 'Un WhatsApp espera TU respuesta',
-            $remitente . ': "' . mb_substr($texto, 0, 120) . '"', null, 'phone');
+            $remitente . ': "' . mb_substr($texto, 0, 120) . '"',
+            '/crecer/panel/whatsapp.php?marca=' . $marca_id . '&tel=' . preg_replace('/\D+/', '', $telefono), 'phone');
         return ['ok' => false, 'motivo' => 'decidir: ' . substr($e->getMessage(), 0, 120)];
     }
 
@@ -188,6 +189,7 @@ function wa_procesar_entrante(PDO $pdo, string $wamid, string $telefono, string 
         ->execute([$enviada ? $d['respuesta'] : null, $d['ia_log_id'], $msg_id]);
     notif_crear($pdo, $marca_id, 'whatsapp', 'Un WhatsApp espera TU respuesta',
         $remitente . ': "' . mb_substr($texto, 0, 120) . '"'
-        . ($d['porque'] !== '' ? ' — ' . $d['porque'] : ''), null, 'phone');
+        . ($d['porque'] !== '' ? ' — ' . $d['porque'] : ''),
+        '/crecer/panel/whatsapp.php?marca=' . $marca_id . '&tel=' . preg_replace('/\D+/', '', $telefono), 'phone');
     return ['ok' => true, 'motivo' => 'escalado'];
 }

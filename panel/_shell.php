@@ -96,6 +96,11 @@ $nav_perfil = [
       <a href="<?= $BASE ?>/ordenes.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='ordenes'?'on':'' ?>">
         <?= ico('qr') ?>Órdenes
       </a>
+      <?php if (defined('WHATSAPP_MARCA_ID') && (int)WHATSAPP_MARCA_ID === $marca_id): ?>
+      <a href="<?= $BASE ?>/whatsapp.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='whatsapp'?'on':'' ?>">
+        <?= ico('phone') ?>WhatsApp
+      </a>
+      <?php endif; ?>
       <a href="<?= $BASE ?>/finanzas.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='finanzas'?'on':'' ?>">
         <?= ico('dollar') ?>Finanzas
       </a>
