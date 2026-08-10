@@ -54,6 +54,15 @@ try {
         catch (Throwable $e) { error_log('optimizador marca ' . $mid . ': ' . $e->getMessage()); }
         $detalle[] = ['marca'=>(int)$mid, 'lecciones'=>$opt['lecciones']] + $r;
     }
+    // EL VIGÍA DEL TOKEN de WhatsApp: chequeo diario — si está inválido o por
+    // vencer (<7 días), avisa por campanita + email. Nunca más un token mudo.
+    try {
+        require_once __DIR__ . '/../includes/whatsapp.php';
+        if (function_exists('wa_token_vigia') && wa_configurado()) {
+            $tot['wa_token'] = wa_token_vigia($pdo);
+        }
+    } catch (Throwable $e) { error_log('vigia token wa: ' . $e->getMessage()); }
+
     $tot['ms'] = (int)round((microtime(true) - $inicio) * 1000);
 
     if ($es_cli) {

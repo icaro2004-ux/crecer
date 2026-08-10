@@ -60,6 +60,50 @@ function wa_enviar_texto(string $telefono, string $texto): array {
 }
 
 /**
+ * EL VIGÍA DEL TOKEN — un token que muere mudo deja al agente sordo sin que
+ * nadie se entere (pasó el 2026-08-09: expiró a las 4:00 PM y los mensajes
+ * caían al vacío). Esto pregunta a Meta por la salud del token y AVISA
+ * (campanita + email al fundador) si está inválido o le quedan <7 días.
+ * Lo corre el cron de métricas a diario. Aplica a CUALQUIER token, hasta al
+ * "permanente" — aquí no confiamos ni en las promesas de Meta.
+ */
+function wa_token_vigia(PDO $pdo): array {
+    if (!wa_configurado()) return ['ok' => false, 'motivo' => 'sin_config'];
+    if (!defined('META_APP_ID') || !defined('META_APP_SECRET') || META_APP_ID === '' || META_APP_SECRET === '') {
+        return ['ok' => false, 'motivo' => 'sin_app_secret'];
+    }
+    $version = defined('META_GRAPH_VERSION') ? META_GRAPH_VERSION : 'v21.0';
+    $url = "https://graph.facebook.com/{$version}/debug_token?"
+         . http_build_query(['input_token' => WHATSAPP_TOKEN, 'access_token' => META_APP_ID . '|' . META_APP_SECRET]);
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20]);
+    $out = curl_exec($ch);
+    curl_close($ch);
+    $d = json_decode((string)$out, true)['data'] ?? null;
+    if (!is_array($d)) return ['ok' => false, 'motivo' => 'no_se_pudo_leer'];
+
+    $valido  = !empty($d['is_valid']);
+    $expira  = (int)($d['expires_at'] ?? 0);          // 0 = no expira
+    $dias    = $expira > 0 ? (int)floor(($expira - time()) / 86400) : null;
+    $alerta  = null;
+    if (!$valido)                       $alerta = 'El token de WhatsApp está INVÁLIDO — el agente está sordo AHORA MISMO.';
+    elseif ($dias !== null && $dias < 7) $alerta = "Al token de WhatsApp le quedan {$dias} día(s) — renuévalo antes de que el agente enmudezca.";
+
+    if ($alerta !== null) {
+        $marca_id = (int)WHATSAPP_MARCA_ID;
+        notif_crear($pdo, $marca_id, 'whatsapp', 'ATENCIÓN: el token de WhatsApp', $alerta,
+            '/crecer/panel/whatsapp.php?marca=' . $marca_id, 'bolt');
+        if (function_exists('crecer_enviar_email') && defined('CRECER_FUNDADOR_EMAIL') && CRECER_FUNDADOR_EMAIL !== '') {
+            try {
+                crecer_enviar_email(CRECER_FUNDADOR_EMAIL, 'Crecer · el token de WhatsApp necesita acción',
+                    "<p>{$alerta}</p><p>Se renueva en developers.facebook.com y se pega en config.local.php (WHATSAPP_TOKEN).</p>");
+            } catch (Throwable $e) { error_log('wa_token_vigia email: ' . $e->getMessage()); }
+        }
+    }
+    return ['ok' => $valido, 'expira_en_dias' => $dias, 'alerta' => $alerta];
+}
+
+/**
  * La CONVERSACIÓN previa con este teléfono (para que el agente tenga memoria
  * y no se repita como perico — el defecto de la primera prueba en vivo).
  */
