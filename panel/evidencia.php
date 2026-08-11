@@ -116,6 +116,11 @@ $nombres_agente = [
     'analitica'=>['chart','El Analista','resumió el mes'],
     'aprendiz'=>['bookmark','El Aprendiz','aprendió vocabulario'],
     'editor'=>['pen','El Editor','ajustó un texto'],
+    'creativa'=>['pen','La Creativa','escribió un caption'],
+    'carruselista'=>['image','El Guionista','armó un carrusel'],
+    'conserje'=>['chat','El Conserje','atendió a un cliente'],
+    'reels'=>['camera','El Productor','montó un reel'],
+    'genoma'=>['compass','El Business Genome','redactó la radiografía'],
 ];
 $agf = fn($a) => $nombres_agente[$a] ?? ['settings', ucfirst($a), 'ejecutó una acción'];
 
@@ -130,8 +135,11 @@ $posts_pub     = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE m
 $msgs_cli      = (int)$pdo->query("SELECT COUNT(*) FROM crecer_ia_log WHERE marca_id={$marca_id} AND agente='retencion' AND estado='ok'")->fetchColumn();
 
 // Desglose por agente
+// ('kernel' = decisiones internas del orquestador; 'genoma' NO va como fila de
+//  agente — es el conocimiento acumulado y tiene su tarjeta propia abajo.)
 $desg = $pdo->prepare("SELECT agente, COUNT(*) n, MAX(created_at) ult, COALESCE(SUM(costo_usd),0) costo
-                       FROM crecer_ia_log WHERE marca_id=? AND estado='ok' GROUP BY agente ORDER BY n DESC");
+                       FROM crecer_ia_log WHERE marca_id=? AND estado='ok' AND agente NOT IN ('kernel','genoma')
+                       GROUP BY agente ORDER BY n DESC");
 $desg->execute([$marca_id]); $desglose = $desg->fetchAll();
 
 // Feed crudo: últimas acciones (la evidencia)
@@ -259,6 +267,32 @@ require __DIR__ . '/_shell.php';
     </p>
   </div>
   <?php endif; ?>
+
+  <?php
+    // BUSINESS GENOME de esta marca: no es un agente que actúa — es lo que
+    // TODOS saben del negocio y no paran de alimentar.
+    $gen_m = ['intake' => 0, 'aprendiz' => 0, 'genoma' => 0];
+    try {
+        $gq = $pdo->prepare("SELECT agente, COUNT(*) n FROM crecer_ia_log
+                             WHERE marca_id=? AND estado='ok' AND agente IN ('intake','aprendiz','genoma') GROUP BY agente");
+        $gq->execute([$marca_id]);
+        foreach ($gq as $r) $gen_m[$r['agente']] = (int)$r['n'];
+    } catch (Throwable $e) {}
+    $gmem = 0; $gopt = 0;
+    try { $s = $pdo->prepare("SELECT COUNT(*) FROM crecer_memoria WHERE marca_id=? AND estado='activa'"); $s->execute([$marca_id]); $gmem = (int)$s->fetchColumn(); } catch (Throwable $e) {}
+    try { $s = $pdo->prepare("SELECT COUNT(*) FROM crecer_memoria WHERE marca_id=? AND estado='activa' AND fuente='optimizador'"); $s->execute([$marca_id]); $gopt = (int)$s->fetchColumn(); } catch (Throwable $e) {}
+    $gen_m_total = array_sum($gen_m) + $gmem;
+  ?>
+  <div class="ev-card">
+    <h2><?= ico('compass') ?> Business Genome · lo que el corillo sabe de este negocio</h2>
+    <p style="font-size:13px;color:var(--muted);margin:0 0 12px;line-height:1.5">No es un agente que ejecuta — es el conocimiento
+    <b>vivo</b> que todos alimentan: cada entrevista, cada corrección del dueño, cada lección medida de los resultados suma aquí.</p>
+    <div class="ev-ag"><span class="e"><?= ico('compass') ?></span><div><div class="nm">Aportes totales al conocimiento</div><div class="ro">la suma de todo lo aprendido</div></div><div class="n"><b><?= number_format($gen_m_total) ?></b></div></div>
+    <div class="ev-ag"><span class="e"><?= ico('lightbulb') ?></span><div><div class="nm">Entrevistas y perfil</div><div class="ro">lo que el dueño le contó (Intake)</div></div><div class="n"><b><?= number_format($gen_m['intake']) ?></b></div></div>
+    <div class="ev-ag"><span class="e"><?= ico('bookmark') ?></span><div><div class="nm">Voz y vocabulario aprendidos</div><div class="ro">de las ediciones del dueño (Aprendiz)</div></div><div class="n"><b><?= number_format($gen_m['aprendiz']) ?></b></div></div>
+    <div class="ev-ag"><span class="e"><?= ico('list') ?></span><div><div class="nm">Radiografías del negocio</div><div class="ro">las reglas redactadas del negocio</div></div><div class="n"><b><?= number_format($gen_m['genoma']) ?></b></div></div>
+    <div class="ev-ag"><span class="e"><?= ico('star') ?></span><div><div class="nm">Memorias activas</div><div class="ro"><?= $gopt > 0 ? "incluye {$gopt} lección(es) medidas de resultados (Optimizador)" : 'hechos y preferencias del negocio' ?></div></div><div class="n"><b><?= number_format($gmem) ?></b></div></div>
+  </div>
 
   <div class="ev-card">
     <h2><?= ico('users') ?> Qué hizo cada agente</h2>
