@@ -54,6 +54,22 @@ for ($i=13; $i>=0; $i--) { $d = date('Y-m-d', time()-$i*86400); $dias[] = ['d'=>
 $max = max(1, max(array_column($dias,'n')));
 // Por agente.
 $por_agente = $pdo->query("SELECT agente, COUNT(*) n, COALESCE(SUM(costo_usd),0) c FROM crecer_ia_log GROUP BY agente ORDER BY n DESC")->fetchAll(PDO::FETCH_ASSOC);
+
+// ── BUSINESS GENOME: no es un agente que actúa — es el conocimiento VIVO que
+//    TODOS los agentes acumulan. Aquí se muestra como la suma que es (si se
+//    mirara solo la fila 'genoma' del log parecería que casi no trabaja:
+//    la Radiografía corre pocas veces a propósito; el conocimiento entra por
+//    la entrevista, las correcciones del dueño y las lecciones de resultados).
+$gen = ['intake' => 0, 'aprendiz' => 0, 'genoma' => 0];
+try {
+    $q = $pdo->query("SELECT agente, COUNT(*) n FROM crecer_ia_log
+                      WHERE estado='ok' AND agente IN ('intake','aprendiz','genoma') GROUP BY agente");
+    foreach ($q as $r) $gen[$r['agente']] = (int)$r['n'];
+} catch (Throwable $e) {}
+$mem_act = 0; $mem_opt = 0;
+try { $mem_act = (int)$pdo->query("SELECT COUNT(*) FROM crecer_memoria WHERE estado='activa'")->fetchColumn(); } catch (Throwable $e) {}
+try { $mem_opt = (int)$pdo->query("SELECT COUNT(*) FROM crecer_memoria WHERE estado='activa' AND fuente='optimizador'")->fetchColumn(); } catch (Throwable $e) {}
+$gen_total = array_sum($gen) + $mem_act;
 ?>
 <!DOCTYPE html><html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -110,6 +126,19 @@ $por_agente = $pdo->query("SELECT agente, COUNT(*) n, COALESCE(SUM(costo_usd),0)
         <div class="bar" title="<?= $d['d'] ?>: <?= $d['n'] ?> decisiones"><span class="col" style="height:<?= max(2,(int)round($d['n']/$max*100)) ?>%"></span><small><?= (int)substr($d['d'],8,2) ?></small></div>
       <?php endforeach; ?>
     </div>
+  </div>
+
+  <div class="card">
+    <h2><?= ico('compass') ?> Business Genome · el conocimiento vivo</h2>
+    <p class="sub" style="margin:0 0 10px">El Genome no es un agente que actúa — es lo que <b>todos</b> los agentes
+    saben del negocio y no paran de alimentar: cada entrevista, cada corrección del dueño, cada lección
+    medida de los resultados <b>suma aquí</b>.</p>
+    <div class="row"><span class="k">Aportes totales al conocimiento</span><span><b><?= number_format($gen_total) ?></b></span></div>
+    <div class="row"><span class="k">— Entrevistas y perfiles (Intake)</span><span><?= number_format($gen['intake']) ?></span></div>
+    <div class="row"><span class="k">— Voz y vocabulario aprendidos de las ediciones del dueño (Aprendiz)</span><span><?= number_format($gen['aprendiz']) ?></span></div>
+    <div class="row"><span class="k">— Radiografías del negocio redactadas</span><span><?= number_format($gen['genoma']) ?></span></div>
+    <div class="row"><span class="k">— Memorias activas del negocio</span><span><?= number_format($mem_act) ?></span></div>
+    <div class="row"><span class="k">&nbsp;&nbsp;&nbsp;de ellas, lecciones medidas de resultados (el Optimizador)</span><span><?= number_format($mem_opt) ?></span></div>
   </div>
 
   <div class="card">
