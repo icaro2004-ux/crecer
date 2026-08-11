@@ -54,16 +54,17 @@ function arte_disparar(int $marca_id, int $post_id, ?bool $con_texto = null, ?st
  */
 function img_estilo_dir(string $estilo): array {
     $map = [
-        'realista'    => ['medio' => 'fotografía',  'dir' => 'Estilo FOTOGRÁFICO realista: luz natural, foto publicitaria nítida, apetecible y creíble.'],
-        'creativo'    => ['medio' => 'imagen',       'dir' => 'Estilo CREATIVO y llamativo: composición audaz, color vibrante, un concepto con gancho — nunca la toma obvia.'],
-        'fantasia'    => ['medio' => 'imagen',       'dir' => 'Estilo FANTÁSTICO / de ensueño: atmósfera mágica y surrealista, luz dramática, paleta rica y saturada.'],
-        'ilustracion' => ['medio' => 'ilustración',  'dir' => 'Estilo ILUSTRACIÓN / arte digital: formas limpias, trazo definido, paleta plana o degradados suaves, composición moderna. NO es fotografía — es una ILUSTRACIÓN con carácter.'],
+        'realista'    => ['medio' => 'fotografía',  'dir' => 'ESTILO REALISTA (obligatorio): una FOTOGRAFÍA real y profesional — luz natural, nitidez editorial, texturas y sombras creíbles, apetecible. PROHIBIDO: ilustración, dibujo, caricatura, render 3D, look plástico/CGI.'],
+        'creativo'    => ['medio' => 'imagen',       'dir' => 'ESTILO CREATIVO (obligatorio): imagen estilizada y audaz — composición inesperada, color vibrante, un concepto con gancho. Puede alejarse de la foto literal, limpia y de alta calidad. Nunca la toma obvia y aburrida.'],
+        'fantasia'    => ['medio' => 'imagen',       'dir' => 'ESTILO FANTÁSTICO (obligatorio): atmósfera mágica y surrealista, luz de ensueño, brillos, paleta rica y saturada, sensación de cuento. Espectacular pero coherente con el mensaje.'],
+        'ilustracion' => ['medio' => 'ilustración',  'dir' => 'ESTILO ILUSTRACIÓN (obligatorio): una ILUSTRACIÓN / arte digital DIBUJADO — trazo definido, formas limpias, color plano o degradados suaves, estética moderna. PROHIBIDO ABSOLUTAMENTE que parezca una fotografía o un render 3D: es un DIBUJO.'],
     ];
-    $claves = array_values(array_filter(array_map('trim', explode('+', strtolower(trim($estilo))))));
+    $claves = array_values(array_filter(array_map('trim', explode('+', strtolower(trim($estilo)))), fn($k) => isset($map[$k])));
     if (count($claves) <= 1) return $map[$claves[0] ?? 'realista'] ?? $map['realista'];
+    // Combinados: refleja SOLO los estilos seleccionados, fundidos en una sola imagen.
     $dirs = []; $medio = 'imagen';
-    foreach ($claves as $k) { if (isset($map[$k])) { $dirs[] = $map[$k]['dir']; if ($k !== 'realista' && $medio === 'imagen') $medio = $map[$k]['medio']; } }
-    return ['medio' => $medio ?: 'imagen', 'dir' => $dirs ? implode(' + ', $dirs) : $map['realista']['dir']];
+    foreach ($claves as $k) { $dirs[] = $map[$k]['dir']; if ($k !== 'realista' && $medio === 'imagen') $medio = $map[$k]['medio']; }
+    return ['medio' => $medio, 'dir' => "ESTILO COMBINADO — usa SOLO estas vibras seleccionadas (" . implode(' + ', $claves) . ") y fúndelas en UNA sola imagen coherente (no un collage ni dos mitades):\n- " . implode("\n- ", $dirs)];
 }
 
 /**
