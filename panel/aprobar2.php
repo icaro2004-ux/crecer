@@ -202,6 +202,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$pagado && generaciones_usadas($pdo, $marca_id, 'imagen') >= CRECER_FREE['imagen']) {
             header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'paywall']); exit;
         }
+        // CUOTA MENSUAL del plan: 40 imágenes IA/mes (renueva el 1ro; las fotos
+        // propias no gastan). Los topes por post de abajo siguen aplicando.
+        $imgq = img_cuota_estado($pdo, $marca_id, $cupo_exento);
+        if ($imgq['lleno']) {
+            header('Content-Type: application/json');
+            echo json_encode(['ok'=>false,'err'=>"Este mes la IA ya pintó tus {$imgq['limite']} imágenes — se renuevan el {$imgq['reset']}. Tus fotos propias siguen corriendo libres.", 'cuota_img'=>$imgq]); exit;
+        }
         $dir_fotos = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/fotos";
         // Tope por post: 3 generaciones IA — SIEMPRE.
         $ai = $pdo->prepare("SELECT arte_intentos FROM crecer_contenido WHERE id=? AND marca_id=?");

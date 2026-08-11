@@ -103,6 +103,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$pagado)           $err = 'El logo se desbloquea cuando te suscribes a un plan.';
         elseif ($final)         $err = 'Tu logo ya está finalizado.';
         elseif ($usados >= $LIMITE_LOGO) $err = "Llegaste a tus {$LIMITE_LOGO} pruebas.";
+        elseif (function_exists('img_cuota_estado')
+                && ($imgq = img_cuota_estado($pdo, $marca_id, ($usuario['rol'] ?? '') === 'admin'))['lleno'])
+                                $err = "Este mes la IA ya pintó tus {$imgq['limite']} imágenes — se renuevan el {$imgq['reset']}.";
         else {
             @set_time_limit(0);
             $desc = trim($_POST['descripcion'] ?? '');

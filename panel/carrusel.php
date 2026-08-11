@@ -185,6 +185,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare("UPDATE crecer_carrusel SET grafica_path=NULL, img_job=NULL, img_estado=NULL, updated_at=NOW() WHERE contenido_id=? AND marca_id=?")
                 ->execute([$cid, $marca_id]);
         }
+        // CUOTA MENSUAL: cada slide que la IA pinte consume 1 de las 40 del mes.
+        $imgq = img_cuota_estado($pdo, $marca_id, ($usuario['rol'] ?? '') === 'admin');
+        $pend = 0;
+        foreach (carrusel_slides($pdo, $cid) as $s) { if (trim((string)$s['grafica_path']) === '') $pend++; }
+        if (!$imgq['exento'] && $pend > $imgq['restantes']) {
+            $jout(['ok' => false, 'err' => "Pintar este carrusel usa {$pend} imágenes y este mes te quedan {$imgq['restantes']} de {$imgq['limite']} (se renuevan el {$imgq['reset']}). Sube tus fotos a los slides — esas no gastan."]);
+        }
         $n = carrusel_encolar_arte($pdo, $marca_id, $cid);
         if ($n < 0) {   // motor Responses apagado → worker sync (Gemini) como respaldo
             $pdo->prepare("UPDATE crecer_carrusel SET img_estado='queued', updated_at=NOW()
@@ -351,6 +358,17 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
     <label class="cr-txt-toggle"><input type="checkbox" id="crTxt" checked> <span>Texto en las imágenes <small>(cada slide muestra su titular — narrativa)</small></span></label>
     <button type="button" class="cr-go" id="crGo"><?= ico('sparkles') ?> Que el Guionista lo arme</button>
     <p class="cr-note">Deja el tema vacío y el Guionista elige el mejor ángulo para tu negocio.</p>
+    <?php
+      $imgq_c = null;
+      try {
+          if (function_exists('img_cuota_estado')) {
+              $imgq_c = img_cuota_estado($pdo, $marca_id, (($usuario['rol'] ?? '') === 'admin'));
+          }
+      } catch (Throwable $e) { $imgq_c = null; }
+    ?>
+    <?php if ($imgq_c && !$imgq_c['exento']): ?>
+    <p class="cr-note" style="margin-top:6px">Si la IA pinta los slides, <b>cada slide consume 1 imagen</b> de tu plan — vas <b><?= (int)$imgq_c['usadas'] ?> de <?= (int)$imgq_c['limite'] ?></b> este mes (renuevan el <?= $imgq_c['reset'] ?>). Con tus fotos, no gastas.</p>
+    <?php endif; ?>
   </div>
 
   <div class="cr-new" style="margin-top:14px">

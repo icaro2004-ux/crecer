@@ -172,6 +172,39 @@ function trial_dias_restantes(?array $su): ?int {
 // ============================================================
 if (!defined('CRECER_POSTS_SEMANA')) define('CRECER_POSTS_SEMANA', 5);
 
+// ── CUOTA MENSUAL DE IMÁGENES IA (decidida 2026-08-10 con Manuel) ──
+// 40/mes por marca: TODO lo que la IA pinta (arte desde cero, realce de fotos,
+// slides de carrusel, pruebas de logo, plan semanal automático). Se renueva el
+// día 1; NO se acumula. Las fotos/videos propios del dueño NO descuentan.
+// El conteo sale de crecer_ia_log (cada imagen ya se registra con su modelo).
+if (!defined('CRECER_IMG_MES')) define('CRECER_IMG_MES', 40);
+const CRECER_IMG_MODELOS = ['gpt-image-1', 'dall-e-3', 'gemini-3-pro-image', 'gemini-2.5-flash-image'];
+
+function img_cuota_usadas(PDO $pdo, int $marca_id): int {
+    try {
+        $in = "'" . implode("','", CRECER_IMG_MODELOS) . "'";
+        $q = $pdo->prepare(
+            "SELECT COUNT(*) FROM crecer_ia_log
+              WHERE marca_id=? AND estado='ok' AND modelo IN ({$in})
+                AND created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')");
+        $q->execute([$marca_id]);
+        return (int)$q->fetchColumn();
+    } catch (Throwable $e) { return 0; }
+}
+
+function img_cuota_estado(PDO $pdo, int $marca_id, bool $exento = false): array {
+    $lim    = (int)CRECER_IMG_MES;
+    $usadas = img_cuota_usadas($pdo, $marca_id);
+    return [
+        'usadas'    => $usadas,
+        'limite'    => $lim,
+        'restantes' => max(0, $lim - $usadas),
+        'lleno'     => (!$exento && $usadas >= $lim),
+        'exento'    => $exento,
+        'reset'     => date('d/m', strtotime('first day of next month')),
+    ];
+}
+
 /** Posts publicados por la marca en los últimos 7 días (cuentan re-publicaciones). */
 function cupo_posts_usados(PDO $pdo, int $marca_id): int {
     try {

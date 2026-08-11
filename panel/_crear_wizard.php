@@ -131,6 +131,18 @@ if (!isset($redes_conectadas)) {
           <label class="fbnew wiz-upl"><?= ico('play') ?> Subir mi video<input type="file" id="wiz-video" accept="video/mp4,video/quicktime" style="display:none"></label>
         </div>
         <div style="font-size:11.5px;color:var(--muted);text-align:center;margin-top:-4px">No creamos video — lo subes tú (MP4/MOV, hasta 100MB). Sale como Reel/video.</div>
+        <?php
+          // EL CONTADOR de la cuota mensual de imágenes IA — transparencia, no sorpresa.
+          $imgq_w = null;
+          try {
+              if (function_exists('img_cuota_estado')) {
+                  $imgq_w = img_cuota_estado($pdo, $marca_id, (($usuario['rol'] ?? '') === 'admin'));
+              }
+          } catch (Throwable $e) { $imgq_w = null; }
+        ?>
+        <?php if ($imgq_w && !$imgq_w['exento']): ?>
+        <div style="font-size:11.5px;color:var(--muted);text-align:center;margin-top:6px">Imágenes IA este mes: <b><?= (int)$imgq_w['usadas'] ?> de <?= (int)$imgq_w['limite'] ?></b> (renuevan el <?= $imgq_w['reset'] ?>) · tus fotos y videos no gastan</div>
+        <?php endif; ?>
       </div>
         <button type="button" class="art-go wiz-ok" id="wiz-next2" style="display:none">Usar este arte →</button>
       </div>

@@ -82,6 +82,17 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     <li>Los precios pueden cambiar; te avisaremos antes de que aplique a tu próxima renovación.</li>
   </ul>
 
+  <h2>5.1 Uso incluido del plan Crecer</h2>
+  <p>El plan mensual incluye, por negocio (marca):</p>
+  <ul>
+    <li><b>Hasta 5 publicaciones por semana</b> a tus redes conectadas (ventana móvil de 7 días) y <b>1 carrusel por semana</b>.</li>
+    <li><b>40 imágenes creadas por IA al mes</b>. Cuentan <b>todas</b> las imágenes que la IA produce: arte desde cero, realces de tus fotos, <b>cada regeneración</b>, cada slide de carrusel pintado por la IA, las pruebas de logo y las imágenes del plan semanal automático. El contador de uso es visible en la aplicación.</li>
+    <li>La cuota se <b>renueva el día 1 de cada mes</b> y <b>no se acumula</b>: si la agotas en dos semanas, la IA no crea imágenes nuevas hasta la renovación — todo lo demás (tus fotos, textos, publicación, WhatsApp) sigue funcionando.</li>
+    <li><b>Tus propias fotos y videos no descuentan</b> de la cuota: subirlos y usarlos tal cual, en posts o en carruseles, es libre.</li>
+    <li>Los textos (captions, historias, respuestas) tienen uso razonable con topes anti-abuso por pieza y por día.</li>
+  </ul>
+  <p>Podemos ajustar estos límites para proteger la calidad del servicio; si un cambio reduce lo incluido en tu plan, lo avisaremos con anticipación razonable.</p>
+
   <h2>6. Uso aceptable</h2>
   <p>No uses el servicio para spam, fraude, suplantación, ni para violar las políticas de las redes
      sociales o la ley. Podemos suspender cuentas que abusen del servicio.</p>
