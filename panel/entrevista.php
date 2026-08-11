@@ -321,6 +321,7 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     var url = redirect || ('/crecer/panel/gateway_post.php?marca='+MARCA+GW);
     var d=document.createElement('div'); d.className='en-done';
     d.innerHTML='<h3>✓ Ya entiendo tu negocio</h3>'+(resumen?'<p>'+esc(resumen)+'</p>':'<p>Armé tu perfil y el corillo ya lo tiene.</p>')
+      +'<p style="margin-top:10px;font-weight:700;color:var(--teal,#00A49F)">Acaba de nacer el Genoma de tu negocio — el cerebro que solo existe para ti, y no va a parar de crecer.</p>'
       +'<a href="'+url+'">Ver mi primer post →</a>';
     msgs.appendChild(d); scroll(d);
   }

@@ -28,6 +28,7 @@ $nav = [
   ['key'=>'sala',      'ic'=>'sparkles','lb'=>'La Sala',    'hr'=>"$BASE/sala.php?marca=$marca_id"],
   ['key'=>'reels',     'ic'=>'camera',  'lb'=>'Reels',      'hr'=>"$BASE/reels.php?marca=$marca_id"],
   ['key'=>'equipo',    'ic'=>'users',   'lb'=>'Tu equipo',  'hr'=>"$BASE/equipo.php?marca=$marca_id"],
+  ['key'=>'genoma',    'ic'=>'genoma',  'lb'=>'El Genoma',  'hr'=>"$BASE/genoma.php?marca=$marca_id"],
   ['key'=>'resultados','ic'=>'chart',   'lb'=>'Resultados', 'hr'=>"$BASE/resultados.php?marca=$marca_id"],
   ['key'=>'biblioteca','ic'=>'image',   'lb'=>'Biblioteca', 'hr'=>"$BASE/biblioteca.php?marca=$marca_id"],
 ];
