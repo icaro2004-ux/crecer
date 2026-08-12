@@ -1,103 +1,76 @@
-# Narrativa para Devpost (500–1,000 palabras)
+# XPRIZE Written Narrative
 
-> Borrador v2 · 2026-08-08 · Para el campo "written narrative" del XPRIZE.
-> En inglés porque así lo leen los jueces. Voz: humana, alegre, con la gente
-> al frente — no "modo AI". Cada afirmación sigue siendo rastreable a evidencia
-> (log, pantalla, Stripe o repo). Revisar y aprobar antes de pegar.
-
----
-
-## Who this is for
-
-In Puerto Rico we have a phrase for how thousands of families get by:
-**"buscando el peso"** — out there every single day, hustling for every dollar.
-The woman baking bizcochos in her kitchen, selling them over WhatsApp. The
-barber whose entire storefront is an Instagram page. The DJ, the cake lady, the
-guy who fixes your AC in August. They're *great* at what they do — and invisible
-online, because marketing is a full-time job and they already have one of those.
-They know they should post. They don't know what to write. And an agency costs
-more than the rent.
-
-Crecer gives them the thing they were never supposed to be able to afford: a
-whole marketing department. Around here we'd call it your **corillo** — your
-crew, the people who show up for you. Crecer's corillo is a team of AI agents
-that runs the month like a real department would: it learns the business from
-the owner's own voice, plans the calendar, writes captions in real Puerto Rican
-Spanish (never translated, never AI slop — it says *bizcocho*, not *tarta*),
-designs the art, publishes straight to Instagram and Facebook, reads the
-numbers, and adjusts. The owner does exactly one thing: approve from the phone,
-between customers. That first time someone hears their own voice in a caption
-they didn't write? That's the product.
-
-## The story
-
-I spent months building Encuéntralo, a services directory for Puerto Rico that
-never launched. When this competition said the business itself had to be
-*operated* by AI, something clicked: forget the directory waiting for
-businesses — build the AI department that makes those businesses stronger, and
-let the directory come later, full of clients whose trust you already earned. I
-pivoted in June, reused my own infrastructure (declared in the repo), and built
-Crecer new. Best rule a competition ever forced on me.
-
-## Where the AI is, every day
-
-The onboarding is my favorite part: the crew *interviews* the owner — a real
-conversation, spoken or typed. You talk, Gemini (via Vertex AI) transcribes you
-— boricua and all — the crew answers out loud and asks its next question based
-on what you just said. When the interview ends, it builds the structured brand
-profile and hands the owner their first finished post. No forms. Then the crew
-takes over: a strategist plans the month, a copywriter drafts in the owner's
-voice and permanently learns every correction ("she says *china*, not
-*naranja*" — noted, forever), a designer makes the art, a publisher posts to
-Instagram and Facebook through Meta's API, an analyst watches what worked.
-
-And Crecer runs *itself* on agents too: a support agent sweeps the platform
-every 15 minutes, fixes what it can on its own, and only escalates to me when
-it can't. An acquisition agent hunts and scores real Puerto Rican
-microbusinesses and builds the outreach queue I work from. Every single model
-call — prompt, model, tokens, cost, latency, outcome, including the failures —
-lands in an audit log, and our submission includes a live evidence screen where
-judges can watch the crew execute in real time, in production. I build with AI
-daily too: this codebase was written working with AI coding agents, with the
-same discipline of logs and tests. AI-native at build time, AI-native at runtime.
-
-**My job as the human:** strategy, voice standards, sales, billing, legal, and
-the final "ship it." The crew does the department's work; I do the owner's.
-
-## The owner runs the show
-
-Images are where you see the philosophy: **the owner runs the show, the crew
-adapts.** A baker with a phone full of product photos drops them into her
-business library and the crew builds the posts around them — her photos, as-is,
-AI on caption duty. Can't afford a photographer? The crew takes her real photo
-and gives it the studio look — enhancing what's there, never inventing the
-product. Running a promo with no product photo to show? The AI designs the art
-from scratch. These are options, not a flowchart — the crew follows the owner's
-instinct, and nothing goes out without their say-so. The deal is simple: owners
-answer for what they publish, we answer for what we produce — true to their real
-business, never stock photos, never someone else's images.
-
-## Honest numbers, real opportunity
-
-Crecer charges $39/month through live Stripe billing, and I'm proudly its first
-paying customer — I run my own acquisition marketing on Crecer and get charged
-like anybody else (reported as related-party, separately, as the rules ask).
-Because every AI call is metered, I know the real cost of serving a client
-against that $39. This model doesn't need a pitch deck to defend itself; it has
-receipts.
-
-Nobody loses a job to Crecer — these businesses could never hire. What they get
-back is the thing they're shortest on: hours, and a fighting chance online. And
-the prize has a named destination in this same market: ATH Móvil (the payment
-rail Puerto Rico actually uses), the WhatsApp agent (the channel where these
-businesses actually live), and launching Encuéntralo on top of Crecer's
-clients — the directory, finally, the right way around.
-
-We're not submitting a demo. We're submitting a working business where the AI
-does the working — with the receipts to prove it.
+> v5 · 12 ago 2026 · campo de 500–1,000 palabras.
+> **983 palabras** medidas (el conteo de Devpost puede variar ±2%; hay margen).
+> En inglés porque así lo leen los jueces, con la voz boricua de Crecer.
+> Los resultados reales, el revenue related-party y las proyecciones van
+> deliberadamente separados — nada de posibilidad presentada como logro.
 
 ---
 
-> **Conteo:** ~870 palabras (dentro del rango 500–1,000 — verificar al pegar en Devpost).
-> **Checklist de reglas:** ✅ uso diario de IA · ✅ división humano vs. IA ·
-> ✅ oportunidad económica/empleo · ✅ historia del build · ✅ related-party declarado.
+## We arrived late. We came with everything we had.
+
+I discovered the Build with Gemini XPRIZE 25 days after it began—nearly a month of a 90-day window already gone. I registered on June 13 and began building that same day: a solo founder, no team, no customer list waiting, and a much shorter runway to launch a real business.
+
+But in Puerto Rico we know how to make a lot out of a little. So for the days that followed, we gave this business *alma, vida y corazón*—soul, life, and heart.
+
+“We” means me and the AI systems that helped build and now operate Crecer. Together, we turned a late start into a live business for people asked to do everything alone: the baker selling through WhatsApp, the barber whose storefront is Instagram, the electrician answering calls between jobs, and the family business that cannot afford an agency.
+
+They are excellent at their craft. What they need is a corillo.
+
+## A whole corillo for the smallest business
+
+Crecer gives a small or midsize business an AI-operated strategist, creative, designer, agenda, salesperson, and analyst. The feeling is simple: **“I have people working for me.”**
+
+It begins with a conversation. The owner speaks naturally—in Puerto Rican Spanish—and Gemini transcribes. The crew asks the next question aloud, adapts, and turns the exchange into a structured business profile. By the end, the owner has a first post.
+
+Then the crew works. It plans, writes in the owner's real voice, learns corrections, designs around the owner's own photos, and publishes approved work to Instagram and Facebook through Meta's API. The owner reviews from a phone with a swipe: this one goes; this one waits.
+
+Crecer reaches beyond the feed. Each business gets a public ordering link and printable QR code; customers order with no app, no account. Orders land on the owner's board, and a completed one can trigger a WhatsApp review request. The post attracts; the QR captures; the review earns the next customer. Poco a poco, but always *pa'lante*.
+
+## AI at the workbench and on the job
+
+AI did not only help write the code. AI operates essential workflows in the running business.
+
+Gemini helps interview owners, structure their business knowledge, plan, write, analyze, and create visual assets. A support agent checks the platform regularly, resolves what it safely can, and escalates what requires me. An acquisition agent searches for Puerto Rican microbusinesses, scores opportunities, and prepares my outreach queue. Every model call records the model, prompt, tokens, cost, latency, outcome, and even failures. Judges can see production evidence instead of taking our word for it.
+
+The crew does not just publish—it chases a number. The owner names a goal in plain words; the strategist turns it into concrete plays, the crew executes them on its own schedule, and each play closes itself when its posts go live. When the plan ends, the analyst measures what it moved and writes the lesson the next plan inherits. What did not move the number does not get repeated.
+
+The division of labor is clear. The AI does the department's repeatable work: interviewing, organizing knowledge, planning, creating, publishing, analyzing, supporting, prospecting. I own purpose, product direction, cultural voice, sales, billing, legal judgment, and the final call to ship.
+
+Our integrity rule matters as much as automation: persuasive content must be grounded in facts the business provided. If the crew does not know enough, it abstains and asks. We would rather pause than invent something about a customer's livelihood.
+
+## Our first customer—and our honest starting line
+
+I am Crecer's first paying customer. I use the product to operate and grow Crecer itself, and I pay the same live Stripe subscription price of $39 per month. We report that payment honestly and separately as related-party revenue, not as an arms-length customer.
+
+We are not ashamed of beginning with one: someone had to trust Crecer first, and I decided it should be me. We report exactly what exists by the deadline—no inflated users, no imaginary testimonials.
+
+Our early customer count reflects that compressed window; it does not define the market. The U.S. Small Business Administration's 2025 Puerto Rico profile counts **41,362 small employers** on the island, together employing **407,296 people**—**98.4% of Puerto Rico's employers**. And that count misses the community we see every day: solo entrepreneurs and informal microbusinesses selling through social media and word of mouth.
+
+Crecer does not need all of them to matter. Reaching 1% would put a capable AI corillo beside more than 400 local businesses; 5%, more than 2,000. Those are not earnings promises—they show how an affordable product can become sustainable while staying rooted here, and eventually create Puerto Rican jobs in customer success, creative quality, and engineering.
+
+## Crecer means more than growth on a graph
+
+Marketing is our first department, not the limit of our imagination. The same auditable agent model can grow into sales, customer relationships, operations, and practical financial coaching—cash flow, pricing, planning for expenses—without pretending to replace an accountant.
+
+And beyond Crecer is Encuéntralo: a future discovery network where Puerto Rico can find the businesses that Crecer has helped become stronger, more visible, and more ready for opportunity.
+
+That is what **Crecer** means to us. To grow a business, yes—but also to grow in confidence, knowledge, stability, opportunity, community, and human potential. Financial growth matters because it gives people room to breathe. Personal growth matters because a business changes when its owner begins to believe, “Maybe I do not have to do this alone.”
+
+We entered 25 days late. We may be early in customers, but we are not early in commitment. We built with what Puerto Rico has always taught us to bring: ingenuity, alegría, and a stubborn kind of hope.
+
+This is only the first version of Crecer.
+
+We are ready to grow—and to bring a whole lot of people with us. **¡Pa'lante!**
+
+---
+
+> **Antes de pegar en Devpost (checklist de honestidad):**
+> 1. Verificar el conteo que muestre Devpost (aquí: 983).
+> 2. El párrafo del ciclo meta → plan → ejecución → lección describe capacidad
+>    construida el 12 ago. **Solo se queda si está VIVA en producción el día de
+>    entregar** (migraciones corridas + probado). Si no, se borra ese párrafo:
+>    no se afirma lo que el motor no hace.
+> 3. Poner las cifras finales reales de revenue/usuarios en los campos
+>    financieros, con el related-party declarado aparte.

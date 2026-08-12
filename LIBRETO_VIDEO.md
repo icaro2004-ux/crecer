@@ -1,159 +1,159 @@
-# CRECER / ENCUÉNTRALO — Libreto del video + Workflow completo
-> Guion escena por escena para el video del XPRIZE (~3 min) **y** documentación
-> de cómo funciona la página de punta a punta. Todo refleja lo que está
-> construido hoy. Lo que es roadmap está marcado como tal — no lo afirmamos como real.
+# CRECER — Libreto del video XPRIZE (~3 min) · v2 desde cero
+
+> Reescrito 2026-08-08 sobre el producto REAL de agosto (el de junio ya no existe).
+> Regla de oro: **todo lo que se ve en pantalla es producción viva** — nada actuado,
+> nada de roadmap presentado como real. Cada escena dice qué criterio demuestra.
+> El video se sube público a YouTube (<3 min, requisito de las reglas).
 
 ---
 
-## 0. LA PREMISA (lo que el jurado tiene que captar en 10 segundos)
+## LA PREMISA (lo que el jurado capta en 10 segundos)
 
-**Crecer es el "corillo digital" de una microempresa boricua.** No es una herramienta
-que el dueño usa: es un **equipo de agentes de IA** que le *corren el marketing del
-negocio* — planifican, escriben, diseñan, agendan — en español puertorriqueño
-auténtico. El dueño solo **aprueba desde el celular**. Encuéntralo es la fase 2:
-el directorio donde esos negocios, ya con confianza ganada, se exhiben.
+**Crecer es el corillo de una microempresa boricua.** No es una herramienta que el
+dueño usa: es un equipo de agentes de IA que le corre el marketing — lo entrevista,
+planifica, escribe en SU voz, diseña con SUS fotos, publica en sus redes de verdad,
+y le maneja hasta las órdenes. El dueño hace una sola cosa: **aprobar desde el celular.**
 
 Emoción objetivo: **"Tengo gente trabajando para mí."**
 
 ---
 
-## 1. EL WORKFLOW COMPLETO (cómo funciona la página)
+## EL ARCO (8 escenas · 3:00)
 
-| # | Pantalla / archivo | Qué hace | Agente | Qué se registra |
-|---|---|---|---|---|
-| 1 | Landing `crecer.php` | Explica el producto y los planes (Gratis / **Crecer $39**; founder $29 vía cupón; Despegar $89 congelado `activo=0` — no se muestra como oferta) | — | — |
-| 2 | Registro → **La Entrevista** `panel/entrevista.php` | El corillo **entrevista** al dueño por chat adaptativo. Puede contestar **hablando** (Gemini transcribe — entiende boricua) y el corillo le **lee sus preguntas en voz alta** ("si me hablas, te hablo"). Al cerrar: perfil rico + Radiografía + su primer post | Intake (entrevista + transcripción) + Creativa + Diseñador | `crecer_ia_log` (cada turno, cada transcripción, caption, imagen) |
-| 3 | Dashboard `index.php` | "Centro del Corillo": 6 agentes con estado real, KPIs, "lo que hizo el corillo hoy", actividad | Todos | Lee `crecer_ia_log` |
-| 4 | Contenido `aprobar2.php` | Fábrica de posts: pedir a la IA (tema/borrador/al azar), multi-plataforma, aprobar, editar → **la IA aprende tu vocabulario** | La Creativa | Cada caption + la lección de vocabulario al glosario |
-| 5 | Gráficas `graficas.php` | Sube **foto real** → arte de post profesional (la IA nunca inventa el producto), preview IG/FB | El Diseñador | Cada imagen (modelo, costo) |
-| 6 | Marca `marca.php` | Estudio de logo con IA — **premium** (bloqueado en el plan gratis) | El Diseñador | Cada logo |
-| 7 | Órdenes `ordenes.php` | Tablero de pedidos + **página pública con QR** (el cliente ordena sin cuenta) + **flywheel de reseñas** | La Agenda | — |
-| 8 | Precios → Stripe `precios.php` / `crear_checkout.php` / `webhook_stripe.php` | Activar plan → cobro real con Stripe → webhook confirma → desbloquea todo | — | `pagos` (revenue), webhook |
-
-**Modelo freemium (el candado):** el trial vive y muere en el **Gateway** — 1 post
-de muestra (imagen + caption), verificado por **SMS (1 gratis por número)** para
-descargarlo/publicarlo. Al app real **solo se cruza pagando** (`panel_guard.php`).
-Nadie extrae lo caro gratis.
-
-**Evidencia núcleo (criterio #2):** TODA llamada a Gemini se registra en
-`crecer_ia_log` con agente, acción, modelo, tokens, costo y latencia.
+| # | Escena | Tiempo | Criterio |
+|---|---|---|---|
+| 1 | La gente (buscando el peso) | 0:00–0:15 | Impacto de categoría |
+| 2 | LA ENTREVISTA — hablas y te hablan | 0:15–0:50 | AI-native (Gemini multimodal) |
+| 3 | El corillo EN VIVO — la evidencia | 0:50–1:20 | ⭐ AI-native + logs |
+| 4 | El Estudio — el dueño decide con el dedo | 1:20–1:45 | AI-native + dueño al mando |
+| 5 | Tus fotos mandan (Biblioteca) | 1:45–2:05 | Integridad + categoría |
+| 6 | Publica DE VERDAD (Meta) | 2:05–2:20 | AI-native en producción |
+| 7 | Negocio completo: QR + órdenes + Stripe | 2:20–2:45 | ⭐ Viabilidad + revenue |
+| 8 | Cierre — Pa'lante | 2:45–3:00 | Los 3 + visión |
 
 ---
 
-## 2. EL LIBRETO (escena por escena · corte de ~3 min)
+## ESCENA POR ESCENA
 
-> Tono de narración: boricua, cercano, seguro. Pantalla = lo que se graba en vivo
-> en producción. **[JURADO]** = qué criterio demuestra esa escena.
+### 1 · La gente · 0:00–0:15
+- **Pantalla:** landing `crecer.php` en el celular; scroll suave por el feed de
+  ejemplos (con su rótulo "Ejemplos creados con Crecer" visible — honestidad a cuadro).
+- **Narración:** "En Puerto Rico hay miles de negocios de una sola persona,
+  buscando el peso todos los días. Saben que tienen que estar en las redes — pero
+  no hay tiempo, y una agencia cuesta más que la renta. Crecer les da lo que nunca
+  pudieron pagar: un corillo completo de marketing."
+- **[JURADO]** Categoría (Small Business Services, economía de supervivencia).
 
-### ESCENA 1 — El problema y la promesa · 0:00–0:20
-- **Pantalla:** landing `crecer.php`. Scroll lento por los planes y el corillo.
-- **Narración:** "En Puerto Rico, miles de negocios pequeños saben que tienen que
-  estar en las redes… pero no tienen tiempo, ni saben qué publicar, ni dinero para
-  una agencia. Crecer les da un corillo digital: un equipo de IA que les trabaja
-  el negocio."
-- **[JURADO]** Impacto de categoría (microempresa boricua) + modelo de negocio (planes).
-
-### ESCENA 2 — El "wow": LA ENTREVISTA (hablas con el corillo) · 0:20–0:50
-- **Pantalla:** registro → `panel/entrevista.php`. El corillo entrevista al dueño
-  como una conversación de verdad: toca el micrófono y **contesta hablando** — su
-  respuesta aparece transcrita en el chat (Gemini, entiende boricua) — y el corillo
-  le **lee la siguiente pregunta en voz alta** ("si me hablas, te hablo"). Las
-  preguntas se adaptan a lo que va contando.
-- **Resultado:** al cerrar, el corillo arma el perfil en pantalla (voz/público/
-  productos — todo real, extraído de la conversación), el dueño elige su tono, y
-  cae en su **primer post montado**.
+### 2 · LA ENTREVISTA — hablas y te hablan · 0:15–0:50
+- **Pantalla:** `panel/entrevista.php`. El dueño toca el micrófono y **contesta
+  hablando**; su respuesta aparece transcrita en el chat (Gemini — entiende
+  boricua). El corillo le **lee la siguiente pregunta en voz alta** y pregunta
+  según lo que va contando. Al cerrar: el perfil real en pantalla (voz, público,
+  productos — todo extraído de la conversación), elige el tono, y cae en su
+  **primer post montado**.
 - **Narración:** "No llenas formularios. Te entrevistan — como a un negocio que
   importa. Hablas, te escuchan, te contestan. Y cuando terminas de hablar, tu
   primer post ya está hecho."
-- **[JURADO]** AI-native (Gemini multimodal: voz→texto→perfil estructurado, cada
-  turno y cada transcripción en `crecer_ia_log`) + tiempo al primer valor.
+- **[JURADO]** AI-native: voz→texto→perfil estructurado, cada turno en `crecer_ia_log`.
+  Tiempo al primer valor: minutos.
 
-### ESCENA 3 — El Centro del Corillo (dashboard) · 0:50–1:25
-- **Pantalla:** `index.php`. Mostrar los **6 agentes** con su estado real
-  (El Estratega "Planificando", La Creativa "Ideando"…), los KPIs, "Lo que hizo
-  el corillo hoy", la actividad.
-- **Momento clave — EVIDENCIA:** abrir la pantalla/consulta de `crecer_ia_log`
-  (ver §4) y mostrar el registro real: *agente, acción, modelo Gemini, tokens, costo*.
-- **Narración:** "Esto no es un dashboard de botones. Es un equipo. Cada agente hace
-  su trabajo — y cada decisión de IA queda registrada: qué hizo, con qué modelo de
-  Gemini, cuánto costó. No es humo."
-- **[JURADO]** ⭐ AI-native + **evidencia/logs** (el corazón del criterio #2).
+### 3 · El corillo EN VIVO — la evidencia · 0:50–1:20 ⭐
+- **Pantalla:** el Centro del Corillo (`index.php`): los agentes con estado real,
+  lo que hizo el corillo hoy. Corte a `evidencia.php` → **"Correr el corillo
+  ahora"**: los agentes ejecutando en tiempo real, con **tokens y costo subiendo
+  en pantalla**. Zoom a una fila del log: agente, acción, modelo Gemini, tokens,
+  costo, latencia.
+- **Narración:** "Esto no es un dashboard con botones — es un equipo trabajando
+  ahora mismo. Y cada decisión queda registrada: qué agente, qué hizo, qué modelo,
+  cuánto costó. Nosotros no te contamos lo que la IA hace. Te lo enseñamos."
+- **[JURADO]** ⭐ El corazón del criterio #2: IA ejecutando decisiones EN VIVO en
+  producción, con bitácora verificable.
 
-### ESCENA 4 — La fábrica de posts + el aprendizaje (Contenido) · 1:25–1:55
-- **Pantalla:** `aprobar2.php`. "Pedir un post a la IA" → escribe un tema
-  ("promo de bizcocho de guayaba pa' Día de las Madres"), escoge plataformas → la
-  IA redacta en voz boricua. El dueño **edita** una palabra; aparece:
-  *"La IA aprendió: usa china, no naranja."* Luego **aprueba**.
-- **Narración:** "Le pides, ella redacta — en boricua de verdad, nada de 'AI slop'.
-  Y cuando corriges algo, **lo aprende para siempre**. Mientras más lo usas, más tuyo se vuelve."
-- **[JURADO]** AI-native + autenticidad cultural (categoría) + **moat** (aprende tu voz).
+### 4 · El Estudio — decides con el dedo · 1:20–1:45
+- **Pantalla (celular en mano):** `propuestas.php`. El mazo de propuestas del
+  corillo: el dueño hace **swipe** — "va", "ahora no" — edita una palabra de un
+  caption y aparece el aprendizaje (el corillo guarda cómo hablas: "china", no
+  "naranja"). Aprobar con el pulgar, entre clientes.
+- **Narración:** "Cada semana el corillo te propone. Tú decides con el dedo, como
+  pasas las redes: esto va, esto no. Corriges una palabra y la aprende para
+  siempre. El negocio es tuyo — el corillo se adapta a ti."
+- **[JURADO]** AI-native + el humano donde debe estar: aprobando, no produciendo.
 
-### ESCENA 5 — Arte con tu producto real (Gráficas) · 1:55–2:15
-- **Pantalla:** `graficas.php`. Subir foto real de un producto → la IA la convierte
-  en arte de post profesional. Preview "cómo se ve en Instagram/Facebook".
-- **Narración:** "La IA no inventa tu producto — parte de tu foto real y la vuelve
-  un post que se ve premium. Lo que el cliente ve es lo que recibe."
-- **[JURADO]** AI-native + regla anti-misrepresentación (confianza).
+### 5 · Tus fotos mandan (Biblioteca) · 1:45–2:05
+- **Pantalla:** `biblioteca.php` con las fotos reales del negocio → en el Estudio,
+  atar una foto propia a una propuesta **tal cual**. Corte a: foto real de un
+  producto → el realce con "look de estudio" (fiel, sin inventar el producto).
+- **Narración:** "¿Tienes fotos de tus productos? Esas mandan. El corillo arma los
+  posts con TUS fotos — y si quieres, les da el look de estudio que no podías
+  pagar. ¿No tienes foto para una promo? La IA diseña el arte. Opciones, no
+  reglas: tú publicas lo que tú apruebas."
+- **[JURADO]** Integridad (real-photos-first, anti-misrepresentación) + categoría
+  (autenticidad, cero AI slop).
 
-### ESCENA 6 — Negocio real: órdenes, QR y reseñas · 2:15–2:35
-- **Pantalla:** `ordenes.php`. El tablero de pedidos + **el QR**: abrir la página
-  pública `ordenar.php` (el cliente ordena sin cuenta). Al completar una orden →
-  "Pedir reseña por WhatsApp".
-- **Narración:** "No es solo marketing. Maneja tus órdenes, te da un QR pa' la
-  barra, y cuando entregas, te consigue la reseña. Herramientas que atan al dueño al producto."
-- **[JURADO]** Viabilidad/retención (moat más allá del marketing).
+### 6 · Publica DE VERDAD · 2:05–2:20
+- **Pantalla:** aprobar una pieza → publicación **real** a Instagram/Facebook vía
+  la API de Meta → abrir Instagram y ver el post publicado en la cuenta.
+- **Narración:** "Y no te deja tarea: el corillo publica solo, directo a tus
+  redes. Lo apruebas aquí… y aparece allá."
+- **[JURADO]** AI-native de punta a punta EN producción (no un mockup de post).
 
-### ESCENA 7 — Revenue real (Stripe) · 2:35–2:55
-- **Pantalla:** tocar algo premium (el logo) → `precios.php` → "Activar Crecer" →
-  **Stripe Checkout real** → vuelve desbloqueado. Mostrar el cobro en el dashboard
-  de Stripe / la fila en `pagos`.
-- **Narración:** "Y se paga de verdad. Stripe, cobro real, plan activo. Esto no es
-  una demo de mentira — es un negocio cobrando."
-- **[JURADO]** ⭐ Viabilidad de negocio + **revenue real** (criterio #1).
+### 7 · Negocio completo: QR + órdenes + Stripe · 2:20–2:45 ⭐
+- **Pantalla:** `ordenes.php` — el link público y **el QR imprimible**; un cliente
+  ordena desde el celular sin crear cuenta (`ordenar.php`); la orden cae al
+  tablero; al completarla → "Pedir reseña por WhatsApp". Corte final: checkout de
+  **Stripe LIVE** activando el plan de $39 y la fila del pago registrada.
+- **Narración:** "Crecer también te corre el mostrador: un QR pa' la barra, el
+  cliente ordena sin apps, y al entregar, la reseña se pide sola. Y esto se paga
+  de verdad — Stripe, treinta y nueve al mes, cobro real. No es una demo: es un
+  negocio operando."
+- **[JURADO]** ⭐ Criterio #1: modelo claro ($39/mes), cobro real, retención (el
+  producto maneja el negocio, no solo los posts).
 
-### ESCENA 8 — Cierre y visión · 2:55–3:05
-- **Pantalla:** volver al dashboard lleno de vida (corillo activo).
-- **Narración:** "Un corillo de IA, corriendo un negocio boricua de verdad, con
-  evidencia de cada paso y dinero real entrando. Y esto es solo el principio:
-  estos negocios son el directorio de Encuéntralo. **Pa'lante.**"
-- **[JURADO]** Cierra los 3 criterios + visión de escala.
+### 8 · Cierre — Pa'lante · 2:45–3:00
+- **Pantalla:** volver al Centro del Corillo lleno de vida; fundido al logo.
+- **Narración:** "Un corillo de IA corriendo negocios boricuas de verdad, con
+  evidencia de cada decisión y dinero real moviéndose. Y esto es el principio:
+  cada negocio que crece se convierte en el directorio donde Puerto Rico lo va a
+  encontrar. Crecer, by Encuéntralo. **Pa'lante.**"
+- **[JURADO]** Cierra los 3 criterios + visión Encuéntralo (fase 2).
 
 ---
 
-## 3. MAPEO A LOS 3 CRITERIOS DEL XPRIZE
+## MAPEO A LOS 3 CRITERIOS
 
-| Criterio | Dónde se demuestra en el video |
+| Criterio | Escenas |
 |---|---|
-| **1. Viabilidad de negocio / revenue real** | Esc. 1 (planes), Esc. 7 (Stripe cobrando), Esc. 6 (retención/moat) |
-| **2. Operación AI-native + evidencia** | Esc. 2 (intake por voz), Esc. 3 (`crecer_ia_log`), Esc. 4 (redacta + aprende), Esc. 5 (arte) |
-| **3. Impacto de categoría** | Esc. 1 (microempresa boricua), Esc. 4 (voz boricua auténtica) |
+| **Viabilidad / revenue real** | 7 (Stripe live + $39 + órdenes), 4 (retención) |
+| **AI-native + evidencia** | 2 (entrevista con voz), 3 ⭐ (corillo en vivo + log), 5-6 (arte + publicación) |
+| **Impacto de categoría** | 1 (la gente), 5 (autenticidad), 8 (visión PR) |
 
 ---
 
-## 4. PENDIENTE PARA QUE EL VIDEO QUEDE FUERTE (producción)
+## CHECKLIST DE PRODUCCIÓN (antes de grabar)
 
-- [x] **Pantalla de evidencia IA** — CONSTRUIDA: `evidencia.php` muestra `crecer_ia_log`
-      (agente, acción, modelo, tokens, costo, latencia) y tiene la **demo EN VIVO**
-      "Correr el corillo ahora" (se entra por `admin_evidencia.php` → "Ver el corillo
-      EN VIVO"): agentes ejecutando en tiempo real con tokens y costo subiendo.
-      **Esa es la escena estrella del criterio #2.**
-- [x] **Stripe en modo LIVE** (activo desde 2026-07-31, verificado con `cs_live_`).
-      Pendiente antes de grabar la Escena 7: **price de $39 corregido en live**
-      (CR-F02) — hoy el checkout se bloquea si el price no cuadra.
-- [ ] **Cuenta + datos demo limpios** (un negocio sembrado que se vea real —
-      rotulado como demo, nunca presentado como cliente real).
-- [ ] **Micrófono funcionando** en la máquina de grabación (o usar la vía de texto).
-- [ ] Grabar en **producción (Hostinger)**, no localhost — el jurado pide live en prod.
+- [ ] **Grabar TODO en producción** (encuentraloahora.com), nunca localhost.
+- [ ] **Precio $39 corregido en Stripe LIVE** (CR-F02) — la Escena 7 no se puede
+      grabar hasta que el checkout muestre $39 antes de pedir tarjeta.
+- [ ] **La voz de la entrevista verificada en prod** (`_cache.php?test=voz` PASS
+      + una entrevista completa hablada con `?otra=1`).
+- [ ] **Cuenta demo limpia** (negocio sembrado que se vea real; se rotula demo si
+      aparece en evidencia — nunca se presenta como cliente real).
+- [ ] **Cuenta de IG/FB de prueba conectada** para la Escena 6 (publicación real
+      visible sin exponer la red de un cliente).
+- [ ] **Micrófono probado** en la máquina de grabación (Escena 2 lo necesita).
+- [ ] Celular real en mano para Escenas 1, 4 y 7 (la experiencia móvil es nativa,
+      que se vea el dedo).
+- [ ] Sin música/material con derechos de terceros (regla del concurso).
 
-## 5. HONESTIDAD (no afirmar en el video lo que no está)
-- **Publicación automática a IG/FB = REAL** (app de Meta montada; publica posts y
-  Reels vía `meta_publicar_ig_reel`). Se puede mostrar publicando de verdad.
-  **El agente de WhatsApp con IA sigue siendo ROADMAP** (falta Cloud API + número
-  dedicado) — no afirmarlo como vivo.
-- Reels: Creatomate se exploró y **se quitó** — no mencionarlo. Existe el
-  **Reels Studio** (Gemini + Shotstack, módulo aislado): mostrarlo **solo si está
-  encendido en prod** al momento de grabar.
-- Las ~430 reseñas semilla en `reviews` son ficticias — **nunca** presentarlas como reales.
-- Revenue en el video: el cobro que se muestra es real (Stripe live), y el founder
-  es el **primer cliente** (se cobra igual que cualquiera). En la entrega ese revenue
-  se reporta como **related-party**, separado del arms-length. No se infla nada.
+## HONESTIDAD (lo que NO se afirma)
+
+- **WhatsApp con IA = roadmap** (falta Cloud API + número dedicado). El único
+  WhatsApp del video es el botón de pedir reseña (real).
+- **Reels y carrusel:** solo si están **encendidos en prod** al momento de grabar
+  (Reels necesita su key/migración; carrusel su migración). Si no, no salen.
+- Las ~430 reseñas semilla de `reviews` son ficticias — jamás a cámara.
+- El revenue que se muestra es real (Stripe live). El founder es el **primer
+  cliente** y en la entrega se reporta como **related-party, separado** del
+  arms-length. En el video no se infla nada.
+- La voz que LEE las preguntas es la del sistema del navegador (gratis); la que
+  ESCUCHA y transcribe es Gemini. No confundirlas en la narración.

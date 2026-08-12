@@ -152,5 +152,15 @@ $gen_total = array_sum($gen) + $mem_act;
     <p class="sub" style="margin:0 0 12px">Descarga el log completo de decisiones de IA (agente, modelo, costo, hora) para la evidencia.</p>
     <a class="btn" href="?export=csv"><?= ico('download') ?> Exportar evidencia (CSV)</a>
   </div>
+
+  <?php /* EL PAQUETE — para el día de la entrega: junta revenue, uso de API y
+           la evidencia del ciclo agéntico ordenados por criterio, listos para
+           pegar en Devpost. Sin copiar números a mano de cinco pantallas. */ ?>
+  <div class="card" style="text-align:center;margin-top:14px">
+    <p class="sub" style="margin:0 0 12px"><b>Día de entrega:</b> el paquete completo para Devpost —
+      revenue real (fríos vs. related-party), uso de API, y la evidencia del ciclo agéntico,
+      ordenados por criterio y listos para copiar.</p>
+    <a class="btn" href="/crecer/panel/admin_paquete.php"><?= ico('package') ?> Armar el paquete de evidencia</a>
+  </div>
 </div>
 </body></html>
