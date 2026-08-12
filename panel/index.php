@@ -624,6 +624,40 @@ $credito  = $has_deck
   .hz-hello{font-family:var(--font-display);font-weight:800;font-size:clamp(28px,7.5vw,36px);letter-spacing:-.03em;color:var(--tinta);line-height:1.05;margin-top:4px}
   .hz-status{display:inline-flex;align-items:center;gap:7px;margin-top:11px;color:var(--teal-700,#00827e);font-weight:700;font-size:13.5px;background:color-mix(in srgb,var(--teal) 10%,#fff);border:1px solid color-mix(in srgb,var(--teal) 22%,#fff);border-radius:999px;padding:5px 13px}
   .hz-status svg{width:15px;height:15px}
+  /* ══ EL NORTE ══ la meta manda: es lo primero que se ve al entrar.
+     Sin meta, la pregunta ocupa el lugar de honor y nada compite con ella. */
+  .norte{background:linear-gradient(135deg,color-mix(in srgb,var(--teal) 12%,#fff),var(--card));
+    border:1px solid color-mix(in srgb,var(--teal) 30%,#fff);border-radius:20px;padding:18px 19px;margin-top:16px;
+    box-shadow:0 10px 30px -18px rgba(0,120,115,.5)}
+  .n-eb{display:block;font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--teal-700,#00827e);margin-bottom:7px}
+  .n-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+  .n-num b{font-family:'Oswald',var(--font-display,sans-serif);font-size:40px;line-height:.95;color:var(--tinta);letter-spacing:-.5px}
+  .n-num span{display:block;font-size:13px;color:var(--muted);font-weight:600;margin-top:3px}
+  .n-dias{text-align:center;background:#fff;border:1px solid var(--line);border-radius:13px;padding:8px 13px;flex:none}
+  .n-dias b{display:block;font-family:'Oswald',var(--font-display,sans-serif);font-size:22px;line-height:1;color:var(--tinta)}
+  .n-dias span{font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+  .n-barra{height:9px;border-radius:99px;background:#fff;border:1px solid var(--line);overflow:hidden;margin:14px 0 8px}
+  .n-barra i{display:block;height:100%;background:linear-gradient(90deg,var(--teal),var(--magenta));border-radius:99px;transition:width .6s cubic-bezier(.4,0,.2,1)}
+  .n-ritmo{font-size:12.5px;font-weight:700;margin:0}
+  .n-ritmo.bien{color:#0a6a5f} .n-ritmo.mal{color:#b4232b}
+  .n-jugada{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-top:14px}
+  .n-jl{display:block;font-size:10.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+  .n-jugada b{display:block;font-size:15px;color:var(--tinta);line-height:1.3;margin-bottom:4px}
+  .n-jugada p{margin:0;font-size:13px;color:var(--muted);line-height:1.5}
+  .n-cta{display:inline-flex;align-items:center;justify-content:center;gap:8px;margin-top:15px;
+    background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;text-decoration:none;
+    font-weight:800;font-size:14.5px;padding:13px 20px;border-radius:13px;width:100%}
+  .n-cta svg{width:16px;height:16px}
+  .n-cta.ghost{background:transparent;color:var(--teal-700,#00827e);border:1.5px solid color-mix(in srgb,var(--teal) 40%,#fff);
+    font-size:13.5px;padding:11px 16px;margin-top:13px}
+  /* Sin meta: la pregunta es la pantalla, no una tarjeta más */
+  .norte-vacio{text-align:center;padding:30px 22px}
+  .norte-vacio h2{font-family:'Oswald',var(--font-display,sans-serif);font-size:26px;line-height:1.15;color:var(--tinta);margin:0 0 9px;letter-spacing:.3px}
+  .norte-vacio p{font-size:14px;color:var(--muted);line-height:1.6;margin:0 auto;max-width:400px}
+  .norte-cerrada{text-align:center;padding:26px 22px}
+  .norte-cerrada h2{font-family:'Oswald',var(--font-display,sans-serif);font-size:24px;color:var(--tinta);margin:0 0 8px;letter-spacing:.3px}
+  .norte-cerrada p{font-size:13.5px;color:var(--muted);line-height:1.55;margin:0 auto;max-width:400px}
+
   .hz-card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:16px;box-shadow:var(--shadow-sm);margin-top:16px}
   .hz-ch{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}
   .hz-ch b{font-family:var(--font-display);font-weight:700;font-size:16px;color:var(--ink-soft,#4a444c)}
@@ -764,6 +798,109 @@ $credito  = $has_deck
       <span class="wx-c" id="hzWxC"></span>
     </div>
   </div>
+
+  <?php
+  // ══════════════════════════════════════════════════════════════════════
+  //  EL NORTE — lo primero que se ve al entrar (2026-08-12).
+  //
+  //  La meta es el motor del producto: si no hay una, el Home no tiene por qué
+  //  enseñar actividad — tiene que hacer LA pregunta. Y si la hay, lo primero
+  //  es cómo vamos y qué toca ahora; todo lo demás (el turno, el relevo, la
+  //  idea del día) sigue igual debajo.
+  //
+  //  Tres estados, tres caras:
+  //   · sin meta      → la pregunta, y nada compite con ella
+  //   · con meta      → el número, el ritmo y la jugada que toca
+  //   · meta cerrada  → lo que se logró y la invitación al mes siguiente
+  // ══════════════════════════════════════════════════════════════════════
+  $__meta = null; $__prog = null; $__jug = null; $__meta_estado = 'ninguna';
+  try {
+      require_once __DIR__ . '/../includes/meta_negocio.php';
+      require_once __DIR__ . '/../includes/meta_ejecutar.php';
+      $__meta = meta_activa($pdo, $marca_id);
+      if ($__meta) {
+          $__prog = meta_progreso($pdo, $__meta);
+          $__jug  = meta_tactica_de_turno($pdo, $__meta);
+          $__meta_estado = 'activa';
+      } else {
+          // ¿Cerró una hace poco? Entonces se celebra y se invita a la próxima.
+          $q = $pdo->prepare("SELECT * FROM crecer_meta WHERE marca_id=? AND estado IN ('lograda','vencida')
+                               ORDER BY updated_at DESC LIMIT 1");
+          $q->execute([$marca_id]);
+          if ($__meta = $q->fetch(PDO::FETCH_ASSOC)) {
+              $__prog = meta_progreso($pdo, $__meta);
+              $__meta_estado = 'cerrada';
+          }
+      }
+  } catch (Throwable $e) { $__meta_estado = 'ninguna'; }   // sin migración: Home de siempre
+  ?>
+
+  <?php if ($__meta_estado === 'ninguna'): ?>
+    <section class="norte norte-vacio">
+      <span class="n-eb">Empecemos por aquí</span>
+      <h2>¿Qué quieres lograr este mes?</h2>
+      <p>Dime el número que te haría feliz y el corillo arma el plan para llegar —
+         y se pone a trabajar en él. Sin un norte, publicar es dar vueltas.</p>
+      <a class="n-cta" href="<?= $BASE ?>/meta.php?<?= $mid ?>"><?= ico('compass') ?> Ponerle meta a mi mes</a>
+    </section>
+
+  <?php elseif ($__meta_estado === 'cerrada'):
+    $__def = meta_objetivo_def((string)$__meta['objetivo']);
+    $__logro = ($__prog['medible'] && $__prog['actual'] !== null) ? (float)$__prog['actual'] : null;
+  ?>
+    <section class="norte norte-cerrada">
+      <span class="n-eb"><?= $__meta['estado'] === 'lograda' ? 'Meta lograda' : 'Se cerró el mes' ?></span>
+      <h2><?php if ($__logro !== null): ?>
+            Lograste <?= $h(meta_fmt($__logro, (string)$__meta['objetivo'])) ?>
+          <?php else: ?>Cerró tu meta<?php endif; ?></h2>
+      <p><?= $__meta['estado'] === 'lograda'
+            ? 'Llegaste. Vamos a poner la próxima con lo que el corillo aprendió este mes.'
+            : 'Se acabó el plazo. El corillo ya sabe qué funcionó y qué no — la próxima sale mejor.' ?></p>
+      <a class="n-cta" href="<?= $BASE ?>/meta.php?<?= $mid ?>"><?= ico('compass') ?> Poner la meta del mes nuevo</a>
+    </section>
+
+  <?php else:
+    $__def = meta_objetivo_def((string)$__meta['objetivo']);
+    $__pct = $__prog['pct'] !== null ? (int)$__prog['pct'] : 0;
+  ?>
+    <section class="norte">
+      <div class="n-top">
+        <div>
+          <span class="n-eb">Tu meta de este mes</span>
+          <div class="n-num">
+            <?php if ($__prog['medible'] && $__prog['actual'] !== null): ?>
+              <b><?= $h(number_format((float)$__prog['actual'])) ?></b>
+              <span>de <?= $h(meta_fmt($__meta['cantidad'] !== null ? (float)$__meta['cantidad'] : null, (string)$__meta['objetivo'])) ?></span>
+            <?php else: ?>
+              <b><?= $h(meta_fmt($__meta['cantidad'] !== null ? (float)$__meta['cantidad'] : null, (string)$__meta['objetivo'])) ?></b>
+              <span><?= $h($__def['verbo']) ?></span>
+            <?php endif; ?>
+          </div>
+        </div>
+        <?php if ($__prog['dias_rest'] !== null && $__prog['dias_rest'] > 0): ?>
+          <div class="n-dias"><b><?= (int)$__prog['dias_rest'] ?></b><span>días</span></div>
+        <?php endif; ?>
+      </div>
+
+      <?php if ($__prog['medible'] && $__meta['cantidad'] !== null): ?>
+        <div class="n-barra"><i style="width:<?= max(2, min(100, $__pct)) ?>%"></i></div>
+        <?php if ($__prog['al_dia'] === false): ?>
+          <p class="n-ritmo mal">Vas atrasado para el ritmo que necesitas — el corillo está apretando.</p>
+        <?php elseif ($__prog['al_dia'] === true): ?>
+          <p class="n-ritmo bien">Vas en ritmo.</p>
+        <?php endif; ?>
+      <?php endif; ?>
+
+      <?php if ($__jug): ?>
+        <div class="n-jugada">
+          <span class="n-jl">Lo que toca ahora</span>
+          <b><?= $h($__jug['titulo']) ?></b>
+          <p><?= $h(mb_substr((string)$__jug['que_hacer'], 0, 130)) ?></p>
+        </div>
+      <?php endif; ?>
+      <a class="n-cta ghost" href="<?= $BASE ?>/meta.php?<?= $mid ?>">Ver el plan completo →</a>
+    </section>
+  <?php endif; ?>
 
   <?php if ($hz_post):
     $hz_g = (string)($hz_post['grafica_path'] ?? '');
