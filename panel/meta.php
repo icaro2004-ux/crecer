@@ -723,7 +723,7 @@ if ($meta) {
                   <b><?= (int)$jp['espera_video'] === 1 ? 'Te falta grabar 1 video' : 'Te faltan ' . (int)$jp['espera_video'] . ' videos' ?></b>
                   Ya te escribí el guion — dice exactamente qué grabar, clip por clip, con el celular.
                   Súbelos y yo los monto con música, textos y tu marca.
-                  <a href="<?= $BASE ?>/reels.php?marca=<?= $marca_id ?>"><?= ico('camera') ?> Subir mis videos</a>
+                  <a href="<?= $BASE ?>/reels.php?marca=<?= $marca_id ?><?= !empty($jp['espera_video_id']) ? '&pieza=' . (int)$jp['espera_video_id'] : '' ?>"><?= ico('camera') ?> Subir mis videos</a>
                 </div>
               <?php endif; ?>
             <?php endif; ?>

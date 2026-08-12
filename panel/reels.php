@@ -53,10 +53,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         };
 
+        // ¿Este reel nace de una pieza del plan que estaba esperando video?
+        // (llega como ?pieza=N desde Tu Meta o el Estudio). Se valida que sea de
+        // esta marca: un id ajeno simplemente se ignora.
+        $pieza_id = (int)($_POST['pieza'] ?? 0);
+        if ($pieza_id > 0) {
+            try {
+                $qp = $pdo->prepare("SELECT id FROM crecer_contenido WHERE id=? AND marca_id=?");
+                $qp->execute([$pieza_id, $marca_id]);
+                if (!$qp->fetchColumn()) $pieza_id = 0;
+            } catch (Throwable $e) { $pieza_id = 0; }
+        }
+
         // Crear el reel primero (para el id).
         $pdo->prepare("INSERT INTO crecer_reels (marca_id, estado, preset, contexto, subtitulos, musica) VALUES (?, 'borrador', ?, ?, ?, ?)")
             ->execute([$marca_id, $preset, $contexto, $subtitulos, $musica]);
         $reel_id = (int)$pdo->lastInsertId();
+        // El amarre va aparte y best-effort: si la migración del amarre aún no
+        // corrió, el reel se hace igual (solo no cierra la pieza solo).
+        if ($pieza_id > 0) {
+            try { $pdo->prepare("UPDATE crecer_reels SET contenido_id=? WHERE id=?")->execute([$pieza_id, $reel_id]); }
+            catch (Throwable $e) { error_log('reel amarre pieza: ' . $e->getMessage()); }
+        }
 
         $ord = 0; $guardados = 0; $errores = [];
 
@@ -264,6 +282,24 @@ $presets = reels_presets();
 $musica_cat = reels_music_catalogo();
 $render_ok = render_disponible();
 $CSRF = csrf_token();
+
+// ── ¿Llegamos desde una pieza del plan que está esperando su video? ──
+//  (?pieza=N desde Tu Meta o el Estudio). Traemos el guion que el corillo ya
+//  escribió para que el dueño sepa exactamente qué grabar, sin cambiar de
+//  pantalla ni acordarse de memoria.
+$pieza_espera = 0; $pieza_guion = ''; $pieza_caption = '';
+if (isset($_GET['pieza']) && (int)$_GET['pieza'] > 0) {
+    try {
+        $qp = $pdo->prepare("SELECT id, guion, caption FROM crecer_contenido
+                              WHERE id=? AND marca_id=? AND necesita_material IS NOT NULL AND estado<>'publicado'");
+        $qp->execute([(int)$_GET['pieza'], $marca_id]);
+        if ($fp = $qp->fetch(PDO::FETCH_ASSOC)) {
+            $pieza_espera  = (int)$fp['id'];
+            $pieza_guion   = trim((string)($fp['guion'] ?? ''));
+            $pieza_caption = trim((string)($fp['caption'] ?? ''));
+        }
+    } catch (Throwable $e) { $pieza_espera = 0; }   // sin la migración: flujo normal
+}
 // Reels usa el MISMO shell que todo el panel (un solo nav, coherencia total).
 $active = 'reels';
 $page_title = 'Reels Studio';
@@ -455,6 +491,24 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
     </div>
   </div>
 
+  <?php if ($pieza_espera && $pieza_guion !== ''): ?>
+  <?php /* Llegó desde una jugada del plan: el corillo ya escribió QUÉ grabar.
+           Se pone al frente para que no tenga que acordarse ni cambiar de
+           pantalla. Al terminar, el video vuelve solo a su pieza. */ ?>
+  <div class="pieza-guion">
+    <div class="pg-t">El corillo te escribió el guion</div>
+    <pre><?= htmlspecialchars($pieza_guion, ENT_QUOTES, 'UTF-8') ?></pre>
+    <p class="pg-n">Graba estos clips con el celular y súbelos aquí abajo. Cuando el reel esté montado,
+       vuelve solo al post que lo está esperando.</p>
+  </div>
+  <style>
+    .pieza-guion{background:#fff8e6;border:1px solid #f2dfae;border-radius:16px;padding:16px 18px;margin:0 0 18px}
+    .pieza-guion .pg-t{font-weight:800;color:#5c4409;font-size:14px;margin-bottom:9px}
+    .pieza-guion pre{margin:0;font-family:inherit;font-size:13.5px;line-height:1.65;color:#7a5b12;white-space:pre-wrap}
+    .pieza-guion .pg-n{font-size:12.5px;color:#8a6a2a;line-height:1.5;margin:11px 0 0}
+  </style>
+  <?php endif; ?>
+
   <!-- PASO 1 · Subir -->
   <section class="screen on" id="s1">
     <div class="card">
@@ -626,6 +680,8 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
 
 <script>
 const CSRF = <?= json_encode($CSRF) ?>;
+// La pieza del plan que espera este video (0 = reel suelto).
+const PIEZA_ESPERA = <?= (int)$pieza_espera ?>;
 const MARCA = <?= (int)$marca_id ?>;
 const HERE = location.pathname + '?marca=<?= $marca_id ?>';
 const $ = s => document.querySelector(s);
@@ -753,6 +809,9 @@ $('#crear').onclick=async()=>{
   go('load'); animateLoad();
   const fd=new FormData();
   fd.append('csrf',CSRF); fd.append('accion','crear'); fd.append('preset',preset);
+  // Si venimos de una pieza del plan que espera video, el reel se amarra a ella
+  // y al quedar listo se cierra solo (ver reels_cerrar_pieza).
+  if (PIEZA_ESPERA) fd.append('pieza', PIEZA_ESPERA);
   fd.append('contexto', $('#contexto').value||'');
   fd.append('subtitulos', $('#subtitulos').checked ? '1' : '');
   fd.append('musica', musica);

@@ -326,7 +326,7 @@ require __DIR__ . '/_shell.php';
         <?php /* El corillo escribe el guion, pero el video solo lo puede grabar
                  el dueño. En vez de fingir una imagen y llamarla reel, se le
                  pide con el guion delante y un camino de un toque. */ ?>
-        <div class="est-art sube" onclick="location.href='<?= $BASE ?>/reels.php?<?= $mid ?>'">
+        <div class="est-art sube" onclick="location.href='<?= $BASE ?>/reels.php?<?= $mid ?>&pieza=<?= (int)$p['id'] ?>'">
           <div class="sube-in">
             <?= ico('camera') ?>
             <b>Sube tu video aquí</b>
@@ -337,7 +337,7 @@ require __DIR__ . '/_shell.php';
           <div class="est-guion">
             <p class="eg-t">Te escribí el guion — solo sigue esto con el celular:</p>
             <pre><?= $h($p['guion']) ?></pre>
-            <a class="eg-b" href="<?= $BASE ?>/reels.php?<?= $mid ?>"><?= ico('camera') ?> Subir mis clips</a>
+            <a class="eg-b" href="<?= $BASE ?>/reels.php?<?= $mid ?>&pieza=<?= (int)$p['id'] ?>"><?= ico('camera') ?> Subir mis clips</a>
           </div>
         <?php endif; ?>
         <?php elseif ($img || $video): ?>

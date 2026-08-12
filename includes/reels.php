@@ -824,6 +824,12 @@ function reels_finalizar_render(PDO $pdo, int $id, array $doc): void {
                 $reel['edl_json'] = $reel['edl_json'] ?? null;
                 reels_generar_copy($pdo, $reel, null);
             }
+            // ── CIERRA LA PIEZA DEL PLAN QUE ESPERABA ESTE VIDEO ──
+            //  Si este reel nació de una jugada, el video vuelve a SU pieza: se
+            //  le pega, se le quita el "falta material" y entra al flujo normal
+            //  (aprobar → publicar → la jugada se cumple sola). Sin esto, la
+            //  pieza se quedaba esperando para siempre aunque el reel existiera.
+            try { reels_cerrar_pieza($pdo, (int)$id); } catch (Throwable $e) { error_log('reels_cerrar_pieza: ' . $e->getMessage()); }
             return;
         }
         if ($st['status'] === 'failed') {
@@ -832,6 +838,63 @@ function reels_finalizar_render(PDO $pdo, int $id, array $doc): void {
         }
     }
     reels_set($pdo, $id, ['estado' => 'failed', 'error_msg' => 'el render tardó demasiado (timeout)']);
+}
+
+/**
+ * EL REEL VUELVE A SU PIEZA. Cuando un reel nacido de una jugada del plan queda
+ * listo, su video se pega en la pieza que lo estaba esperando y se le quita la
+ * marca de "falta material". Desde ahí sigue el camino de cualquier otra pieza:
+ * el dueño la aprueba, se publica, y la jugada se cierra sola.
+ *
+ * Best-effort a propósito: si algo falla aquí, el reel YA existe y está listo en
+ * el Estudio de Reels — el dueño no pierde su trabajo, solo el amarre automático.
+ *
+ * @return bool true si cerró una pieza
+ */
+function reels_cerrar_pieza(PDO $pdo, int $reel_id): bool {
+    $r = null;
+    try {
+        $q = $pdo->prepare("SELECT id, marca_id, contenido_id, video_url, poster_url, copy_post FROM crecer_reels WHERE id=?");
+        $q->execute([$reel_id]);
+        $r = $q->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return false;   // sin la columna contenido_id (migración pendiente): no pasa nada
+    }
+    if (!$r || empty($r['contenido_id']) || empty($r['video_url'])) return false;
+
+    $cid = (int)$r['contenido_id'];
+    $mid = (int)$r['marca_id'];
+    // La pieza tiene que seguir existiendo, ser de la misma marca y estar esperando.
+    $c = null;
+    try {
+        $q = $pdo->prepare("SELECT id, caption, estado FROM crecer_contenido WHERE id=? AND marca_id=?");
+        $q->execute([$cid, $mid]);
+        $c = $q->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) { return false; }
+    if (!$c || $c['estado'] === 'publicado') return false;
+
+    // El caption: si el dueño ya tenía uno escrito por el corillo, se respeta.
+    // El copy que generó el motor de reels solo entra si la pieza venía vacía.
+    $sets = ["grafica_path=?", "necesita_material=NULL", "tipo='reel'", "updated_at=NOW()"];
+    $par  = [(string)$r['video_url']];
+    if (trim((string)$c['caption']) === '' && trim((string)($r['copy_post'] ?? '')) !== '') {
+        $sets[] = "caption=?"; $par[] = (string)$r['copy_post'];
+    }
+    $par[] = $cid; $par[] = $mid;
+    try {
+        $pdo->prepare("UPDATE crecer_contenido SET " . implode(',', $sets) . " WHERE id=? AND marca_id=?")->execute($par);
+    } catch (Throwable $e) { return false; }
+
+    // Avisar: el dueño subió los clips hace rato y probablemente ya se fue.
+    try {
+        require_once __DIR__ . '/notif.php';
+        if (function_exists('notif_crear')) {
+            notif_crear($pdo, $mid, 'contenido', 'Tu reel está listo',
+                'Monté el video con tus clips y ya está en su lugar. Míralo y apruébalo.',
+                '/crecer/panel/propuestas.php?marca=' . $mid);
+        }
+    } catch (Throwable $e) {}
+    return true;
 }
 
 /** Dispara el worker por auto-HTTP (fire-and-forget). $modo: 'crear' | 'reedit'. */

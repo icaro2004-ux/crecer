@@ -54,11 +54,17 @@ function jugada_progreso(PDO $pdo, array $t): array {
         }
     } catch (Throwable $e) {}
     // Piezas trancadas esperando algo que solo el dueño puede dar (sus clips).
+    // Se guarda el id de la primera para poder llevarlo DIRECTO a grabar esa
+    // pieza (con su guion delante), en vez de soltarlo en el Estudio de Reels.
+    $out['espera_video_id'] = 0;
     try {
-        $q2 = $pdo->prepare("SELECT COUNT(*) FROM crecer_contenido
-                              WHERE tactica_id=? AND necesita_material IS NOT NULL AND estado<>'publicado'");
+        $q2 = $pdo->prepare("SELECT id FROM crecer_contenido
+                              WHERE tactica_id=? AND necesita_material IS NOT NULL AND estado<>'publicado'
+                              ORDER BY id ASC");
         $q2->execute([(int)$t['id']]);
-        $out['espera_video'] = (int)$q2->fetchColumn();
+        $pend = $q2->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        $out['espera_video']    = count($pend);
+        $out['espera_video_id'] = $pend ? (int)$pend[0] : 0;
     } catch (Throwable $e) { /* sin la migración de material: se ignora */ }
     if ($meta > 0) $out['pct'] = min(100, (int)round($out['publicadas'] / $meta * 100));
     $out['cumplida'] = $meta > 0 && $out['publicadas'] >= $meta;
