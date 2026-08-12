@@ -71,7 +71,34 @@ UNION ALL SELECT 'crecer_meta_jobs (cola)',
 UNION ALL SELECT 'crecer_visual_huella (anti-slop)',
        CASE WHEN COUNT(*) > 0 THEN 'OK' ELSE 'FALTA' END, '2026-08-12_crecer_variedad_visual.sql'
   FROM information_schema.TABLES
- WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'crecer_visual_huella';
+ WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'crecer_visual_huella'
+
+-- ── El reel que pide material y vuelve solo a su pieza ──
+UNION ALL SELECT 'crecer_contenido.necesita_material',
+       CASE WHEN COUNT(*) > 0 THEN 'OK' ELSE 'FALTA' END, '2026-08-12_crecer_pieza_material.sql'
+  FROM information_schema.COLUMNS
+ WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'crecer_contenido' AND COLUMN_NAME = 'necesita_material'
+
+UNION ALL SELECT 'crecer_contenido.guion',
+       CASE WHEN COUNT(*) > 0 THEN 'OK' ELSE 'FALTA' END, '2026-08-12_crecer_pieza_material.sql'
+  FROM information_schema.COLUMNS
+ WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'crecer_contenido' AND COLUMN_NAME = 'guion'
+
+UNION ALL SELECT 'crecer_reels.contenido_id',
+       CASE WHEN COUNT(*) > 0 THEN 'OK' ELSE 'FALTA' END, '2026-08-12_crecer_reel_pieza.sql'
+  FROM information_schema.COLUMNS
+ WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'crecer_reels' AND COLUMN_NAME = 'contenido_id'
+
+-- ── El contrato de la jugada (formato/ejecutado) ──
+UNION ALL SELECT 'crecer_meta_tactica.formato',
+       CASE WHEN COUNT(*) > 0 THEN 'OK' ELSE 'FALTA' END, '2026-08-12_crecer_jugada_ejecuta.sql'
+  FROM information_schema.COLUMNS
+ WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'crecer_meta_tactica' AND COLUMN_NAME = 'formato'
+
+UNION ALL SELECT 'crecer_meta_tactica.ejecutado_at',
+       CASE WHEN COUNT(*) > 0 THEN 'OK' ELSE 'FALTA' END, '2026-08-12_crecer_jugada_ejecuta.sql'
+  FROM information_schema.COLUMNS
+ WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'crecer_meta_tactica' AND COLUMN_NAME = 'ejecutado_at';
 
 
 -- ============================================================
