@@ -315,6 +315,12 @@ if ($meta) {
   @keyframes jgb{0%,60%,100%{opacity:.3}30%{opacity:1}}
   .jg-live.ok{color:#0a6a5f;background:color-mix(in srgb,var(--teal,#00A49F) 10%,#fff);border:1px solid color-mix(in srgb,var(--teal,#00A49F) 28%,#fff);border-radius:11px;padding:10px 12px}
 
+  /* Lo que solo el dueño puede dar: sus videos */
+  .jg-video{margin-top:11px;background:#fff8e6;border:1px solid #f2dfae;border-radius:12px;padding:12px 14px;font-size:12.5px;line-height:1.55;color:#7a5b12}
+  .jg-video b{display:block;color:#5c4409;font-size:13.5px;margin-bottom:3px}
+  .jg-video a{display:inline-flex;align-items:center;gap:7px;margin-top:10px;background:#5c4409;color:#fff;text-decoration:none;font-weight:800;font-size:13px;padding:9px 14px;border-radius:10px}
+  .jg-video a svg{width:14px;height:14px}
+
   /* Encabezado del plan vigente + cumplimiento */
   .plan-cab{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin:0 0 12px;flex-wrap:wrap}
   .plan-cab h2{font-family:var(--font-display,'Oswald',sans-serif);font-size:17px;letter-spacing:.4px;color:var(--tinta);margin:0}
@@ -708,6 +714,18 @@ if ($meta) {
                   <?php endif; ?>
                 </span>
               </div>
+
+              <?php if ((int)$jp['espera_video'] > 0): ?>
+                <?php /* Lo único que el corillo NO puede hacer solo: el video.
+                         Se dice claro y se le da el camino, en vez de fingir
+                         que la pieza está lista. */ ?>
+                <div class="jg-video">
+                  <b><?= (int)$jp['espera_video'] === 1 ? 'Te falta grabar 1 video' : 'Te faltan ' . (int)$jp['espera_video'] . ' videos' ?></b>
+                  Ya te escribí el guion — dice exactamente qué grabar, clip por clip, con el celular.
+                  Súbelos y yo los monto con música, textos y tu marca.
+                  <a href="<?= $BASE ?>/reels.php?marca=<?= $marca_id ?>"><?= ico('camera') ?> Subir mis videos</a>
+                </div>
+              <?php endif; ?>
             <?php endif; ?>
 
             <div class="jg-meta">

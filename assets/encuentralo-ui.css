@@ -290,9 +290,14 @@ body{
   .content{padding:20px 18px 80px}
   .grid.g2,.grid.g3{grid-template-columns:1fr}
   .backdrop.show{display:block}
-  /* Navegación consolidada: en móvil la barra de abajo ES la navegación primaria.
-     El panel del avatar NO repite esos 4 destinos — solo Biblioteca + perfil. */
-  .side nav:not(.nav-perfil) a:not([href*="biblioteca"]){display:none}
+  /* Navegación consolidada: en móvil la barra de abajo ES la navegación primaria,
+     así que el drawer NO repite esos destinos — pero SÍ tiene que mostrar todos
+     los demás, o quedan inalcanzables desde el teléfono.
+     Los repetidos se marcan `.dup` desde PHP (_shell.php $nav['bot']).
+     Antes esta regla escondía TODO menos Biblioteca: se escribió con 4 destinos
+     y al crecer el menú dejó Reels, Tu equipo, El Genoma y Calendario sin acceso
+     en móvil. Marcar en PHP y no adivinar por el href evita que vuelva a pasar. */
+  .side nav:not(.nav-perfil) a.dup{display:none}
   /* El avatar es el acceso al menú. El hamburger al lado SEÑALA que ahí hay
      menú (sin él, la inicial sola no se lee como botón). */
   .ptop-menu .bars{display:flex}

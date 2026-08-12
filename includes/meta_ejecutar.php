@@ -42,7 +42,7 @@ function jugada_por_id(PDO $pdo, int $tactica_id, int $marca_id): ?array {
  */
 function jugada_progreso(PDO $pdo, array $t): array {
     $meta = (int)($t['piezas_meta'] ?? 0);
-    $out = ['meta'=>$meta, 'creadas'=>0, 'publicadas'=>0, 'listas'=>0, 'pct'=>0, 'cumplida'=>false];
+    $out = ['meta'=>$meta, 'creadas'=>0, 'publicadas'=>0, 'listas'=>0, 'espera_video'=>0, 'pct'=>0, 'cumplida'=>false];
     try {
         $q = $pdo->prepare("SELECT estado, COUNT(*) c FROM crecer_contenido WHERE tactica_id=? GROUP BY estado");
         $q->execute([(int)$t['id']]);
@@ -53,6 +53,13 @@ function jugada_progreso(PDO $pdo, array $t): array {
             elseif (in_array($r['estado'], ['aprobado','programado'], true)) $out['listas'] += $c;
         }
     } catch (Throwable $e) {}
+    // Piezas trancadas esperando algo que solo el dueño puede dar (sus clips).
+    try {
+        $q2 = $pdo->prepare("SELECT COUNT(*) FROM crecer_contenido
+                              WHERE tactica_id=? AND necesita_material IS NOT NULL AND estado<>'publicado'");
+        $q2->execute([(int)$t['id']]);
+        $out['espera_video'] = (int)$q2->fetchColumn();
+    } catch (Throwable $e) { /* sin la migración de material: se ignora */ }
     if ($meta > 0) $out['pct'] = min(100, (int)round($out['publicadas'] / $meta * 100));
     $out['cumplida'] = $meta > 0 && $out['publicadas'] >= $meta;
     return $out;
@@ -151,6 +158,49 @@ function jugada_inventario(PDO $pdo, int $marca_id, array $t, int $faltan): arra
     } catch (Throwable $e) {}
 
     return $out;
+}
+
+/**
+ * EL GUION DEL REEL — lo único honesto que el corillo puede producir solo
+ * cuando la jugada pide video.
+ *
+ * Crecer SÍ monta reels (Gemini lee los clips y Shotstack los arma), pero no
+ * inventa video: el material crudo solo lo puede grabar el dueño. Antes el
+ * motor resolvía esto generando una IMAGEN y llamándola "reel" — mentira que
+ * el dueño descubría al ir a publicar.
+ *
+ * Ahora el corillo hace su parte: escribe QUÉ grabar, clip por clip, en
+ * lenguaje de alguien que va a usar el celular con una mano.
+ *
+ * @return string el guion (o '' si falló)
+ */
+function jugada_guion_reel(PDO $pdo, int $marca_id, array $t, string $idea): string {
+    require_once __DIR__ . '/agentes.php';
+    require_once __DIR__ . '/ia.php';
+    try {
+        $m   = leer_marca($pdo, $marca_id);
+        $ctx = cerebro_negocio($pdo, $marca_id, $m);
+        $sistema = "Eres el GUIONISTA de reels de Crecer. El dueño de un micronegocio boricua va a grabar con su "
+            . "CELULAR, con una mano, entre clientes. Escríbele qué grabar en 3 o 4 clips CORTOS (4-6 segundos "
+            . "cada uno), en orden.\n"
+            . "REGLAS:\n"
+            . "- Cada clip: qué se ve y cómo sostener el teléfono. Concreto y filmable HOY, con lo que ya tiene "
+            . "en su negocio. Nada de drones, trípodes, iluminación ni actores.\n"
+            . "- Nada de jerga de cine (ni 'plano detalle', ni 'travelling'): dilo como se lo dirías a un amigo.\n"
+            . "- Empieza por el clip que engancha en el primer segundo.\n"
+            . "- Máximo 90 palabras en total.\n"
+            . "Devuelve SOLO el guion, en líneas que empiecen con 'Clip 1:', 'Clip 2:'...";
+        $prompt = "Negocio:\n{$ctx}\n\nLa jugada: {$t['titulo']} — {$t['que_hacer']}\n"
+                . "La idea de este reel: {$idea}\n"
+                . (trim((string)$t['cta']) !== '' ? "Al final se le pide a la gente: {$t['cta']}\n" : '')
+                . "\nEscribe el guion de los clips.";
+        $r = ia_ejecutar($pdo, 'guionista', 'Guion de reel para la jugada', $prompt, [
+            'marca_id' => $marca_id, 'sistema' => $sistema,
+            'temperatura' => 0.85, 'max_tokens' => 320, 'thinking_budget' => 0,
+            'mock_texto' => "Clip 1: El horno abriéndose con el bizcocho adentro.\nClip 2: Tus manos sacándolo y el vapor subiendo.\nClip 3: Un pedazo cortado, bien de cerca.",
+        ]);
+        return trim((string)($r['texto'] ?? ''));
+    } catch (Throwable $e) { error_log('jugada_guion_reel: ' . $e->getMessage()); return ''; }
 }
 
 /**
@@ -303,7 +353,7 @@ function jugada_ejecutar(PDO $pdo, int $marca_id, int $tactica_id): array {
 
     // ── 1. INVENTARIO: qué hay ya ──
     $inv = jugada_inventario($pdo, $marca_id, $t, $faltan);
-    $ids = []; $recicladas = 0; $notas = [];
+    $ids = []; $recicladas = 0; $notas = []; $pide_video = 0;
 
     // ── 2. LA GAVETA: piezas listas que nadie publicó, puestas a trabajar ──
     //  No se les toca el texto (pueden ser del dueño): se amarran a la jugada
@@ -358,6 +408,27 @@ function jugada_ejecutar(PDO $pdo, int $marca_id, int $tactica_id): array {
                 $visual = (string)($rr['debate']['visual'] ?? '');
             } catch (Throwable $e) { error_log('jugada redactar: ' . $e->getMessage()); }
 
+            // ── REEL: el corillo hace SU parte y pide la del dueño ──
+            //  No inventamos video. Se escribe el guion (qué grabar, clip por
+            //  clip) y la pieza queda marcada como "falta material". Antes esto
+            //  se resolvía generando una imagen y llamándola reel — mentira que
+            //  el dueño descubría al ir a publicar.
+            if ($tipo === 'reel') {
+                $guion = jugada_guion_reel($pdo, $marca_id, $t, $txt);
+                try {
+                    $pdo->prepare("UPDATE crecer_contenido SET necesita_material='video', guion=?, updated_at=NOW()
+                                    WHERE id=? AND marca_id=?")
+                        ->execute([$guion !== '' ? $guion : null, $cid, $marca_id]);
+                } catch (Throwable $e) {
+                    // Sin la migración de material, no se finge un reel: se deja
+                    // como post para no prometer un video que no existe.
+                    try { $pdo->prepare("UPDATE crecer_contenido SET tipo='post' WHERE id=? AND marca_id=?")->execute([$cid, $marca_id]); }
+                    catch (Throwable $e2) {}
+                }
+                $ids[] = $cid; $faltan--; $dia++; $pide_video++;
+                continue;   // NO se le genera arte: lo que falta es el video del dueño
+            }
+
             // El arte: FOTO REAL del negocio si la hay (gana siempre y no gasta
             // cuota de imágenes); si no, se genera con la memoria anti-repetición.
             if ($cap !== '') {
@@ -393,9 +464,18 @@ function jugada_ejecutar(PDO $pdo, int $marca_id, int $tactica_id): array {
     $nuevas = count($ids) - $recicladas;
     if ($nuevas > 0) {
         $con_foto = count($inv['fotos']) > 0;
-        $notas[] = $nuevas === 1
-            ? 'Escribí 1 pieza nueva' . ($con_foto ? ' usando tus propias fotos' : '') . '.'
-            : "Escribí {$nuevas} piezas nuevas" . ($con_foto ? ' y usé tus propias fotos donde pegaban' : '') . '.';
+        $escritas = $nuevas - $pide_video;
+        if ($escritas > 0) {
+            $notas[] = $escritas === 1
+                ? 'Escribí 1 pieza nueva' . ($con_foto ? ' usando tus propias fotos' : '') . '.'
+                : "Escribí {$escritas} piezas nuevas" . ($con_foto ? ' y usé tus propias fotos donde pegaban' : '') . '.';
+        }
+        // Los reels se dicen aparte: ahí falta algo que solo él puede dar.
+        if ($pide_video > 0) {
+            $notas[] = $pide_video === 1
+                ? 'Para el reel te dejé el guion escrito — solo faltan tus clips y yo lo monto.'
+                : "Para los {$pide_video} reels te dejé los guiones escritos — solo faltan tus clips y yo los monto.";
+        }
     }
     if (!$ids) {
         return ['ok'=>false, 'err'=>'No pude producir el contenido de esta jugada. Intenta otra vez.',
@@ -409,7 +489,10 @@ function jugada_ejecutar(PDO $pdo, int $marca_id, int $tactica_id): array {
     } catch (Throwable $e) {}
 
     $total = count($ids);
-    $resumen = implode(' ', $notas) . ' '
-             . ($total === 1 ? 'Está esperando tu OK en Tus Posts.' : "Las {$total} están esperando tu OK en Tus Posts.");
-    return ['ok'=>true, 'creadas'=>$total, 'recicladas'=>$recicladas, 'ids'=>$ids, 'resumen'=>trim($resumen)];
+    $listas = $total - $pide_video;
+    $cola = '';
+    if ($listas > 0) $cola = ($listas === 1 ? 'Está esperando tu OK en Tus Posts.' : "Las {$listas} están esperando tu OK en Tus Posts.");
+    $resumen = trim(implode(' ', $notas) . ' ' . $cola);
+    return ['ok'=>true, 'creadas'=>$total, 'recicladas'=>$recicladas, 'pide_video'=>$pide_video,
+            'ids'=>$ids, 'resumen'=>$resumen];
 }

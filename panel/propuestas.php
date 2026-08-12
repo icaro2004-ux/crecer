@@ -78,10 +78,18 @@ if ($jugada_id > 0) {
         if ($jugada_tit === '') $jugada_id = 0;   // ajena o inexistente: se ignora
     } catch (Throwable $e) { $jugada_id = 0; }
 }
+// ¿Existe ya la columna de material pendiente? (migración 2026-08-12). Se
+// pregunta en vez de asumir: si no está, el Estudio funciona igual que antes
+// — romperlo entero por una columna nueva sería mucho peor que no mostrarla.
+$col_material = false;
+try { $pdo->query("SELECT necesita_material FROM crecer_contenido LIMIT 1"); $col_material = true; }
+catch (Throwable $e) { $col_material = false; }
+
 $props = [];
 try {
-    $sql = "SELECT id, caption, plataforma, tipo, fecha_programada, grafica_path
-              FROM crecer_contenido
+    $sql = "SELECT id, caption, plataforma, tipo, fecha_programada, grafica_path"
+         . ($col_material ? ", necesita_material, guion" : ", NULL AS necesita_material, NULL AS guion")
+         . " FROM crecer_contenido
              WHERE marca_id=? AND estado=? AND tipo<>'carrusel'";
     $par = [$marca_id, $deck_apartadas ? 'rechazado' : 'borrador'];
     if ($jugada_id > 0) { $sql .= " AND tactica_id=?"; $par[] = $jugada_id; }
@@ -158,6 +166,23 @@ require __DIR__ . '/_shell.php';
   .est-art img{width:100%;max-height:72vh;object-fit:cover;display:block}
   .est-art.txt{aspect-ratio:16/10;color:var(--teal)}
   .est-art.txt svg{width:38px;height:38px;opacity:.6}
+
+  /* "Sube tu video aquí" — el hueco honesto donde iría el reel.
+     No es un error ni un vacío: es una invitación con el camino claro. */
+  .est-art.sube{aspect-ratio:4/5;cursor:pointer;background:
+    linear-gradient(135deg,color-mix(in srgb,var(--teal) 7%,#fff),color-mix(in srgb,var(--magenta) 6%,#fff));
+    border:2px dashed color-mix(in srgb,var(--teal) 40%,#fff);box-shadow:none;transition:border-color .18s,transform .12s}
+  .est-art.sube:hover{border-color:var(--teal);transform:translateY(-2px)}
+  .est-art.sube:active{transform:scale(.99)}
+  .sube-in{text-align:center;padding:26px 22px;color:var(--teal-700,#00827e)}
+  .sube-in svg{width:40px;height:40px;margin-bottom:12px;opacity:.85}
+  .sube-in b{display:block;font-family:'Oswald',var(--font-display,sans-serif);font-size:21px;letter-spacing:.4px;color:var(--tinta);margin-bottom:6px}
+  .sube-in span{display:block;font-size:13.5px;line-height:1.5;color:var(--muted);max-width:240px;margin:0 auto}
+  .est-guion{background:#fff;border:1px solid var(--line);border-radius:16px;padding:15px 17px;margin:0 0 20px}
+  .est-guion .eg-t{font-size:13px;font-weight:700;color:var(--tinta);margin:0 0 9px}
+  .est-guion pre{margin:0;font-family:inherit;font-size:13.5px;line-height:1.65;color:var(--muted);white-space:pre-wrap}
+  .est-guion .eg-b{display:inline-flex;align-items:center;gap:7px;margin-top:12px;background:var(--tinta);color:#fff;text-decoration:none;font-weight:800;font-size:13px;padding:10px 15px;border-radius:11px}
+  .est-guion .eg-b svg{width:14px;height:14px}
   .est-vtag{display:flex;flex-direction:column;align-items:center;gap:7px;color:var(--teal-700);font-size:12px;font-weight:700;padding:38px 0}
   .est-vtag svg{width:30px;height:30px}
   .est-cap{font-size:16.5px;line-height:1.6;color:var(--tinta);white-space:pre-wrap;margin:0 0 18px;font-weight:400}
@@ -297,7 +322,25 @@ require __DIR__ . '/_shell.php';
       <article class="est-prop<?= $i===0?' show':'' ?>" id="prop-<?= (int)$p['id'] ?>" data-id="<?= (int)$p['id'] ?>" <?= $i===0?'':'style="display:none"' ?>>
         <p class="est-ctx"><?= $h($ctx) ?></p>
 
-        <?php if ($img || $video): ?>
+        <?php if (!empty($p['necesita_material'])): /* EL REEL ESPERA SU VIDEO ── */ ?>
+        <?php /* El corillo escribe el guion, pero el video solo lo puede grabar
+                 el dueño. En vez de fingir una imagen y llamarla reel, se le
+                 pide con el guion delante y un camino de un toque. */ ?>
+        <div class="est-art sube" onclick="location.href='<?= $BASE ?>/reels.php?<?= $mid ?>'">
+          <div class="sube-in">
+            <?= ico('camera') ?>
+            <b>Sube tu video aquí</b>
+            <span>Yo le pongo la música, los textos y tu marca.</span>
+          </div>
+        </div>
+        <?php if (trim((string)($p['guion'] ?? '')) !== ''): ?>
+          <div class="est-guion">
+            <p class="eg-t">Te escribí el guion — solo sigue esto con el celular:</p>
+            <pre><?= $h($p['guion']) ?></pre>
+            <a class="eg-b" href="<?= $BASE ?>/reels.php?<?= $mid ?>"><?= ico('camera') ?> Subir mis clips</a>
+          </div>
+        <?php endif; ?>
+        <?php elseif ($img || $video): ?>
         <div class="est-art">
           <?php if ($img): ?><img src="<?= $h($p['grafica_path']) ?>" alt="">
           <?php else: ?><span class="est-vtag"><?= ico('image') ?>Video</span><?php endif; ?>

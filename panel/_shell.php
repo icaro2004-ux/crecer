@@ -22,17 +22,23 @@ $notif_nl = function_exists('notif_no_leidas') ? notif_no_leidas($pdo, $marca_id
 // (siguen accesibles por URL / por el perfil; reversible).
 // ÓRDENES VOLVIÓ (2026-08-08, decisión de Manuel): el link público + QR de
 // órdenes es un ASSET del negocio, no exceso — no se esconde.
+// `bot` = este destino YA está en la barra de abajo del móvil. Solo esos se
+// esconden del drawer (para no repetirlos); todo lo demás TIENE que verse ahí,
+// o queda inalcanzable desde el teléfono.
+// (Bug 2026-08-12: el CSS escondía todo el menú menos Biblioteca — se escribió
+//  cuando había 4 destinos y la barra los cubría todos. Con 9 destinos, Reels,
+//  Tu equipo, El Genoma y Calendario dejaron de existir en móvil.)
 $nav = [
-  ['key'=>'inicio',    'ic'=>'home',    'lb'=>'Inicio',     'hr'=>"$BASE/index.php?marca=$marca_id"],
+  ['key'=>'inicio',    'ic'=>'home',    'lb'=>'Inicio',     'bot'=>1, 'hr'=>"$BASE/index.php?marca=$marca_id"],
   // LA META (2026-08-12): el norte del negocio. Va arriba porque gobierna todo
   // lo demás — el corillo trabaja PARA esto, no para llenar el calendario.
-  ['key'=>'meta',      'ic'=>'compass', 'lb'=>'Tu Meta',    'hr'=>"$BASE/meta.php?marca=$marca_id"],
-  ['key'=>'contenido', 'ic'=>'list', 'lb'=>'Tus Posts',  'hr'=>"$BASE/propuestas.php?marca=$marca_id"],
-  ['key'=>'sala',      'ic'=>'sparkles','lb'=>'La Sala',    'hr'=>"$BASE/sala.php?marca=$marca_id"],
+  ['key'=>'meta',      'ic'=>'compass', 'lb'=>'Tu Meta',    'bot'=>1, 'hr'=>"$BASE/meta.php?marca=$marca_id"],
+  ['key'=>'contenido', 'ic'=>'list', 'lb'=>'Tus Posts',  'bot'=>1, 'hr'=>"$BASE/propuestas.php?marca=$marca_id"],
+  ['key'=>'sala',      'ic'=>'sparkles','lb'=>'La Sala',    'bot'=>1, 'hr'=>"$BASE/sala.php?marca=$marca_id"],
   ['key'=>'reels',     'ic'=>'camera',  'lb'=>'Reels',      'hr'=>"$BASE/reels.php?marca=$marca_id"],
   ['key'=>'equipo',    'ic'=>'users',   'lb'=>'Tu equipo',  'hr'=>"$BASE/equipo.php?marca=$marca_id"],
   ['key'=>'genoma',    'ic'=>'genoma',  'lb'=>'El Genoma',  'hr'=>"$BASE/genoma.php?marca=$marca_id"],
-  ['key'=>'resultados','ic'=>'chart',   'lb'=>'Resultados', 'hr'=>"$BASE/resultados.php?marca=$marca_id"],
+  ['key'=>'resultados','ic'=>'chart',   'lb'=>'Resultados', 'bot'=>1, 'hr'=>"$BASE/resultados.php?marca=$marca_id"],
   ['key'=>'biblioteca','ic'=>'image',   'lb'=>'Biblioteca', 'hr'=>"$BASE/biblioteca.php?marca=$marca_id"],
 ];
 // Perfil / ajustes (secundario, abajo): Mi marca (config de marca/voz), config, facturación, soporte.
@@ -93,7 +99,8 @@ $nav_perfil = [
     <a href="<?= $crear_url_shell ?>" class="side-crear" style="display:flex;align-items:center;justify-content:center;gap:8px;margin:10px 0 6px;padding:12px 14px;border-radius:14px;text-decoration:none;color:#fff;font-weight:800;font-size:14.5px;background:linear-gradient(135deg,var(--teal),var(--teal-700,#00827e));box-shadow:0 8px 18px -8px rgba(0,164,159,.55)"><?= ico('pen') ?> Crear</a>
     <nav>
       <?php foreach ($nav as $n): ?>
-        <a href="<?= $n['hr'] ?>" class="<?= $n['key']===$active?'on':'' ?>">
+        <?php /* .dup = ya está en la barra de abajo → se esconde SOLO en móvil */ ?>
+        <a href="<?= $n['hr'] ?>" class="<?= $n['key']===$active?'on ':'' ?><?= !empty($n['bot'])?'dup':'' ?>">
           <?= ico($n['ic']) ?><?= $n['lb'] ?>
         </a>
       <?php endforeach; ?>
