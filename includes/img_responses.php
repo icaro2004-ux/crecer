@@ -73,7 +73,7 @@ function img_estilo_dir(string $estilo): array {
  * @param $tiene_logo true = se adjunta el logo REAL del negocio (úsalo, no inventes)
  * @param $estilo     realista|creativo|fantasia|ilustracion (combinable con '+')
  */
-function img_resp_brief(array $m, string $copy, ?bool $con_texto = null, bool $tiene_logo = false, ?string $extra = null, string $estilo = 'realista'): string {
+function img_resp_brief(array $m, string $copy, ?bool $con_texto = null, bool $tiene_logo = false, ?string $extra = null, string $estilo = 'realista', array $lente = [], string $evitar = ''): string {
     $nombre  = trim((string)($m['nombre_negocio'] ?? ''));
     $desc    = trim((string)($m['descripcion'] ?? ''));
     $publico = trim((string)($m['publico_objetivo'] ?? ''));
@@ -95,6 +95,20 @@ function img_resp_brief(array $m, string $copy, ?bool $con_texto = null, bool $t
     if ($tiene_logo) $regla_logo = "Se adjunta el LOGO REAL del negocio: úsalo EXACTAMENTE ese (intégralo con buen gusto, en una esquina o como marca discreta). NO inventes ni dibujes otro logo.";
     else             $regla_logo = "NO inventes un logotipo ni una marca gráfica falsa. Si muestras el nombre del negocio, escríbelo como texto limpio y correcto: \"{$nombre}\" — nunca un logo ficticio.";
 
+    // ANTI-SLOP (2026-08-12): el estilo de marca se respeta al pie de la letra,
+    // pero la IDEA tiene que ser otra cada vez. Sin esto el modelo repite su
+    // composición favorita y solo cambia el objeto ("una mano sosteniendo X",
+    // después "...sosteniendo Y") — el dueño lo nota y se va.
+    $bloque_variedad = '';
+    if ($lente) {
+        $bloque_variedad .= "\nIDEA VISUAL DE ESTA PIEZA (obligatoria — «{$lente['nombre']}»):\n{$lente['mandato']}\n"
+                          . "Esta idea NO se negocia: define el sujeto, el encuadre y la escena. El ESTILO de arriba "
+                          . "se mantiene igual (esa es la identidad del negocio); lo que cambia es QUÉ se ve y CÓMO se encuadra.\n";
+    }
+    if (trim($evitar) !== '') {
+        $bloque_variedad .= "\n{$evitar}";
+    }
+
     return "Crea una pieza publicitaria profesional para redes sociales (Facebook e Instagram) para este negocio puertorriqueño.\n\n"
          . "ESTILO OBLIGATORIO (respétalo al pie de la letra): {$ed['dir']}\n\n"
          . "Negocio (nombre EXACTO, escríbelo sin errores): {$nombre}\nQué hace: {$desc}\n"
@@ -103,8 +117,9 @@ function img_resp_brief(array $m, string $copy, ?bool $con_texto = null, bool $t
          . "\nTexto del post que la imagen va a acompañar:\n\"{$copy}\"\n\n"
          . "{$regla_texto}\n{$regla_logo}\n"
          . (($extra !== null && trim($extra) !== '') ? "Indicación extra del dueño (respétala con buen gusto): " . trim($extra) . "\n" : '')
-         . "No inventes datos, precios ni promociones que no estén aquí.\n\n"
-         . "La pieza debe detener el scroll y dar ganas de comprar, SIEMPRE en el estilo indicado arriba. Genera la mejor pieza posible.";
+         . "No inventes datos, precios ni promociones que no estén aquí.\n"
+         . $bloque_variedad
+         . "\nLa pieza debe detener el scroll y dar ganas de comprar, SIEMPRE en el estilo indicado arriba. Genera la mejor pieza posible.";
 }
 
 /**
@@ -126,10 +141,29 @@ function img_resp_encolar(PDO $pdo, int $marca_id, int $post_id, string $copy, ?
                 $logo = ['data' => base64_encode((string)file_get_contents($labs)), 'mime' => $mime];
             }
         }
-        $brief = img_resp_brief($m, $copy, $con_texto, $logo !== null, $extra, $estilo);
+        // ANTI-SLOP: el camino ASÍNCRONO (el que usa el corillo autónomo) también
+        // obedece la memoria visual — si no, la tanda semanal sale toda igual.
+        require_once __DIR__ . '/variedad_visual.php';
+        $lente = []; $evitar = '';
+        try {
+            $lente  = variedad_lente_asignado($pdo, $marca_id);
+            $evitar = variedad_evitar_txt($pdo, $marca_id, 6);
+        } catch (Throwable $e) { error_log('encolar variedad: ' . $e->getMessage()); }
+
+        $brief = img_resp_brief($m, $copy, $con_texto, $logo !== null, $extra, $estilo, $lente, $evitar);
         $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1'] + ($logo ? ['logo' => $logo] : []));
         $pdo->prepare("UPDATE crecer_contenido SET img_job=?, img_estado='queued' WHERE id=? AND marca_id=?")
             ->execute([$bg['id'], $post_id, $marca_id]);
+        // La huella se registra AL ENCOLAR (no al terminar): así dos piezas
+        // encoladas seguidas no reciben el mismo lente.
+        if ($lente) {
+            try {
+                variedad_registrar($pdo, $marca_id, (string)$lente['clave'], [
+                    'primary_subject' => $lente['nombre'],
+                    'composition'     => mb_substr(trim($copy), 0, 90),
+                ], $post_id);
+            } catch (Throwable $e) { /* best-effort */ }
+        }
         try {
             $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,estado)
                            VALUES (?,?,?,?,?,?, 'ok')")
@@ -163,7 +197,16 @@ function img_gemini_fallback(PDO $pdo, int $marca_id, int $post_id, string $copy
             if (is_file($labs)) { $mime = (function_exists('mime_content_type') ? mime_content_type($labs) : '') ?: 'image/png';
                 $imgs[] = ['data' => base64_encode((string)file_get_contents($labs)), 'mime' => $mime]; }
         }
-        $brief = img_resp_brief($m, $copy, null, !empty($imgs));
+        // El RESPALDO también obedece la memoria visual: si no, la imagen que
+        // salva el día es justo la que repite la fórmula.
+        require_once __DIR__ . '/variedad_visual.php';
+        $lente = []; $evitar = '';
+        try {
+            $lente  = variedad_lente_asignado($pdo, $marca_id);
+            $evitar = variedad_evitar_txt($pdo, $marca_id, 6);
+        } catch (Throwable $e) {}
+
+        $brief = img_resp_brief($m, $copy, null, !empty($imgs), null, 'realista', $lente, $evitar);
         $r = gemini_imagen($brief, ['modelo' => 'gemini-3-pro-image', 'aspect' => '1:1'] + ($imgs ? ['imagenes' => $imgs] : []));
         $bin = $r['data'] ?? '';
         if ($bin === '') return '';

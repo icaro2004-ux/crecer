@@ -165,6 +165,25 @@ GENOMA DEL NEGOCIO
 {$genome}
 USR;
 
+    // ANTI-SLOP (2026-08-12) — este cerebro creativo también necesita MEMORIA.
+    // Es libre de inventar la escena, pero no de repetir la que ya hizo: se le
+    // asigna una aproximación que no haya usado y se le enseña su propio historial.
+    require_once __DIR__ . '/variedad_visual.php';
+    try {
+        $lente  = variedad_lente_asignado($pdo, $marca_id);
+        $evitar = variedad_evitar_txt($pdo, $marca_id, 6);
+        $mensaje .= "\n\nAPROXIMACIÓN VISUAL ASIGNADA PARA ESTA PIEZA\n\n«{$lente['nombre']}»\n{$lente['mandato']}\n\n"
+                  . "Eres libre en TODO lo demás — el concepto, la historia, la emoción — pero el sujeto y el "
+                  . "encuadre salen de esta aproximación. Es lo que garantiza que este negocio no termine con "
+                  . "diez piezas que parecen la misma.";
+        if (trim($evitar) !== '') $mensaje .= "\n\n" . $evitar;
+        // Huella al ASIGNAR (no al terminar): dos piezas seguidas nunca comparten lente.
+        variedad_registrar($pdo, $marca_id, (string)$lente['clave'], [
+            'primary_subject' => $lente['nombre'],
+            'composition'     => mb_substr(trim($copy), 0, 90),
+        ], null);
+    } catch (Throwable $e) { error_log('messenger variedad: ' . $e->getMessage()); }
+
     // ESTÁNDAR DE CALIDAD (Creative Playbook del laboratorio) — orienta el NIVEL, NO la
     // escena. Lo ÚNICO del laboratorio que llega aquí es este texto (nunca las imágenes).
     require_once __DIR__ . '/ref_lab.php';

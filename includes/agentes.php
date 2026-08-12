@@ -1009,7 +1009,17 @@ function generar_grafica_responses(PDO $pdo, int $marca_id, array $m, string $co
         $mime = (function_exists('mime_content_type') ? mime_content_type($logo_abs) : '') ?: 'image/png';
         $logo = ['data' => base64_encode((string)file_get_contents($logo_abs)), 'mime' => $mime];
     }
-    $brief = img_resp_brief($m, $copy, $con_texto, $logo !== null, ($extra !== '' ? $extra : null), $estilo);
+    // ANTI-SLOP: este es el motor de arte de PRODUCCIÓN (gpt-image-1). Aquí también
+    // manda la memoria visual — se asigna el lente que lleva más tiempo sin usarse
+    // y se le enseña al modelo lo que ya hizo para este negocio.
+    require_once __DIR__ . '/variedad_visual.php';
+    $lente = []; $evitar = '';
+    try {
+        $lente  = variedad_lente_asignado($pdo, $marca_id);
+        $evitar = variedad_evitar_txt($pdo, $marca_id, 6);
+    } catch (Throwable $e) { error_log('responses variedad: ' . $e->getMessage()); }
+
+    $brief = img_resp_brief($m, $copy, $con_texto, $logo !== null, ($extra !== '' ? $extra : null), $estilo, $lente, $evitar);
     $t0 = microtime(true);
     try {
         $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1'] + ($logo ? ['logo' => $logo] : []));
@@ -1033,6 +1043,15 @@ function generar_grafica_responses(PDO $pdo, int $marca_id, array $m, string $co
     if (@file_put_contents($abs, $bin) === false) return null;
     $url = rtrim(UPLOADS_URL, '/') . '/' . $fname;
     $lat = (int)round((microtime(true) - $t0) * 1000);
+    // La huella: la próxima imagen sabrá que esta existió y no repetirá la idea.
+    if ($lente) {
+        try {
+            variedad_registrar($pdo, $marca_id, (string)$lente['clave'], [
+                'primary_subject' => $lente['nombre'],
+                'composition'     => mb_substr(trim($copy), 0, 90),
+            ], null);
+        } catch (Throwable $e) { /* best-effort */ }
+    }
     try {
         $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,costo_usd,latencia_ms,estado)
                        VALUES (?,?,?,?,?,?,?,?, 'ok')")
