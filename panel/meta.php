@@ -256,7 +256,8 @@ $tacticas = $meta ? meta_tacticas($pdo, (int)$meta['id']) : [];
     <p class="wz-ayuda">Escoge lo que más falta te hace ahora mismo. Después lo puedes cambiar.</p>
     <div class="obj-grid">
       <?php foreach ($objetivos as $k => $o): ?>
-        <button type="button" class="obj" data-obj="<?= $h($k) ?>" data-unidad="<?= $h($o['unidad']) ?>">
+        <button type="button" class="obj" data-obj="<?= $h($k) ?>" data-unidad="<?= $h($o['unidad']) ?>"
+                data-pregunta="<?= $h($o['pregunta']) ?>" data-etiqueta="<?= $h($o['unidad']==='dolares' ? 'dólares' : $o['unidad']) ?>">
           <span class="ic"><?= ico($o['ico']) ?></span>
           <b><?= $h($o['titulo']) ?></b>
           <p><?= $h($o['explicacion']) ?></p>
@@ -355,8 +356,10 @@ $tacticas = $meta ? meta_tacticas($pdo, (int)$meta['id']) : [];
       document.querySelectorAll('.obj').forEach(function(x){x.classList.remove('sel');});
       b.classList.add('sel');
       datos.objetivo=b.dataset.obj;
-      document.getElementById('unidad').textContent = b.dataset.unidad==='dolares' ? 'dólares' : b.dataset.unidad;
-      document.getElementById('q2').textContent = '¿Cuántos ' + (b.dataset.unidad==='dolares'?'dólares':b.dataset.unidad) + ' quieres?';
+      // La pregunta viene ESCRITA por objetivo (antes se armaba pegando la unidad
+      // y salía "¿Cuántos interacciones quieres?" — mal dicho y mal visto).
+      document.getElementById('unidad').textContent = b.dataset.etiqueta;
+      document.getElementById('q2').textContent = b.dataset.pregunta;
       document.getElementById('tip-num').classList.remove('on');
       revisar();
     });

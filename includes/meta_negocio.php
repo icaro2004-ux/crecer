@@ -43,6 +43,7 @@ function meta_objetivos(): array {
     return [
         'pedidos' => [
             'titulo'   => 'Quiero más pedidos',
+            'pregunta' => '¿Cuántos pedidos quieres?',
             'gancho'   => 'Que entre más gente comprando.',
             'explicacion' => 'Contamos cada orden que te entra por tu página de pedidos. '
                            . 'Si hoy te entran 10 al mes y quieres 25, esa es la meta.',
@@ -54,20 +55,23 @@ function meta_objetivos(): array {
             'senal'    => 'Cada orden que entra por tu página de pedidos.',
         ],
         'ventas' => [
-            'titulo'   => 'Quiero vender más dinero',
+            'titulo'   => 'Quiero que entre más dinero',
+            'pregunta' => '¿Cuánto dinero quieres que entre?',
             'gancho'   => 'Que suba lo que entra a la caja, no solo la cantidad de órdenes.',
             'explicacion' => 'Aquí no contamos pedidos, contamos dólares. Sirve cuando prefieres '
                            . 'pocos pedidos grandes que muchos chiquitos — como quien vende bizcochos '
                            . 'de boda en vez de ponquecitos.',
-            'jerga'    => 'En mercadeo a esto le dicen "revenue" o "ticket promedio" cuando se mira por orden.',
+            'jerga'    => 'En mercadeo a esto le dicen "revenue" (el dinero que entra) o "ticket promedio" '
+                        . 'cuando se mira cuánto deja cada pedido.',
             'unidad'   => 'dolares',
-            'verbo'    => 'dólares en órdenes',
+            'verbo'    => 'en ventas',
             'ico'      => 'dollar',
             'medible'  => true,
             'senal'    => 'La suma de los montos de tus órdenes.',
         ],
         'conversaciones' => [
             'titulo'   => 'Quiero que me escriban más',
+            'pregunta' => '¿Cuántas personas quieres que te escriban?',
             'gancho'   => 'Más gente preguntando precios y disponibilidad.',
             'explicacion' => 'Cada persona que te escribe por WhatsApp, Instagram o Facebook es una venta '
                            . 'que puede pasar. Primero preguntan, después compran. Si nadie escribe, '
@@ -81,6 +85,7 @@ function meta_objetivos(): array {
         ],
         'alcance' => [
             'titulo'   => 'Quiero que me conozca más gente',
+            'pregunta' => '¿A cuánta gente quieres llegar?',
             'gancho'   => 'Llegarle a gente del área que todavía no sabe que existes.',
             'explicacion' => 'Es cuánta gente DISTINTA vio tus publicaciones. Si 500 personas vieron '
                            . 'tu post, eso son 500 personas que ahora saben que existes. Es el primer '
@@ -93,8 +98,9 @@ function meta_objetivos(): array {
             'senal'    => 'El alcance real que reporta Instagram y Facebook de tus posts.',
         ],
         'comunidad' => [
-            'titulo'   => 'Quiero que mi gente se active',
-            'gancho'   => 'Que reaccionen, comenten, guarden y compartan lo tuyo.',
+            'titulo'   => 'Quiero que mi gente reaccione y comparta',
+            'pregunta' => '¿Cuántas reacciones quieres?',
+            'gancho'   => 'Que le den like, comenten, guarden y compartan lo tuyo.',
             'explicacion' => 'Cuando tu gente le da like, comenta o comparte, Instagram y Facebook '
                            . 'entienden que lo tuyo vale la pena y se lo enseñan a MÁS gente gratis. '
                            . 'Una comunidad activa te ahorra dinero en anuncios.',
@@ -107,6 +113,7 @@ function meta_objetivos(): array {
         ],
         'visitas_web' => [
             'titulo'   => 'Quiero que visiten mi página',
+            'pregunta' => '¿Cuántas visitas quieres?',
             'gancho'   => 'Mandar gente a tu web, tu menú en línea o tu tienda.',
             'explicacion' => 'Es cuánta gente sale de Instagram o Facebook y entra a tu página. '
                            . 'Sirve si vendes o reservas desde ahí.',
