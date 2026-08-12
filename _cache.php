@@ -242,8 +242,26 @@ if (($_GET['test'] ?? '') === 'meta') {
                                              : 'falló: ' . ($p['err'] ?? '?')) . "\n";
         }
 
+        // EL PLAN: historial, cumplimiento y récord medido de cada versión.
+        $planes = meta_planes($pdo, (int)$meta['id']);
+        if ($planes) {
+            echo "\n   Planes (" . count($planes) . " en total):\n";
+            foreach ($planes as $pp) {
+                $pg  = meta_plan_progreso($pdo, (int)$pp['id']);
+                $rs  = meta_plan_resultados($pdo, $pp);
+                $vale = $pp['funciono'] === null ? 'sin veredicto' : ((int)$pp['funciono'] === 1 ? 'FUNCIONO' : 'no funciono');
+                echo "     v{$pp['version']} [{$pp['estado']}] {$pg['hechas']}/{$pg['total']} jugadas · "
+                   . "{$rs['publicadas']}/{$rs['piezas']} publicadas · "
+                   . "alcance " . ($rs['alcance'] ?? '—') . " · reacciones " . ($rs['interacciones'] ?? '—')
+                   . " · movió " . ($rs['movio'] !== null ? $rs['movio'] : '—') . " · {$vale}\n";
+                if (!empty($pp['leccion'])) echo "        lección: " . mb_substr((string)$pp['leccion'], 0, 100) . "\n";
+            }
+            $her = meta_lecciones_para_prompt($pdo, (int)$meta['id']);
+            echo "     → lo que hereda el próximo plan: " . ($her !== '' ? 'SI (' . substr_count($her, "\n- ") . ' lección/es)' : 'nada todavía') . "\n";
+        }
+
         $tac = meta_tacticas($pdo, (int)$meta['id']);
-        echo "   Jugadas: " . count($tac) . "\n";
+        echo "   Jugadas del plan vigente: " . count($tac) . "\n";
         foreach ($tac as $t) {
             echo "     · [{$t['tipo']}/{$t['quien']}/sem{$t['semana']}] {$t['titulo']}"
                . ($t['estado'] !== 'pendiente' ? " ({$t['estado']})" : '')

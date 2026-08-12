@@ -80,14 +80,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        // (d) Marcar una jugada.
+        // (d) Marcar una jugada. Si con esa se completó el plan, se CIERRA y queda
+        //     en observación (la lección la escribe el Analista cuando Meta reporte
+        //     los números de esos posts — juzgar hoy sería juzgar el vacío).
         if ($accion === 'tactica') {
             $ok = meta_tactica_estado($pdo, (int)($_POST['id'] ?? 0), $marca_id, (string)($_POST['estado'] ?? 'hecha'));
-            echo json_encode(['ok'=>$ok]);
+            $completo = false;
+            if ($ok) {
+                $mt = meta_activa($pdo, $marca_id);
+                $pl = $mt ? meta_plan_activo($pdo, (int)$mt['id']) : null;
+                if ($pl) {
+                    $pg = meta_plan_progreso($pdo, (int)$pl['id']);
+                    if ($pg['completo']) $completo = meta_plan_cerrar($pdo, (int)$pl['id'], 'completado');
+                }
+            }
+            echo json_encode(['ok'=>$ok, 'plan_completo'=>$completo]);
             exit;
         }
 
-        // (e) Cerrar / cambiar la meta.
+        // (e) Evaluar un plan cerrado a pedido (el dueño no quiere esperar al relevo).
+        if ($accion === 'evaluar') {
+            $ev = meta_plan_evaluar($pdo, (int)($_POST['plan'] ?? 0), $marca_id);
+            echo json_encode($ev, JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // (f) Cerrar / cambiar la meta.
         if ($accion === 'cerrar') {
             $meta = meta_activa($pdo, $marca_id);
             if ($meta) meta_ajustar($pdo, (int)$meta['id'], $marca_id, ['estado'=>'cancelada']);
@@ -111,7 +129,21 @@ require __DIR__ . '/_shell.php';
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
 $prog = $meta ? meta_progreso($pdo, $meta) : null;
-$tacticas = $meta ? meta_tacticas($pdo, (int)$meta['id']) : [];
+// EL PLAN VIGENTE y su cumplimiento; las jugadas mostradas son las SUYAS.
+$plan_act  = $meta ? meta_plan_activo($pdo, (int)$meta['id']) : null;
+$prog_plan = $plan_act ? meta_plan_progreso($pdo, (int)$plan_act['id']) : null;
+$tacticas  = $meta ? meta_tacticas($pdo, (int)$meta['id']) : [];
+// EL HISTORIAL: cada plan cerrado con su récord medido (se abre para ver el detalle).
+$historial = [];
+if ($meta) {
+    foreach (meta_planes($pdo, (int)$meta['id']) as $p) {
+        if ($plan_act && (int)$p['id'] === (int)$plan_act['id']) continue;   // el vigente va arriba
+        $historial[] = ['plan' => $p, 'prog' => meta_plan_progreso($pdo, (int)$p['id']),
+                        'res'  => meta_plan_resultados($pdo, $p),
+                        'tac'  => meta_tacticas($pdo, (int)$meta['id'], null, (int)$p['id'])];
+        if (count($historial) >= 6) break;
+    }
+}
 ?>
 <style>
   /* ══ LA META ══ el norte del negocio.
@@ -216,6 +248,51 @@ $tacticas = $meta ? meta_tacticas($pdo, (int)$meta['id']) : [];
   .jg-ok{margin-left:auto;border:1.5px solid var(--line);background:transparent;color:var(--muted);font-family:inherit;font-weight:700;font-size:12px;padding:7px 12px;border-radius:9px;cursor:pointer;flex:none}
   .jg-ok:hover{border-color:var(--teal,#00A49F);color:var(--teal,#00A49F)}
 
+  /* Encabezado del plan vigente + cumplimiento */
+  .plan-cab{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin:0 0 12px;flex-wrap:wrap}
+  .plan-cab h2{font-family:var(--font-display,'Oswald',sans-serif);font-size:17px;letter-spacing:.4px;color:var(--tinta);margin:0}
+  .plan-v{font-size:12px;color:var(--muted);font-weight:600}
+  .plan-prog{text-align:right;font-size:12.5px;color:var(--muted);font-weight:600;min-width:132px}
+  .plan-prog b{color:var(--tinta)}
+  .plan-barra{height:6px;border-radius:99px;background:var(--crema-2,#f2efe9);border:1px solid var(--line);overflow:hidden;margin-top:5px}
+  .plan-barra i{display:block;height:100%;background:linear-gradient(90deg,var(--teal,#00A49F),var(--magenta,#EF4375));border-radius:99px;transition:width .5s}
+  .plan-obs{background:color-mix(in srgb,var(--teal,#00A49F) 10%,#fff);border:1px solid color-mix(in srgb,var(--teal,#00A49F) 30%,#fff);color:#0a6a5f;border-radius:13px;padding:12px 14px;font-size:13px;line-height:1.55;margin:0 0 14px}
+
+  /* Historial de planes */
+  .hplan{background:var(--card,#fff);border:1px solid var(--line);border-radius:14px;margin-bottom:9px;overflow:hidden}
+  .hplan[open]{border-color:var(--teal,#00A49F)}
+  .hplan summary{cursor:pointer;list-style:none;padding:13px 15px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .hplan summary::-webkit-details-marker{display:none}
+  .hplan summary:hover{background:var(--crema-2,#faf8f5)}
+  .hp-v{font-family:var(--font-display,'Oswald',sans-serif);font-size:15px;font-weight:700;color:var(--tinta);letter-spacing:.3px}
+  .hp-f{font-size:12px;color:var(--muted);font-weight:600}
+  .hp-est{margin-left:auto;font-size:11px;font-weight:800;padding:4px 9px;border-radius:99px;background:var(--crema-2,#f2efe9);color:var(--muted)}
+  .hp-est.ok{background:color-mix(in srgb,var(--teal,#00A49F) 14%,#fff);color:#0a6a5f}
+  .hp-vale{font-size:11px;font-weight:800;padding:4px 9px;border-radius:99px}
+  .hp-vale.si{background:#e6f7f0;color:#0a6a4a}
+  .hp-vale.no{background:#fdeeee;color:#b4232b}
+  .hp-vale.nd{background:#fff4e0;color:#8a5a10}
+  .hp-body{padding:0 15px 15px;border-top:1px dashed var(--line)}
+  .hp-nums{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:13px 0}
+  .hp-nums div{background:var(--crema-2,#faf8f5);border:1px solid var(--line);border-radius:11px;padding:9px 8px;text-align:center}
+  .hp-nums b{display:block;font-family:var(--font-display,'Oswald',sans-serif);font-size:19px;color:var(--tinta);line-height:1.1}
+  .hp-nums span{display:block;font-size:10.5px;color:var(--muted);line-height:1.25;margin-top:3px}
+  .hp-movio{font-size:13px;color:var(--tinta);line-height:1.5;margin:0 0 11px}
+  .hp-lec{background:color-mix(in srgb,var(--magenta,#EF4375) 7%,#fff);border-left:3px solid var(--magenta,#EF4375);border-radius:0 10px 10px 0;padding:11px 13px;font-size:13px;line-height:1.55;color:var(--tinta)}
+  .hp-lec.pend{background:var(--crema-2,#faf8f5);border-left-color:var(--line);color:var(--muted)}
+  .hp-ev{display:block;margin-top:9px;border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-family:inherit;font-weight:700;font-size:12.5px;padding:8px 13px;border-radius:10px;cursor:pointer}
+  .hp-ev:hover{border-color:var(--teal,#00A49F);color:var(--teal,#00A49F)}
+  .hp-lista{margin-top:13px}
+  .hp-lista>b{display:block;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:7px}
+  .hp-t{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);padding:4px 0;line-height:1.4}
+  .hp-t.ok{color:var(--tinta)}
+  .hp-t svg{width:14px;height:14px;flex:none;color:var(--line)}
+  .hp-t.ok svg{color:var(--teal,#00A49F)}
+  .hp-p{display:flex;gap:10px;align-items:baseline;padding:5px 0;border-bottom:1px dashed var(--line);font-size:12.5px}
+  .hp-p:last-child{border-bottom:0}
+  .hp-cap{flex:1;color:var(--tinta);line-height:1.4}
+  .hp-m{flex:none;color:var(--muted);font-weight:700;font-size:11.5px}
+
   .glos{margin-top:22px;border-top:1px solid var(--line);padding-top:16px}
   .glos summary{cursor:pointer;font-size:13.5px;font-weight:700;color:var(--muted);list-style:none}
   .glos summary::-webkit-details-marker{display:none}
@@ -234,6 +311,12 @@ $tacticas = $meta ? meta_tacticas($pdo, (int)$meta['id']) : [];
   @media(max-width:900px){ .mv{grid-template-columns:1fr} }
   @media(max-width:680px){
     .obj-grid{grid-template-columns:1fr}
+    /* Los 4 números del récord no caben en una fila de 360px: 2x2 y se leen. */
+    .hp-nums{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .plan-cab{align-items:flex-start}
+    .plan-prog{text-align:left;min-width:100%}
+    .hplan summary{padding:12px 13px}
+    .hp-est{margin-left:0}
     .wz-q{font-size:22px}
     .mv-num{font-size:46px}
     .mt-num input{width:150px;font-size:32px}
@@ -498,8 +581,27 @@ $tacticas = $meta ? meta_tacticas($pdo, (int)$meta['id']) : [];
     <?php endif; ?>
 
     <?php if ($tacticas): ?>
-      <h2 style="font-family:var(--font-display,'Oswald',sans-serif);font-size:17px;letter-spacing:.4px;color:var(--tinta);margin:0 0 12px">
-        Las jugadas para lograrlo</h2>
+      <div class="plan-cab">
+        <div>
+          <h2>Las jugadas para lograrlo</h2>
+          <?php if ($plan_act): ?>
+            <span class="plan-v">Plan #<?= (int)$plan_act['version'] ?> · desde el <?= $h(date('j/n', strtotime((string)$plan_act['inicio_at']))) ?></span>
+          <?php endif; ?>
+        </div>
+        <?php if ($prog_plan && $prog_plan['total'] > 0): ?>
+          <div class="plan-prog">
+            <b><?= (int)$prog_plan['hechas'] ?> de <?= (int)$prog_plan['total'] ?></b> hechas
+            <div class="plan-barra"><i style="width:<?= max(3, (int)$prog_plan['pct']) ?>%"></i></div>
+          </div>
+        <?php endif; ?>
+      </div>
+      <?php if ($prog_plan && $prog_plan['completo']): ?>
+        <div class="plan-obs">
+          <b>Cumpliste el plan completo.</b> Ahora el corillo está pendiente de los números de esos posts.
+          Cuando Instagram y Facebook reporten, el Analista te dice si funcionó y qué cambiar — no antes,
+          para no juzgar con datos que todavía no existen.
+        </div>
+      <?php endif; ?>
       <div class="jug">
         <?php foreach ($tacticas as $t):
           $tipo_lbl = ['contenido'=>'Contenido','distribucion'=>'Difusión','pauta'=>'Anuncio pagado',
@@ -538,6 +640,85 @@ $tacticas = $meta ? meta_tacticas($pdo, (int)$meta['id']) : [];
       </div>
     <?php endif; ?>
 
+    <?php if ($historial): ?>
+      <h2 style="font-family:var(--font-display,'Oswald',sans-serif);font-size:17px;letter-spacing:.4px;color:var(--tinta);margin:26px 0 4px">
+        Planes anteriores</h2>
+      <p style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 12px">
+        Cada plan guarda su propio récord: qué se hizo, qué se publicó y qué dejó. Ábrelos para ver los resultados.</p>
+
+      <?php foreach ($historial as $hh):
+        $p = $hh['plan']; $pr = $hh['prog']; $rs = $hh['res'];
+        $vale = $p['funciono'] === null ? null : ((int)$p['funciono'] === 1);
+      ?>
+        <details class="hplan">
+          <summary>
+            <span class="hp-v">Plan #<?= (int)$p['version'] ?></span>
+            <span class="hp-f"><?= $h(date('j/n', strtotime((string)$p['inicio_at']))) ?>
+              — <?= $h(!empty($p['cierre_at']) ? date('j/n', strtotime((string)$p['cierre_at'])) : 'abierto') ?></span>
+            <span class="hp-est <?= $p['estado']==='completado'?'ok':'' ?>">
+              <?= $p['estado']==='completado' ? 'Cumplido' : ($p['estado']==='reemplazado' ? 'Reemplazado' : 'Cerrado') ?></span>
+            <?php if ($vale === true): ?><span class="hp-vale si">Funcionó</span>
+            <?php elseif ($vale === false): ?><span class="hp-vale no">No movió nada</span>
+            <?php elseif (!empty($p['leccion'])): ?><span class="hp-vale nd">Sin evidencia</span><?php endif; ?>
+          </summary>
+
+          <div class="hp-body">
+            <div class="hp-nums">
+              <div><b><?= (int)$pr['hechas'] ?>/<?= (int)$pr['total'] ?></b><span>jugadas hechas</span></div>
+              <div><b><?= (int)$rs['publicadas'] ?></b><span>posts publicados</span></div>
+              <div><b><?= $rs['alcance'] !== null ? number_format((float)$rs['alcance']) : '—' ?></b><span>personas alcanzadas</span></div>
+              <div><b><?= $rs['interacciones'] !== null ? number_format((float)$rs['interacciones']) : '—' ?></b><span>reacciones</span></div>
+            </div>
+            <?php if ($rs['movio'] !== null && !empty($rs['objetivo'])): ?>
+              <p class="hp-movio">Mientras este plan estuvo activo entraron
+                <b><?= $h(meta_fmt((float)$rs['movio'], (string)$rs['objetivo'])) ?></b>.</p>
+            <?php endif; ?>
+
+            <?php if (!empty($p['leccion'])): ?>
+              <div class="hp-lec"><b>Lo que aprendió el corillo:</b> <?= $h($p['leccion']) ?></div>
+            <?php else: ?>
+              <div class="hp-lec pend">
+                Todavía sin lección: <?= (int)$rs['publicadas'] === 0
+                  ? 'este plan no llegó a publicarse, así que no hay nada que juzgar.'
+                  : 'esperando que Instagram y Facebook reporten los números de sus posts.' ?>
+                <?php if ((int)$rs['publicadas'] > 0): ?>
+                  <button type="button" class="hp-ev" data-plan="<?= (int)$p['id'] ?>">Evaluarlo ahora</button>
+                <?php endif; ?>
+              </div>
+            <?php endif; ?>
+
+            <?php if ($hh['tac']): ?>
+              <div class="hp-lista">
+                <b>Las jugadas de este plan</b>
+                <?php foreach ($hh['tac'] as $t): ?>
+                  <div class="hp-t <?= $t['estado']==='hecha'?'ok':'' ?>">
+                    <?= $t['estado']==='hecha' ? ico('check-circle') : ico('circle') ?>
+                    <span><?= $h($t['titulo']) ?></span>
+                  </div>
+                <?php endforeach; ?>
+              </div>
+            <?php endif; ?>
+
+            <?php if ($rs['posts']): ?>
+              <div class="hp-lista">
+                <b>Lo que se publicó</b>
+                <?php foreach (array_slice($rs['posts'], 0, 8) as $po): ?>
+                  <div class="hp-p">
+                    <span class="hp-cap"><?= $h(mb_substr(trim((string)$po['caption']), 0, 74)) ?><?= mb_strlen((string)$po['caption']) > 74 ? '…' : '' ?></span>
+                    <span class="hp-m">
+                      <?= $po['estado']==='publicado'
+                          ? ($po['alcance'] !== null ? number_format((float)$po['alcance']) . ' personas' : 'publicado')
+                          : $h($po['estado']) ?>
+                    </span>
+                  </div>
+                <?php endforeach; ?>
+              </div>
+            <?php endif; ?>
+          </div>
+        </details>
+      <?php endforeach; ?>
+    <?php endif; ?>
+
     <details class="glos">
       <summary>¿Qué significan las palabras raras del mercadeo?</summary>
       <dl>
@@ -559,9 +740,25 @@ $tacticas = $meta ? meta_tacticas($pdo, (int)$meta['id']) : [];
     b.addEventListener('click', function(){
       b.disabled=true; b.textContent='…';
       post({accion:'tactica', id:b.dataset.id, estado:'hecha'}).then(function(d){
-        if(d.ok){ var c=b.closest('.jg'); c.classList.add('hecha'); b.remove(); }
+        if(d.ok){
+          var c=b.closest('.jg'); c.classList.add('hecha'); b.remove();
+          // Si esa era la última, el plan se cerró: recargamos para mostrar el
+          // aviso de "en observación" y el plan ya en el historial.
+          if(d.plan_completo) location.reload();
+        }
         else { b.disabled=false; b.textContent='Marcar hecha'; }
       }).catch(function(){ b.disabled=false; b.textContent='Marcar hecha'; });
+    });
+  });
+
+  // Evaluar un plan viejo a pedido (sin esperar al relevo del corillo)
+  document.querySelectorAll('.hp-ev').forEach(function(b){
+    b.addEventListener('click', function(){
+      b.disabled=true; b.textContent='El Analista está mirando los números…';
+      post({accion:'evaluar', plan:b.dataset.plan}).then(function(d){
+        if(d.ok) location.reload();
+        else { b.disabled=false; b.textContent='Evaluarlo ahora'; alert(d.err||'No pude evaluarlo ahora.'); }
+      }).catch(function(){ b.disabled=false; b.textContent='Evaluarlo ahora'; });
     });
   });
 

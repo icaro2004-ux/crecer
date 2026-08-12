@@ -2282,12 +2282,14 @@ function trabajo_autonomo(PDO $pdo, int $marca_id, string $enfoque = ''): array 
 
     // ¿Bajo qué meta y qué jugada nace esta tanda? Se amarra a cada pieza para
     // que Resultados pueda decir la verdad después ("estos posts eran de la meta").
-    $meta_id = null; $tactica_id = null;
+    $meta_id = null; $tactica_id = null; $plan_id = null;
     try {
         require_once __DIR__ . '/meta_negocio.php';
         $__meta = meta_activa($pdo, $marca_id);
         if ($__meta) {
             $meta_id = (int)$__meta['id'];
+            $__p = meta_plan_activo($pdo, $meta_id);
+            if ($__p) $plan_id = (int)$__p['id'];
             $__t = meta_tactica_de_turno($pdo, $__meta);
             if ($__t) $tactica_id = (int)$__t['id'];
         }
@@ -2300,8 +2302,14 @@ function trabajo_autonomo(PDO $pdo, int $marca_id, string $enfoque = ''): array 
     // después de correr la migración 2026-08-12_crecer_meta.sql.
     $amarrar = null;
     if ($meta_id !== null) {
-        try { $amarrar = $pdo->prepare("UPDATE crecer_contenido SET meta_id=?, tactica_id=? WHERE id=? AND marca_id=?"); }
+        // Con plan_id la pieza queda ligada al PLAN que la produjo: así ese plan
+        // puede medir después qué dejaron sus posts (su récord propio).
+        try { $amarrar = $pdo->prepare("UPDATE crecer_contenido SET meta_id=?, tactica_id=?, plan_id=? WHERE id=? AND marca_id=?"); }
         catch (Throwable $e) { $amarrar = null; }
+        if (!$amarrar) {   // sin la migración del plan: se amarra lo que sí existe
+            try { $amarrar = $pdo->prepare("UPDATE crecer_contenido SET meta_id=?, tactica_id=? WHERE id=? AND marca_id=?"); $plan_id = false; }
+            catch (Throwable $e) { $amarrar = null; }
+        }
     }
     foreach ($plan['piezas'] as $pz) {
         $cid = (int)$pz['id'];
@@ -2321,7 +2329,13 @@ function trabajo_autonomo(PDO $pdo, int $marca_id, string $enfoque = ''): array 
         // Repartir en los próximos días (look "te dejé la semana lista")
         $fecha = date('Y-m-d 10:00:00', strtotime('+' . ($i + 1) . ' day'));
         $reprog->execute([$fecha, $cid, $marca_id]);
-        if ($amarrar) { try { $amarrar->execute([$meta_id, $tactica_id, $cid, $marca_id]); } catch (Throwable $e) {} }
+        if ($amarrar) {
+            try {
+                $amarrar->execute($plan_id === false
+                    ? [$meta_id, $tactica_id, $cid, $marca_id]
+                    : [$meta_id, $tactica_id, $plan_id, $cid, $marca_id]);
+            } catch (Throwable $e) {}
+        }
         $ids[] = $cid;
         $i++;
     }
@@ -2440,6 +2454,12 @@ function relevo_del_corillo(PDO $pdo, int $marca_id): array {
         require_once __DIR__ . '/meta_negocio.php';
         $cambio = meta_revisar($pdo, $marca_id);
         if ($cambio !== '') $res['meta'] = $cambio;
+        // 6) El PLAN: se cierra cuando se cumplió entero y queda EN OBSERVACIÓN
+        //    hasta que Meta reporte los números de sus posts; entonces el Analista
+        //    escribe la lección y el próximo plan la hereda. Aquí es donde el
+        //    corillo se afina en vez de repetir lo que no funcionó.
+        $cp = meta_plan_revisar($pdo, $marca_id);
+        if ($cp !== '') $res['plan'] = $cp;
     } catch (Throwable $e) { error_log('relevo meta: ' . $e->getMessage()); }
     return $res;
 }

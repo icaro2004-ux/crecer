@@ -461,6 +461,10 @@ REGLAS QUE NO SE NEGOCIAN:
 - El CTA es sagrado: cada táctica de contenido dice qué exactamente se le pide a
   la gente (escribir por WhatsApp, comentar una palabra, guardar, ir al link).
 - Nada de humo corporativo. Concreto, en cristiano, de ESTE negocio.
+- SI TE PASO LECCIONES DE PLANES ANTERIORES: son sagradas. Lo que ya se midió y
+  funcionó, se repite y se sube de volumen; lo que se midió y NO movió el número,
+  NO se repite — cambia el ángulo. Decir "hagamos lo mismo otra vez" cuando ya
+  hay evidencia de que no funcionó es el peor error que puedes cometer.
 
 HABLAS CON UN COMERCIANTE, NO CON UN MERCADÓLOGO (esto es lo más importante):
 El dueño sabe hacer bizcochos, cortar pelo o arreglar aires — NO sabe de redes ni
@@ -479,6 +483,11 @@ quien da cátedra.
 Responde SOLO JSON válido, sin texto extra.
 SYS;
 
+    // LO QUE YA SE INTENTÓ: las lecciones de los planes anteriores de ESTA meta.
+    // Aquí es donde el corillo se afina semana tras semana en vez de repetir lo
+    // que no funcionó. Si un plan anterior movió el número, se dice; si no, también.
+    $lecciones = meta_lecciones_para_prompt($pdo, $meta_id);
+
     $prompt = "NEGOCIO:\n{$ctx}\n\n"
         . "LA META DEL DUEÑO:\n"
         . "- Objetivo: {$def['titulo']} ({$def['verbo']})\n"
@@ -487,6 +496,7 @@ SYS;
         . "- Presupuesto para pauta/boost: {$pauta}\n"
         . ($contexto !== '' ? "- Con qué cuenta: {$contexto}\n" : '')
         . "\nSEÑALES REALES DEL NEGOCIO:\n" . ($senales ? '- ' . implode("\n- ", $senales) : '- Todavía sin historial.') . "\n"
+        . ($lecciones !== '' ? "\n{$lecciones}" : '')
         . "\nDiseña el plan. Devuelve JSON con esta forma EXACTA:\n"
         . '{"veredicto":"alcanzable|ambiciosa|fuera_de_alcance",'
         . '"diagnostico":"2-4 frases en cristiano: dónde está parado, qué le juega a favor y qué en contra, y si la meta da o no. Habla TÚ al dueño.",'
@@ -526,14 +536,37 @@ SYS;
     $pdo->prepare("UPDATE crecer_meta SET diagnostico=?, veredicto=?, ia_log_id=?, updated_at=NOW() WHERE id=? AND marca_id=?")
         ->execute([$diagnostico, $veredicto, $r['ia_log_id'] ?? null, $meta_id, $marca_id]);
 
-    // Plan nuevo = tácticas nuevas (las viejas pendientes se descartan; las
-    // ya hechas quedan como historia de lo que se ejecutó).
-    $pdo->prepare("DELETE FROM crecer_meta_tactica WHERE meta_id=? AND estado='pendiente'")->execute([$meta_id]);
+    // ── EL PLAN NUEVO ES UNA ENTIDAD, NO UN REEMPLAZO ──
+    //  Antes se borraban las tácticas pendientes y el plan anterior se evaporaba:
+    //  imposible saber después si sirvió. Ahora el anterior se CIERRA (y se mide
+    //  al vuelo con lo que dejó) y nace una versión nueva. Historial completo:
+    //  una semana puede tener 1 plan o 4, cada uno con su récord.
+    $plan_id = null;
+    try {
+        $ant = meta_plan_activo($pdo, $meta_id);
+        if ($ant) meta_plan_cerrar($pdo, (int)$ant['id'], 'reemplazado');
+        $ver = (int)$pdo->query("SELECT COALESCE(MAX(version),0)+1 FROM crecer_meta_plan WHERE meta_id={$meta_id}")->fetchColumn();
+        $pdo->prepare("INSERT INTO crecer_meta_plan (meta_id, marca_id, version, diagnostico, veredicto, estado, ia_log_id)
+                       VALUES (?,?,?,?,?, 'activo', ?)")
+            ->execute([$meta_id, $marca_id, $ver, $diagnostico, $veredicto, $r['ia_log_id'] ?? null]);
+        $plan_id = (int)$pdo->lastInsertId();
+    } catch (Throwable $e) {
+        // Sin la migración del plan, el comportamiento cae al de antes (sin
+        // historial): las tácticas viejas pendientes se retiran para no mezclar.
+        error_log('meta_plan_generar (sin tabla de planes): ' . $e->getMessage());
+        try { $pdo->prepare("DELETE FROM crecer_meta_tactica WHERE meta_id=? AND estado='pendiente'")->execute([$meta_id]); }
+        catch (Throwable $e2) {}
+    }
 
-    $ins = $pdo->prepare(
-        "INSERT INTO crecer_meta_tactica
-           (meta_id, marca_id, orden, semana, tipo, titulo, que_hacer, por_que, canal, cta, inversion, quien)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
+    $ins = $plan_id !== null
+        ? $pdo->prepare(
+            "INSERT INTO crecer_meta_tactica
+               (meta_id, marca_id, orden, semana, tipo, titulo, que_hacer, por_que, canal, cta, inversion, quien, plan_id)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?, {$plan_id})")
+        : $pdo->prepare(
+            "INSERT INTO crecer_meta_tactica
+               (meta_id, marca_id, orden, semana, tipo, titulo, que_hacer, por_que, canal, cta, inversion, quien)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
     $tipos_ok  = ['contenido','distribucion','pauta','oferta','alianza','operacion'];
     $canales_ok= ['instagram','facebook','whatsapp','ambas','fisico'];
     $orden = 0; $guardadas = [];
@@ -563,19 +596,340 @@ SYS;
     }
 
     return ['ok' => true, 'diagnostico' => $diagnostico, 'veredicto' => $veredicto,
-            'tacticas' => $guardadas, 'ia_log_id' => $r['ia_log_id'] ?? null];
+            'tacticas' => $guardadas, 'plan_id' => $plan_id, 'ia_log_id' => $r['ia_log_id'] ?? null];
 }
 
 // ── Las tácticas ─────────────────────────────────────────────
-function meta_tacticas(PDO $pdo, int $meta_id, ?string $estado = null): array {
+/**
+ * Las jugadas. Por defecto SOLO las del plan vigente (si hay historial de
+ * planes); pasa $plan_id para abrir las de un plan viejo, o $todas=true para
+ * verlas todas.
+ */
+function meta_tacticas(PDO $pdo, int $meta_id, ?string $estado = null, ?int $plan_id = null, bool $todas = false): array {
     try {
         $sql = "SELECT * FROM crecer_meta_tactica WHERE meta_id=?";
         $par = [$meta_id];
-        if ($estado !== null) { $sql .= " AND estado=?"; $par[] = $estado; }
+        if ($plan_id !== null)      { $sql .= " AND plan_id=?"; $par[] = $plan_id; }
+        elseif (!$todas) {
+            // Solo las del plan vigente. Las de planes viejos quedan de historia.
+            $act = meta_plan_activo($pdo, $meta_id);
+            if ($act) { $sql .= " AND plan_id=?"; $par[] = (int)$act['id']; }
+        }
+        if ($estado !== null)       { $sql .= " AND estado=?"; $par[] = $estado; }
         $sql .= " ORDER BY semana ASC, orden ASC";
         $q = $pdo->prepare($sql); $q->execute($par);
         return $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
     } catch (Throwable $e) { return []; }
+}
+
+// ══ EL PLAN COMO ENTIDAD: historial, cierre, medición y lección ══
+//  Aquí es donde el corillo deja de solo ejecutar y empieza a APRENDER:
+//  cada plan se guarda entero, se mide con señales reales cuando cierra, y
+//  su lección entra al plan siguiente.
+
+/** El plan vigente de una meta (null si no hay o si falta la migración). */
+function meta_plan_activo(PDO $pdo, int $meta_id): ?array {
+    try {
+        $q = $pdo->prepare("SELECT * FROM crecer_meta_plan WHERE meta_id=? AND estado='activo' ORDER BY version DESC LIMIT 1");
+        $q->execute([$meta_id]);
+        return $q->fetch(PDO::FETCH_ASSOC) ?: null;
+    } catch (Throwable $e) { return null; }
+}
+
+/** Todos los planes de una meta, del más nuevo al más viejo (el historial). */
+function meta_planes(PDO $pdo, int $meta_id): array {
+    try {
+        $q = $pdo->prepare("SELECT * FROM crecer_meta_plan WHERE meta_id=? ORDER BY version DESC");
+        $q->execute([$meta_id]);
+        return $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable $e) { return []; }
+}
+
+function meta_plan_por_id(PDO $pdo, int $plan_id, int $marca_id): ?array {
+    try {
+        $q = $pdo->prepare("SELECT * FROM crecer_meta_plan WHERE id=? AND marca_id=? LIMIT 1");
+        $q->execute([$plan_id, $marca_id]);
+        return $q->fetch(PDO::FETCH_ASSOC) ?: null;
+    } catch (Throwable $e) { return null; }
+}
+
+/**
+ * ¿Cuánto del plan se cumplió? Cuenta jugadas hechas vs. totales.
+ * @return array{hechas:int, total:int, pct:int, completo:bool, pendientes:int}
+ */
+function meta_plan_progreso(PDO $pdo, int $plan_id): array {
+    $out = ['hechas' => 0, 'total' => 0, 'pct' => 0, 'completo' => false, 'pendientes' => 0];
+    try {
+        $q = $pdo->prepare("SELECT estado, COUNT(*) c FROM crecer_meta_tactica WHERE plan_id=? GROUP BY estado");
+        $q->execute([$plan_id]);
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $c = (int)$r['c'];
+            $out['total'] += $c;
+            if ($r['estado'] === 'hecha')       $out['hechas'] += $c;
+            // 'descartada' cuenta como resuelta (el dueño decidió no hacerla)
+            elseif ($r['estado'] !== 'descartada') $out['pendientes'] += $c;
+        }
+        if ($out['total'] > 0) $out['pct'] = (int)round($out['hechas'] / $out['total'] * 100);
+        $out['completo'] = $out['total'] > 0 && $out['pendientes'] === 0;
+    } catch (Throwable $e) {}
+    return $out;
+}
+
+/**
+ * LOS RESULTADOS REALES DE UN PLAN. Mide lo que ese plan dejó en el mundo:
+ * sus piezas, cuántas se publicaron, el alcance y las reacciones que sacaron,
+ * y cuánto se movió el objetivo de la meta DURANTE SU VENTANA.
+ *
+ * Todo de señales reales. Si no hay dato, queda null — nunca un cero que
+ * parezca fracaso ni un número inventado que parezca éxito.
+ */
+function meta_plan_resultados(PDO $pdo, array $plan): array {
+    $pid = (int)$plan['id'];
+    $out = ['piezas'=>0, 'publicadas'=>0, 'alcance'=>null, 'interacciones'=>null, 'movio'=>null, 'posts'=>[]];
+    try {
+        $q = $pdo->prepare(
+            "SELECT c.id, c.caption, c.estado, c.plataforma, c.publicado_at, c.grafica_path,
+                    SUM(mt.alcance) alcance, SUM(mt.interacciones) interacciones
+               FROM crecer_contenido c
+          LEFT JOIN crecer_metricas mt ON mt.contenido_id = c.id
+              WHERE c.plan_id = ?
+           GROUP BY c.id
+           ORDER BY c.publicado_at IS NULL, c.publicado_at DESC, c.id DESC");
+        $q->execute([$pid]);
+        $posts = $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $out['posts']  = $posts;
+        $out['piezas'] = count($posts);
+        $al = null; $it = null;
+        foreach ($posts as $p) {
+            if ($p['estado'] === 'publicado') $out['publicadas']++;
+            if ($p['alcance'] !== null)       $al = (int)$al + (int)$p['alcance'];
+            if ($p['interacciones'] !== null) $it = (int)$it + (int)$p['interacciones'];
+        }
+        $out['alcance'] = $al; $out['interacciones'] = $it;
+    } catch (Throwable $e) { error_log('meta_plan_resultados: ' . $e->getMessage()); }
+
+    // ¿Cuánto movió el número de la meta mientras este plan estuvo vivo?
+    try {
+        $meta = $pdo->query("SELECT * FROM crecer_meta WHERE id=" . (int)$plan['meta_id'])->fetch(PDO::FETCH_ASSOC);
+        if ($meta) {
+            $desde = (string)$plan['inicio_at'];
+            $hasta = !empty($plan['cierre_at']) ? (string)$plan['cierre_at'] : date('Y-m-d H:i:s');
+            $out['movio'] = meta_medir($pdo, (int)$plan['marca_id'], (string)$meta['objetivo'], $desde, $hasta);
+            $out['objetivo'] = (string)$meta['objetivo'];
+        }
+    } catch (Throwable $e) {}
+    return $out;
+}
+
+/**
+ * CIERRA un plan y le CONGELA sus resultados medidos. Se llama cuando se
+ * cumplieron todas las jugadas ('completado') o cuando nace uno nuevo que lo
+ * sustituye ('reemplazado'). Los números quedan grabados: son su récord.
+ */
+function meta_plan_cerrar(PDO $pdo, int $plan_id, string $estado = 'completado'): bool {
+    if (!in_array($estado, ['completado','reemplazado','abandonado'], true)) return false;
+    try {
+        $plan = $pdo->query("SELECT * FROM crecer_meta_plan WHERE id={$plan_id}")->fetch(PDO::FETCH_ASSOC);
+        if (!$plan || $plan['estado'] !== 'activo') return false;
+        $res = meta_plan_resultados($pdo, $plan);
+        $pdo->prepare(
+            "UPDATE crecer_meta_plan
+                SET estado=?, cierre_at=NOW(), piezas=?, publicadas=?, alcance=?, interacciones=?, movio=?, updated_at=NOW()
+              WHERE id=?")
+            ->execute([$estado, $res['piezas'], $res['publicadas'], $res['alcance'],
+                       $res['interacciones'], $res['movio'], $plan_id]);
+        return true;
+    } catch (Throwable $e) { error_log('meta_plan_cerrar: ' . $e->getMessage()); return false; }
+}
+
+/**
+ * EL ANALISTA JUZGA EL PLAN. Con el plan ya cerrado y medido, escribe en
+ * cristiano qué pasó y deja la LECCIÓN que el próximo plan va a heredar.
+ *
+ * Honestidad dura: si no hay evidencia suficiente (nada publicado, o sin
+ * métricas todavía), NO inventa un veredicto — deja `funciono=NULL` y dice
+ * que falta medir. Preferimos "no sé todavía" a un aplauso falso.
+ *
+ * @return array{ok:bool, leccion:string, funciono:?bool, err?:string}
+ */
+function meta_plan_evaluar(PDO $pdo, int $plan_id, int $marca_id): array {
+    require_once __DIR__ . '/ia.php';
+    $plan = meta_plan_por_id($pdo, $plan_id, $marca_id);
+    if (!$plan) return ['ok'=>false, 'err'=>'No encuentro ese plan.', 'leccion'=>'', 'funciono'=>null];
+
+    $meta = $pdo->query("SELECT * FROM crecer_meta WHERE id=" . (int)$plan['meta_id'])->fetch(PDO::FETCH_ASSOC);
+    $def  = meta_objetivo_def((string)($meta['objetivo'] ?? 'pedidos'));
+    $res  = meta_plan_resultados($pdo, $plan);
+    $tac  = meta_tacticas($pdo, (int)$plan['meta_id'], null, $plan_id);
+    $prog = meta_plan_progreso($pdo, $plan_id);
+
+    // Congelar el récord con lo medido AHORA. Sin esto, el plan guardaba los
+    // números del día que cerró (casi siempre ceros, porque Meta reporta tarde)
+    // y el próximo plan heredaba "0 posts publicados" cuando fueron tres.
+    try {
+        $pdo->prepare("UPDATE crecer_meta_plan SET piezas=?, publicadas=?, alcance=?, interacciones=?, movio=?, updated_at=NOW() WHERE id=?")
+            ->execute([$res['piezas'], $res['publicadas'], $res['alcance'], $res['interacciones'], $res['movio'], $plan_id]);
+    } catch (Throwable $e) {}
+
+    // Sin nada publicado no hay nada que juzgar: se dice y punto.
+    if ((int)$res['publicadas'] === 0) {
+        $lec = 'Este plan no llegó a publicarse, así que no hay de dónde sacar conclusiones. '
+             . 'No cuenta ni a favor ni en contra.';
+        try {
+            $pdo->prepare("UPDATE crecer_meta_plan SET leccion=?, funciono=NULL, updated_at=NOW() WHERE id=?")
+                ->execute([$lec, $plan_id]);
+        } catch (Throwable $e) {}
+        return ['ok'=>true, 'leccion'=>$lec, 'funciono'=>null];
+    }
+
+    $lineas = [];
+    foreach ($tac as $t) $lineas[] = "- [{$t['tipo']}] {$t['titulo']} ({$t['estado']})";
+    $detalle_posts = [];
+    foreach (array_slice($res['posts'], 0, 10) as $p) {
+        if ($p['estado'] !== 'publicado') continue;
+        $detalle_posts[] = '- "' . mb_substr(trim((string)$p['caption']), 0, 70) . '…" → '
+            . ($p['alcance'] !== null ? $p['alcance'] . ' personas alcanzadas' : 'sin métricas todavía')
+            . ($p['interacciones'] !== null ? ', ' . $p['interacciones'] . ' reacciones' : '');
+    }
+
+    $sistema = "Eres EL ANALISTA de Crecer. Acaba de cerrar un plan de marketing de un micronegocio boricua y tu "
+        . "trabajo es decir LA VERDAD de qué pasó, en cristiano, para que el próximo plan sea mejor.\n"
+        . "REGLAS:\n"
+        . "- Habla con el dueño, que NO sabe de mercadeo: si usas una palabra del oficio (alcance, reacciones, "
+        . "boost), la explicas ahí mismo.\n"
+        . "- NO inventes números: usa solo los que te doy.\n"
+        . "- Si los números no alcanzan para concluir, DILO ('todavía es poco para saber').\n"
+        . "- La lección tiene que ser ACCIONABLE para el próximo plan: qué repetir y qué cambiar.\n"
+        . "- Nada de aplausos vacíos. Si no funcionó, se dice con respeto y se propone el cambio.\n"
+        . "Responde SOLO JSON: {\"funciono\":true|false|null,\"leccion\":\"2-4 frases al dueño\"}";
+
+    $prompt = "META: {$def['titulo']} — "
+        . ($meta['cantidad'] !== null ? meta_fmt((float)$meta['cantidad'], (string)$meta['objetivo']) : 'sin número') . "\n"
+        . "PLAN v{$plan['version']} · del " . substr((string)$plan['inicio_at'], 0, 10)
+        . " al " . substr((string)($plan['cierre_at'] ?: date('Y-m-d')), 0, 10) . "\n\n"
+        . "JUGADAS ({$prog['hechas']} de {$prog['total']} hechas):\n" . implode("\n", $lineas) . "\n\n"
+        . "LO QUE SE PUBLICÓ ({$res['publicadas']} de {$res['piezas']} piezas):\n"
+        . ($detalle_posts ? implode("\n", $detalle_posts) : '- (sin detalle de métricas todavía)') . "\n\n"
+        . "RESULTADO EN NÚMEROS:\n"
+        . '- Alcance total: ' . ($res['alcance'] !== null ? $res['alcance'] . ' personas' : 'sin datos de Instagram/Facebook todavía') . "\n"
+        . '- Reacciones totales: ' . ($res['interacciones'] !== null ? $res['interacciones'] : 'sin datos todavía') . "\n"
+        . '- Lo que se movió el objetivo durante este plan: '
+        . ($res['movio'] !== null ? meta_fmt((float)$res['movio'], (string)$meta['objetivo']) : 'sin señal medible') . "\n\n"
+        . "¿Funcionó este plan? Escribe la lección para el próximo.";
+
+    try {
+        $r = ia_ejecutar($pdo, 'analitica', "Evaluar plan v{$plan['version']}", $prompt, [
+            'marca_id' => $marca_id, 'sistema' => $sistema, 'json' => true,
+            'modelo' => defined('CRECER_COPILOTO_MODEL') ? CRECER_COPILOTO_MODEL : GEMINI_MODEL,
+            'temperatura' => 0.6, 'max_tokens' => 420, 'thinking_budget' => 0,
+            'mock_texto' => '{"funciono":null,"leccion":"Se publicó lo planificado pero todavía es poco para saber si movió la aguja. Repetimos el ángulo del combo y medimos otra semana."}',
+        ]);
+        $j = json_decode((string)($r['texto'] ?? ''), true);
+        $lec = trim((string)($j['leccion'] ?? ''));
+        if ($lec === '') return ['ok'=>false, 'err'=>'El Analista no devolvió lección.', 'leccion'=>'', 'funciono'=>null];
+        $fun = array_key_exists('funciono', $j) && $j['funciono'] !== null ? (int)(bool)$j['funciono'] : null;
+        $pdo->prepare("UPDATE crecer_meta_plan SET leccion=?, funciono=?, updated_at=NOW() WHERE id=?")
+            ->execute([$lec, $fun, $plan_id]);
+        return ['ok'=>true, 'leccion'=>$lec, 'funciono'=>$fun === null ? null : (bool)$fun];
+    } catch (Throwable $e) {
+        return ['ok'=>false, 'err'=>substr($e->getMessage(), 0, 160), 'leccion'=>'', 'funciono'=>null];
+    }
+}
+
+/**
+ * LO QUE YA SE INTENTÓ — las lecciones de los planes cerrados de esta meta,
+ * listas para inyectar al prompt del plan siguiente. Esto es lo que hace que
+ * el corillo se afine semana tras semana en vez de repetir lo que no sirvió.
+ */
+function meta_lecciones_para_prompt(PDO $pdo, int $meta_id): string {
+    try {
+        $q = $pdo->prepare(
+            "SELECT version, leccion, funciono, publicadas, alcance, interacciones, movio
+               FROM crecer_meta_plan
+              WHERE meta_id=? AND estado<>'activo' AND leccion IS NOT NULL AND leccion<>''
+              ORDER BY version DESC LIMIT 3");
+        $q->execute([$meta_id]);
+        $rows = $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        if (!$rows) return '';
+        $out = "LO QUE YA SE INTENTÓ CON ESTA META (planes anteriores, ya medidos):\n";
+        foreach ($rows as $r) {
+            $veredicto = $r['funciono'] === null ? 'sin evidencia suficiente'
+                       : ((int)$r['funciono'] === 1 ? 'SÍ funcionó' : 'NO funcionó');
+            $out .= "- Plan v{$r['version']} ({$veredicto}): {$r['leccion']}";
+            $nums = [];
+            if ($r['publicadas'] !== null)    $nums[] = "{$r['publicadas']} posts publicados";
+            if ($r['alcance'] !== null)       $nums[] = "{$r['alcance']} personas alcanzadas";
+            if ($r['interacciones'] !== null) $nums[] = "{$r['interacciones']} reacciones";
+            if ($nums) $out .= ' [' . implode(', ', $nums) . ']';
+            $out .= "\n";
+        }
+        $out .= "Usa esto: repite y sube de volumen lo que funcionó; NO repitas lo que ya se midió y no movió nada.\n";
+        return $out;
+    } catch (Throwable $e) { return ''; }
+}
+
+/**
+ * REVISIÓN AUTOMÁTICA DEL PLAN (la corre el relevo del corillo). Dos pasos,
+ * y el orden importa:
+ *
+ *  1. Si el plan vigente ya tiene todas sus jugadas resueltas → se CIERRA.
+ *     Pero NO se evalúa todavía: los posts acaban de salir y Instagram/Facebook
+ *     tardan días en reportar sus números. Juzgar ahí sería juzgar el vacío.
+ *  2. Los planes YA cerrados y sin lección se quedan EN OBSERVACIÓN: en cada
+ *     relevo se les vuelve a medir, y cuando por fin hay señal (o ya pasaron
+ *     4 días esperándola) el Analista escribe la lección.
+ *
+ * Eso es "cuando se haga todo, quedar pendiente a las métricas de esos posts".
+ */
+function meta_plan_revisar(PDO $pdo, int $marca_id): string {
+    $hechos = [];
+
+    // ── Paso 1: cerrar el plan vigente si ya se cumplió entero ──
+    $meta = meta_activa($pdo, $marca_id);
+    if ($meta) {
+        $plan = meta_plan_activo($pdo, (int)$meta['id']);
+        if ($plan) {
+            $prog = meta_plan_progreso($pdo, (int)$plan['id']);
+            if ($prog['completo'] && meta_plan_cerrar($pdo, (int)$plan['id'], 'completado')) {
+                $hechos[] = "plan v{$plan['version']} completado (en observación: esperando los números de sus posts)";
+            }
+        }
+    }
+
+    // ── Paso 2: evaluar los cerrados que ya tengan señal ──
+    try {
+        $q = $pdo->prepare(
+            "SELECT * FROM crecer_meta_plan
+              WHERE marca_id=? AND estado IN ('completado','reemplazado')
+                AND (leccion IS NULL OR leccion='')
+              ORDER BY cierre_at ASC LIMIT 3");
+        $q->execute([$marca_id]);
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $p) {
+            // Re-medir: las métricas llegan tarde, así que el récord se refresca
+            // antes de juzgar (si no, se juzgaría con los ceros del primer día).
+            $res = meta_plan_resultados($pdo, $p);
+            try {
+                $pdo->prepare("UPDATE crecer_meta_plan SET piezas=?, publicadas=?, alcance=?, interacciones=?, movio=?, updated_at=NOW() WHERE id=?")
+                    ->execute([$res['piezas'], $res['publicadas'], $res['alcance'], $res['interacciones'], $res['movio'], (int)$p['id']]);
+            } catch (Throwable $e) {}
+
+            $dias_esperando = !empty($p['cierre_at'])
+                ? (int)((new DateTimeImmutable((string)$p['cierre_at']))->diff(new DateTimeImmutable('now'))->days) : 0;
+            // OJO: un `movio` de 0.00 NO es señal — es "todavía no pasó nada".
+            // (meta_medir devuelve 0 legítimo para un COUNT sin filas, así que
+            //  tomarlo por evidencia haría que el Analista juzgara el vacío.)
+            $hay_senal = ($res['alcance'] !== null || $res['interacciones'] !== null
+                       || ($res['movio'] !== null && (float)$res['movio'] > 0));
+            // Con señal se juzga ya; sin señal se espera hasta 4 días y entonces
+            // se cierra el caso diciendo justamente eso (sin inventar veredicto).
+            if (!$hay_senal && $dias_esperando < 4) continue;
+
+            $ev = meta_plan_evaluar($pdo, (int)$p['id'], $marca_id);
+            if (!empty($ev['ok'])) $hechos[] = "plan v{$p['version']} evaluado: " . mb_substr($ev['leccion'], 0, 80);
+        }
+    } catch (Throwable $e) { error_log('meta_plan_revisar: ' . $e->getMessage()); }
+
+    return implode(' · ', $hechos);
 }
 
 /**
