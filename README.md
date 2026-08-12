@@ -42,6 +42,28 @@ diferencia entre lo que existe en el código y lo que trabaja.)
 Cada llamada queda con prompt, modelo, tokens, costo, latencia, estado y error — también
 **cuando falla**. Esa bitácora es la evidencia, no un adorno.
 
+### El corillo no publica: persigue un número
+
+Publicar contenido es fácil de simular. Lo que hace a Crecer un *departamento* y no un
+generador es el ciclo cerrado:
+
+1. **El dueño declara una meta** en sus palabras — *"quiero más pedidos"* — con cuánto,
+   para cuándo y qué presupuesto tiene para anuncios.
+2. **La Estratega diagnostica con honestidad** (*"esa meta es ambiciosa con lo que hay"*)
+   y arma un plan de jugadas concretas, cada una con cuántas piezas produce y qué se le
+   pide exactamente a la gente.
+3. **El corillo ejecuta las jugadas solo**, en su relevo semanal. Antes de gastar,
+   inventaría lo que ya existe: posts listos sin publicar, las fotos reales del negocio,
+   y los posts que ya midieron bien.
+4. **Cada jugada se cierra sola** cuando sus piezas se publican de verdad. El dueño no
+   marca checkboxes de trabajo que hizo la IA; solo confirma lo que ocurre fuera de
+   Crecer (poner el boost, hablar con un aliado).
+5. **El plan se mide y deja una lección** — cuánto movió el número — y **el plan
+   siguiente la hereda**: lo que no funcionó no se repite.
+
+Todo ese ciclo queda en `crecer_meta`, `crecer_meta_plan` y `crecer_meta_tactica`, con
+las piezas amarradas al plan que las produjo. Es auditable pieza por pieza.
+
 ## Google Cloud / Gemini
 
 - **Gemini** corre toda la capa de texto y decisión: aprender el negocio, planificar,
@@ -80,8 +102,15 @@ Qué es nuevo y qué se reusa está declarado en **[REUSE.md](REUSE.md)**.
 
 **https://encuentraloahora.com/crecer/**
 
-- Cuenta de evaluación: _(pendiente de crear — sin datos de clientes reales)_
-- Acceso gratuito durante la evaluación.
+| | |
+|---|---|
+| **Usuario de evaluación** | `_______________` |
+| **Contraseña** | `_______________` |
+| **Negocio de prueba** | cuenta limpia, sin datos de clientes reales |
+| **Acceso** | gratuito y completo durante la evaluación (sin cobro) |
+
+> Si estas credenciales aparecen en blanco al momento de evaluar, escribe a
+> **icaro2004@gmail.com** y te damos acceso el mismo día.
 
 ### ⚠️ Antes de tocar nada
 
@@ -102,8 +131,15 @@ Esta es una aplicación **en producción con clientes reales**. Por favor:
 4. **Apruébalo o ajústalo**. Si lo editas, el `aprendiz` aprende de esa edición.
 5. Entra a **La Sala** y pídele algo en tus palabras: *"necesito algo para el Día de las
    Madres"*. Verás la cadena de agentes trabajando.
-6. En **Operaciones → Evidencia** (cuenta admin) está la bitácora: qué agente decidió qué,
-   con costo y latencia reales.
+6. **Ponle una meta** (*Tu Meta* en el menú): escoge qué quieres lograr, cuánto y para
+   cuándo. La Estratega arma el plan delante de ti — con su diagnóstico honesto de si la
+   meta da o no. Toca **"Que lo haga el corillo"** en cualquier jugada y la producción
+   completa se ejecuta sola. **Esto es el corazón del producto:** el resto del panel
+   trabaja para ese número.
+7. En **Operaciones → Evidencia** (cuenta admin) está la bitácora: qué agente decidió qué,
+   con costo y latencia reales. Y en **Armar el paquete de evidencia** están todos los
+   datos de la entrega — revenue real con el related-party separado, uso de API y el
+   ciclo agéntico — ordenados por criterio y exportables en JSON/CSV.
 
 ### Instalación local
 
@@ -142,6 +178,9 @@ operativo lo que todavía no gobierna producción.
 - El Ayudante: soporte que diagnostica, repara y escala solo
 - Cobro por Stripe · verificación por SMS (Twilio)
 - El corillo trabaja solo por cron semanal
+- **La Meta y su plan** (desde el 12 ago): el dueño declara un número que perseguir, la
+  Estratega arma el plan, el corillo ejecuta las jugadas en su relevo, cada una se cierra
+  con la evidencia de publicación, y la lección del plan cerrado alimenta al siguiente
 
 **Implementado pero NO gobernando producción:**
 
