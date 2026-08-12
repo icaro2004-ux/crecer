@@ -911,10 +911,14 @@ $credito  = $has_deck
 
       <?php if ($__prog['medible'] && $__meta['cantidad'] !== null): ?>
         <div class="n-barra"><i data-ancho="<?= max(2, min(100, $__pct)) ?>" style="width:0"></i></div>
+        <?php /* Lenguaje de EQUIPO, no de supervisor: "tenemos", no "vas". El
+                 dueño ya vive con presión; Crecer es su corillo, no su jefe. */ ?>
         <?php if ($__prog['al_dia'] === false): ?>
-          <p class="n-ritmo mal">Vas atrasado para el ritmo que necesitas — el corillo está apretando.</p>
+          <p class="n-ritmo mal">Tenemos que apretar un poco<?php if (!empty($__prog['falta']) && $__prog['dias_rest']): ?>:
+            faltan <?= $h(meta_fmt((float)$__prog['falta'], (string)$__meta['objetivo'])) ?>
+            y quedan <?= (int)$__prog['dias_rest'] ?> días<?php endif; ?>.</p>
         <?php elseif ($__prog['al_dia'] === true): ?>
-          <p class="n-ritmo bien">Vas en ritmo.</p>
+          <p class="n-ritmo bien">Vamos en ritmo.</p>
         <?php endif; ?>
       <?php endif; ?>
 
@@ -922,7 +926,7 @@ $credito  = $has_deck
         <div class="n-jugada">
           <span class="n-jl">Lo que toca ahora</span>
           <b><?= $h($__jug['titulo']) ?></b>
-          <p><?= $h(mb_substr((string)$__jug['que_hacer'], 0, 130)) ?></p>
+          <p><?= $h(meta_recorte((string)$__jug['que_hacer'], 130)) ?></p>
         </div>
       <?php endif; ?>
       <span class="n-ir">Ver el plan completo <i>→</i></span>

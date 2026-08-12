@@ -27,8 +27,21 @@ require_once __DIR__ . '/../includes/memoria.php';
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
 // ── Los datos del cerebro (todo real, todo defensivo) ──
+//  OJO: la radiografía no siempre es plana — algunos capítulos vienen como
+//  lista (productos, reglas). `strval()` sobre un array escupe
+//  "Array to string conversion" en la cara del dueño, así que se aplanan a
+//  texto legible antes de mostrarlos.
 $radio = json_decode((string)($marca['radiografia_json'] ?? ''), true);
-$radio = is_array($radio) ? array_filter(array_map('trim', array_map('strval', $radio))) : [];
+$radio = is_array($radio) ? array_filter(array_map(function ($v) {
+    if (is_array($v)) {
+        $partes = [];
+        foreach ($v as $x) {
+            if (is_scalar($x)) { $t = trim((string)$x); if ($t !== '') $partes[] = $t; }
+        }
+        return implode(' · ', $partes);
+    }
+    return is_scalar($v) ? trim((string)$v) : '';
+}, $radio)) : [];
 
 $glosario = array_values(array_filter(array_map('trim',
     preg_split('/\r\n|\r|\n|;|·/', (string)($marca['glosario'] ?? '')) ?: [])));

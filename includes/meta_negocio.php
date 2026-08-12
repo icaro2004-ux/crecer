@@ -322,6 +322,20 @@ function meta_sugerir_numero(PDO $pdo, int $marca_id, string $objetivo, int $dia
     ];
 }
 
+/**
+ * Recorta SIN partir palabras. `mb_substr` a secas deja cosas como
+ * "sin revelar el secreto, c" — se ve descuidado justo en la tarjeta que más
+ * mira el dueño.
+ */
+function meta_recorte(string $txt, int $max = 130): string {
+    $txt = trim(preg_replace('/\s+/u', ' ', $txt));
+    if (mb_strlen($txt) <= $max) return $txt;
+    $corte = mb_substr($txt, 0, $max);
+    $esp = mb_strrpos($corte, ' ');
+    if ($esp !== false && $esp > $max * 0.6) $corte = mb_substr($corte, 0, $esp);
+    return rtrim($corte, " ,.;:-") . '…';
+}
+
 /** Fecha en español ("11 de septiembre") — date('F') sale en inglés en el server. */
 function meta_fecha_es(string $fecha): string {
     $MES = [1=>'enero','febrero','marzo','abril','mayo','junio','julio','agosto',
@@ -1002,11 +1016,21 @@ function meta_tactica_de_turno(PDO $pdo, array $meta): ?array {
 
     $tac = meta_tacticas($pdo, (int)$meta['id'], 'pendiente');
     if (!$tac) return null;
-    // Primero lo de esta semana que ejecuta el corillo; si no hay, lo que venga.
-    foreach ($tac as $t) {
-        if ((int)$t['semana'] <= $semana_actual && $t['quien'] === 'corillo') return $t;
-    }
-    foreach ($tac as $t) { if ($t['quien'] === 'corillo') return $t; }
+
+    // ORDEN DE PREFERENCIA (importa más de lo que parece): lo primero que el
+    // dueño ve al abrir la app debe ser algo que EL CORILLO HACE SOLO. Si le
+    // enseñamos primero el reel —lo único que exige que él grabe— la app abre
+    // pidiéndole trabajo, que es justo lo contrario de lo que vendemos.
+    // Un reel sigue en el plan y se le pide a su tiempo; solo no va de primero.
+    $solo_corillo = fn(array $t) => ($t['clase'] ?? 'produccion') === 'produccion' && ($t['formato'] ?? 'post') !== 'reel';
+
+    // 1) De esta semana y que el corillo hace solo.
+    foreach ($tac as $t) { if ((int)$t['semana'] <= $semana_actual && $solo_corillo($t)) return $t; }
+    // 2) Cualquiera que el corillo haga solo.
+    foreach ($tac as $t) { if ($solo_corillo($t)) return $t; }
+    // 3) Producción aunque pida material (el reel).
+    foreach ($tac as $t) { if (($t['clase'] ?? 'produccion') === 'produccion') return $t; }
+    // 4) Lo que quede (acciones del dueño). Que se vea es mejor que no ver nada.
     return $tac[0];
 }
 

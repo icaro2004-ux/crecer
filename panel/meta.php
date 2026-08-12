@@ -262,10 +262,28 @@ if ($meta) {
   .vered.fuera_de_alcance{background:#fdeeee;color:#b4232b}
 
   .jug{display:flex;flex-direction:column;gap:11px}
-  .jg{background:var(--card,#fff);border:1px solid var(--line);border-radius:15px;padding:15px 16px;box-shadow:var(--shadow-sm);transition:border-color .15s,transform .12s}
-  .jg:hover{border-color:var(--teal,#00A49F);transform:translateY(-1px)}
-  .jg.hecha{opacity:.55}
+  .jg{background:var(--card,#fff);border:1px solid var(--line);border-radius:15px;padding:0;box-shadow:var(--shadow-sm);transition:border-color .15s}
+  .jg:hover{border-color:var(--teal,#00A49F)}
+  .jg.hecha{opacity:.62}
   .jg.hecha .jg-t{text-decoration:line-through}
+  /* Plegadas por defecto: la de turno abre sola. Seis jugadas abiertas en un
+     teléfono eran 8,000px sin jerarquía — no se sabía por dónde empezar. */
+  /* Dos líneas, siempre: arriba el tipo y el estado, abajo el título a ancho
+     completo. En una sola fila, el chip y el estado ahogaban el título y en
+     360px caía en cuatro líneas de dos palabras. */
+  .jg > summary{list-style:none;cursor:pointer;padding:13px 16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .jg > summary::-webkit-details-marker{display:none}
+  .jg > summary:hover{background:var(--crema-2,#faf8f5);border-radius:14px}
+  .jg[open] > summary{border-bottom:1px dashed var(--line);border-radius:14px 14px 0 0}
+  .jg > summary .jg-tipo{order:1}
+  .jg-mini{order:2;margin-left:auto;font-size:11.5px;font-weight:800;color:var(--muted);white-space:nowrap}
+  .jg > summary .jg-t{order:3;flex:0 0 100%;margin-top:3px;font-size:15px;line-height:1.3}
+  .jg.turno{border-color:var(--magenta,#EF4375);box-shadow:0 0 0 3px color-mix(in srgb,var(--magenta,#EF4375) 12%,transparent)}
+  .jg-ahora{background:var(--magenta,#EF4375);color:#fff;font-size:10.5px;font-weight:800;letter-spacing:.5px;
+    text-transform:uppercase;padding:5px 16px}
+  /* Todo lo que va dentro del pliegue respira igual que antes */
+  .jg > *:not(summary):not(.jg-ahora){margin-left:16px;margin-right:16px}
+  .jg > .jg-meta:last-of-type,.jg > .jg-live{margin-bottom:14px}
   .jg-top{display:flex;align-items:flex-start;gap:11px}
   .jg-tipo{flex:none;font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:5px 9px;border-radius:8px;background:var(--crema-2,#f2efe9);color:var(--muted)}
   .jg-tipo.pauta{background:#fff2e0;color:#a05a10}
@@ -676,18 +694,35 @@ if ($meta) {
         </div>
       <?php endif; ?>
       <div class="jug">
-        <?php foreach ($tacticas as $t):
+        <?php
+        // La jugada de turno va ABIERTA y marcada; las demás plegadas. Seis
+        // jugadas abiertas eran 8,000px de scroll en un teléfono, todas con el
+        // mismo peso y sin señal de por dónde empezar.
+        $__turno = meta_tactica_de_turno($pdo, $meta);
+        $__turno_id = $__turno ? (int)$__turno['id'] : 0;
+        foreach ($tacticas as $t):
           $tipo_lbl = ['contenido'=>'Contenido','distribucion'=>'Difusión','pauta'=>'Anuncio pagado',
                        'oferta'=>'Oferta','alianza'=>'Alianza','operacion'=>'Cómo operar'][$t['tipo']] ?? $t['tipo'];
           $clase = (string)($t['clase'] ?? 'produccion');
           $jp    = jugada_progreso($pdo, $t);
           $hecha = $t['estado'] === 'hecha';
+          $es_turno = ((int)$t['id'] === $__turno_id) && !$hecha;
+          // Resumen corto para cuando está plegada: que se entienda sin abrir.
+          if ($hecha)                       $mini = 'Hecha';
+          elseif ($clase === 'regla')       $mini = 'Siempre';
+          elseif ($clase === 'accion_dueno')$mini = 'La haces tú';
+          elseif ((int)$jp['espera_video'] > 0) $mini = 'Falta tu video';
+          elseif ((int)$jp['creadas'] === 0)   $mini = (int)$jp['meta'] . ($jp['meta'] == 1 ? ' pieza' : ' piezas');
+          else                              $mini = (int)$jp['publicadas'] . '/' . (int)$jp['meta'] . ' publicadas';
         ?>
-          <div class="jg <?= $hecha?'hecha':'' ?> <?= $clase==='regla'?'regla':'' ?>" data-id="<?= (int)$t['id'] ?>">
-            <div class="jg-top">
+          <details class="jg <?= $hecha?'hecha':'' ?> <?= $clase==='regla'?'regla':'' ?> <?= $es_turno?'turno':'' ?>"
+                   data-id="<?= (int)$t['id'] ?>" <?= $es_turno ? 'open' : '' ?>>
+            <summary class="jg-sum">
               <span class="jg-tipo <?= $h($t['tipo']) ?>"><?= $h($tipo_lbl) ?></span>
               <span class="jg-t"><?= $h($t['titulo']) ?></span>
-            </div>
+              <span class="jg-mini"><?= $h($mini) ?></span>
+            </summary>
+            <?php if ($es_turno): ?><div class="jg-ahora">Por aquí seguimos</div><?php endif; ?>
             <?php if (trim((string)$t['que_hacer']) !== ''): ?>
               <p class="jg-q"><?= $h($t['que_hacer']) ?></p><?php endif; ?>
             <?php if (trim((string)$t['por_que']) !== ''): ?>
@@ -760,7 +795,7 @@ if ($meta) {
                 <?= ico('check-circle') ?> Ya lo hice</button>
             <?php endif; ?>
             <div class="jg-live" data-for="<?= (int)$t['id'] ?>"></div>
-          </div>
+          </details>
         <?php endforeach; ?>
       </div>
     <?php else: ?>
