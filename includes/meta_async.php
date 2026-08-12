@@ -46,7 +46,11 @@ function meta_job_en_curso(PDO $pdo, int $tactica_id): ?int {
 function meta_job_disparar(int $id): void {
     if (!worker_puede_disparar('meta')) return;
     $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
-    $url  = 'https://' . $host . '/crecer/panel/meta_worker.php?id=' . $id . '&key=' . META_WORKER_KEY;
+    // Producción es https siempre; en local (XAMPP) no hay TLS y el disparo se
+    // perdía en silencio — el trabajo quedaba encolado para siempre y no se
+    // podía probar el ciclo antes de subirlo. Solo localhost baja a http.
+    $esquema = preg_match('/^(localhost|127\.0\.0\.1)(:|$)/i', $host) ? 'http' : 'https';
+    $url  = $esquema . '://' . $host . '/crecer/panel/meta_worker.php?id=' . $id . '&key=' . META_WORKER_KEY;
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER    => true,
