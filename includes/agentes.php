@@ -2444,17 +2444,50 @@ function relevo_del_corillo(PDO $pdo, int $marca_id): array {
     try { aprender_estilo_visual($pdo, $marca_id); } catch (Throwable $e) { error_log('relevo aprendiz: ' . $e->getMessage()); }
     // 2) La Estratega: fija el enfoque de la semana (alimenta al creador).
     $enfoque = estratega_enfoque_semana($pdo, $marca_id);
-    // 3) El Creador: redacta los borradores que falten, alineados al enfoque.
-    $res = trabajo_autonomo($pdo, $marca_id, $enfoque);
-    // 4) El Analista: cierra el relevo con los números reales.
+
+    // 3) EL PLAN MANDA. Si el negocio tiene una meta con jugadas pendientes, el
+    //    corillo EJECUTA ESAS JUGADAS — no inventa contenido suelto. Aquí es
+    //    donde la automatización deja de depender de que el dueño toque un botón:
+    //    los lunes el plan avanza solo, reciclando lo que ya existe.
+    $res = ['creadas' => 0, 'ids' => [], 'razon' => ''];
+    $del_plan = 0;
+    try {
+        require_once __DIR__ . '/meta_ejecutar.php';
+        $m_tope = leer_marca($pdo, $marca_id);
+        $tope   = max(1, (int)($m_tope['autopilot_n'] ?? 3));
+        // No amontonar: lo que ya está esperando OK cuenta contra el tope.
+        $q = $pdo->prepare("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id=? AND estado='borrador'");
+        $q->execute([$marca_id]);
+        $tope = max(0, $tope - (int)$q->fetchColumn());
+
+        $pe = plan_ejecutar_pendientes($pdo, $marca_id, $tope);
+        $del_plan = (int)$pe['piezas'];
+        if ($del_plan > 0) {
+            $res['creadas'] = $del_plan;
+            $res['razon']   = 'el corillo avanzó el plan: ' . implode(' · ', $pe['detalle'])
+                            . ($pe['recicladas'] > 0 ? " (reusando {$pe['recicladas']} de lo que ya tenías)" : '');
+            $res['plan_jugadas'] = (int)$pe['jugadas'];
+        }
+    } catch (Throwable $e) { error_log('relevo plan: ' . $e->getMessage()); }
+
+    // 4) Si no había plan que avanzar (o no llenó el cupo), el Creador trabaja
+    //    como siempre: borradores alineados al enfoque de la semana.
+    if ($del_plan === 0) {
+        $res = trabajo_autonomo($pdo, $marca_id, $enfoque);
+    }
+    // 5) El Analista: cierra el relevo con los números reales.
     analitica_del_relevo($pdo, $marca_id);
-    // 5) La meta: ¿ya se logró? ¿se venció? Se cierra sola, con progreso MEDIDO
+    // 6) La meta: ¿ya se logró? ¿se venció? Se cierra sola, con progreso MEDIDO
     //    (nunca por corazonada). Si no hay meta, no pasa nada.
     try {
         require_once __DIR__ . '/meta_negocio.php';
+        require_once __DIR__ . '/meta_ejecutar.php';
+        // Antes de juzgar nada: las jugadas cuyas piezas ya se publicaron se dan
+        // por hechas SOLAS (evidencia, no declaración del dueño).
+        jugadas_sincronizar_marca($pdo, $marca_id);
         $cambio = meta_revisar($pdo, $marca_id);
         if ($cambio !== '') $res['meta'] = $cambio;
-        // 6) El PLAN: se cierra cuando se cumplió entero y queda EN OBSERVACIÓN
+        // 7) El PLAN: se cierra cuando se cumplió entero y queda EN OBSERVACIÓN
         //    hasta que Meta reporte los números de sus posts; entonces el Analista
         //    escribe la lección y el próximo plan la hereda. Aquí es donde el
         //    corillo se afina en vez de repetir lo que no funcionó.

@@ -216,6 +216,54 @@ function jugada_ideas(PDO $pdo, int $marca_id, array $t, int $n, array $inv): ar
 }
 
 /**
+ * EL CORILLO EJECUTA EL PLAN SOLO (lo corre el relevo semanal).
+ *
+ * Este es el que hace que la automatización sea de verdad: sin esto, las
+ * jugadas solo se ejecutaban si el dueño tocaba el botón — o sea, seguía
+ * dependiendo de él. Ahora los lunes el corillo agarra las jugadas
+ * pendientes de SU plan y las produce, con el mismo inventario (gaveta,
+ * fotos reales, ganadores) que ahorra cuota.
+ *
+ * Respeta un TOPE de piezas por relevo (el `autopilot_n` de la marca): un
+ * plan de 3 jugadas x 3 piezas no se le vacía encima al dueño de un golpe
+ * ni le quema la cuota del mes. Lo que no entre, entra el relevo siguiente.
+ *
+ * @return array{piezas:int, jugadas:int, recicladas:int, detalle:array}
+ */
+function plan_ejecutar_pendientes(PDO $pdo, int $marca_id, int $tope_piezas): array {
+    $out = ['piezas' => 0, 'jugadas' => 0, 'recicladas' => 0, 'detalle' => []];
+    if ($tope_piezas <= 0) return $out;
+
+    $meta = meta_activa($pdo, $marca_id);
+    if (!$meta) return $out;
+    $plan = meta_plan_activo($pdo, (int)$meta['id']);
+    if (!$plan) return $out;
+
+    // Las jugadas del plan vigente que el corillo puede hacer y aún no cumplió.
+    $tac = meta_tacticas($pdo, (int)$meta['id'], null, (int)$plan['id']);
+    foreach ($tac as $t) {
+        if ($out['piezas'] >= $tope_piezas) break;
+        if (($t['clase'] ?? 'produccion') !== 'produccion') continue;
+        if (!in_array($t['estado'], ['pendiente','en_curso'], true)) continue;
+
+        // ¿Le falta trabajo a esta jugada?
+        $p = jugada_progreso($pdo, $t);
+        if ($p['creadas'] >= (int)$t['piezas_meta']) continue;
+
+        try {
+            $r = jugada_ejecutar($pdo, $marca_id, (int)$t['id']);
+            if (!empty($r['ok']) && (int)$r['creadas'] > 0) {
+                $out['piezas']     += (int)$r['creadas'];
+                $out['recicladas'] += (int)$r['recicladas'];
+                $out['jugadas']++;
+                $out['detalle'][] = $t['titulo'] . ': ' . (int)$r['creadas'] . ' pieza(s)';
+            }
+        } catch (Throwable $e) { error_log('plan_ejecutar_pendientes: ' . $e->getMessage()); }
+    }
+    return $out;
+}
+
+/**
  * EJECUTAR LA JUGADA — el corillo produce TODO el trabajo de una.
  * Lento a propósito (escribe + hace arte): va por la cola, nunca en la
  * pantalla del dueño.
