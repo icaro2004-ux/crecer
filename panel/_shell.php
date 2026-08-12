@@ -24,6 +24,9 @@ $notif_nl = function_exists('notif_no_leidas') ? notif_no_leidas($pdo, $marca_id
 // órdenes es un ASSET del negocio, no exceso — no se esconde.
 $nav = [
   ['key'=>'inicio',    'ic'=>'home',    'lb'=>'Inicio',     'hr'=>"$BASE/index.php?marca=$marca_id"],
+  // LA META (2026-08-12): el norte del negocio. Va arriba porque gobierna todo
+  // lo demás — el corillo trabaja PARA esto, no para llenar el calendario.
+  ['key'=>'meta',      'ic'=>'compass', 'lb'=>'Tu Meta',    'hr'=>"$BASE/meta.php?marca=$marca_id"],
   ['key'=>'contenido', 'ic'=>'list', 'lb'=>'Tus Posts',  'hr'=>"$BASE/propuestas.php?marca=$marca_id"],
   ['key'=>'sala',      'ic'=>'sparkles','lb'=>'La Sala',    'hr'=>"$BASE/sala.php?marca=$marca_id"],
   ['key'=>'reels',     'ic'=>'camera',  'lb'=>'Reels',      'hr'=>"$BASE/reels.php?marca=$marca_id"],

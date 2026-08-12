@@ -106,7 +106,7 @@ function campana_estrategia(PDO $pdo, int $marca_id, string $ctx, string $copy):
  * No escribe prompts ni piensa en IA. La imagen COMPLEMENTA la emoción, no ilustra el copy.
  * @return array Visual Brief (o [] si falla).
  */
-function director_creativo_visual(PDO $pdo, int $marca_id, string $que_vende, string $copy, string $estrategia, array $estilo, bool $con_texto, string $nombre, string $instr = ''): array {
+function director_creativo_visual(PDO $pdo, int $marca_id, string $que_vende, string $copy, string $estrategia, array $estilo, bool $con_texto, string $nombre, string $instr = '', array $lente = [], string $evitar = ''): array {
     $guia = "Guía de estilo visual ({$estilo['nombre']}): luz={$estilo['lighting']}; composición={$estilo['composition']}; "
           . "paleta={$estilo['palette']}; fotografía={$estilo['photography']}; atmósfera={$estilo['atmosphere']}; "
           . "contraste={$estilo['contrast']}; profundidad={$estilo['dof']}; color={$estilo['treatment']}.";
@@ -124,10 +124,25 @@ function director_creativo_visual(PDO $pdo, int $marca_id, string $que_vende, st
          . "Respeta la guía de estilo. Devuelve SOLO JSON con: emotion, visual_story, primary_subject, secondary_elements (array), "
          . "background, lighting, camera, lens, composition, focus, color_palette (array), textures (array), mood, visual_style, "
          . "quality, negative (array). {$extra_txt}";
+    // ANTI-SLOP: el estilo de marca se respeta, pero la IDEA tiene que ser otra.
+    // El lente asignado (rotación determinística) manda sobre el atractor del
+    // modelo, y la memoria de lo ya hecho le cierra la puerta a repetirse.
+    if ($lente) {
+        $sys .= " APROXIMACIÓN VISUAL ASIGNADA para ESTA imagen — «{$lente['nombre']}»: {$lente['mandato']} "
+              . "Esta aproximación NO se negocia: es la idea de esta pieza. El estilo de marca (luz, paleta, "
+              . "tratamiento) se respeta igual, pero la COMPOSICIÓN y el SUJETO salen de esta aproximación.";
+    }
+    if (trim($evitar) !== '') {
+        $sys .= " VARIEDAD OBLIGATORIA: repetir la fórmula de las imágenes anteriores de este negocio es el PEOR "
+              . "resultado posible — el dueño lo nota y se va. Cambia el sujeto, el gesto, el ángulo y el escenario.";
+    }
+
     $prompt = "Estrategia (qué emoción): {$estrategia}\n"
             . "Negocio (lo que vende): " . ($que_vende ?: 'productos/servicios') . ($nombre !== '' ? " · Nombre: {$nombre}" : '') . "\n"
             . "Copy de referencia (para el TONO, NO para copiar literal): \"{$copy}\"\n"
             . ($instr !== '' ? "Pedido del dueño: {$instr}\n" : '')
+            . ($lente ? "Aproximación asignada: «{$lente['nombre']}» — {$lente['mandato']}\n" : '')
+            . (trim($evitar) !== '' ? "\n{$evitar}" : '')
             . $guia . "\n\nDiseña el Visual Brief.";
     try {
         $r = ia_ejecutar($pdo, 'director', 'Director de arte (visual brief)', $prompt, [
@@ -188,11 +203,28 @@ function campana_visual(PDO $pdo, int $marca_id, array $m, string $copy, array $
     $estilo_key = estilo_por_industria($cat, $que_vende);
     $estilo = biblioteca_estilos()[$estilo_key];
 
+    // ── ANTI-SLOP: memoria + rotación de la IDEA ──
+    //  El estilo de marca ya quedó fijado arriba (identidad). Aquí decidimos que
+    //  la IMAGEN sea distinta a las anteriores: se asigna el lente que lleva más
+    //  tiempo sin usarse y se le enseña al Director lo que ya hizo.
+    require_once __DIR__ . '/variedad_visual.php';
+    $lente = ['clave' => '', 'nombre' => '', 'mandato' => '', 'mata' => []];
+    $evitar = '';
+    try {
+        $lente  = variedad_lente_asignado($pdo, $marca_id, $opts['lente'] ?? null);
+        $evitar = variedad_evitar_txt($pdo, $marca_id, 6);
+    } catch (Throwable $e) { error_log('campana_visual variedad: '.$e->getMessage()); }
+
     $prompt = ''; $brief = []; $estrategia = '';
     try {
         $estrategia = campana_estrategia($pdo, $marca_id, ($ctx !== '' ? $ctx : $que_vende), $copy);
-        $brief = director_creativo_visual($pdo, $marca_id, $que_vende, $copy, $estrategia, $estilo, $con_texto, $nombre, $instr);
-        if (!empty($brief)) $prompt = ingeniero_prompt_visual($pdo, $marca_id, $brief, $con_texto);
+        $brief = director_creativo_visual($pdo, $marca_id, $que_vende, $copy, $estrategia, $estilo, $con_texto, $nombre, $instr, $lente, $evitar);
+        if (!empty($brief)) {
+            $prompt = ingeniero_prompt_visual($pdo, $marca_id, $brief, $con_texto);
+            // Queda la huella: la próxima imagen sabrá que esta existió.
+            try { variedad_registrar($pdo, $marca_id, (string)$lente['clave'], $brief, $opts['contenido_id'] ?? null); }
+            catch (Throwable $e) { error_log('campana_visual huella: '.$e->getMessage()); }
+        }
     } catch (Throwable $e) { error_log('campana_visual pipeline: '.$e->getMessage()); }
 
     // Respaldo: el director simple (dirigir_arte). Si TODO falla, '' → generar_grafica usa su prompt.
@@ -209,10 +241,20 @@ function campana_visual(PDO $pdo, int $marca_id, array $m, string $copy, array $
     if ($prompt !== '') {
         $u = mb_strtolower($copy, 'UTF-8');
         $variedad = (bool)preg_match('/docena|variedad|surtid|todos los sabores|sabores|assortment|evento|catering|caja|selecci/u', $u);
-        $prompt .= ' Composition mandate: a full commercial editorial scene with real depth, professional food styling and'
-                 . ' buying context — NOT an extreme close-up, macro, or a single isolated centered product on an empty blurred'
-                 . ' background. Negative prompts: macro, extreme close-up, single isolated product, empty blurred background, catalog cutout.';
+        // El mandato anti-macro aplica SALVO cuando el lente asignado ES el del
+        // detalle (ahí el close-up es la idea, no el sesgo).
+        if (($lente['clave'] ?? '') !== 'detalle_textura') {
+            $prompt .= ' Composition mandate: a full commercial editorial scene with real depth, professional food styling and'
+                     . ' buying context — NOT an extreme close-up, macro, or a single isolated centered product on an empty blurred'
+                     . ' background.';
+        }
         if ($variedad) $prompt .= ' Show a generous assortment / open box with several different items, abundant and appetizing.';
+        // Negativos de VARIEDAD: matan la muletilla (la mano anónima sosteniendo
+        // el producto) y lo que el lente de turno prohíbe expresamente.
+        try {
+            $neg = variedad_negativos($lente);
+            if ($neg !== '') $prompt .= ' Negative prompts: ' . $neg . ', empty blurred background, catalog cutout.';
+        } catch (Throwable $e) {}
     }
-    return ['prompt'=>$prompt, 'brief'=>$brief, 'estrategia'=>$estrategia, 'estilo'=>$estilo_key];
+    return ['prompt'=>$prompt, 'brief'=>$brief, 'estrategia'=>$estrategia, 'estilo'=>$estilo_key, 'lente'=>$lente['clave'] ?? ''];
 }

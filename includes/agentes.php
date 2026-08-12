@@ -740,7 +740,29 @@ SYS;
         if ($txt !== '') $mensajes[] = ['role' => $rol, 'texto' => $txt];
     }
 
+    // HABLA CON UN COMERCIANTE, NO CON UN MERCADÓLOGO: si usa una palabra del
+    // oficio (alcance, engagement, lead, CTA, boost, pauta), la explica ahí mismo.
+    // Democratizar el mercadeo es el producto; no se democratiza lo que no se entiende.
+    $sistema .= "\n- El dueño NO es experto en redes ni en mercadeo. Si usas una palabra del oficio (alcance, "
+        . "engagement, lead, CTA, boost, pauta, orgánico, conversión), la explicas en la MISMA frase y en cristiano. "
+        . "Ejemplo: \"ponle $20 al post que mejor va, para que se lo enseñen a más gente del área (a eso le dicen "
+        . "'boost')\". Nunca lo hagas sentir bruto: explicas como quien le enseña a un socio.\n";
+
+    // LA META: si el negocio persigue un número, la Estratega habla desde ahí —
+    // así se puede discutir y ajustar la meta en la Sala, no solo en su pantalla.
+    $meta_txt = '';
+    try {
+        require_once __DIR__ . '/meta_negocio.php';
+        $meta_txt = meta_para_prompt($pdo, $marca_id);
+    } catch (Throwable $e) {}
+    if (trim($meta_txt) !== '') {
+        $sistema .= "\n- El negocio tiene una META activa (te la paso abajo). Todo consejo se mide contra ella. Si el "
+            . "dueño pide algo que no la acerca, dilo. Si pide cambiarla (subirla, bajarla, mover la fecha), confirma "
+            . "el cambio y dile que lo ajuste en la pantalla de Tu Meta — o que te diga y el corillo reajusta el plan.\n";
+    }
+
     $prompt = "Perfil del negocio:\n{$ctx}\n\n"
+        . (trim($meta_txt) !== '' ? $meta_txt . "\n" : '')
         . "Snapshot operacional actual:\n{$snapshot}\n\n"
         . "El dueño pregunta/plantea:\n\"{$pregunta}\"\n\n"
         . "Responde como copiloto ejecutivo de Encuentralo: diagnostico breve, proximo paso y, si hace falta, una pregunta.";
@@ -1286,6 +1308,11 @@ function planificar_mes(PDO $pdo, int $marca_id, int $anio, int $mes, int $n_pie
     require_once __DIR__ . '/optimizador.php';
     $lecciones_txt = optimizador_para_prompt($pdo, $marca_id);
     $momento_opt   = optimizador_mejor_momento($pdo, $marca_id);
+    // LA META manda sobre el plan: si el negocio declaró un número que perseguir,
+    // el calendario deja de ser "contenido variado" y se convierte en la campaña
+    // que empuja ESE número (con su CTA obligado). Sin meta, todo sigue igual.
+    require_once __DIR__ . '/meta_negocio.php';
+    $meta_txt = meta_para_prompt($pdo, $marca_id);
 
     $sistema = <<<SYS
 Eres el ESTRATEGA de contenido de Crecer, un departamento de marketing con IA
@@ -1306,8 +1333,17 @@ SYS;
     // manda en el plan: se inyecta como memoria del negocio.
     // (la memoria aprendida ya viene dentro del cerebro_negocio, en el contexto)
 
+    // Con meta viva, el plan es una CAMPAÑA, no un calendario bonito: cada pieza
+    // tiene que empujar el número y cerrar pidiendo la acción.
+    if (trim($meta_txt) !== '') {
+        $sistema .= "\n- HAY UNA META EN JUEGO (abajo). Cada pieza tiene que empujar ESE número: si una idea no "
+                  . "acerca a la meta, no va. La `idea` de cada pieza TERMINA con el llamado a la acción exacto "
+                  . "(qué tiene que hacer la gente: escribir por WhatsApp, comentar una palabra, separar el suyo).";
+    }
+
     $enfoque = trim($enfoque);
     $prompt = "Perfil del negocio:\n{$ctx}\n\n"
+        . (trim($meta_txt) !== '' ? $meta_txt . "\n" : '')
         . ($enfoque !== '' ? "ENFOQUE DE LA SEMANA (lo fijó la Estratega — alinea las piezas a esto):\n\"{$enfoque}\"\n\n" : '')
         . ($lecciones_txt !== '' ? $lecciones_txt . "\n" : '')
         . "Diseña la estrategia de {$n_piezas} piezas para el mes {$mes}/{$anio}, con pilares variados.\n"
@@ -1856,6 +1892,14 @@ SYS;
     $prompt = "Perfil del negocio:\n{$ctx}\n\n"
         . "Plataforma: {$pieza['plataforma']} | Tipo: {$pieza['tipo']}\n"
         . "Idea de esta pieza: {$idea}\n";
+    // LA META: si el negocio persigue un número, el caption cierra pidiendo la
+    // acción que lo mueve — no un "visítanos" de relleno.
+    require_once __DIR__ . '/meta_negocio.php';
+    $__meta_txt = meta_para_prompt($pdo, (int)$pieza['marca_id']);
+    if (trim($__meta_txt) !== '') {
+        $prompt .= "\n" . $__meta_txt
+                 . "El llamado a la acción de este caption tiene que ser el de la meta, dicho con la voz del negocio.\n";
+    }
     if ($debate['brief'] !== '') {
         $prompt .= "\n🔥 BRIEF DEL CORILLO (síguelo — dale ESTE ángulo atrevido, sin inventar datos del negocio):\n"
                  . $debate['brief'] . "\n";
@@ -2217,9 +2261,29 @@ function trabajo_autonomo(PDO $pdo, int $marca_id, string $enfoque = ''): array 
         return ['creadas' => 0, 'ids' => [], 'razon' => 'planificador falló: ' . substr($e->getMessage(), 0, 100)];
     }
 
+    // ¿Bajo qué meta y qué jugada nace esta tanda? Se amarra a cada pieza para
+    // que Resultados pueda decir la verdad después ("estos posts eran de la meta").
+    $meta_id = null; $tactica_id = null;
+    try {
+        require_once __DIR__ . '/meta_negocio.php';
+        $__meta = meta_activa($pdo, $marca_id);
+        if ($__meta) {
+            $meta_id = (int)$__meta['id'];
+            $__t = meta_tactica_de_turno($pdo, $__meta);
+            if ($__t) $tactica_id = (int)$__t['id'];
+        }
+    } catch (Throwable $e) { /* sin meta el relevo corre igual que siempre */ }
+
     $ids = [];
     $i = 0;
     $reprog = $pdo->prepare("UPDATE crecer_contenido SET fecha_programada=? WHERE id=? AND marca_id=?");
+    // Amarre a la meta: aparte y best-effort, porque la columna solo existe
+    // después de correr la migración 2026-08-12_crecer_meta.sql.
+    $amarrar = null;
+    if ($meta_id !== null) {
+        try { $amarrar = $pdo->prepare("UPDATE crecer_contenido SET meta_id=?, tactica_id=? WHERE id=? AND marca_id=?"); }
+        catch (Throwable $e) { $amarrar = null; }
+    }
     foreach ($plan['piezas'] as $pz) {
         $cid = (int)$pz['id'];
         $cap = ''; $visual = '';
@@ -2238,6 +2302,7 @@ function trabajo_autonomo(PDO $pdo, int $marca_id, string $enfoque = ''): array 
         // Repartir en los próximos días (look "te dejé la semana lista")
         $fecha = date('Y-m-d 10:00:00', strtotime('+' . ($i + 1) . ' day'));
         $reprog->execute([$fecha, $cid, $marca_id]);
+        if ($amarrar) { try { $amarrar->execute([$meta_id, $tactica_id, $cid, $marca_id]); } catch (Throwable $e) {} }
         $ids[] = $cid;
         $i++;
     }
@@ -2267,11 +2332,29 @@ function estratega_enfoque_semana(PDO $pdo, int $marca_id): string {
         } catch (Throwable $e) {}
 
         $hoy = date('Y-m-d');
-        $sistema = "Eres LA ESTRATEGA de Crecer para un negocio boricua. En 1-2 frases define el ENFOQUE "
-            . "de ESTA semana: qué debe empujar el negocio y POR QUÉ (aprovecha fechas boricuas, la quincena, "
-            . "el fin de semana, la temporada, o un pilar que falte por trabajar). Concreto, accionable y de "
-            . "ESTE negocio. NO repitas el ángulo de los últimos temas. Devuelve SOLO el enfoque, sin títulos ni saludo.";
-        $prompt = "Perfil del negocio:\n{$ctx}\n\nHoy es {$hoy}.\n{$recientes}\n¿Cuál es el enfoque de la semana?";
+
+        // ¿HAY META? Entonces la Estratega deja de improvisar: el enfoque sale de
+        // la jugada que toca del plan, y su trabajo es aterrizarla a esta semana.
+        // (Antes fijaba el norte mirando solo el perfil — bonito, pero sin destino.)
+        require_once __DIR__ . '/meta_negocio.php';
+        $meta_txt = meta_para_prompt($pdo, $marca_id);
+
+        if (trim($meta_txt) !== '') {
+            $sistema = "Eres LA ESTRATEGA de Crecer para un negocio boricua. El negocio tiene una META en juego y un "
+                . "plan con jugadas. En 1-2 frases define el ENFOQUE de ESTA semana: cómo se aterriza la jugada que "
+                . "toca para empujar ese número, aprovechando lo que da el calendario boricua (quincena, fin de "
+                . "semana, fiestas, temporada). Concreto y de ESTE negocio. NO repitas el ángulo de los últimos "
+                . "temas. Habla en cristiano: nada de jerga de mercadeo sin explicar. Devuelve SOLO el enfoque, "
+                . "sin títulos ni saludo.";
+            $prompt = "Perfil del negocio:\n{$ctx}\n\n{$meta_txt}\nHoy es {$hoy}.\n{$recientes}\n"
+                . "¿Cuál es el enfoque de esta semana para acercarnos a la meta?";
+        } else {
+            $sistema = "Eres LA ESTRATEGA de Crecer para un negocio boricua. En 1-2 frases define el ENFOQUE "
+                . "de ESTA semana: qué debe empujar el negocio y POR QUÉ (aprovecha fechas boricuas, la quincena, "
+                . "el fin de semana, la temporada, o un pilar que falte por trabajar). Concreto, accionable y de "
+                . "ESTE negocio. NO repitas el ángulo de los últimos temas. Devuelve SOLO el enfoque, sin títulos ni saludo.";
+            $prompt = "Perfil del negocio:\n{$ctx}\n\nHoy es {$hoy}.\n{$recientes}\n¿Cuál es el enfoque de la semana?";
+        }
         $r = ia_ejecutar($pdo, 'estratega', 'Enfoque de la semana', $prompt, [
             'marca_id' => $marca_id, 'sistema' => $sistema,
             'modelo' => CRECER_COPILOTO_MODEL,
@@ -2332,6 +2415,13 @@ function relevo_del_corillo(PDO $pdo, int $marca_id): array {
     $res = trabajo_autonomo($pdo, $marca_id, $enfoque);
     // 4) El Analista: cierra el relevo con los números reales.
     analitica_del_relevo($pdo, $marca_id);
+    // 5) La meta: ¿ya se logró? ¿se venció? Se cierra sola, con progreso MEDIDO
+    //    (nunca por corazonada). Si no hay meta, no pasa nada.
+    try {
+        require_once __DIR__ . '/meta_negocio.php';
+        $cambio = meta_revisar($pdo, $marca_id);
+        if ($cambio !== '') $res['meta'] = $cambio;
+    } catch (Throwable $e) { error_log('relevo meta: ' . $e->getMessage()); }
     return $res;
 }
 
@@ -2589,8 +2679,25 @@ function sala_saludo(PDO $pdo, int $marca_id): array {
     }
     $m = leer_marca($pdo, $marca_id);
     $gte = equipo_nombre($m, 'gerente');
-    return ['respuesta' => "Aquí está el corillo, listo. 👋 Dime en qué andamos: una idea que quieras montar, fechas u ofertas "
-        . "que se vengan, o una orden directa como \"hazme 3 posts del combo nuevo\" y lo repartimos al equipo. — {$gte}",
+
+    // EL CORILLO SABE PARA QUÉ TRABAJA: si hay meta, el saludo arranca por ahí
+    // (y si no hay, invita a ponerla — es lo que le da sentido a todo lo demás).
+    $meta_linea = '';
+    try {
+        require_once __DIR__ . '/meta_negocio.php';
+        $meta_linea = meta_resumen_corto($pdo, $marca_id);
+    } catch (Throwable $e) {}
+
+    if ($meta_linea !== '') {
+        return ['respuesta' => "Aquí está el corillo, listo. Estamos detrás de tu meta — {$meta_linea}. "
+            . "Dime en qué andamos: una idea que quieras montar, fechas u ofertas que se vengan, o una orden directa "
+            . "como \"hazme 3 posts del combo nuevo\". Si quieres cambiar la meta o ver cómo vamos, dímelo también. — {$gte}",
+            'meeting' => false];
+    }
+    return ['respuesta' => "Aquí está el corillo, listo. Dime en qué andamos: una idea que quieras montar, fechas u ofertas "
+        . "que se vengan, o una orden directa como \"hazme 3 posts del combo nuevo\" y lo repartimos al equipo. "
+        . "Y si me dices qué quieres lograr este mes (más pedidos, que te escriban más, que te conozca más gente), "
+        . "te armo el plan para llegar. — {$gte}",
         'meeting' => false];
 }
 

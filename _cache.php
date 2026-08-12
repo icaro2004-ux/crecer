@@ -193,6 +193,118 @@ if (($_GET['test'] ?? '') === 'publicador') {
     exit;
 }
 
+// ── LA META: ¿el corillo sabe para qué número trabaja?  &test=meta
+//    Determinista y GRATIS: lee la meta activa de cada marca, mide el progreso
+//    con señales REALES y — lo importante — imprime EL BLOQUE QUE SE LE INYECTA
+//    AL PLANIFICADOR. Si ese bloque sale vacío, la meta es adorno; si sale con
+//    la jugada y el CTA, está gobernando el motor de verdad.
+//    &marca=ID para una sola. &plan=1 regenera el plan con la Estratega (GASTA).
+if (($_GET['test'] ?? '') === 'meta') {
+    require_once __DIR__ . '/includes/meta_negocio.php';
+    echo "LA META DEL NEGOCIO — el norte del corillo\n" . str_repeat('=', 46) . "\n\n";
+
+    // ¿Corrió la migración?
+    $tabla_ok = false;
+    try { $pdo->query("SELECT 1 FROM crecer_meta LIMIT 1"); $tabla_ok = true; }
+    catch (Throwable $e) { echo "TABLA crecer_meta: NO EXISTE todavía.\n"
+        . "  → Corre migrations/2026-08-12_crecer_meta.sql en phpMyAdmin.\n"
+        . "  (Sin eso, el producto sigue funcionando igual que antes — la meta simplemente no existe.)\n\n"; }
+    if ($tabla_ok) echo "Tabla crecer_meta: OK\n\n";
+
+    $mids = isset($_GET['marca'])
+        ? [(int)$_GET['marca']]
+        : array_map('intval', $pdo->query("SELECT id FROM crecer_marca ORDER BY id")->fetchAll(PDO::FETCH_COLUMN));
+
+    foreach ($mids as $mid) {
+        $nom = (string)$pdo->query("SELECT nombre_negocio FROM crecer_marca WHERE id={$mid}")->fetchColumn();
+        echo "── Marca {$mid} · {$nom}\n";
+        $meta = $tabla_ok ? meta_activa($pdo, $mid) : null;
+        if (!$meta) { echo "   (sin meta activa — el corillo publica, pero no persigue nada)\n\n"; continue; }
+
+        $def  = meta_objetivo_def((string)$meta['objetivo']);
+        $prog = meta_progreso($pdo, $meta);
+        echo "   Objetivo: {$def['titulo']} · meta de "
+           . meta_fmt($meta['cantidad'] !== null ? (float)$meta['cantidad'] : null, (string)$meta['objetivo'])
+           . (!empty($meta['fecha_limite']) ? " para el {$meta['fecha_limite']}" : ' (sin fecha)') . "\n";
+        echo "   Medible: " . ($prog['medible'] ? 'sí — ' . $def['senal'] : 'NO (se dice claro, no se inventa)') . "\n";
+        if ($prog['medible']) {
+            echo "   Progreso REAL: " . ($prog['actual'] === null ? 'todavía sin dato' : meta_fmt((float)$prog['actual'], (string)$meta['objetivo']))
+               . ($prog['pct'] !== null ? " ({$prog['pct']}%)" : '')
+               . ($prog['dias_rest'] !== null ? " · quedan {$prog['dias_rest']} días" : '') . "\n";
+            if ($prog['al_dia'] !== null) echo "   Ritmo: " . ($prog['al_dia'] ? 'va en ritmo' : 'ATRASADA') . "\n";
+        }
+        if (trim((string)$meta['diagnostico']) !== '') echo "   Estratega: " . trim((string)$meta['diagnostico']) . "\n";
+
+        if (($_GET['plan'] ?? '') === '1') {
+            echo "\n   [GASTA] Regenerando el plan con la Estratega…\n";
+            $p = meta_plan_generar($pdo, $mid, (int)$meta['id']);
+            echo '   → ' . (!empty($p['ok']) ? count($p['tacticas']) . ' jugada(s) · veredicto: ' . $p['veredicto']
+                                             : 'falló: ' . ($p['err'] ?? '?')) . "\n";
+        }
+
+        $tac = meta_tacticas($pdo, (int)$meta['id']);
+        echo "   Jugadas: " . count($tac) . "\n";
+        foreach ($tac as $t) {
+            echo "     · [{$t['tipo']}/{$t['quien']}/sem{$t['semana']}] {$t['titulo']}"
+               . ($t['estado'] !== 'pendiente' ? " ({$t['estado']})" : '')
+               . ($t['inversion'] !== null ? " · \${$t['inversion']}" : '') . "\n";
+            if (trim((string)$t['cta']) !== '') echo "        CTA: {$t['cta']}\n";
+        }
+        $turno = meta_tactica_de_turno($pdo, $meta);
+        echo "   Jugada de turno: " . ($turno ? $turno['titulo'] : '(ninguna pendiente)') . "\n";
+
+        echo "\n   ── LO QUE SE LE INYECTA AL MOTOR (planificador + creador) ──\n";
+        $iny = meta_para_prompt($pdo, $mid);
+        echo $iny === '' ? "   (VACÍO — la meta NO está gobernando el motor)\n"
+                         : preg_replace('/^/m', '   | ', rtrim($iny)) . "\n";
+        echo "\n   Enfoque de la semana que saldría: " . (meta_enfoque_semana($pdo, $mid) ?: '(sin meta)') . "\n\n";
+    }
+    echo "(Sin &plan=1 esto no gasta ni un centavo: solo lee y mide.)\n";
+    exit;
+}
+
+// ── VARIEDAD VISUAL: el antídoto del AI slop.  &test=variedad
+//    Determinista y GRATIS. Enseña qué composiciones YA hizo esta marca (memoria
+//    propia + la reconstruida desde el log del Director) y qué lente le toca a la
+//    próxima imagen. Si el lente asignado se repite entre corridas o la memoria
+//    sale vacía con posts hechos, el anti-slop no está mordiendo.
+if (($_GET['test'] ?? '') === 'variedad') {
+    require_once __DIR__ . '/includes/variedad_visual.php';
+    echo "VARIEDAD VISUAL — que no se repita la misma idea\n" . str_repeat('=', 50) . "\n\n";
+
+    $tabla_ok = false;
+    try { $pdo->query("SELECT 1 FROM crecer_visual_huella LIMIT 1"); $tabla_ok = true; }
+    catch (Throwable $e) { echo "TABLA crecer_visual_huella: NO EXISTE todavía.\n"
+        . "  → Corre migrations/2026-08-12_crecer_variedad_visual.sql en phpMyAdmin.\n"
+        . "  (Mientras tanto la memoria funciona igual, reconstruida desde crecer_ia_log.)\n\n"; }
+    if ($tabla_ok) echo "Tabla crecer_visual_huella: OK\n\n";
+
+    echo "Banco de lentes (" . count(variedad_lentes()) . " formas distintas de mirar el negocio):\n";
+    foreach (variedad_lentes() as $k => $l) echo "  · {$k} — {$l['nombre']}\n";
+    echo "\n";
+
+    $mids = isset($_GET['marca'])
+        ? [(int)$_GET['marca']]
+        : array_map('intval', $pdo->query("SELECT id FROM crecer_marca ORDER BY id")->fetchAll(PDO::FETCH_COLUMN));
+
+    foreach ($mids as $mid) {
+        $nom = (string)$pdo->query("SELECT nombre_negocio FROM crecer_marca WHERE id={$mid}")->fetchColumn();
+        echo "── Marca {$mid} · {$nom}\n";
+        $ult = variedad_ultimas($pdo, $mid, 6);
+        if (!$ult) { echo "   (sin historial visual todavía — la primera imagen es libre)\n"; }
+        foreach ($ult as $u) {
+            echo "   · " . ($u['lente'] !== '' ? "[{$u['lente']}] " : '[del log] ')
+               . mb_substr((string)($u['resumen'] ?: $u['sujeto']), 0, 110) . "\n";
+        }
+        $l = variedad_lente_asignado($pdo, $mid);
+        echo "   → LENTE QUE TOCA a la próxima: {$l['clave']} ({$l['nombre']})\n";
+        echo "     Negativos que se pegan al prompt: " . variedad_negativos($l) . "\n\n";
+    }
+    echo "(Prueba real: corre esto, genera una imagen, y vuelve a correrlo — el lente\n"
+       . " asignado tiene que HABER CAMBIADO y la huella nueva aparecer arriba.)\n";
+    exit;
+}
+
 // ── EL OPTIMIZADOR: ¿qué aprendió el corillo de TUS resultados?  &test=optimizador
 //    Determinista y GRATIS (cero llamadas a modelos): analiza las métricas reales
 //    y muestra las lecciones con su evidencia. Solo opina con ≥5 posts medidos y
