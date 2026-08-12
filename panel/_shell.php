@@ -32,7 +32,10 @@ $nav = [
   ['key'=>'inicio',    'ic'=>'home',    'lb'=>'Inicio',     'bot'=>1, 'hr'=>"$BASE/index.php?marca=$marca_id"],
   // LA META (2026-08-12): el norte del negocio. Va arriba porque gobierna todo
   // lo demás — el corillo trabaja PARA esto, no para llenar el calendario.
-  ['key'=>'meta',      'ic'=>'compass', 'lb'=>'Tu Meta',    'bot'=>1, 'hr'=>"$BASE/meta.php?marca=$marca_id"],
+  // Tu Meta NO va en la barra del móvil (se pone una vez por semana; el
+  // seguimiento diario vive en el card del Home). Por eso sin 'bot': tiene que
+  // seguir visible en el drawer para que se pueda llegar desde el teléfono.
+  ['key'=>'meta',      'ic'=>'compass', 'lb'=>'Tu Meta',    'hr'=>"$BASE/meta.php?marca=$marca_id"],
   ['key'=>'contenido', 'ic'=>'list', 'lb'=>'Tus Posts',  'bot'=>1, 'hr'=>"$BASE/propuestas.php?marca=$marca_id"],
   ['key'=>'sala',      'ic'=>'sparkles','lb'=>'La Sala',    'bot'=>1, 'hr'=>"$BASE/sala.php?marca=$marca_id"],
   ['key'=>'reels',     'ic'=>'camera',  'lb'=>'Reels',      'hr'=>"$BASE/reels.php?marca=$marca_id"],
@@ -104,7 +107,8 @@ $nav_perfil = [
           <?= ico($n['ic']) ?><?= $n['lb'] ?>
         </a>
       <?php endforeach; ?>
-      <a href="<?= $BASE ?>/calendario.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='calendario'?'on':'' ?>">
+      <?php /* .dup — el Calendario vive en la barra de abajo del móvil */ ?>
+      <a href="<?= $BASE ?>/calendario.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='calendario'?'on ':'' ?>dup">
         <?= ico('calendar') ?>Calendario
       </a>
       <a href="<?= $BASE ?>/ordenes.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='ordenes'?'on':'' ?>">

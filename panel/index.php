@@ -658,6 +658,30 @@ $credito  = $has_deck
   .norte-cerrada h2{font-family:'Oswald',var(--font-display,sans-serif);font-size:24px;color:var(--tinta);margin:0 0 8px;letter-spacing:.3px}
   .norte-cerrada p{font-size:13.5px;color:var(--muted);line-height:1.55;margin:0 auto;max-width:400px}
 
+  /* El card ENTERO es tocable: es el objeto más importante de la pantalla,
+     no puede pedirle al pulgar que cace un link chiquito. */
+  a.norte.viva{display:block;text-decoration:none;color:inherit;transition:transform .14s cubic-bezier(.4,0,.2,1),box-shadow .18s}
+  a.norte.viva:hover{transform:translateY(-2px);box-shadow:0 16px 38px -18px rgba(0,120,115,.55)}
+  a.norte.viva:active{transform:scale(.995)}
+  .n-ir{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:14px;
+    font-size:13.5px;font-weight:800;color:var(--teal-700,#00827e);
+    border-top:1px dashed color-mix(in srgb,var(--teal) 28%,#fff);padding-top:12px}
+  .n-ir i{font-style:normal;transition:transform .18s}
+  a.norte.viva:hover .n-ir i{transform:translateX(4px)}
+
+  /* ATRASADO: el card cambia de temperatura. El color es información —
+     de un vistazo, desde lejos, sabes si hay que apretar. */
+  .norte.atrasado{background:linear-gradient(135deg,color-mix(in srgb,var(--coral) 14%,#fff),var(--card));
+    border-color:color-mix(in srgb,var(--coral) 38%,#fff);box-shadow:0 10px 30px -18px rgba(255,107,61,.55)}
+  .norte.atrasado .n-eb{color:#c2410c}
+  .norte.atrasado .n-barra i{background:linear-gradient(90deg,var(--coral),var(--magenta))}
+  .norte.atrasado .n-ir{color:#c2410c;border-top-color:color-mix(in srgb,var(--coral) 32%,#fff)}
+  a.norte.viva.atrasado:hover{box-shadow:0 16px 38px -18px rgba(255,107,61,.6)}
+
+  @media (prefers-reduced-motion:reduce){
+    a.norte.viva,a.norte.viva:hover,.n-ir i{transition:none;transform:none}
+  }
+
   .hz-card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:16px;box-shadow:var(--shadow-sm);margin-top:16px}
   .hz-ch{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}
   .hz-ch b{font-family:var(--font-display);font-weight:700;font-size:16px;color:var(--ink-soft,#4a444c)}
@@ -862,14 +886,17 @@ $credito  = $has_deck
   <?php else:
     $__def = meta_objetivo_def((string)$__meta['objetivo']);
     $__pct = $__prog['pct'] !== null ? (int)$__prog['pct'] : 0;
+    // El COLOR informa, no decora: cálido = vas atrasado y hay que apretar.
+    // Así se lee el estado desde lejos, sin leer una palabra.
+    $__cls = $__prog['al_dia'] === false ? ' atrasado' : '';
   ?>
-    <section class="norte">
+    <a class="norte viva<?= $__cls ?>" href="<?= $BASE ?>/meta.php?<?= $mid ?>">
       <div class="n-top">
         <div>
           <span class="n-eb">Tu meta de este mes</span>
           <div class="n-num">
             <?php if ($__prog['medible'] && $__prog['actual'] !== null): ?>
-              <b><?= $h(number_format((float)$__prog['actual'])) ?></b>
+              <b data-cuenta="<?= (int)$__prog['actual'] ?>">0</b>
               <span>de <?= $h(meta_fmt($__meta['cantidad'] !== null ? (float)$__meta['cantidad'] : null, (string)$__meta['objetivo'])) ?></span>
             <?php else: ?>
               <b><?= $h(meta_fmt($__meta['cantidad'] !== null ? (float)$__meta['cantidad'] : null, (string)$__meta['objetivo'])) ?></b>
@@ -883,7 +910,7 @@ $credito  = $has_deck
       </div>
 
       <?php if ($__prog['medible'] && $__meta['cantidad'] !== null): ?>
-        <div class="n-barra"><i style="width:<?= max(2, min(100, $__pct)) ?>%"></i></div>
+        <div class="n-barra"><i data-ancho="<?= max(2, min(100, $__pct)) ?>" style="width:0"></i></div>
         <?php if ($__prog['al_dia'] === false): ?>
           <p class="n-ritmo mal">Vas atrasado para el ritmo que necesitas — el corillo está apretando.</p>
         <?php elseif ($__prog['al_dia'] === true): ?>
@@ -898,8 +925,8 @@ $credito  = $has_deck
           <p><?= $h(mb_substr((string)$__jug['que_hacer'], 0, 130)) ?></p>
         </div>
       <?php endif; ?>
-      <a class="n-cta ghost" href="<?= $BASE ?>/meta.php?<?= $mid ?>">Ver el plan completo →</a>
-    </section>
+      <span class="n-ir">Ver el plan completo <i>→</i></span>
+    </a>
   <?php endif; ?>
 
   <?php if ($hz_post):
@@ -1373,6 +1400,38 @@ $credito  = $has_deck
       else { alert('No se pudo reescribir. Intenta otra vez.'); }
     }).catch(function(){ regen.disabled=false; regen.innerHTML=old; alert('Se cayó la conexión.'); });
   });
+})();
+</script>
+
+<script>
+/* EL NORTE, vivo. Dos gestos chiquitos que hacen que el número se sienta ganado
+   en vez de impreso: cuenta hacia arriba y la barra se llena al entrar.
+   Respeta prefers-reduced-motion: si el usuario pidió menos movimiento, los
+   valores aparecen finales de una vez. */
+(function(){
+  var quieto = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var num = document.querySelector('.norte .n-num b[data-cuenta]');
+  var bar = document.querySelector('.norte .n-barra i[data-ancho]');
+
+  if (bar) {
+    var w = Math.max(2, Math.min(100, parseInt(bar.dataset.ancho, 10) || 0));
+    if (quieto) { bar.style.width = w + '%'; }
+    else { requestAnimationFrame(function(){ setTimeout(function(){ bar.style.width = w + '%'; }, 180); }); }
+  }
+  if (num) {
+    var fin = parseInt(num.dataset.cuenta, 10) || 0;
+    if (quieto || fin === 0) { num.textContent = fin.toLocaleString('es-PR'); return; }
+    var dur = Math.min(900, 260 + fin * 22), t0 = null;
+    function paso(ts){
+      if (t0 === null) t0 = ts;
+      var p = Math.min(1, (ts - t0) / dur);
+      // easing suave al final: el número "aterriza" en vez de frenar en seco
+      var v = Math.round(fin * (1 - Math.pow(1 - p, 3)));
+      num.textContent = v.toLocaleString('es-PR');
+      if (p < 1) requestAnimationFrame(paso);
+    }
+    requestAnimationFrame(paso);
+  }
 })();
 </script>
 <?php

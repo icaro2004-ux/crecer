@@ -5,10 +5,12 @@
 <!-- Bottom nav (solo móvil) · EXACTAMENTE 4 destinos, sin FAB central · Perfil vive en el avatar del top-bar -->
 <nav class="botnav botnav-crear">
   <a href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='inicio'?'on':'' ?>"><?= ico('home') ?>Inicio</a>
-  <?php /* TU META (2026-08-12) ocupa el slot del Calendario: en el pulgar tiene que
-           estar el NORTE, no la vista de lo ya planificado. El calendario sigue en el
-           menú de escritorio y por URL. Móvil = 5 destinos, ni uno más. */ ?>
-  <a href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='meta'?'on':'' ?>"><?= ico('compass') ?>Tu Meta</a>
+  <?php /* El Calendario se queda en la barra y Tu Meta NO (decisión 2026-08-12):
+           la meta se pone una vez por semana — gastar 1 de 5 slots del pulgar en
+           un ritual semanal es caro. El seguimiento diario ya vive en el card del
+           Home (grande y tocable entero), que es por donde se entra a la meta.
+           El calendario sí se consulta seguido: qué sale y cuándo. */ ?>
+  <a href="<?= $BASE ?>/calendario.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='calendario'?'on':'' ?>"><?= ico('calendar') ?>Calendario</a>
   <a href="<?= $BASE ?>/propuestas.php?marca=<?= $marca_id ?>" class="bn-crear <?= ($active ?? '')==='contenido'?'on':'' ?>"><span class="ci"><?= ico('pen') ?></span><span class="cl">Crear</span></a>
   <a href="<?= $BASE ?>/resultados.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='resultados'?'on':'' ?>"><?= ico('chart') ?>Resultados</a>
   <a href="<?= $BASE ?>/sala.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='sala'?'on':'' ?>"><?= ico('chat') ?>Sala</a>
