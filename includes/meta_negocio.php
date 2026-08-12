@@ -497,13 +497,30 @@ SYS;
         . ($contexto !== '' ? "- Con qué cuenta: {$contexto}\n" : '')
         . "\nSEÑALES REALES DEL NEGOCIO:\n" . ($senales ? '- ' . implode("\n- ", $senales) : '- Todavía sin historial.') . "\n"
         . ($lecciones !== '' ? "\n{$lecciones}" : '')
-        . "\nDiseña el plan. Devuelve JSON con esta forma EXACTA:\n"
+        . "\nCADA JUGADA ES EJECUTABLE, NO UN CONSEJO. Declara su CLASE, porque de eso depende\n"
+        . "cómo se da por cumplida (el dueño NO marca checkboxes de lo que hacemos nosotros):\n"
+        . "  · \"produccion\"   = la ejecuta el corillo produciendo contenido. Di CUÁNTAS piezas\n"
+        . "                       (1-4) y en qué formato. Se cierra sola cuando esas piezas se publican.\n"
+        . "  · \"accion_dueno\" = pasa FUERA de Crecer y necesita sus manos o su bolsillo (poner el\n"
+        . "                       boost, hablar con un vecino, tomar una foto, preparar una oferta).\n"
+        . "                       En `que_hacer` va el paso a paso EXACTO, como para alguien que\n"
+        . "                       nunca lo ha hecho.\n"
+        . "  · \"regla\"        = una forma de operar que no se 'termina' nunca (\"contesta los\n"
+        . "                       mensajes el mismo día\", \"ten el precio a la mano\"). Úsala poco.\n"
+        . "\nDevuelve JSON con esta forma EXACTA:\n"
         . '{"veredicto":"alcanzable|ambiciosa|fuera_de_alcance",'
         . '"diagnostico":"2-4 frases en cristiano: dónde está parado, qué le juega a favor y qué en contra, y si la meta da o no. Habla TÚ al dueño.",'
-        . '"tacticas":[{"tipo":"contenido|distribucion|pauta|oferta|alianza|operacion","titulo":"4-8 palabras",'
+        . '"tacticas":[{"clase":"produccion|accion_dueno|regla","piezas":3,"formato":"post|reel|carrusel|historia|mixto",'
+        . '"tipo":"contenido|distribucion|pauta|oferta|alianza|operacion","titulo":"4-8 palabras",'
         . '"que_hacer":"la instrucción concreta, 1-2 frases","por_que":"por qué mueve ESTE número, 1 frase",'
         . '"canal":"instagram|facebook|whatsapp|ambas|fisico","cta":"qué se le pide exactamente a la gente",'
         . '"inversion":null,"quien":"corillo|dueno","semana":1}]}' . "\n"
+        . "- `piezas`: SOLO en clase \"produccion\" (1-4, cuántas piezas produce el corillo). En las demás, 0.\n"
+        . "- PROPORCIÓN OBLIGATORIA: al menos la MITAD de las jugadas son \"produccion\". Máximo DOS de\n"
+        . "  \"accion_dueno\" en todo el plan, y máximo UNA \"regla\". El dueño nos paga para no tener\n"
+        . "  que hacer esto: un plan donde él tiene 4 tareas es un plan fracasado, por bueno que suene.\n"
+        . "- No partas en dos jugadas lo que es una sola acción suya (si hay que poner boost, es UNA\n"
+        . "  jugada de boost con el presupuesto repartido por dentro, no una por cada post).\n"
         . "- Entre 4 y 6 tácticas, ordenadas por impacto.\n"
         . "- `semana`: en cuál de las " . max(1, (int)ceil($dias / 7)) . " semanas del plan entra (1 = esta).\n"
         . "- `inversion`: solo en tipo 'pauta', el monto en dólares (número, sin $). En las demás, null.\n"
@@ -558,19 +575,35 @@ SYS;
         catch (Throwable $e2) {}
     }
 
-    $ins = $plan_id !== null
+    // El INSERT lleva el contrato de la jugada (clase/piezas/formato) si la
+    // migración de ejecución ya corrió; si no, cae al INSERT de antes.
+    $cols_ejec = false;
+    try { $pdo->query("SELECT clase FROM crecer_meta_tactica LIMIT 1"); $cols_ejec = true; } catch (Throwable $e) {}
+
+    $ins = $cols_ejec
         ? $pdo->prepare(
             "INSERT INTO crecer_meta_tactica
-               (meta_id, marca_id, orden, semana, tipo, titulo, que_hacer, por_que, canal, cta, inversion, quien, plan_id)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?, {$plan_id})")
-        : $pdo->prepare(
-            "INSERT INTO crecer_meta_tactica
-               (meta_id, marca_id, orden, semana, tipo, titulo, que_hacer, por_que, canal, cta, inversion, quien)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
+               (meta_id, marca_id, orden, semana, tipo, titulo, que_hacer, por_que, canal, cta, inversion, quien,
+                plan_id, clase, piezas_meta, formato)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+        : ($plan_id !== null
+            ? $pdo->prepare(
+                "INSERT INTO crecer_meta_tactica
+                   (meta_id, marca_id, orden, semana, tipo, titulo, que_hacer, por_que, canal, cta, inversion, quien, plan_id)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?, {$plan_id})")
+            : $pdo->prepare(
+                "INSERT INTO crecer_meta_tactica
+                   (meta_id, marca_id, orden, semana, tipo, titulo, que_hacer, por_que, canal, cta, inversion, quien)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"));
     $tipos_ok  = ['contenido','distribucion','pauta','oferta','alianza','operacion'];
     $canales_ok= ['instagram','facebook','whatsapp','ambas','fisico'];
     $orden = 0; $guardadas = [];
     $sin_pauta = ($meta['presupuesto_pauta'] === null || (float)$meta['presupuesto_pauta'] <= 0);
+    // COMPUERTA DE AUTOMATIZACIÓN: por mucho que el modelo insista, al dueño no
+    // se le cargan más de 2 tareas propias ni más de 1 regla. Si vendemos
+    // "el corillo lo hace", el plan no puede ser una lista de deberes suyos.
+    $tope_dueno = 2; $tope_regla = 1;
+    $n_dueno = 0; $n_regla = 0;
     foreach (array_slice($tacticas, 0, 6) as $t) {
         $tipo = in_array($t['tipo'] ?? '', $tipos_ok, true) ? $t['tipo'] : 'contenido';
         // Compuerta dura: sin presupuesto declarado NO entra pauta, diga lo que
@@ -589,10 +622,34 @@ SYS;
             ($tipo === 'pauta' && isset($t['inversion']) && is_numeric($t['inversion'])) ? (float)$t['inversion'] : null,
             (($t['quien'] ?? '') === 'dueno') ? 'dueno' : 'corillo',
         ];
+        // ── El CONTRATO de la jugada: de esto depende cómo se da por cumplida ──
+        $clase = in_array($t['clase'] ?? '', ['produccion','accion_dueno','regla'], true) ? (string)$t['clase'] : null;
+        if ($clase === null) {   // modelo viejo o respuesta incompleta: se infiere
+            $clase = $tipo === 'operacion' ? 'regla' : ((($t['quien'] ?? '') === 'dueno') ? 'accion_dueno' : 'produccion');
+        }
+        // Coherencia dura: lo que el dueño hace con sus manos NO lo produce el
+        // corillo, y una regla no se "termina" nunca. El modelo a veces mezcla.
+        if ($clase === 'produccion' && ($t['quien'] ?? '') === 'dueno' && in_array($tipo, ['pauta','alianza','oferta'], true)) {
+            $clase = 'accion_dueno';
+        }
+        if ($tipo === 'pauta') $clase = 'accion_dueno';   // el boost lo paga él, siempre
+        // Se aplica el tope: lo que sobra de tareas del dueño o de reglas, se cae.
+        // Mejor un plan más corto que uno que le devuelve el trabajo al dueño.
+        if ($clase === 'accion_dueno') { if (++$n_dueno > $tope_dueno) continue; }
+        elseif ($clase === 'regla')    { if (++$n_regla > $tope_regla) continue; }
+        $piezas  = $clase === 'produccion' ? max(1, min(4, (int)($t['piezas'] ?? 2))) : 0;
+        $formato = in_array($t['formato'] ?? '', ['post','reel','carrusel','historia','mixto'], true) ? (string)$t['formato'] : 'post';
+        if ($clase !== 'produccion') $formato = 'post';
+        // Quien ejecuta se deriva de la clase (una sola verdad, sin contradicción).
+        $fila[11] = $clase === 'produccion' ? 'corillo' : 'dueno';
+
+        if ($cols_ejec) { $fila[] = $plan_id; $fila[] = $clase; $fila[] = $piezas; $fila[] = $formato; }
+
         $ins->execute($fila);
         $guardadas[] = ['id' => (int)$pdo->lastInsertId(), 'tipo' => $tipo, 'titulo' => $fila[5],
                         'que_hacer' => $fila[6], 'por_que' => $fila[7], 'canal' => $fila[8],
-                        'cta' => $fila[9], 'inversion' => $fila[10], 'quien' => $fila[11], 'semana' => $fila[3]];
+                        'cta' => $fila[9], 'inversion' => $fila[10], 'quien' => $fila[11], 'semana' => $fila[3],
+                        'clase' => $clase, 'piezas_meta' => $piezas, 'formato' => $formato];
     }
 
     return ['ok' => true, 'diagnostico' => $diagnostico, 'veredicto' => $veredicto,

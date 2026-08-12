@@ -80,9 +80,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        // (d) Marcar una jugada. Si con esa se completó el plan, se CIERRA y queda
-        //     en observación (la lección la escribe el Analista cuando Meta reporte
-        //     los números de esos posts — juzgar hoy sería juzgar el vacío).
+        // (c2) EJECUTAR LA JUGADA — el corillo produce TODO su contenido.
+        //      Va por cola: escribir + arte de varias piezas tarda minutos y no
+        //      puede colgar la pantalla del dueño.
+        if ($accion === 'ejecutar') {
+            require_once __DIR__ . '/../includes/meta_async.php';
+            require_once __DIR__ . '/../includes/meta_ejecutar.php';
+            $tid = (int)($_POST['id'] ?? 0);
+            $t = jugada_por_id($pdo, $tid, $marca_id);
+            if (!$t) { echo json_encode(['ok'=>false,'err'=>'No encuentro esa jugada.']); exit; }
+            if (($t['clase'] ?? 'produccion') !== 'produccion') {
+                echo json_encode(['ok'=>false,'err'=>'Esta jugada la tienes que hacer tú — no es de producir contenido.']); exit;
+            }
+            $ya = meta_job_en_curso($pdo, $tid);
+            if ($ya) { echo json_encode(['ok'=>true, 'job'=>$ya, 'ya'=>true]); exit; }
+            $job = meta_job_encolar($pdo, $marca_id, $tid);
+            meta_job_disparar($job);
+            echo json_encode(['ok'=>true, 'job'=>$job]);
+            exit;
+        }
+
+        // (c3) Polling del trabajo del corillo.
+        if ($accion === 'job') {
+            require_once __DIR__ . '/../includes/meta_async.php';
+            $st = meta_job_estado($pdo, (int)($_POST['job'] ?? 0), $marca_id);
+            if (!$st) { echo json_encode(['ok'=>false,'err'=>'No encuentro ese trabajo.']); exit; }
+            echo json_encode(['ok'=>true] + $st, JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // (d) Confirmar una jugada. OJO: esto SOLO aplica a las de 'accion_dueno'
+        //     (lo que pasa fuera de Crecer). Las de producción se cierran solas
+        //     con la evidencia de publicación — el dueño no declara nuestro trabajo.
         if ($accion === 'tactica') {
             $ok = meta_tactica_estado($pdo, (int)($_POST['id'] ?? 0), $marca_id, (string)($_POST['estado'] ?? 'hecha'));
             $completo = false;
@@ -127,6 +156,12 @@ $active    = 'meta';
 $page_title = 'Tu Meta';
 require __DIR__ . '/_shell.php';
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+
+// CIERRE AUTOMÁTICO: antes de pintar nada, las jugadas cuyas piezas ya se
+// publicaron se dan por hechas SOLAS. La verdad la da la evidencia, no un
+// checkbox del dueño.
+require_once __DIR__ . '/../includes/meta_ejecutar.php';
+if ($meta) jugadas_sincronizar_marca($pdo, $marca_id);
 
 $prog = $meta ? meta_progreso($pdo, $meta) : null;
 // EL PLAN VIGENTE y su cumplimiento; las jugadas mostradas son las SUYAS.
@@ -247,6 +282,38 @@ if ($meta) {
   .jg-cta{font-size:12.5px;color:var(--tinta);background:color-mix(in srgb,var(--magenta,#EF4375) 7%,#fff);border-left:3px solid var(--magenta,#EF4375);padding:8px 11px;border-radius:0 9px 9px 0;margin-top:10px;line-height:1.45}
   .jg-ok{margin-left:auto;border:1.5px solid var(--line);background:transparent;color:var(--muted);font-family:inherit;font-weight:700;font-size:12px;padding:7px 12px;border-radius:9px;cursor:pointer;flex:none}
   .jg-ok:hover{border-color:var(--teal,#00A49F);color:var(--teal,#00A49F)}
+  .jg.regla{background:var(--crema-2,#faf8f5);border-style:dashed}
+  .jg-tag.regla{background:#eef2ff;color:#4338ca}
+
+  /* El TRABAJO de la jugada: un punto por pieza. Vacío = por hacer,
+     relleno claro = lista esperando OK, relleno fuerte = publicada. */
+  .jg-trabajo{display:flex;align-items:center;gap:10px;margin-top:11px;flex-wrap:wrap}
+  .jg-puntos{display:flex;gap:5px}
+  .jg-puntos i{width:11px;height:11px;border-radius:50%;border:1.5px solid var(--line);background:transparent;display:block;transition:background .3s}
+  .jg-puntos i.lista{background:color-mix(in srgb,var(--teal,#00A49F) 35%,#fff);border-color:color-mix(in srgb,var(--teal,#00A49F) 45%,#fff)}
+  .jg-puntos i.pub{background:var(--teal,#00A49F);border-color:var(--teal,#00A49F)}
+  .jg-est{font-size:12px;color:var(--muted);font-weight:700}
+
+  /* La acción del card — nunca decorativo */
+  .jg-hacer{width:100%;margin-top:12px;border:0;cursor:pointer;background:linear-gradient(135deg,var(--coral,#FF6B3D),var(--magenta,#EF4375));color:#fff;font-family:inherit;font-weight:800;font-size:14px;padding:12px 16px;border-radius:12px;display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .12s}
+  .jg-hacer:active{transform:scale(.98)}
+  .jg-hacer:disabled{opacity:.6;cursor:default}
+  .jg-hacer svg{width:16px;height:16px}
+  .jg-hacer.sec{background:transparent;border:1.5px solid var(--line);color:var(--muted);font-size:13px;margin-top:8px}
+  .jg-hacer.sec:hover{border-color:var(--magenta,#EF4375);color:var(--magenta,#EF4375)}
+  .jg-ver{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:12px;border:1.5px solid var(--line);background:var(--card,#fff);color:var(--tinta);text-decoration:none;font-weight:800;font-size:13.5px;padding:11px 16px;border-radius:12px}
+  .jg-ver:hover{border-color:var(--teal,#00A49F);color:var(--teal,#00A49F)}
+  .jg-ver svg{width:15px;height:15px}
+  .jg-ok2{width:100%;margin-top:12px;border:1.5px solid var(--teal,#00A49F);background:transparent;color:var(--teal,#00A49F);font-family:inherit;font-weight:800;font-size:13.5px;padding:11px 16px;border-radius:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+  .jg-ok2:hover{background:color-mix(in srgb,var(--teal,#00A49F) 8%,#fff)}
+  .jg-ok2 svg{width:15px;height:15px}
+  .jg-live{font-size:12.5px;line-height:1.5;color:var(--muted);margin-top:9px;display:none}
+  .jg-live.on{display:block}
+  .jg-live b{color:var(--tinta)}
+  .jg-live .pts span{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--magenta,#EF4375);margin:0 1px;animation:jgb 1s infinite}
+  .jg-live .pts span:nth-child(2){animation-delay:.15s}.jg-live .pts span:nth-child(3){animation-delay:.3s}
+  @keyframes jgb{0%,60%,100%{opacity:.3}30%{opacity:1}}
+  .jg-live.ok{color:#0a6a5f;background:color-mix(in srgb,var(--teal,#00A49F) 10%,#fff);border:1px solid color-mix(in srgb,var(--teal,#00A49F) 28%,#fff);border-radius:11px;padding:10px 12px}
 
   /* Encabezado del plan vigente + cumplimiento */
   .plan-cab{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin:0 0 12px;flex-wrap:wrap}
@@ -605,9 +672,12 @@ if ($meta) {
       <div class="jug">
         <?php foreach ($tacticas as $t):
           $tipo_lbl = ['contenido'=>'Contenido','distribucion'=>'Difusión','pauta'=>'Anuncio pagado',
-                       'oferta'=>'Oferta','alianza'=>'Alianza','operacion'=>'Operación'][$t['tipo']] ?? $t['tipo'];
+                       'oferta'=>'Oferta','alianza'=>'Alianza','operacion'=>'Cómo operar'][$t['tipo']] ?? $t['tipo'];
+          $clase = (string)($t['clase'] ?? 'produccion');
+          $jp    = jugada_progreso($pdo, $t);
+          $hecha = $t['estado'] === 'hecha';
         ?>
-          <div class="jg <?= $t['estado']==='hecha'?'hecha':'' ?>" data-id="<?= (int)$t['id'] ?>">
+          <div class="jg <?= $hecha?'hecha':'' ?> <?= $clase==='regla'?'regla':'' ?>" data-id="<?= (int)$t['id'] ?>">
             <div class="jg-top">
               <span class="jg-tipo <?= $h($t['tipo']) ?>"><?= $h($tipo_lbl) ?></span>
               <span class="jg-t"><?= $h($t['titulo']) ?></span>
@@ -618,18 +688,60 @@ if ($meta) {
               <p class="jg-p">Por qué: <?= $h($t['por_que']) ?></p><?php endif; ?>
             <?php if (trim((string)$t['cta']) !== ''): ?>
               <div class="jg-cta"><b>Lo que le pedimos a la gente:</b> <?= $h($t['cta']) ?></div><?php endif; ?>
+
+            <?php if ($clase === 'produccion' && (int)$jp['meta'] > 0): ?>
+              <?php /* EL TRABAJO REAL de la jugada: puntos que se van llenando
+                       según las piezas se crean y se publican. Nadie marca esto. */ ?>
+              <div class="jg-trabajo">
+                <div class="jg-puntos">
+                  <?php for ($i = 0; $i < (int)$jp['meta']; $i++): ?>
+                    <i class="<?= $i < (int)$jp['publicadas'] ? 'pub' : ($i < (int)$jp['creadas'] ? 'lista' : '') ?>"></i>
+                  <?php endfor; ?>
+                </div>
+                <span class="jg-est">
+                  <?php if ((int)$jp['creadas'] === 0): ?>
+                    <?= (int)$jp['meta'] ?> <?= (int)$jp['meta'] === 1 ? 'pieza' : 'piezas' ?> por hacer
+                  <?php elseif ((int)$jp['publicadas'] >= (int)$jp['meta']): ?>
+                    <?= (int)$jp['publicadas'] ?> publicadas — cumplida
+                  <?php else: ?>
+                    <?= (int)$jp['publicadas'] ?> publicadas · <?= (int)$jp['creadas'] - (int)$jp['publicadas'] ?> esperando tu OK
+                  <?php endif; ?>
+                </span>
+              </div>
+            <?php endif; ?>
+
             <div class="jg-meta">
-              <span class="jg-tag <?= $t['quien']==='dueno'?'dueno':'corillo' ?>">
-                <?= $t['quien']==='dueno' ? ico('users') . ' Lo haces tú' : ico('sparkles') . ' Lo hace el corillo' ?>
-              </span>
+              <?php if ($clase === 'regla'): ?>
+                <span class="jg-tag regla"><?= ico('bookmark') ?> Regla del negocio</span>
+              <?php else: ?>
+                <span class="jg-tag <?= $clase==='accion_dueno'?'dueno':'corillo' ?>">
+                  <?= $clase==='accion_dueno' ? ico('users') . ' Lo haces tú' : ico('sparkles') . ' Lo hace el corillo' ?>
+                </span>
+              <?php endif; ?>
               <?php if ($t['inversion'] !== null): ?>
                 <span class="jg-tag"><?= ico('dollar') ?> $<?= $h(number_format((float)$t['inversion'], 0)) ?></span>
               <?php endif; ?>
               <span class="jg-tag"><?= ico('clock') ?> Semana <?= (int)$t['semana'] ?></span>
-              <?php if ($t['estado'] !== 'hecha'): ?>
-                <button type="button" class="jg-ok" data-id="<?= (int)$t['id'] ?>">Marcar hecha</button>
-              <?php endif; ?>
             </div>
+
+            <?php /* LA ACCIÓN — el card nunca es decorativo: siempre hace algo */ ?>
+            <?php if (!$hecha && $clase === 'produccion'): ?>
+              <?php if ((int)$jp['creadas'] === 0): ?>
+                <button type="button" class="jg-hacer" data-id="<?= (int)$t['id'] ?>">
+                  <?= ico('sparkles') ?> Que lo haga el corillo</button>
+              <?php else: ?>
+                <a class="jg-ver" href="<?= $BASE ?>/propuestas.php?marca=<?= $marca_id ?>&jugada=<?= (int)$t['id'] ?>">
+                  <?= ico('list') ?> Ver <?= (int)$jp['creadas'] === 1 ? 'la pieza' : 'las ' . (int)$jp['creadas'] . ' piezas' ?> de esta jugada</a>
+                <?php if ((int)$jp['creadas'] < (int)$jp['meta']): ?>
+                  <button type="button" class="jg-hacer sec" data-id="<?= (int)$t['id'] ?>">
+                    Que haga <?= (int)$jp['meta'] - (int)$jp['creadas'] ?> más</button>
+                <?php endif; ?>
+              <?php endif; ?>
+            <?php elseif (!$hecha && $clase === 'accion_dueno'): ?>
+              <button type="button" class="jg-ok2" data-id="<?= (int)$t['id'] ?>">
+                <?= ico('check-circle') ?> Ya lo hice</button>
+            <?php endif; ?>
+            <div class="jg-live" data-for="<?= (int)$t['id'] ?>"></div>
           </div>
         <?php endforeach; ?>
       </div>
@@ -736,18 +848,75 @@ if ($meta) {
   function post(d){ var fd=new FormData(); fd.append('csrf',CSRF); for(var k in d) fd.append(k,d[k]);
     return fetch(URL,{method:'POST',body:fd}).then(function(r){return r.json();}); }
 
-  document.querySelectorAll('.jg-ok').forEach(function(b){
+  // ── "Que lo haga el corillo": produce TODO el contenido de la jugada ──
+  //  Va por cola (tarda minutos) y se sondea. El dueño puede irse: cuando
+  //  termine le llega la notificación.
+  document.querySelectorAll('.jg-hacer').forEach(function(b){
+    b.addEventListener('click', function(){
+      var card=b.closest('.jg'), live=card.querySelector('.jg-live');
+      card.querySelectorAll('.jg-hacer').forEach(function(x){ x.disabled=true; });
+      live.className='jg-live on';
+      live.innerHTML='<span class="pts"><span></span><span></span><span></span></span> '+
+                     'El corillo está mirando lo que ya tienes y poniéndose a escribir…';
+      post({accion:'ejecutar', id:b.dataset.id}).then(function(d){
+        if(!d.ok || !d.job){
+          live.className='jg-live on';
+          live.textContent=d.err||'No pude arrancar. Intenta otra vez.';
+          card.querySelectorAll('.jg-hacer').forEach(function(x){ x.disabled=false; });
+          return;
+        }
+        sondear(d.job, card, live);
+      }).catch(function(){
+        live.className='jg-live on'; live.textContent='Se cayó la conexión. Intenta otra vez.';
+        card.querySelectorAll('.jg-hacer').forEach(function(x){ x.disabled=false; });
+      });
+    });
+  });
+
+  function sondear(job, card, live){
+    var n=0, MAX=120, fallos=0;      // 120 * 3s = 6 min de margen
+    var frases=['El corillo está mirando lo que ya tienes y poniéndose a escribir…',
+                'Escribiendo con la voz de tu negocio…',
+                'Haciendo el arte de cada pieza…',
+                'Casi listo: programando las fechas…'];
+    var iv=setInterval(function(){
+      n++;
+      if(n%6===0){ var f=frases[Math.min(Math.floor(n/6), frases.length-1)];
+        live.innerHTML='<span class="pts"><span></span><span></span><span></span></span> '+f; }
+      post({accion:'job', job:job}).then(function(d){
+        fallos=0;
+        if(!d.ok || d.estado==='failed'){
+          clearInterval(iv);
+          live.className='jg-live on';
+          live.textContent=(d.error_msg||d.err||'Se me trabó a mitad')+'. Puedes intentarlo otra vez.';
+          card.querySelectorAll('.jg-hacer').forEach(function(x){ x.disabled=false; });
+          return;
+        }
+        if(d.estado==='done'){
+          clearInterval(iv);
+          live.className='jg-live on ok';
+          live.innerHTML='<b>Listo.</b> '+ (d.resultado||'Te dejé el contenido en Tus Posts.');
+          setTimeout(function(){ location.reload(); }, 2600);   // refresca los puntos y el botón
+          return;
+        }
+        if(n>=MAX){ clearInterval(iv);
+          live.className='jg-live on';
+          live.textContent='Está tardando más de lo normal. El corillo sigue en eso — revisa Tus Posts en un ratito.'; }
+      }).catch(function(){ if(++fallos>=8){ clearInterval(iv);
+        live.className='jg-live on';
+        live.textContent='Se cayó la conexión, pero el corillo sigue trabajando. Revisa Tus Posts en un rato.'; } });
+    }, 3000);
+  }
+
+  // "Ya lo hice" — SOLO para lo que pasa fuera de Crecer (boost, alianza, foto).
+  // Lo que produce el corillo se cierra solo con la evidencia de publicación.
+  document.querySelectorAll('.jg-ok2').forEach(function(b){
     b.addEventListener('click', function(){
       b.disabled=true; b.textContent='…';
       post({accion:'tactica', id:b.dataset.id, estado:'hecha'}).then(function(d){
-        if(d.ok){
-          var c=b.closest('.jg'); c.classList.add('hecha'); b.remove();
-          // Si esa era la última, el plan se cerró: recargamos para mostrar el
-          // aviso de "en observación" y el plan ya en el historial.
-          if(d.plan_completo) location.reload();
-        }
-        else { b.disabled=false; b.textContent='Marcar hecha'; }
-      }).catch(function(){ b.disabled=false; b.textContent='Marcar hecha'; });
+        if(d.ok){ location.reload(); }
+        else { b.disabled=false; b.textContent='Ya lo hice'; }
+      }).catch(function(){ b.disabled=false; b.textContent='Ya lo hice'; });
     });
   });
 

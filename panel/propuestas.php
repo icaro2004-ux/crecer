@@ -65,14 +65,29 @@ $UP_URL_BIB = (defined('UPLOADS_URL') ? UPLOADS_URL : '/crecer/uploads');
 //    la SEGUNDA VUELTA — las que dijiste "ahora no" (swipe izq o botón No),
 //    por si alguna merece otra oportunidad. Nada se pierde nunca. ──
 $deck_apartadas = (($_GET['apartadas'] ?? '') === '1');
+// ?jugada=<id> — llega desde Tu Meta ("ver las piezas de esta jugada"): el mazo
+// se limita a lo que produjo ESA jugada del plan. Sin el filtro, el dueño caía
+// en la lista completa y perdía el hilo de lo que venía a ver.
+$jugada_id = isset($_GET['jugada']) ? (int)$_GET['jugada'] : 0;
+$jugada_tit = '';
+if ($jugada_id > 0) {
+    try {
+        $qj = $pdo->prepare("SELECT titulo FROM crecer_meta_tactica WHERE id=? AND marca_id=?");
+        $qj->execute([$jugada_id, $marca_id]);
+        $jugada_tit = (string)($qj->fetchColumn() ?: '');
+        if ($jugada_tit === '') $jugada_id = 0;   // ajena o inexistente: se ignora
+    } catch (Throwable $e) { $jugada_id = 0; }
+}
 $props = [];
 try {
-    $q = $pdo->prepare(
-        "SELECT id, caption, plataforma, tipo, fecha_programada, grafica_path
-         FROM crecer_contenido
-         WHERE marca_id=? AND estado=? AND tipo<>'carrusel'
-         ORDER BY COALESCE(fecha_programada, created_at) ASC, id ASC");
-    $q->execute([$marca_id, $deck_apartadas ? 'rechazado' : 'borrador']);
+    $sql = "SELECT id, caption, plataforma, tipo, fecha_programada, grafica_path
+              FROM crecer_contenido
+             WHERE marca_id=? AND estado=? AND tipo<>'carrusel'";
+    $par = [$marca_id, $deck_apartadas ? 'rechazado' : 'borrador'];
+    if ($jugada_id > 0) { $sql .= " AND tactica_id=?"; $par[] = $jugada_id; }
+    $sql .= " ORDER BY COALESCE(fecha_programada, created_at) ASC, id ASC";
+    $q = $pdo->prepare($sql);
+    $q->execute($par);
     $props = $q->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) { $props = []; }
 // Cuántas apartadas hay en total (para invitar a la segunda vuelta al cerrar el mazo)
@@ -227,6 +242,11 @@ require __DIR__ . '/_shell.php';
   <?php if ($deck_apartadas): ?>
   <p class="est-owner">Segunda vuelta — las que apartaste en <b><?= $h($negocio) ?></b></p>
   <a class="est-b lnk" href="<?= $BASE ?>/propuestas.php?<?= $mid ?>" style="display:inline-block;padding:0 0 18px">← Volver a lo nuevo</a>
+  <?php elseif ($jugada_id > 0): ?>
+  <?php /* Llegó desde Tu Meta: el mazo trae SOLO lo que produjo esa jugada,
+           y se dice claro con la salida a la vista para no dejarlo encerrado. */ ?>
+  <p class="est-owner">Lo que el corillo hizo para <b><?= $h($jugada_tit) ?></b></p>
+  <a class="est-b lnk" href="<?= $BASE ?>/propuestas.php?<?= $mid ?>" style="display:inline-block;padding:0 0 18px">← Ver todas las propuestas</a>
   <?php else: ?>
   <p class="est-owner">El estudio de <b><?= $h($negocio) ?></b></p>
   <div class="est-crear-row">
