@@ -281,8 +281,12 @@ if ($meta) {
   .jg.turno{border-color:var(--magenta,#EF4375);box-shadow:0 0 0 3px color-mix(in srgb,var(--magenta,#EF4375) 12%,transparent)}
   .jg-ahora{background:var(--magenta,#EF4375);color:#fff;font-size:10.5px;font-weight:800;letter-spacing:.5px;
     text-transform:uppercase;padding:5px 16px}
-  /* Todo lo que va dentro del pliegue respira igual que antes */
+  /* Todo lo que va dentro del pliegue respira igual que antes.
+     OJO: los hijos llevan margen lateral, así que los que iban a 100% de ancho
+     sumaban 32px de más y SE SALÍAN del card por la derecha (el botón aparecía
+     cortado). Con width:auto ocupan lo que queda, que es lo correcto. */
   .jg > *:not(summary):not(.jg-ahora){margin-left:16px;margin-right:16px}
+  .jg > .jg-hacer, .jg > .jg-ver, .jg > .jg-ok2{width:calc(100% - 32px)}
   .jg > .jg-meta:last-of-type,.jg > .jg-live{margin-bottom:14px}
   .jg-top{display:flex;align-items:flex-start;gap:11px}
   .jg-tipo{flex:none;font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:5px 9px;border-radius:8px;background:var(--crema-2,#f2efe9);color:var(--muted)}
