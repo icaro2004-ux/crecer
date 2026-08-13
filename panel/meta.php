@@ -403,6 +403,15 @@ if ($meta) {
   .mt-load b{display:block;font-size:16px;color:var(--tinta);margin-bottom:5px}
   .mt-load span{font-size:13.5px;color:var(--muted);line-height:1.5}
 
+  /* ── DESKTOP: otra experiencia, no la misma estirada ──
+     En el teléfono el plegado es la solución correcta (poco scroll, una cosa a
+     la vez). Con pantalla grande sobra espacio: las jugadas se ven abiertas
+     para poder COMPARARLAS, y el número se queda pegado mientras se lee el
+     plan — así el "voy 0 de 25" nunca se pierde de vista. */
+  @media(min-width:901px){
+    .mv > div:first-child{position:sticky;top:18px}
+    .jg{margin-bottom:2px}
+  }
   @media(max-width:900px){ .mv{grid-template-columns:1fr} }
   @media(max-width:680px){
     .obj-grid{grid-template-columns:1fr}
@@ -904,6 +913,14 @@ if ($meta) {
   var CSRF=<?= json_encode(csrf_token()) ?>, MARCA=<?= (int)$marca_id ?>, URL=location.pathname+'?marca='+MARCA;
   function post(d){ var fd=new FormData(); fd.append('csrf',CSRF); for(var k in d) fd.append(k,d[k]);
     return fetch(URL,{method:'POST',body:fd}).then(function(r){return r.json();}); }
+
+  // DESKTOP: las jugadas se abren todas. Plegarlas es la respuesta al scroll del
+  // teléfono; con pantalla grande, esconder información que cabe es quitarle al
+  // dueño la posibilidad de comparar su plan de un vistazo.
+  // (El dueño puede cerrarlas a mano si quiere; solo cambia el estado inicial.)
+  if (window.matchMedia('(min-width:901px)').matches) {
+    document.querySelectorAll('details.jg').forEach(function(d){ d.open = true; });
+  }
 
   // ── "Que lo haga el corillo": produce TODO el contenido de la jugada ──
   //  Va por cola (tarda minutos) y se sondea. El dueño puede irse: cuando
