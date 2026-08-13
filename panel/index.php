@@ -938,8 +938,13 @@ $credito  = $has_deck
             <?php endif; ?>
           </div>
         </div>
-        <?php if ($__prog['dias_rest'] !== null && $__prog['dias_rest'] > 0): ?>
+        <?php /* Solo si quedan días DE VERDAD: una meta vencida que sigue activa
+                 mostraba "quedan -1 días" (dias_rest viene negativo a propósito
+                 para poder detectar el vencimiento). */ ?>
+        <?php if (($__prog['dias_rest'] ?? 0) > 0): ?>
           <div class="n-dias"><b><?= (int)$__prog['dias_rest'] ?></b><span>días</span></div>
+        <?php elseif (!empty($__prog['vencida'])): ?>
+          <div class="n-dias" style="background:#fdeeee;border-color:#f0b4b8"><b style="font-size:15px;color:#b4232b">Se venció</b><span>el plazo</span></div>
         <?php endif; ?>
       </div>
 
@@ -1077,7 +1082,10 @@ $credito  = $has_deck
         <div class="an-ok"><?= ico('check-circle') ?> Estoy pendiente de tu meta.</div>
         <p class="an-msg an-sub">Este objetivo todavía no lo puedo medir solo, así que te aviso por lo que sí veo:
            cuánta gente alcanzan tus posts y cuántos te escriben.</p>
-      <?php elseif ($__prog['actual'] !== null && (float)$__prog['actual'] <= 0): ?>
+      <?php elseif ($__prog['actual'] === null || (float)$__prog['actual'] <= 0): ?>
+        <?php /* `actual` en null = todavía no hay señal (Meta aún no reporta).
+                 Antes caía al último caso y decía "Vamos en ritmo. Llevas 0
+                 personas" debajo de un card que correctamente no enseña número. */ ?>
         <div class="an-ok"><?= ico('clock') ?> Todavía no hay nada que medir de tu meta.</div>
         <p class="an-msg an-sub">Cuando salgan los primeros posts del plan y la gente empiece a moverse,
            aquí te digo qué está funcionando y qué hay que cambiar.</p>
@@ -1087,11 +1095,17 @@ $credito  = $has_deck
           if ($__falta !== null && $__dias !== null && $__dias > 0): ?> y faltan
           <?= $h(meta_fmt((float)$__falta, (string)$__meta['objetivo'])) ?> en <?= (int)$__dias ?> días<?php endif; ?>.
           Estoy mirando qué formatos y horarios te rinden más para apretar por ahí.</p>
-      <?php else: ?>
+      <?php elseif ($__prog['al_dia'] === true): ?>
         <div class="an-ok"><?= ico('check-circle') ?> Vamos en ritmo para tu meta.</div>
         <p class="an-msg an-sub">Llevas <?= $h(meta_fmt((float)$__prog['actual'], (string)$__meta['objetivo'])) ?>
            <?php if ($__dias !== null && $__dias > 0): ?>con <?= (int)$__dias ?> días por delante<?php endif; ?>.
            Sigo pendiente de tu alcance y tus horarios por si aparece una oportunidad.</p>
+      <?php else: ?>
+        <?php /* Hay avance pero todavía no se puede juzgar el ritmo (meta recién
+                 puesta, o sin fecha límite): se dice lo que hay y nada más. */ ?>
+        <div class="an-ok"><?= ico('check-circle') ?> Ya se está moviendo.</div>
+        <p class="an-msg an-sub">Llevas <?= $h(meta_fmt((float)$__prog['actual'], (string)$__meta['objetivo'])) ?>.
+           Déjame unos días más de datos y te digo si vamos al ritmo que hace falta.</p>
       <?php endif; ?>
     <?php else: ?>
       <div class="an-ok"><?= ico('check-circle') ?> No cambiaría nada esta semana. Sigue así.</div>

@@ -45,7 +45,21 @@ function meta_job_en_curso(PDO $pdo, int $tactica_id): ?int {
 /** Dispara el worker por auto-HTTP, fire-and-forget. */
 function meta_job_disparar(int $id): void {
     if (!worker_puede_disparar('meta')) return;
-    $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
+
+    // EL HOST NO SE TOMA A CIEGAS DE LA PETICIÓN. `HTTP_HOST` lo controla quien
+    // llama: con una cabecera Host forjada, este curl le mandaría la llave de
+    // los workers a un servidor ajeno. Solo se aceptan hosts conocidos; ante
+    // cualquier otra cosa se usa el dominio de producción.
+    $host_req = (string)($_SERVER['HTTP_HOST'] ?? '');
+    $permitidos = defined('CRECER_WORKER_HOSTS')
+        ? array_map('trim', explode(',', (string)CRECER_WORKER_HOSTS))
+        : ['encuentraloahora.com', 'www.encuentraloahora.com', 'localhost', '127.0.0.1'];
+    $host = 'encuentraloahora.com';
+    foreach ($permitidos as $ok) {
+        // se admite el puerto (localhost:8080) pero no un dominio distinto
+        if ($host_req === $ok || preg_match('/^' . preg_quote($ok, '/') . ':\d+$/', $host_req)) { $host = $host_req; break; }
+    }
+
     // Producción es https siempre; en local (XAMPP) no hay TLS y el disparo se
     // perdía en silencio — el trabajo quedaba encolado para siempre y no se
     // podía probar el ciclo antes de subirlo. Solo localhost baja a http.
@@ -65,9 +79,20 @@ function meta_job_disparar(int $id): void {
 /** EL WORKER — produce el contenido de la jugada y guarda el reporte. */
 function meta_job_procesar(PDO $pdo, int $id): void {
     @set_time_limit(0);
+    // CLAIM ATÓMICO. Antes esto era leer-y-luego-escribir: si dos workers
+    // entraban a la vez (el disparo original y el rescate del polling, por
+    // ejemplo), los dos pasaban el chequeo y producían el trabajo DOS VECES —
+    // piezas duplicadas y, peor, imágenes pagadas duplicadas contra la cuota
+    // de 40/mes del dueño. Con el UPDATE condicional solo gana uno.
+    try {
+        $q = $pdo->prepare("UPDATE crecer_meta_jobs SET estado='working', updated_at=NOW()
+                             WHERE id=? AND estado='queued'");
+        $q->execute([$id]);
+        if ($q->rowCount() === 0) return;   // otro worker ya lo tomó (o ya terminó)
+    } catch (Throwable $e) { return; }
+
     $j = $pdo->query("SELECT * FROM crecer_meta_jobs WHERE id=" . (int)$id)->fetch(PDO::FETCH_ASSOC);
-    if (!$j || in_array($j['estado'], ['done','working'], true)) return;   // idempotente
-    _mjob_set($pdo, $id, ['estado' => 'working']);
+    if (!$j) return;
 
     require_once __DIR__ . '/meta_ejecutar.php';
     try {
@@ -107,13 +132,22 @@ function meta_job_procesar(PDO $pdo, int $id): void {
 function meta_job_estado(PDO $pdo, int $id, int $marca_id): ?array {
     try {
         $q = $pdo->prepare("SELECT estado, resultado, creadas, recicladas, error_msg,
-                                   TIMESTAMPDIFF(SECOND, created_at, NOW()) AS edad
+                                   TIMESTAMPDIFF(SECOND, created_at, NOW()) AS edad,
+                                   TIMESTAMPDIFF(SECOND, updated_at, NOW()) AS quieto
                               FROM crecer_meta_jobs WHERE id=? AND marca_id=?");
         $q->execute([$id, $marca_id]);
         $r = $q->fetch(PDO::FETCH_ASSOC);
         if (!$r) return null;
-        if ($r['estado'] === 'queued' && (int)$r['edad'] > 25) meta_job_disparar($id);
-        unset($r['edad']);
+        // RESCATE, pero como mucho una vez cada 30s. Antes se re-disparaba en
+        // CADA sondeo (o sea cada 3 segundos) contra el mismo job. El claim
+        // atómico ya impide el trabajo duplicado, pero lanzar ocho peticiones
+        // para nada es ruido que tampoco queremos.
+        if ($r['estado'] === 'queued' && (int)$r['edad'] > 25 && (int)$r['quieto'] > 30) {
+            try { $pdo->prepare("UPDATE crecer_meta_jobs SET updated_at=NOW() WHERE id=?")->execute([$id]); }
+            catch (Throwable $e) {}
+            meta_job_disparar($id);
+        }
+        unset($r['edad'], $r['quieto']);
         return $r;
     } catch (Throwable $e) { return null; }
 }

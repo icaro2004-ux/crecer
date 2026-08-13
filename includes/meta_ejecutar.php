@@ -414,6 +414,16 @@ function jugada_ejecutar(PDO $pdo, int $marca_id, int $tactica_id): array {
                 $visual = (string)($rr['debate']['visual'] ?? '');
             } catch (Throwable $e) { error_log('jugada redactar: ' . $e->getMessage()); }
 
+            // Si no se pudo escribir, la pieza NO se cuenta ni se deja a medias.
+            // Antes se contaba igual: el reporte decía "escribí 3 piezas", el
+            // dueño encontraba una vacía, y como la jugada ya tenía sus piezas
+            // "creadas" nadie volvía a intentarlo — se quedaba trancada.
+            if (trim($cap) === '') {
+                try { $pdo->prepare("DELETE FROM crecer_contenido WHERE id=? AND marca_id=?")->execute([$cid, $marca_id]); }
+                catch (Throwable $e) {}
+                continue;
+            }
+
             // ── REEL: el corillo hace SU parte y pide la del dueño ──
             //  No inventamos video. Se escribe el guion (qué grabar, clip por
             //  clip) y la pieza queda marcada como "falta material". Antes esto

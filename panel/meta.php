@@ -588,10 +588,16 @@ if ($meta) {
     document.getElementById('cargando').classList.add('on');
     bar.style.width='100%';
     var f=new Date(); f.setDate(f.getDate()+datos.dias);
+    // La fecha se arma con la hora LOCAL, no con toISOString(): en Puerto Rico
+    // (UTC-4) a partir de las 8 de la noche toISOString ya devuelve el día
+    // siguiente, así que la meta salía con un día de más.
+    var fLocal = f.getFullYear() + '-' +
+                 String(f.getMonth()+1).padStart(2,'0') + '-' +
+                 String(f.getDate()).padStart(2,'0');
     var fd=new FormData();
     fd.append('csrf',CSRF); fd.append('accion','crear');
     fd.append('objetivo',datos.objetivo); fd.append('cantidad',datos.cantidad);
-    fd.append('fecha_limite', f.toISOString().slice(0,10));
+    fd.append('fecha_limite', fLocal);
     fd.append('presupuesto',datos.pauta); fd.append('contexto',datos.contexto);
     fetch(location.pathname+'?marca='+MARCA,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
       if(d.ok){ location.href=location.pathname+'?marca='+MARCA; return; }

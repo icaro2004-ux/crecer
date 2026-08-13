@@ -313,7 +313,10 @@ function meta_sugerir_numero(PDO $pdo, int $marca_id, string $objetivo, int $dia
     }
     // Con historial: +30% sobre lo que ya logra (ambiciosa pero honesta).
     $sug = $previo * 1.3;
-    $sug = $objetivo === 'ventas' ? round($sug / 25) * 25 : ceil($sug);
+    // En dinero se redondea a $25 para que suene a meta y no a cifra de
+    // contable — pero con PISO: con $8 de historial, redondear a la baja
+    // proponía "$0 — un 30% más", que es una burla.
+    $sug = $objetivo === 'ventas' ? max(25, round($sug / 25) * 25) : max(1, ceil($sug));
     return [
         'sugerido' => (float)$sug,
         'base'     => (float)$previo,
@@ -731,7 +734,13 @@ function meta_plan_por_id(PDO $pdo, int $plan_id, int $marca_id): ?array {
 function meta_plan_progreso(PDO $pdo, int $plan_id): array {
     $out = ['hechas' => 0, 'total' => 0, 'pct' => 0, 'completo' => false, 'pendientes' => 0];
     try {
-        $q = $pdo->prepare("SELECT estado, COUNT(*) c FROM crecer_meta_tactica WHERE plan_id=? GROUP BY estado");
+        // Las REGLAS quedan fuera del conteo: no son tareas que se terminen
+        // ("contesta el mismo día" no se marca hecha nunca) y ni siquiera tienen
+        // botón. Contándolas, un plan con una regla NUNCA llegaba a completo:
+        // no se cerraba, no se medía y no dejaba lección. El loop de aprendizaje
+        // se moría en silencio.
+        $q = $pdo->prepare("SELECT estado, COUNT(*) c FROM crecer_meta_tactica
+                             WHERE plan_id=? AND clase<>'regla' GROUP BY estado");
         $q->execute([$plan_id]);
         foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $c = (int)$r['c'];
@@ -1124,26 +1133,38 @@ function meta_enfoque_semana(PDO $pdo, int $marca_id): string {
  */
 function meta_avance_semana(PDO $pdo, array $meta): array {
     $out = ['semana' => 1, 'semanas' => 1, 'jugadas' => 0, 'hechas' => 0, 'piezas' => 0];
+    $plan = meta_plan_activo($pdo, (int)$meta['id']);
+
+    // OJO CON DESDE CUÁNDO SE CUENTA. Lo que el dueño lee ("Semana 2 de 5") va
+    // contra la meta, pero la Estratega numera las semanas de sus jugadas
+    // relativas a SU plan. Si el plan v2 nació a mitad de mes, contar desde la
+    // meta buscaría jugadas de "semana 3" en un plan que solo tiene 1 y 2 — y
+    // la tira de avance salía siempre en cero.
     try {
-        $ini = new DateTimeImmutable((string)$meta['fecha_inicio']);
+        $ini_meta = new DateTimeImmutable((string)$meta['fecha_inicio']);
         $hoy = new DateTimeImmutable('today');
-        $out['semana'] = 1 + (int)floor((int)$ini->diff($hoy)->days / 7);
+        $out['semana'] = 1 + (int)floor((int)$ini_meta->diff($hoy)->days / 7);
         if (!empty($meta['fecha_limite'])) {
             $fin = new DateTimeImmutable((string)$meta['fecha_limite']);
-            $out['semanas'] = max(1, (int)ceil(((int)$ini->diff($fin)->days) / 7));
+            $out['semanas'] = max(1, (int)ceil(((int)$ini_meta->diff($fin)->days) / 7));
             $out['semana']  = min($out['semana'], $out['semanas']);
         }
     } catch (Throwable $e) {}
 
     // Jugadas de ESTA semana y cuántas ya están cumplidas. Solo las del plan
-    // VIGENTE: contando toda la meta se sumaban las de los planes reemplazados
-    // y salía "4 de 8" cuando el plan de esta semana tiene 2.
+    // VIGENTE (contando toda la meta se sumaban las de los planes reemplazados
+    // y salía "4 de 8" cuando el plan de esta semana tiene 2) y con la semana
+    // medida DESDE QUE NACIÓ ESE PLAN, que es como están numeradas.
     try {
-        $plan = meta_plan_activo($pdo, (int)$meta['id']);
         if ($plan) {
+            $sem_plan = 1;
+            try {
+                $ini_plan = new DateTimeImmutable((string)$plan['inicio_at']);
+                $sem_plan = 1 + (int)floor((int)$ini_plan->diff(new DateTimeImmutable('now'))->days / 7);
+            } catch (Throwable $e) {}
             $q = $pdo->prepare("SELECT estado FROM crecer_meta_tactica
                                  WHERE plan_id=? AND semana=? AND clase<>'regla'");
-            $q->execute([(int)$plan['id'], $out['semana']]);
+            $q->execute([(int)$plan['id'], $sem_plan]);
             foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $e) {
                 $out['jugadas']++;
                 if ($e === 'hecha') $out['hechas']++;
