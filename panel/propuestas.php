@@ -159,6 +159,35 @@ require __DIR__ . '/_shell.php';
 
   .est-prop{opacity:0}
   .est-prop.show{opacity:1}
+
+  /* ══ DESKTOP: la propuesta se ve de UN GOLPE ══
+     En el teléfono el orden vertical es correcto: se mira el arte, se lee, se
+     desliza. En una pantalla grande esa misma columna medía 1,950px de alto —
+     había que hacer scroll para decidir sobre UNA pieza, con 880px de ancho
+     vacíos a los lados. Aquí el arte va a un lado y el texto con la decisión
+     al otro: se ve entera y se decide sin mover nada. */
+  @media(min-width:901px){
+    /* el contenedor del panel está limitado a 600px para la lectura en una
+       columna; en desktop hay que soltarlo o las dos columnas salen ahogadas */
+    .content{max-width:1120px}
+    .est{max-width:1040px;padding:5vh 10px 70px}
+    .est-prop.show{display:grid;grid-template-columns:minmax(0,46%) minmax(0,1fr);
+      gap:12px 34px;align-items:start;align-content:start}
+    /* columna izquierda: lo visual y lo que hay que grabar */
+    .est-art,.est-guion,.est-bib{grid-column:1;margin-bottom:0}
+    .est-art{position:sticky;top:24px}
+    /* con 469px de ancho, el 4/5 del recuadro de video daba 586px de alto y
+       empujaba todo fuera de pantalla: en desktop se acota */
+    .est-art.sube{aspect-ratio:auto;min-height:300px;max-height:380px}
+    .est-art img{max-height:62vh}
+    /* columna derecha: contexto, copy, créditos y la decisión */
+    .est-ctx,.est-cap,.est-cred,.est-verdict,.est-listos,.est-mini{grid-column:2}
+    .est-ctx{margin-bottom:6px}
+    .est-cap{margin-bottom:14px}
+    /* sin arte, el copy manda: ocupa las dos columnas y respira */
+    .est-prop.show:not(:has(.est-art)) .est-cap,
+    .est-prop.show:not(:has(.est-art)) .est-verdict{grid-column:1/-1}
+  }
   .est-ctx{font-size:12.5px;font-weight:600;color:var(--muted);text-transform:capitalize;margin:0 0 14px}
   .est-art{border-radius:22px;overflow:hidden;background:var(--crema-2);border:1px solid var(--line);
     display:grid;place-items:center;margin:0 0 20px;
