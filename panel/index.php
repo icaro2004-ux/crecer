@@ -135,7 +135,10 @@ if (!$plan) {
 $trabajo = [];
 try {
     $tq = $pdo->prepare(
-        "SELECT id, estado, caption, plataforma, tipo, fecha_programada, grafica_path
+        // tactica_id viene para poder decir DE QUÉ META es cada pieza: sin eso,
+        // el Home enseña "3 posts esperando tu OK" y el dueño no sabe si tienen
+        // algo que ver con el número que está persiguiendo.
+        "SELECT id, estado, caption, plataforma, tipo, fecha_programada, grafica_path, tactica_id
          FROM crecer_contenido
          WHERE marca_id=? AND estado IN ('fallido','publicando','borrador','aprobado','programado','publicado')
          ORDER BY FIELD(estado,'fallido','publicando','borrador','aprobado','programado','publicado'),
@@ -143,7 +146,22 @@ try {
          LIMIT 4");
     $tq->execute([$marca_id]);
     $trabajo = $tq->fetchAll(PDO::FETCH_ASSOC);
-} catch (Throwable $e) { $trabajo = []; }
+} catch (Throwable $e) {
+    // Sin la columna tactica_id (migración pendiente) el Home NO se queda mudo:
+    // repite la consulta sin ella. Perder el "próximo post" por una columna
+    // nueva sería peor que no poder decir a qué meta pertenece.
+    try {
+        $tq = $pdo->prepare(
+            "SELECT id, estado, caption, plataforma, tipo, fecha_programada, grafica_path
+             FROM crecer_contenido
+             WHERE marca_id=? AND estado IN ('fallido','publicando','borrador','aprobado','programado','publicado')
+             ORDER BY FIELD(estado,'fallido','publicando','borrador','aprobado','programado','publicado'),
+                      COALESCE(fecha_programada, created_at) ASC, id DESC
+             LIMIT 4");
+        $tq->execute([$marca_id]);
+        $trabajo = $tq->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e2) { $trabajo = []; }
+}
 
 // Actividad real de IA para complementar el trabajo preparado.
 $feed_map = [
@@ -742,6 +760,16 @@ $credito  = $has_deck
   .an-ok{color:var(--teal-dark,#00827e);font-weight:700;font-size:14.5px;display:inline-flex;align-items:center;gap:8px;margin-bottom:5px}
   .an-ok svg{width:18px;height:18px;flex:none}
   .an-sub{color:var(--muted);font-size:13px}
+  /* El Analista ahora carga con sus propios números, así que necesita su salida
+     al detalle en vez de una tarjeta "Cómo vas" aparte. */
+  .an-ver{display:inline-block;margin-top:13px;font-size:13px;font-weight:700;color:var(--teal-dark,#00827e);text-decoration:none}
+  .an-ver:hover{text-decoration:underline}
+  /* El hilo entre una pieza y la meta de la que salió */
+  .eb-meta{font-style:normal;color:var(--magenta);font-weight:800}
+  .hz-dejugada{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--teal-dark,#00827e);
+    background:color-mix(in srgb,var(--teal) 10%,#fff);border:1px solid color-mix(in srgb,var(--teal) 26%,#fff);
+    border-radius:99px;padding:4px 10px;margin:6px 0 2px;max-width:100%}
+  .hz-dejugada svg{width:12px;height:12px;flex:none}
   .hz-notlist{display:flex;flex-direction:column}
   .hz-not{display:flex;gap:11px;align-items:center;padding:10px 2px;text-decoration:none;color:inherit;border-top:1px solid var(--line)}
   .hz-not:first-child{border-top:0}
@@ -938,10 +966,26 @@ $credito  = $has_deck
     $hz_vid = $hz_g !== '' && preg_match('#\.(mp4|mov|m4v)$#i', $hz_g);
     $hz_cap = trim((string)($hz_post['caption'] ?? ''));
   ?>
+  <?php
+  // ¿Esta pieza nació de una jugada del plan? Entonces se dice, porque cambia
+  // el sentido de aprobarla: no es "un post más", es un paso hacia SU número.
+  $hz_de_meta = '';
+  if (!empty($hz_post['tactica_id']) && $__meta_estado === 'activa' && $__meta) {
+      try {
+          $qd = $pdo->prepare("SELECT titulo FROM crecer_meta_tactica WHERE id=? AND marca_id=?");
+          $qd->execute([(int)$hz_post['tactica_id'], $marca_id]);
+          $tt = (string)($qd->fetchColumn() ?: '');
+          if ($tt !== '') $hz_de_meta = $tt;
+      } catch (Throwable $e) {}
+  }
+  ?>
   <section class="hz-card">
     <div class="hz-next">
       <div class="l">
-        <span class="eb">Próximo post</span>
+        <span class="eb">Próximo post<?php if ($hz_de_meta !== ''): ?><i class="eb-meta"> · de tu meta</i><?php endif; ?></span>
+        <?php if ($hz_de_meta !== ''): ?>
+          <span class="hz-dejugada"><?= ico('compass') ?> <?= $h($hz_de_meta) ?></span>
+        <?php endif; ?>
         <p class="cap"><?= $h($hz_cap !== '' ? $hz_cap : 'Tu próximo post — el corillo lo está afinando.') ?></p>
         <?php if ($hz_post['modo']==='aprobar'): ?>
           <a class="hz-approve" href="<?= $BASE ?>/propuestas.php?<?= $mid ?>"><?= ico('check') ?> Aprobar post</a>
@@ -962,23 +1006,93 @@ $credito  = $has_deck
   <section class="hz-card"><p class="hz-empty">Todo al día. El corillo está preparando lo próximo — te aviso cuando haya algo para tu OK.</p></section>
   <?php endif; ?>
 
-  <!-- ADR-0004 · El Analista proactivo: habla cuando algo merece atención -->
+  <?php
+  // ══════════════════════════════════════════════════════════════════════
+  //  CÓMO VAMOS — UNA SOLA VOZ (2026-08-12)
+  //
+  //  Antes esto eran CUATRO tarjetas seguidas contestando la misma pregunta
+  //  con voces distintas: el Analista proactivo, "Cómo vas", "Rendimiento" y
+  //  "Proyección del mes". El dueño no leía un equipo poniéndolo al día:
+  //  leía un tablero de aeropuerto.
+  //
+  //  Ahora el Analista habla UNA vez, y sus números (la gráfica, el ritmo del
+  //  mes) viven dentro de su tarjeta como respaldo de lo que dice — no como
+  //  bloques sueltos compitiendo por atención.
+  // ══════════════════════════════════════════════════════════════════════
+  ?>
   <section class="hz-card an-card">
     <div class="an-head">
       <span class="an-av"><?= ico('chart') ?></span>
       <span class="an-who"><b><?= $h($an_nombre) ?></b><span class="live"><span class="an-dot"></span> Vigilando tus números</span></span>
+      <?php if ($hz_creciendo): ?><span class="hz-up" style="margin-left:auto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/></svg> En crecimiento</span><?php endif; ?>
     </div>
-    <?php if ($an_top): ?>
+
+    <?php if ($an_top): /* tiene algo que decir y qué hacer al respecto */ ?>
       <p class="an-title"><?= $h($an_top['titulo']) ?></p>
       <p class="an-msg"><?= $h($an_top['mensaje']) ?></p>
       <div class="an-acts" id="anActs" data-id="<?= (int)$an_top['id'] ?>">
         <a class="an-go" id="anGo" href="<?= $h($an_top['accion_url']) ?>"><?= $h($an_top['accion_label']) ?> &rarr;</a>
         <button class="an-skip" id="anSkip" type="button">Ahora no</button>
       </div>
+    <?php elseif ($hz_analista && (!empty($hz_analista['lectura']) || !empty($hz_analista['reco']))): ?>
+      <?php /* su lectura de la semana (lo que antes era la tarjeta "Cómo vas") */ ?>
+      <p class="an-msg"><?= $h($hz_analista['lectura'] ?? $hz_analista['reco']) ?></p>
+      <?php if (!empty($hz_analista['reco']) && !empty($hz_analista['lectura'])): ?>
+        <div class="hz-reco"><?= ico('bolt') ?><span><?= $h($hz_analista['reco']) ?></span></div>
+      <?php endif; ?>
+    <?php elseif ($__meta_estado === 'activa' && $__prog):
+      /* HABLA CONTRA LA META, NO AL AIRE. Decir "no cambiaría nada, sigue así"
+         mientras arriba se lee "0 de 25 pedidos" es lo que hacía sentir el Home
+         como piezas sueltas. Todo lo de abajo sale de $__prog, que ya está
+         medido — nada inventado. */
+      $__falta = $__prog['falta'] ?? null;
+      $__dias  = $__prog['dias_rest'] ?? null;
+      $__unid  = meta_objetivo_def((string)$__meta['objetivo'])['unidad'];
+    ?>
+      <?php if (!$__prog['medible']): ?>
+        <div class="an-ok"><?= ico('check-circle') ?> Estoy pendiente de tu meta.</div>
+        <p class="an-msg an-sub">Este objetivo todavía no lo puedo medir solo, así que te aviso por lo que sí veo:
+           cuánta gente alcanzan tus posts y cuántos te escriben.</p>
+      <?php elseif ($__prog['actual'] !== null && (float)$__prog['actual'] <= 0): ?>
+        <div class="an-ok"><?= ico('clock') ?> Todavía no hay nada que medir de tu meta.</div>
+        <p class="an-msg an-sub">Cuando salgan los primeros posts del plan y la gente empiece a moverse,
+           aquí te digo qué está funcionando y qué hay que cambiar.</p>
+      <?php elseif ($__prog['al_dia'] === false): ?>
+        <div class="an-ok" style="color:#b4232b"><?= ico('bolt') ?> Vamos cortos para la meta.</div>
+        <p class="an-msg an-sub">Llevas <?= $h(meta_fmt((float)$__prog['actual'], (string)$__meta['objetivo'])) ?><?php
+          if ($__falta !== null && $__dias !== null && $__dias > 0): ?> y faltan
+          <?= $h(meta_fmt((float)$__falta, (string)$__meta['objetivo'])) ?> en <?= (int)$__dias ?> días<?php endif; ?>.
+          Estoy mirando qué formatos y horarios te rinden más para apretar por ahí.</p>
+      <?php else: ?>
+        <div class="an-ok"><?= ico('check-circle') ?> Vamos en ritmo para tu meta.</div>
+        <p class="an-msg an-sub">Llevas <?= $h(meta_fmt((float)$__prog['actual'], (string)$__meta['objetivo'])) ?>
+           <?php if ($__dias !== null && $__dias > 0): ?>con <?= (int)$__dias ?> días por delante<?php endif; ?>.
+           Sigo pendiente de tu alcance y tus horarios por si aparece una oportunidad.</p>
+      <?php endif; ?>
     <?php else: ?>
       <div class="an-ok"><?= ico('check-circle') ?> No cambiaría nada esta semana. Sigue así.</div>
       <p class="an-msg an-sub">Estoy pendiente de tu alcance, tus formatos y tus horarios. Apenas vea una oportunidad, te la traigo aquí.</p>
     <?php endif; ?>
+
+    <?php if ($hz_hay_serie):
+      $n=count($hz_serie); $mx=max(1,max($hz_serie)); $pts=[];
+      foreach($hz_serie as $i=>$v){ $x=$n>1?round(($i/($n-1))*300,1):0; $y=round(64-($v/$mx)*54,1); $pts[]="$x,$y"; }
+      $poly=implode(' ',$pts); $lastp=explode(',',end($pts));
+    ?>
+      <?php /* los números que respaldan lo que acaba de decir, no un bloque aparte */ ?>
+      <svg class="hz-spark" viewBox="0 0 300 72" preserveAspectRatio="none" style="margin-top:14px">
+        <defs><linearGradient id="hzg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--teal)" stop-opacity=".28"/><stop offset="1" stop-color="var(--teal)" stop-opacity="0"/></linearGradient></defs>
+        <polygon points="0,72 <?= $poly ?> 300,72" fill="url(#hzg)"/>
+        <polyline points="<?= $poly ?>" fill="none" stroke="var(--teal)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+        <circle cx="<?= $lastp[0] ?>" cy="<?= $lastp[1] ?>" r="4.5" fill="var(--teal)"/>
+      </svg>
+      <div class="hz-cap">Posts publicados por semana · últimas 8<?= $hay_insights ? '' : ' · conecta tus redes para ver alcance' ?><?php
+        // La proyección deja de ser una tarjeta propia: es una frase más de su lectura.
+        if ($hz_proj > 0) echo ' · a este ritmo cierras el mes con ' . (int)$hz_proj . ' posts';
+      ?></div>
+    <?php endif; ?>
+
+    <a class="an-ver" href="<?= $BASE ?>/resultados.php?<?= $mid ?>">Ver todos los resultados →</a>
   </section>
   <script>
   (function(){
@@ -1005,60 +1119,17 @@ $credito  = $has_deck
     </div>
   </section>
 
-  <section class="hz-card">
-    <div class="hz-ch"><b>Rendimiento</b><?php if ($hz_creciendo): ?><span class="hz-up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/></svg> En crecimiento</span><?php endif; ?></div>
-    <?php if ($hz_hay_serie):
-      $n=count($hz_serie); $mx=max(1,max($hz_serie)); $pts=[];
-      foreach($hz_serie as $i=>$v){ $x=$n>1?round(($i/($n-1))*300,1):0; $y=round(64-($v/$mx)*54,1); $pts[]="$x,$y"; }
-      $poly=implode(' ',$pts); $lastp=explode(',',end($pts));
-    ?>
-    <svg class="hz-spark" viewBox="0 0 300 72" preserveAspectRatio="none">
-      <defs><linearGradient id="hzg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--teal)" stop-opacity=".28"/><stop offset="1" stop-color="var(--teal)" stop-opacity="0"/></linearGradient></defs>
-      <polygon points="0,72 <?= $poly ?> 300,72" fill="url(#hzg)"/>
-      <polyline points="<?= $poly ?>" fill="none" stroke="var(--teal)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
-      <circle cx="<?= $lastp[0] ?>" cy="<?= $lastp[1] ?>" r="4.5" fill="var(--teal)"/>
-    </svg>
-    <div class="hz-cap">Posts publicados por semana · últimas 8<?= $hay_insights ? '' : ' · conecta tus redes para ver alcance' ?></div>
-    <?php else: ?>
-    <p class="hz-empty">Publica esta semana y aquí verás tu rendimiento crecer.</p>
-    <?php endif; ?>
-  </section>
-
-  <?php if ($hz_analista && (!empty($hz_analista['lectura']) || !empty($hz_analista['reco']))): ?>
-  <section class="hz-card">
-    <div class="hz-ch"><b>Cómo vas</b><a href="<?= $BASE ?>/resultados.php?<?= $mid ?>">Ver resultados →</a></div>
-    <div class="hz-tip"><span class="ic teal"><?= ico('chart') ?></span><p><?= $h($hz_analista['lectura'] ?? $hz_analista['reco']) ?></p></div>
-    <?php if (!empty($hz_analista['reco'])): ?><div class="hz-reco"><?= ico('bolt') ?><span><?= $h($hz_analista['reco']) ?></span></div><?php endif; ?>
-  </section>
-  <?php endif; ?>
-
-  <?php if ($hz_fin): ?>
-  <section class="hz-card">
-    <div class="hz-ch"><b>Tip de finanzas</b><a href="<?= $BASE ?>/finanzas.php?<?= $mid ?>">Ver finanzas →</a></div>
-    <div class="hz-tip"><span class="ic amber"><?= ico('dollar') ?></span><p><?= $h($hz_fin) ?></p></div>
-  </section>
-  <?php endif; ?>
-
-  <?php if ($hz_notifs): ?>
-  <section class="hz-card">
-    <div class="hz-ch"><b>Lo último</b><a href="<?= $BASE ?>/notificaciones_centro.php?<?= $mid ?>">Ver todo →</a></div>
-    <div class="hz-notlist">
-      <?php foreach ($hz_notifs as $nt): ?>
-      <a class="hz-not" href="<?= $BASE ?>/notificaciones_centro.php?<?= $mid ?>">
-        <span class="ni"><?= ico(($nt['icono'] ?? '') ?: 'bell') ?></span>
-        <span class="nt"><b><?= $h($nt['titulo'] ?? '') ?></b><?php if (!empty($nt['mensaje'])): ?><small><?= $h(mb_strimwidth((string)$nt['mensaje'],0,60,'…')) ?></small><?php endif; ?></span>
-      </a>
-      <?php endforeach; ?>
-    </div>
-  </section>
-  <?php endif; ?>
-
-  <?php if ($hz_proj > 0): ?>
-  <section class="hz-card">
-    <div class="hz-ch"><b>Proyección del mes</b></div>
-    <div class="hz-fc"><div class="fc-n"><?= $hz_proj ?></div><div class="fc-l">posts este mes si sigues a este ritmo<br><small><?= $hz_mespub ?> publicado<?= $hz_mespub==1?'':'s' ?> en <?= $hz_diames ?> día<?= $hz_diames==1?'':'s' ?></small></div></div>
-  </section>
-  <?php endif; ?>
+  <?php
+  // ── Lo que se fue de aquí y por qué (2026-08-12) ──
+  //  · "Rendimiento", "Cómo vas" y "Proyección del mes" → ahora viven DENTRO de
+  //    la tarjeta del Analista, arriba. Eran cuatro voces para una sola pregunta.
+  //  · "Lo último" → la campanita del top-bar ya trae las notificaciones con su
+  //    contador. Enseñarlas dos veces no las hace más visibles, hace más ruido.
+  //  · "Tip de finanzas" → vive en Finanzas, que está en el menú. Este es el
+  //    Home de marketing; mezclar dominios es lo que hacía sentir el Home como
+  //    cosas sueltas sin relación.
+  //  Nada se borró del sistema: solo dejaron de competir en esta pantalla.
+  ?>
 
   <section class="hz-card" id="hzIdea">
     <div class="hz-ch"><b>Idea del día</b></div>

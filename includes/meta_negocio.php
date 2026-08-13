@@ -1014,7 +1014,13 @@ function meta_tactica_de_turno(PDO $pdo, array $meta): ?array {
         $semana_actual = 1 + (int)floor((int)$ini->diff(new DateTimeImmutable('today'))->days / 7);
     } catch (Throwable $e) {}
 
-    $tac = meta_tacticas($pdo, (int)$meta['id'], 'pendiente');
+    // Pendientes Y a medias: una jugada empezada es justo la que toca seguir.
+    // Mirando solo 'pendiente', el Home saltaba por encima de lo que ya estaba
+    // en marcha y proponía otra cosa.
+    $tac = array_values(array_filter(
+        meta_tacticas($pdo, (int)$meta['id']),
+        fn($t) => in_array($t['estado'] ?? '', ['pendiente', 'en_curso'], true)
+    ));
     if (!$tac) return null;
 
     // ORDEN DE PREFERENCIA (importa más de lo que parece): lo primero que el
