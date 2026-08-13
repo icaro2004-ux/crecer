@@ -30,12 +30,13 @@ function arte_disparar(int $marca_id, int $post_id, ?bool $con_texto = null, ?st
     // CR-F01b: sin llave no se dispara. El job se queda en cola y lo rescata el
     // sweep cuando el config vuelva — mejor eso que quemar el intento contra un 503.
     if (!worker_puede_disparar('arte')) return;
-    $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
+    // host VALIDADO (ver worker_host): la cabecera Host la controla quien llama.
+    $host = worker_host();
     $q = '&ct=' . ($con_texto === null ? 'x' : ($con_texto ? '1' : '0'));
     if ($extra !== null && trim($extra) !== '') $q .= '&extra=' . rawurlencode(mb_substr(trim($extra), 0, 300));
     if (trim($estilo) !== '' && $estilo !== 'realista') $q .= '&est=' . rawurlencode(mb_substr(trim($estilo), 0, 60));
     if ($fb) $q .= '&fb=1';   // re-disparo: ir DIRECTO a Gemini (gpt no pudo)
-    $url  = 'https://' . $host . '/crecer/panel/arte_worker.php?marca=' . $marca_id . '&id=' . $post_id . '&key=' . ARTE_WORKER_KEY . $q;
+    $url  = worker_esquema($host) . '://' . $host . '/crecer/panel/arte_worker.php?marca=' . $marca_id . '&id=' . $post_id . '&key=' . ARTE_WORKER_KEY . $q;
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER    => true,

@@ -53,6 +53,47 @@ function worker_autorizar(string $recibida, string $worker): void {
 }
 
 /**
+ * EL HOST AL QUE SE LLAMA A SÍ MISMO EL SERVIDOR — validado.
+ *
+ * Los disparadores arman una URL así para despertar a su worker:
+ *     https://HOST/crecer/panel/xxx_worker.php?key=CRECER_WORKER_KEY
+ *
+ * Si HOST sale de `$_SERVER['HTTP_HOST']` a pelo, lo controla QUIEN LLAMA: con
+ * una cabecera `Host: servidor-ajeno.com` forjada, el curl le entrega la llave
+ * de los workers a ese servidor. Con esa llave se pueden disparar trabajos —
+ * es decir, gastar el dinero de imágenes del dueño.
+ *
+ * Aquí solo pasan hosts conocidos. Cualquier otra cosa cae al dominio real.
+ * Se puede ajustar con la constante CRECER_WORKER_HOSTS (lista por comas).
+ */
+function worker_host(): string {
+    $pedido = (string)($_SERVER['HTTP_HOST'] ?? '');
+    $ok = defined('CRECER_WORKER_HOSTS')
+        ? array_filter(array_map('trim', explode(',', (string)CRECER_WORKER_HOSTS)))
+        : ['encuentraloahora.com', 'www.encuentraloahora.com', 'localhost', '127.0.0.1'];
+    foreach ($ok as $h) {
+        // se admite el puerto (localhost:8080), no un dominio distinto
+        if ($pedido === $h || preg_match('/^' . preg_quote($h, '/') . ':\d+$/', $pedido)) return $pedido;
+    }
+    return 'encuentraloahora.com';
+}
+
+/**
+ * El esquema que toca: producción siempre https; en local (XAMPP) no hay TLS
+ * y el disparo se perdería en silencio.
+ */
+function worker_esquema(string $host): string {
+    return preg_match('/^(localhost|127\.0\.0\.1)(:|$)/i', $host) ? 'http' : 'https';
+}
+
+/** La URL completa de un worker, con host validado y esquema correcto. */
+function worker_url(string $archivo, array $params = []): string {
+    $host = worker_host();
+    $qs = http_build_query(['key' => worker_key()] + $params);
+    return worker_esquema($host) . '://' . $host . '/crecer/panel/' . ltrim($archivo, '/') . '?' . $qs;
+}
+
+/**
  * Para los DISPARADORES (arte_disparar, gen_disparar, …): ¿tiene sentido lanzar?
  * Si no hay llave, no se dispara — el job se queda en cola y lo rescata el sweep
  * cuando el config vuelva. Mejor eso que quemar el intento contra un 503.

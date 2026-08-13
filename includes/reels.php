@@ -902,9 +902,9 @@ function reels_disparar(int $id, string $modo = 'crear'): void {
     // CR-F01b: sin llave no se dispara. El job se queda en cola y lo rescata el
     // sweep cuando el config vuelva — mejor eso que quemar el intento contra un 503.
     if (!worker_puede_disparar('reel')) return;
-    $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
-    $sch  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $url  = $sch . '://' . $host . '/crecer/panel/reel_worker.php?id=' . $id . '&modo=' . rawurlencode($modo) . '&key=' . REELS_WORKER_KEY;
+    // host VALIDADO (ver worker_host): la cabecera Host la controla quien llama.
+    $host = worker_host();
+    $url  = worker_esquema($host) . '://' . $host . '/crecer/panel/reel_worker.php?id=' . $id . '&modo=' . rawurlencode($modo) . '&key=' . REELS_WORKER_KEY;
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER    => true,

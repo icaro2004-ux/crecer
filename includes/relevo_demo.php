@@ -36,8 +36,10 @@ function relevo_marcar(PDO $pdo, int $marca_id, string $accion, string $resp = '
  * logueando cada agente. El tablero lo ve aparecer sondeando crecer_ia_log.
  */
 function relevo_disparar(int $marca_id): void {
-    $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
-    $url  = 'https://' . $host . '/crecer/panel/relevo_worker.php?marca=' . $marca_id . '&key=' . RELEVO_WORKER_KEY;
+    // host VALIDADO (ver worker_host): la cabecera Host la controla quien llama.
+    require_once __DIR__ . '/worker_key.php';
+    $host = worker_host();
+    $url  = worker_esquema($host) . '://' . $host . '/crecer/panel/relevo_worker.php?marca=' . $marca_id . '&key=' . RELEVO_WORKER_KEY;
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER    => true,

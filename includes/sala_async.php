@@ -37,8 +37,10 @@ function sala_disparar(int $id): void {
     // CR-F01b: sin llave no se dispara. El job se queda en cola y lo rescata el
     // sweep cuando el config vuelva — mejor eso que quemar el intento contra un 503.
     if (!worker_puede_disparar('sala')) return;
-    $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
-    $url  = 'https://' . $host . '/crecer/panel/sala_worker.php?id=' . $id . '&key=' . SALA_WORKER_KEY;
+    // host VALIDADO: con HTTP_HOST a pelo, una cabecera Host forjada se llevaba
+    // la llave de los workers a un servidor ajeno (ver worker_host()).
+    $host = worker_host();
+    $url  = worker_esquema($host) . '://' . $host . '/crecer/panel/sala_worker.php?id=' . $id . '&key=' . SALA_WORKER_KEY;
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER    => true,

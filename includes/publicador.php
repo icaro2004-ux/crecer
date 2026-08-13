@@ -35,9 +35,10 @@ function publicar_disparar(int $marca_id, int $contenido_id, array $plataformas 
     // CR-F01b: sin llave no se dispara. El job se queda en cola y lo rescata el
     // sweep cuando el config vuelva — mejor eso que quemar el intento contra un 503.
     if (!worker_puede_disparar('publicar')) return;
-    $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
+    // host VALIDADO (ver worker_host): la cabecera Host la controla quien llama.
+    $host = worker_host();
     $pl = array_values(array_intersect(['instagram', 'facebook'], $plataformas));
-    $url  = 'https://' . $host . '/crecer/panel/publicar_worker.php?marca=' . $marca_id . '&id=' . $contenido_id . '&key=' . PUBLICAR_WORKER_KEY
+    $url  = worker_esquema($host) . '://' . $host . '/crecer/panel/publicar_worker.php?marca=' . $marca_id . '&id=' . $contenido_id . '&key=' . PUBLICAR_WORKER_KEY
           . ($pl ? '&pl=' . implode(',', $pl) : '');
     $ch = curl_init($url);
     curl_setopt_array($ch, [

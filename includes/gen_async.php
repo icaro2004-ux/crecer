@@ -37,8 +37,9 @@ function gen_disparar(int $id): void {
     // CR-F01b: sin llave no se dispara. El job se queda en cola y lo rescata el
     // sweep cuando el config vuelva — mejor eso que quemar el intento contra un 503.
     if (!worker_puede_disparar('gen')) return;
-    $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
-    $url  = 'https://' . $host . '/crecer/panel/gen_worker.php?id=' . $id . '&key=' . GEN_WORKER_KEY;
+    // host VALIDADO (ver worker_host): la cabecera Host la controla quien llama.
+    $host = worker_host();
+    $url  = worker_esquema($host) . '://' . $host . '/crecer/panel/gen_worker.php?id=' . $id . '&key=' . GEN_WORKER_KEY;
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,

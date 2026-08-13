@@ -373,8 +373,9 @@ function carrusel_disparar(int $marca_id, int $contenido_id): void {
     // CR-F01b: sin llave no se dispara. El job se queda en cola y lo rescata el
     // sweep cuando el config vuelva — mejor eso que quemar el intento contra un 503.
     if (!worker_puede_disparar('carrusel')) return;
-    $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
-    $url  = 'https://' . $host . '/crecer/panel/carrusel_worker.php?marca=' . $marca_id . '&id=' . $contenido_id . '&key=' . CARRUSEL_WORKER_KEY;
+    // host VALIDADO (ver worker_host): la cabecera Host la controla quien llama.
+    $host = worker_host();
+    $url  = worker_esquema($host) . '://' . $host . '/crecer/panel/carrusel_worker.php?marca=' . $marca_id . '&id=' . $contenido_id . '&key=' . CARRUSEL_WORKER_KEY;
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT_MS => 1500, CURLOPT_TIMEOUT_MS => 3000,

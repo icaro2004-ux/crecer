@@ -264,9 +264,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Publicar es LENTO (Meta procesa el video) → async, o el request se cae.
         // Limpiamos el error, disparamos el worker y el frontend hace polling.
         $pdo->prepare("UPDATE crecer_reels SET error_msg=NULL WHERE id=?")->execute([$rid]);
-        $host = $_SERVER['HTTP_HOST'] ?? 'encuentraloahora.com';
-        $sch  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-        $wurl = $sch . '://' . $host . '/crecer/panel/reel_publicar_worker.php?id=' . $rid . '&cid=' . $cid
+        // host VALIDADO (ver worker_host): la cabecera Host la controla quien llama.
+        require_once __DIR__ . '/../includes/worker_key.php';
+        $host = worker_host();
+        $wurl = worker_esquema($host) . '://' . $host . '/crecer/panel/reel_publicar_worker.php?id=' . $rid . '&cid=' . $cid
               . '&redes=' . rawurlencode(implode(',', $destinos)) . '&key=' . REELS_WORKER_KEY;
         $ch = curl_init($wurl);
         curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_CONNECTTIMEOUT_MS=>1500, CURLOPT_TIMEOUT_MS=>3000, CURLOPT_NOSIGNAL=>1, CURLOPT_SSL_VERIFYPEER=>false]);

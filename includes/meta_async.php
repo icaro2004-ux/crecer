@@ -46,25 +46,10 @@ function meta_job_en_curso(PDO $pdo, int $tactica_id): ?int {
 function meta_job_disparar(int $id): void {
     if (!worker_puede_disparar('meta')) return;
 
-    // EL HOST NO SE TOMA A CIEGAS DE LA PETICIÓN. `HTTP_HOST` lo controla quien
-    // llama: con una cabecera Host forjada, este curl le mandaría la llave de
-    // los workers a un servidor ajeno. Solo se aceptan hosts conocidos; ante
-    // cualquier otra cosa se usa el dominio de producción.
-    $host_req = (string)($_SERVER['HTTP_HOST'] ?? '');
-    $permitidos = defined('CRECER_WORKER_HOSTS')
-        ? array_map('trim', explode(',', (string)CRECER_WORKER_HOSTS))
-        : ['encuentraloahora.com', 'www.encuentraloahora.com', 'localhost', '127.0.0.1'];
-    $host = 'encuentraloahora.com';
-    foreach ($permitidos as $ok) {
-        // se admite el puerto (localhost:8080) pero no un dominio distinto
-        if ($host_req === $ok || preg_match('/^' . preg_quote($ok, '/') . ':\d+$/', $host_req)) { $host = $host_req; break; }
-    }
-
-    // Producción es https siempre; en local (XAMPP) no hay TLS y el disparo se
-    // perdía en silencio — el trabajo quedaba encolado para siempre y no se
-    // podía probar el ciclo antes de subirlo. Solo localhost baja a http.
-    $esquema = preg_match('/^(localhost|127\.0\.0\.1)(:|$)/i', $host) ? 'http' : 'https';
-    $url  = $esquema . '://' . $host . '/crecer/panel/meta_worker.php?id=' . $id . '&key=' . META_WORKER_KEY;
+    // host VALIDADO (ver worker_host): la cabecera Host la controla quien llama.
+    // Una sola implementación compartida por todos los disparadores.
+    $host = worker_host();
+    $url  = worker_esquema($host) . '://' . $host . '/crecer/panel/meta_worker.php?id=' . $id . '&key=' . META_WORKER_KEY;
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER    => true,
