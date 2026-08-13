@@ -1,0 +1,163 @@
+<?php
+// ============================================================
+//  CRECER — CORRER LA MIGRACIÓN DE LA META DESDE EL SERVIDOR
+//  panel/admin_migrar.php   (solo admin)
+//
+//  Por qué existe: la migración se estaba cayendo en phpMyAdmin y el error
+//  quedaba enterrado arriba del resultado, así que estábamos adivinando a
+//  ciegas. Esto la corre sentencia por sentencia y dice, de cada una, si
+//  entró, si ya estaba, o EL ERROR EXACTO que dio.
+//
+//  Es seguro correrlo las veces que haga falta:
+//   · no borra ni modifica datos — solo crea tablas y añade columnas
+//   · lo que ya existe se reporta como "ya estaba" y sigue de largo
+//   · nada se ejecuta hasta que se confirma con el botón
+//
+//  Uso:  /crecer/panel/admin_migrar.php   (con sesión de admin)
+// ============================================================
+require __DIR__ . '/../includes/db.php';
+require __DIR__ . '/../includes/auth.php';
+requiere_login();
+$usuario = usuario_actual($pdo);
+if (($usuario['rol'] ?? '') !== 'admin') { http_response_code(403); exit('Acceso solo para administradores.'); }
+
+$ARCHIVO = dirname(__DIR__) . '/migrations/_META-SIMPLE.sql';
+$h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+
+// Errores que significan "esto ya estaba" — no son fallos.
+const YA_ESTABA = [1050 /*tabla existe*/, 1060 /*columna existe*/, 1061 /*índice existe*/, 1062 /*duplicado*/];
+
+$correr = ($_SERVER['REQUEST_METHOD'] === 'POST' && csrf_ok());
+$res = []; $n_ok = 0; $n_ya = 0; $n_err = 0;
+
+if ($correr && is_file($ARCHIVO)) {
+    $sql = (string)file_get_contents($ARCHIVO);
+    $sql = preg_replace('/^\s*--.*$/m', '', $sql);          // fuera los comentarios
+    foreach (array_filter(array_map('trim', explode(';', $sql))) as $stmt) {
+        $etiqueta = preg_replace('/\s+/', ' ', mb_substr($stmt, 0, 78));
+        // Los SELECT informativos del archivo (el "Listo…" del final) NO se
+        // ejecutan: con exec() dejan un resultado sin consumir y la siguiente
+        // consulta revienta con "unbuffered queries are active" — que fue lo que
+        // hizo que esta misma página reportara "faltan 16" cuando estaban todas.
+        if (preg_match('/^SELECT\b/i', $stmt)) { continue; }
+        try {
+            $pdo->exec($stmt);
+            $res[] = ['ok', $etiqueta, '']; $n_ok++;
+        } catch (PDOException $e) {
+            $code = (int)($e->errorInfo[1] ?? 0);
+            if (in_array($code, YA_ESTABA, true)) { $res[] = ['ya', $etiqueta, 'ya estaba (' . $code . ')']; $n_ya++; }
+            else { $res[] = ['err', $etiqueta, '[' . $code . '] ' . $e->getMessage()]; $n_err++; }
+        }
+    }
+}
+
+// ── Verificación (siempre se muestra) ──
+$falta = [];
+$piezas = [
+    ['crecer_meta',            'tabla',  null],
+    ['crecer_meta_tactica',    'tabla',  null],
+    ['crecer_meta_plan',       'tabla',  null],
+    ['crecer_meta_jobs',       'tabla',  null],
+    ['crecer_visual_huella',   'tabla',  null],
+    ['crecer_contenido',       'col',    'meta_id'],
+    ['crecer_contenido',       'col',    'tactica_id'],
+    ['crecer_contenido',       'col',    'plan_id'],
+    ['crecer_contenido',       'col',    'necesita_material'],
+    ['crecer_contenido',       'col',    'guion'],
+    ['crecer_meta_tactica',    'col',    'plan_id'],
+    ['crecer_meta_tactica',    'col',    'clase'],
+    ['crecer_meta_tactica',    'col',    'piezas_meta'],
+    ['crecer_meta_tactica',    'col',    'formato'],
+    ['crecer_meta_tactica',    'col',    'ejecutado_at'],
+    ['crecer_reels',           'col',    'contenido_id'],
+];
+$estado = [];
+foreach ($piezas as [$tabla, $tipo, $col]) {
+    try {
+        if ($tipo === 'tabla') {
+            $q = $pdo->prepare("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?");
+            $q->execute([$tabla]); $hay = (int)$q->fetchColumn() > 0;
+            $nombre = $tabla;
+        } else {
+            $q = $pdo->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?");
+            $q->execute([$tabla, $col]); $hay = (int)$q->fetchColumn() > 0;
+            $nombre = $tabla . '.' . $col;
+        }
+    } catch (Throwable $e) { $hay = false; $nombre = $tabla . ($col ? '.' . $col : ''); }
+    $estado[] = [$nombre, $hay];
+    if (!$hay) $falta[] = $nombre;
+}
+$base = '';
+try { $base = (string)$pdo->query('SELECT DATABASE()')->fetchColumn(); } catch (Throwable $e) {}
+?>
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Migrar la Meta — Crecer</title>
+<style>
+ body{margin:0;background:#faf8f5;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#231F20;padding:24px 16px 60px}
+ .w{max-width:860px;margin:0 auto}
+ h1{font-size:23px;margin:0 0 4px} .sub{color:#6b6560;font-size:13.5px;margin:0 0 20px;line-height:1.55}
+ .base{display:inline-block;background:#fff;border:1px solid #e6e1da;border-radius:9px;padding:6px 11px;font-size:12.5px;margin-bottom:18px}
+ .btn{display:inline-block;background:#231F20;color:#fff;border:0;border-radius:11px;padding:13px 22px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+ .btn.go{background:linear-gradient(135deg,#FF6B3D,#EF4375)}
+ .caja{background:#fff;border:1px solid #e6e1da;border-radius:14px;padding:16px 18px;margin-bottom:16px}
+ .fila{display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-bottom:1px solid #f2efe9;font-size:12.5px;line-height:1.5}
+ .fila:last-child{border-bottom:0}
+ .tag{flex:none;font-size:10.5px;font-weight:800;padding:3px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:.4px}
+ .tag.ok{background:#e6f7f0;color:#0a6a4a} .tag.ya{background:#f2efe9;color:#6b6560} .tag.err{background:#fdeeee;color:#b4232b}
+ code{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:#444;word-break:break-word}
+ .err-msg{color:#b4232b;font-weight:600;margin-top:3px}
+ .res{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:7px;margin-top:4px}
+ .p{display:flex;gap:8px;align-items:center;font-size:12.5px;background:#fff;border:1px solid #e6e1da;border-radius:9px;padding:8px 10px}
+ .p b{flex:none;width:15px;height:15px;border-radius:50%;display:inline-block}
+ .p.si b{background:#12a150} .p.no b{background:#e0245e}
+ .final{border-radius:14px;padding:16px 18px;font-size:15px;font-weight:700;line-height:1.5}
+ .final.bien{background:#e6f7f0;border:1px solid #9ad9bd;color:#0a6a4a}
+ .final.mal{background:#fdeeee;border:1px solid #f0b4b8;color:#b4232b}
+</style></head><body><div class="w">
+ <h1>Migrar la Meta</h1>
+ <p class="sub">Corre la migración desde el servidor y te dice, línea por línea, qué entró, qué ya estaba
+    y el error exacto si algo falla. No borra ni modifica datos: solo crea tablas y añade columnas.</p>
+ <div class="base">Base de datos: <b><?= $h($base ?: '(desconocida)') ?></b></div>
+
+ <?php if (!is_file($ARCHIVO)): ?>
+   <div class="final mal">No encuentro <code>migrations/_META-SIMPLE.sql</code> en el servidor.
+     ¿Hiciste el Redeploy después del último push?</div>
+ <?php elseif (!$correr): ?>
+   <form method="post" class="caja">
+     <input type="hidden" name="csrf" value="<?= $h(csrf_token()) ?>">
+     <p style="margin:0 0 14px;font-size:14px;line-height:1.6">Se van a crear las 5 tablas de la Meta y añadir
+        6 columnas. Lo que ya exista se salta solo.</p>
+     <button class="btn go" type="submit">Correr la migración ahora</button>
+   </form>
+ <?php else: ?>
+   <div class="caja">
+     <p style="margin:0 0 10px;font-weight:700;font-size:14px">
+       <?= (int)$n_ok ?> entraron · <?= (int)$n_ya ?> ya estaban · <?= (int)$n_err ?> con error</p>
+     <?php foreach ($res as [$t, $et, $msg]): ?>
+       <div class="fila">
+         <span class="tag <?= $h($t) ?>"><?= $t === 'ok' ? 'hecho' : ($t === 'ya' ? 'ya estaba' : 'error') ?></span>
+         <div><code><?= $h($et) ?></code>
+           <?php if ($t === 'err'): ?><div class="err-msg"><?= $h($msg) ?></div><?php endif; ?></div>
+       </div>
+     <?php endforeach; ?>
+   </div>
+ <?php endif; ?>
+
+ <div class="caja">
+   <p style="margin:0 0 10px;font-weight:700;font-size:14px">Estado de la base ahora mismo</p>
+   <div class="res">
+     <?php foreach ($estado as [$nombre, $hay]): ?>
+       <div class="p <?= $hay ? 'si' : 'no' ?>"><b></b><?= $h($nombre) ?></div>
+     <?php endforeach; ?>
+   </div>
+ </div>
+
+ <?php if (!$falta): ?>
+   <div class="final bien">Todo listo: las 16 piezas están puestas. La Meta ya puede correr en producción.</div>
+ <?php else: ?>
+   <div class="final mal">Faltan <?= count($falta) ?>: <?= $h(implode(', ', $falta)) ?>.
+     <?php if (!$correr): ?><br>Dale al botón de arriba para crearlas.<?php endif; ?></div>
+ <?php endif; ?>
+</div></body></html>
