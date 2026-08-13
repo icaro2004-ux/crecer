@@ -658,6 +658,12 @@ $credito  = $has_deck
   .n-barra i{display:block;height:100%;background:linear-gradient(90deg,var(--teal),var(--magenta));border-radius:99px;transition:width .6s cubic-bezier(.4,0,.2,1)}
   .n-ritmo{font-size:12.5px;font-weight:700;margin:0}
   .n-ritmo.bien{color:#0a6a5f} .n-ritmo.mal{color:#b4232b}
+  /* La victoria corta: lo que SÍ se movió esta semana, mientras el número
+     grande madura. Va discreta — informa, no compite con la meta. */
+  .n-semana{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;
+    background:#fff;border:1px solid var(--line);border-radius:11px;padding:9px 12px}
+  .ns-t{font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted)}
+  .ns-v{font-size:12.5px;font-weight:700;color:var(--teal-dark,#00827e);text-align:right}
   .n-jugada{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-top:14px}
   .n-jl{display:block;font-size:10.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
   .n-jugada b{display:block;font-size:15px;color:var(--tinta);line-height:1.3;margin-bottom:4px}
@@ -948,6 +954,24 @@ $credito  = $has_deck
         <?php elseif ($__prog['al_dia'] === true): ?>
           <p class="n-ritmo bien">Vamos en ritmo.</p>
         <?php endif; ?>
+      <?php endif; ?>
+
+      <?php
+      // LA VICTORIA CORTA. El número grande tarda en moverse y eso desespera:
+      // el dueño abre la app el día 3, ve "0 de 25" y siente que no pasa nada.
+      // Esto le enseña lo que SÍ pasó esta semana, que es real y es suyo.
+      $__sem = meta_avance_semana($pdo, $__meta);
+      if ($__sem['jugadas'] > 0 || $__sem['piezas'] > 0):
+      ?>
+        <div class="n-semana">
+          <span class="ns-t">Semana <?= (int)$__sem['semana'] ?><?= $__sem['semanas'] > 1 ? ' de ' . (int)$__sem['semanas'] : '' ?></span>
+          <span class="ns-v">
+            <?php if ($__sem['jugadas'] > 0): ?>
+              <?= (int)$__sem['hechas'] ?> de <?= (int)$__sem['jugadas'] ?> jugadas<?php endif; ?>
+            <?php if ($__sem['piezas'] > 0): ?>
+              <?= $__sem['jugadas'] > 0 ? ' · ' : '' ?><?= (int)$__sem['piezas'] ?> publicad<?= $__sem['piezas'] == 1 ? 'o' : 'os' ?><?php endif; ?>
+          </span>
+        </div>
       <?php endif; ?>
 
       <?php if ($__jug): ?>

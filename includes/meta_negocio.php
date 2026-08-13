@@ -1111,6 +1111,60 @@ function meta_enfoque_semana(PDO $pdo, int $marca_id): string {
 }
 
 /**
+ * EL AVANCE DE ESTA SEMANA — la victoria corta.
+ *
+ * Un número mensual desespera: el dueño abre la app el día 3, ve "0 de 25" y
+ * siente que no pasa nada, aunque el corillo esté trabajando. Pero SÍ está
+ * pasando algo — hay jugadas cumplidas y piezas publicadas esta semana.
+ * Eso es lo que hay que enseñarle mientras el número grande madura.
+ *
+ * Todo medido, nada inventado.
+ *
+ * @return array{semana:int, semanas:int, jugadas:int, hechas:int, piezas:int}
+ */
+function meta_avance_semana(PDO $pdo, array $meta): array {
+    $out = ['semana' => 1, 'semanas' => 1, 'jugadas' => 0, 'hechas' => 0, 'piezas' => 0];
+    try {
+        $ini = new DateTimeImmutable((string)$meta['fecha_inicio']);
+        $hoy = new DateTimeImmutable('today');
+        $out['semana'] = 1 + (int)floor((int)$ini->diff($hoy)->days / 7);
+        if (!empty($meta['fecha_limite'])) {
+            $fin = new DateTimeImmutable((string)$meta['fecha_limite']);
+            $out['semanas'] = max(1, (int)ceil(((int)$ini->diff($fin)->days) / 7));
+            $out['semana']  = min($out['semana'], $out['semanas']);
+        }
+    } catch (Throwable $e) {}
+
+    // Jugadas de ESTA semana y cuántas ya están cumplidas. Solo las del plan
+    // VIGENTE: contando toda la meta se sumaban las de los planes reemplazados
+    // y salía "4 de 8" cuando el plan de esta semana tiene 2.
+    try {
+        $plan = meta_plan_activo($pdo, (int)$meta['id']);
+        if ($plan) {
+            $q = $pdo->prepare("SELECT estado FROM crecer_meta_tactica
+                                 WHERE plan_id=? AND semana=? AND clase<>'regla'");
+            $q->execute([(int)$plan['id'], $out['semana']]);
+            foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $e) {
+                $out['jugadas']++;
+                if ($e === 'hecha') $out['hechas']++;
+            }
+        }
+    } catch (Throwable $e) {}
+
+    // Piezas publicadas en los últimos 7 días bajo esta meta: la prueba de que
+    // el corillo no está de brazos cruzados aunque el número grande no se mueva.
+    try {
+        $q = $pdo->prepare("SELECT COUNT(*) FROM crecer_contenido
+                             WHERE meta_id=? AND estado='publicado'
+                               AND publicado_at >= (NOW() - INTERVAL 7 DAY)");
+        $q->execute([(int)$meta['id']]);
+        $out['piezas'] = (int)$q->fetchColumn();
+    } catch (Throwable $e) {}
+
+    return $out;
+}
+
+/**
  * REVISIÓN de la meta (para el cron / el relevo): cierra la meta si ya
  * se logró o si se venció. No inventa: solo actúa con progreso medido.
  * @return string  qué pasó ('' si nada)
