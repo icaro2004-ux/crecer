@@ -67,30 +67,44 @@ function tour_pasos(string $clave, array $ctx = []): array {
     switch ($clave) {
 
         case 'inicio':
+            // El orden sigue lo que el ojo ve al bajar por el Home. Se
+            // reescribió el 2026-08-12 junto con la cirugía del Home: antes
+            // señalaba un "tip de finanzas" que ya no está y una gráfica que
+            // ahora vive dentro del Analista. Un tour que apunta a lo que no
+            // existe es peor que no tener tour.
             return array_values(array_filter([
+                // 1 · EL NORTE. Es lo primero de la pantalla y lo que da sentido
+                //     a todo lo demás, así que abre el tour.
+                !empty($ctx['hay_meta']) ? [
+                    'sel' => '.norte',
+                    't'   => 'Aquí manda tu meta.',
+                    's'   => 'Todo lo que hace el corillo empuja este número. Abajo te dice qué toca ahora y cómo vas esta semana.',
+                ] : [
+                    'sel' => '.norte',
+                    't'   => 'Empieza por decir qué quieres lograr.',
+                    's'   => 'Más pedidos, que te escriban, que te conozca más gente. El corillo arma el plan y se pone a trabajar en él. Sin un norte, publicar es dar vueltas.',
+                ],
+                // 2 · Lo que necesita de ti
                 !empty($ctx['hay_post']) ? [
-                    'sel' => '.hz-card',
+                    'sel' => '.hz-next', 'up' => '.hz-card',
                     't'   => 'Tu corillo ya trabajó.',
                     's'   => 'Esto no es una pantalla vacía esperándote: tu próximo post ya está hecho. Tú solo lo apruebas.',
                 ] : [
-                    'sel' => '.hz-card',
+                    'sel' => '.hz-next', 'up' => '.hz-card',
                     't'   => 'Aquí aparece tu próximo post.',
                     's'   => 'El corillo lo está preparando. Cuando esté, sale aquí y lo único que tienes que hacer es darle el OK.',
                 ],
+                // 3 · Quién mira los números (ahora con la gráfica dentro)
                 [
                     'sel' => '.an-card',
                     't'   => 'Y hay quien vigila.',
-                    's'   => 'Tu analista mira tus números todos los días y te habla solo cuando algo vale la pena. No tienes que ir a buscarlo.',
+                    's'   => 'Tu analista mira tus números todos los días y te habla solo cuando algo vale la pena — siempre contra tu meta, no por hablar. La gráfica de abajo es su prueba.',
                 ],
+                // 4 · Lo que viene
                 [
                     'sel' => '.hz-week', 'up' => '.hz-card',
                     't'   => 'Tu semana, de un vistazo.',
                     's'   => 'Lo que sale y cuándo. Si quieres moverlo o agregar lo tuyo, eso se hace en Calendario.',
-                ],
-                [
-                    'sel' => '.hz-spark', 'up' => '.hz-card',
-                    't'   => 'Tus números y tus consejos.',
-                    's'   => 'Aquí ves si vas creciendo. Y más abajo el analista te lo explica en español, con un tip de finanzas y la idea del día.',
                 ],
                 $nav,
                 $ayuda,

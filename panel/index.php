@@ -662,7 +662,7 @@ $credito  = $has_deck
      grande madura. Va discreta — informa, no compite con la meta. */
   .n-semana{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;
     background:#fff;border:1px solid var(--line);border-radius:11px;padding:9px 12px}
-  .ns-t{font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted)}
+  .ns-t{font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);white-space:nowrap;flex:none}
   .ns-v{font-size:12.5px;font-weight:700;color:var(--teal-dark,#00827e);text-align:right}
   .n-jugada{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-top:14px}
   .n-jl{display:block;font-size:10.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
@@ -1537,5 +1537,10 @@ $credito  = $has_deck
 // EL RECIBIMIENTO — la primera vez que esta cuenta entra a esta pantalla.
 // Su JS espera al 'load', así el botón Ayuda ya existe cuando lo ilumine.
 require_once __DIR__ . '/../includes/tour.php';
-tour_montar($pdo, $marca_id, 'inicio', ['hay_post' => !empty($hz_post)]);
+// El tour cambia según lo que el dueño tenga delante: si ya hay meta, la explica;
+// si no, le dice por qué conviene ponerla.
+tour_montar($pdo, $marca_id, 'inicio', [
+    'hay_post' => !empty($hz_post),
+    'hay_meta' => ($__meta_estado === 'activa'),
+]);
 require __DIR__ . '/_shell_foot.php'; ?>

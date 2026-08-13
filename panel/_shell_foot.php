@@ -47,7 +47,12 @@
     var key='guia_'+ov.dataset.key;
     window.cerrarGuia=function(){ ov.classList.remove('show');
       var no=document.getElementById('guiaNo'); if(no&&no.checked) localStorage.setItem(key,'1'); };
-    if(!localStorage.getItem(key)) setTimeout(function(){ov.classList.add('show');},650);
+    // UNA SOLA BIENVENIDA A LA VEZ. El Recibimiento (#trOv, el spotlight que
+    // señala elementos reales) y esta guía se disparaban los dos en la primera
+    // visita y salían uno encima del otro. Si el Recibimiento va a correr, la
+    // guía cede: se queda esperando en su botón "?" para cuando la pidan.
+    var hayTour = !!document.getElementById('trOv');
+    if(!hayTour && !localStorage.getItem(key)) setTimeout(function(){ov.classList.add('show');},650);
     document.getElementById('guiaBtn').addEventListener('click',function(){ov.classList.add('show');});
     ov.addEventListener('click',function(e){ if(e.target===ov) cerrarGuia(); });
   })();
