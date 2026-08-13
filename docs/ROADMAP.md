@@ -30,19 +30,25 @@
 > Manuel trabaja lu–vi: bloques de 15–30 min por noche. Sábado = día grande.
 > Claude adelanta en semana lo que no necesita manos de Manuel.
 
+> **El calendario real** (corregido 2026-08-12): el **17 cae en LUNES**, no en
+> domingo. Hay un día más de colchón del que decía este roadmap.
+
 | Día | Tarea de Manuel (corta) |
 |---|---|
-| **Lun 11** | Token de WhatsApp: verificar/extender a 60 días (5 min) — el Vigía avisa si muere |
-| **Mar 12** | **Stripe LIVE: price $39** (CR-F02) — desbloquea el revenue (15 min) |
-| **Mié 13** | Migraciones pendientes en phpMyAdmin + SQL de verificación de esquema (15 min) |
-| **Jue 14** | Rotar `CRECER_WORKER_KEY` y `CRON_TOKEN` + compartir repo con `testing@devpost.com` y `judging@hacker.fund` (15 min) |
-| **Vie 15** | Cuenta de juez (crear + credenciales al README) + abrir draft en Devpost, pegar campos listos (20 min) |
-| **Sáb 16** | **EL VIDEO** (guion listo) + subir a YouTube · swap Twilio/realtor · token permanente · evidencia final (P&L, screenshots) · Devpost completo |
-| **Dom 17 AM** | Revisión final y **SUBMIT antes de la 1:00 PM PT** (colchón, no deadline) |
+| ~~Mar 11~~ | ~~Token de WhatsApp~~ |
+| **Mié 12** | ✅ Migraciones de la Meta en producción (16/16) · falta **Redeploy** y probar en el teléfono |
+| **Jue 13** | **Stripe LIVE: price $39** + rotar `CRECER_WORKER_KEY` y `CRON_TOKEN` (20 min) |
+| **Vie 14** | Cuenta de juez (crear + credenciales al README) + compartir repo con `testing@devpost.com` y `judging@hacker.fund` + abrir draft en Devpost (20 min) |
+| **SÁB 15** | **EL VIDEO** (guion listo) + subir a YouTube · evidencia final (el paquete la arma sola) · Devpost completo · **tag `v1.0-xprize`** |
+| **Dom 16** | Revisión con la cabeza fresca: repo, video y app desde incógnito |
+| **LUN 17** | **SUBMIT antes de las 12:00 PM PT** (deadline 1:00 PM PT = 4:00 PM en PR) |
 
-**Claude en semana:** SABADO-CHECKLIST detallado · empaquetador de evidencia
-(P&L + logs + usuarios → campos de Devpost) · README del juez · pasada final a la
-narrativa v4 · mapa click-a-click del token permanente y del swap Twilio.
+Detalle paso a paso en [`ENTREGA-CHECKLIST.md`](../ENTREGA-CHECKLIST.md).
+
+**Ya hecho por Claude:** checklist del día D · empaquetador de evidencia
+(`panel/admin_paquete.php`: P&L + logs + uso de API → campos de Devpost) ·
+README del juez · narrativa v5 dentro del límite de palabras (983) ·
+migrador desde el servidor (`panel/admin_migrar.php`).
 
 ## Horizonte 1 — CERTIFICACIÓN (resto de agosto)
 

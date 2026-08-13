@@ -1,9 +1,16 @@
 # ENTREGA XPRIZE — el guion del día D
 
-> **Deadline duro: domingo 17 ago 2026, 1:00 PM PT** (= 4:00 PM en Puerto Rico).
-> El sábado 16 es el día de trabajo; el domingo AM es colchón, no plan.
-> Este documento se marca a mano: cada `[ ]` que quede sin marcar el sábado en la
-> noche es un riesgo que llega vivo al domingo.
+> **Deadline duro: LUNES 17 ago 2026, 1:00 PM PT** (= 4:00 PM en Puerto Rico).
+> Ojo con el día de la semana — el 17 cae en **lunes**, no en domingo:
+>
+> | | |
+> |---|---|
+> | **Sábado 15** | el día de trabajo (video + evidencia + Devpost en draft) |
+> | **Domingo 16** | revisión completa, con la cabeza fresca |
+> | **Lunes 17** | envío antes de la 1:00 PM PT — con margen, no al filo |
+>
+> Este documento se marca a mano: cada `[ ]` que quede sin marcar el sábado por
+> la noche es un riesgo que llega vivo al domingo.
 
 ---
 
@@ -28,7 +35,7 @@ queman entero.
 
 ---
 
-## Sábado 16 — el orden importa
+## Sábado 15 — el orden importa
 
 ### 1. Certificar que el producto está vivo (45 min)
 
@@ -83,15 +90,50 @@ Guion completo en `LIBRETO_VIDEO.md`. Antes de grabar:
 
 ---
 
-## Domingo 17 AM — revisión y envío
+## Sábado 15, al cerrar — el tag de la entrega
+
+- [ ] Sobre el commit exacto que se entrega (ni antes ni después):
+      `git tag -a v1.0-xprize -m "Entrega Build with Gemini XPRIZE — ago 2026"`
+      y `git push origin v1.0-xprize`.
+- [ ] Mencionarlo en el `README.md`.
+      **Para qué:** con el tag, `main` puede seguir avanzando después de entregar
+      sin que el jurado vea algo distinto de lo que se le entregó.
+
+---
+
+## Domingo 16 — revisión con la cabeza fresca
 
 - [ ] Leer la narrativa completa una vez, en voz alta. Si algo suena a promesa y
       no a hecho, se corrige.
 - [ ] Abrir el link del repo **desde una ventana de incógnito** para confirmar
       que un juez puede entrar de verdad.
 - [ ] Abrir el video desde incógnito.
-- [ ] Entrar a la app con la cuenta de juez desde incógnito.
-- [ ] **SUBMIT antes de las 12:00 PM PT** (una hora de colchón sobre el deadline).
+- [ ] Entrar a la app con la cuenta de juez desde incógnito y hacer el recorrido
+      completo: Home → poner meta → ver el plan → "Que lo haga el corillo" →
+      aprobar un post.
+
+---
+
+## Lunes 17 — envío
+
+- [ ] Última mirada al draft de Devpost (que no falte ningún adjunto).
+- [ ] **SUBMIT antes de las 12:00 PM PT** — una hora de colchón sobre el
+      deadline de la 1:00 PM PT (4:00 PM en Puerto Rico).
+
+---
+
+## Durante la ventana de evaluación (después de enviar)
+
+Se puede seguir mejorando el producto, con tres reglas:
+
+1. **El repo y la narrativa se congelan solos** gracias al tag. Producción **no**:
+   si un juez entra y justo se está desplegando algo a medias, ve eso.
+2. Cada despliegue de esos días pasa antes por el recorrido básico.
+3. **Lo que sale en el video no se toca** hasta que pase la evaluación.
+
+Deuda de desktop aceptada a propósito para después: Configuración, Mi marca y
+Actividad se ven estrechas en pantalla grande. No están en el recorrido del
+jurado.
 
 ---
 
