@@ -93,9 +93,31 @@ if ($vista === 'mes') {
 $eventos = [];
 // Lo RECHAZADO no va al calendario: si dijiste que no, no debe seguir
 // apareciendo como si fuera a salir (confunde y no se publica).
-$c = $pdo->prepare("SELECT id, plataforma, tipo, estado, caption, grafica_path, DATE_FORMAT(fecha_programada,'%Y-%m-%d') fk, TIME_FORMAT(fecha_programada,'%H:%i') hora FROM crecer_contenido WHERE marca_id=? AND estado<>'rechazado' AND DATE(fecha_programada) BETWEEN ? AND ?");
-$c->execute([$marca_id,$rangoIni,$rangoFin]);
-foreach ($c->fetchAll() as $p) $eventos[$p['fk']][] = ['tipo'=>'contenido']+$p;
+// Se trae tactica_id para poder decir DE QUÉ JUGADA del plan salió cada pieza:
+// el calendario es donde el dueño ve "qué sale y cuándo", y saber que eso está
+// empujando su meta cambia lo que significa. Si la columna no existe todavía,
+// se cae a la consulta de siempre en vez de dejar el calendario vacío.
+try {
+    $c = $pdo->prepare("SELECT id, plataforma, tipo, estado, caption, grafica_path, tactica_id, DATE_FORMAT(fecha_programada,'%Y-%m-%d') fk, TIME_FORMAT(fecha_programada,'%H:%i') hora FROM crecer_contenido WHERE marca_id=? AND estado<>'rechazado' AND DATE(fecha_programada) BETWEEN ? AND ?");
+    $c->execute([$marca_id,$rangoIni,$rangoFin]);
+    $filas_cont = $c->fetchAll();
+} catch (Throwable $e) {
+    $c = $pdo->prepare("SELECT id, plataforma, tipo, estado, caption, grafica_path, DATE_FORMAT(fecha_programada,'%Y-%m-%d') fk, TIME_FORMAT(fecha_programada,'%H:%i') hora FROM crecer_contenido WHERE marca_id=? AND estado<>'rechazado' AND DATE(fecha_programada) BETWEEN ? AND ?");
+    $c->execute([$marca_id,$rangoIni,$rangoFin]);
+    $filas_cont = $c->fetchAll();
+}
+// Títulos de las jugadas, de una sola consulta (no una por pieza).
+$jugadas_tit = [];
+$ids_tac = array_values(array_unique(array_filter(array_column($filas_cont, 'tactica_id'))));
+if ($ids_tac) {
+    try {
+        $in = implode(',', array_map('intval', $ids_tac));
+        foreach ($pdo->query("SELECT id, titulo FROM crecer_meta_tactica WHERE id IN ({$in}) AND marca_id=" . (int)$marca_id) as $r) {
+            $jugadas_tit[(int)$r['id']] = (string)$r['titulo'];
+        }
+    } catch (Throwable $e) {}
+}
+foreach ($filas_cont as $p) $eventos[$p['fk']][] = ['tipo'=>'contenido']+$p;
 $o = $pdo->prepare("SELECT id, cliente_nombre, descripcion, monto, estado, DATE_FORMAT(fecha_entrega,'%Y-%m-%d') fk, TIME_FORMAT(fecha_entrega,'%H:%i') hora FROM crecer_ordenes WHERE marca_id=? AND fecha_entrega IS NOT NULL AND DATE(fecha_entrega) BETWEEN ? AND ?");
 $o->execute([$marca_id,$rangoIni,$rangoFin]);
 foreach ($o->fetchAll() as $r) $eventos[$r['fk']][] = ['tipo'=>'orden']+$r;
@@ -111,11 +133,17 @@ $est_col =['borrador'=>'#9A6A0E','aprobado'=>'#0F7A45','rechazado'=>'#C23A2E','p
             'recibida'=>'#9A6A0E','en_proceso'=>'#0A7886','completada'=>'#0F7A45','cancelada'=>'#C23A2E'];
 
 // Chip de evento reutilizable (todas las vistas)
-$chip = function($ev, $showHora=false) use ($h,$est_col) {
+// $jugadas_tit entra por `use` — sin eso el closure no la ve y las piezas del
+// plan salían sin decir a qué meta pertenecen.
+$chip = function($ev, $showHora=false) use ($h,$est_col,$jugadas_tit) {
     if ($ev['tipo']==='contenido') {
         $col=$est_col[$ev['estado']]??'#888';
         $titulo=mb_substr($ev['caption'] ?: 'Contenido',0,22);
-        $data='data-tipo="contenido" data-cap="'.$h($ev['caption']).'" data-img="'.$h($ev['grafica_path']??'').'" data-meta="'.$h(ucfirst($ev['plataforma']).' · '.$ev['estado']).'"';
+        // Si la pieza salió de una jugada del plan, se dice aquí: es la
+        // diferencia entre "un post más el martes" y "esto empuja tu meta".
+        $de_jugada = !empty($ev['tactica_id']) && isset($jugadas_tit[(int)$ev['tactica_id']])
+            ? ' · Meta: ' . $jugadas_tit[(int)$ev['tactica_id']] : '';
+        $data='data-tipo="contenido" data-cap="'.$h($ev['caption']).'" data-img="'.$h($ev['grafica_path']??'').'" data-meta="'.$h(ucfirst($ev['plataforma']).' · '.$ev['estado'].$de_jugada).'"';
         $tt=$ev['caption']??'';
     } elseif ($ev['tipo']==='orden') {
         $col=$est_col[$ev['estado']]??'#0A7886';
