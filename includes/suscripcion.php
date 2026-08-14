@@ -114,6 +114,30 @@ function activacion_de_prueba(?string $email = null): bool {
     return false;
 }
 
+/**
+ * ¿Es una CUENTA DE JURADO? (evaluadores del XPRIZE)
+ *
+ * Existe para separar dos cosas que CRECER_TEST_EMAILS tenía mezcladas y que no
+ * son lo mismo:
+ *   · cuentas de prueba DEL FUNDADOR → necesitan generación ilimitada y entran
+ *     a los laboratorios internos;
+ *   · cuenta del JURADO → sus credenciales se PUBLICAN en un repo público, así
+ *     que no puede tener nada ilimitado ni tocar herramientas que gastan API.
+ *
+ * Lo que da esta lista, y nada más: ver la bitácora técnica (evidencia.php) de
+ * SU PROPIA marca, que es la prueba del criterio #2. El acceso al app se lo da
+ * su suscripción de cortesía, con la MISMA cuota de imágenes que un cliente que
+ * paga. Si alguien saca las credenciales del README, el daño tiene techo.
+ *
+ * Config:  define('CRECER_JUEZ_EMAILS', 'jurado@ejemplo.com, otro@ejemplo.com');
+ */
+function es_cuenta_juez(?string $email = null): bool {
+    if ($email === null || $email === '') return false;
+    if (!defined('CRECER_JUEZ_EMAILS') || CRECER_JUEZ_EMAILS === '') return false;
+    $lista = array_map('trim', explode(',', strtolower((string)CRECER_JUEZ_EMAILS)));
+    return in_array(strtolower($email), $lista, true);
+}
+
 /** ¿Está en trial (genera pero con candado)? */
 function en_trial(?array $su): bool { return $su && $su['estado'] === 'trial'; }
 

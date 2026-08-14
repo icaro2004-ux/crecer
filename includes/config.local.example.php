@@ -142,6 +142,17 @@ define('CRECER_WORKER_KEY', '');
 //    Estas cuentas, además, ENTRAN SIN VERIFICAR POR CORREO (registro directo),
 //    así puedes probar el flujo completo desde la página aunque el email falle.
 //      define('CRECER_TEST_EMAILS', 'tucorreo+prueba1@gmail.com, tucorreo+prueba2@gmail.com, tucorreo+prueba3@gmail.com');
+//
+//  · CUENTAS DE JURADO (evaluadores del concurso). NO es lo mismo que la lista
+//    de arriba, y la diferencia importa: CRECER_TEST_EMAILS da generación de
+//    imágenes ILIMITADA y entrada a los laboratorios internos, y las
+//    credenciales del jurado se publican en un repositorio público.
+//    Esta lista da UNA sola cosa: ver la bitácora técnica (panel/evidencia.php)
+//    de SU PROPIA marca — la prueba del criterio #2. El acceso al app se lo da
+//    su suscripción de cortesía, con la MISMA cuota de imágenes que un cliente
+//    que paga. Así, si alguien saca las credenciales del README, el daño tiene
+//    techo.
+//      define('CRECER_JUEZ_EMAILS', 'tucorreo+jurado@gmail.com');
 
 // ── EMAIL / SMTP (activación de cuentas y avisos) ────────────────────────────
 // SIN estas constantes, crecer_enviar_email() cae a mail() de PHP, que NO

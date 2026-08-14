@@ -38,15 +38,20 @@ $marca_id = (int)$marca['id'];
 // el admin ve TODAS las marcas con el correo de cada dueño, y la entrega
 // promete que no expone datos de ningún cliente real.
 //
-// Así que se abre a las cuentas de CRECER_TEST_EMAILS —la del jurado— y SOLO
-// para su propia marca: arriba, el selector de marca por ?marca= sigue siendo
-// exclusivo del admin, así que un evaluador cae en marca_del_usuario() y no
-// puede mirar la de nadie más. Ve las facturas de lo que él mismo generó.
+// Así que se abre a las cuentas de CRECER_JUEZ_EMAILS y SOLO para su propia
+// marca: arriba, el selector de marca por ?marca= sigue siendo exclusivo del
+// admin, así que un evaluador cae en marca_del_usuario() y no puede mirar la de
+// nadie más. Ve las facturas de lo que él mismo generó.
+//
+// Se usa CRECER_JUEZ_EMAILS y NO CRECER_TEST_EMAILS a propósito: esa otra lista
+// da además generación ilimitada de imágenes, y las credenciales del jurado se
+// publican en un repo público. Al jurado se le da lo que necesita para juzgar,
+// no una llave maestra.
 //
 // El cliente normal sigue yendo a la versión humana: los costos por llamada no
 // son asunto suyo.
-$es_evaluador = function_exists('activacion_de_prueba')
-             && activacion_de_prueba($usuario['email'] ?? null);
+$es_evaluador = function_exists('es_cuenta_juez')
+             && es_cuenta_juez($usuario['email'] ?? null);
 if (!$es_admin && !$es_evaluador) {
     header('Location: /crecer/panel/actividad.php?marca=' . $marca_id);
     exit;
