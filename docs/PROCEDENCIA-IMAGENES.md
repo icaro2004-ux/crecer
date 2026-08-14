@@ -35,16 +35,39 @@ que su origen no se puede verificar desde el repositorio. Solo Manuel lo sabe.
 Todas 800×800, en `assets/landing/feed/`. Se usan en `crecer.php` y podrían aparecer
 en el video de la entrega.
 
+**RESUELTO el 14 de agosto de 2026.** Las ocho las **generó el propio producto**
+(el generador de arte de Crecer, que para arte desde cero usa `gpt-image-1`).
+No son fotografías: no salieron de ningún banco de imágenes ni de una cámara.
+
+Eso disuelve los tres riesgos de golpe:
+
+- **Licencia:** la salida es propia. OpenAI cede al usuario los derechos de lo
+  que genera, con uso comercial incluido. No hay licencia de terceros que
+  verificar ni que se pueda vencer.
+- **Persona identificable:** las personas que aparecen (el barbero, su cliente)
+  **no existen** — son generadas. No hay a quién pedirle un model release
+  porque no hay nadie retratado.
+- **Marca visible:** los rótulos que se ven en las imágenes (el neón "EL CORTE
+  Barbería", el logo "Dulce Encanto") son de los **negocios ficticios** del
+  feed, creados para el ejemplo. No hay un local real reconocible.
+
+Y confirma que el rótulo de la landing —*"Ejemplos creados con Crecer"*— es
+literalmente cierto: son la salida del producto, no una ilustración comprada.
+
 | Archivo | Negocio ficticio que ilustra | Origen | Licencia | Persona identificable | Marca visible | ¿Video? |
 |---|---|---|---|---|---|---|
-| `barberia.jpg` | Barbería El Corte | | | | | |
-| `dj.jpg` | DJ Louie | | | | | |
-| `grooming.jpg` | Patitas Felices | | | | | |
-| `electricista.jpg` | (electricista) | | | | | |
-| `abogada.jpg` | (abogada) | | | | | |
-| `cpa.jpg` | (CPA) | | | | | |
-| `reposteria.jpg` | (repostería) | | | | | |
-| `foodtruck.jpg` | (food truck) | | | | | |
+| `barberia.jpg` | Barbería El Corte | Generada por Crecer (gpt-image-1) | Salida propia | No — persona generada | Ficticia (del ejemplo) | Sí |
+| `dj.jpg` | DJ Louie | Generada por Crecer (gpt-image-1) | Salida propia | No | Ficticia | Sí |
+| `grooming.jpg` | Patitas Felices | Generada por Crecer (gpt-image-1) | Salida propia | No | Ficticia | Sí |
+| `electricista.jpg` | Electric Torres | Generada por Crecer (gpt-image-1) | Salida propia | No | Ficticia | Sí |
+| `abogada.jpg` | Lcda. Rivera | Generada por Crecer (gpt-image-1) | Salida propia | No | Ficticia | Sí |
+| `cpa.jpg` | CPA Núñez | Generada por Crecer (gpt-image-1) | Salida propia | No | Ficticia | Sí |
+| `reposteria.jpg` | Dulce Encanto | Generada por Crecer (gpt-image-1) | Salida propia | No | Ficticia | Sí |
+| `foodtruck.jpg` | La Guagua del Sabor | Generada por Crecer (gpt-image-1) | Salida propia | No | Ficticia | Sí |
+
+> Los archivos no traen EXIF (se perdió al convertir de PNG a JPG el 1 de
+> agosto), así que el origen **no se puede verificar desde el repositorio**.
+> Queda asentado aquí, que es donde hay que buscarlo.
 
 ## Otras imágenes públicas que conviene revisar
 
@@ -70,6 +93,12 @@ No las he auditado — las dejo listadas para que decidas si necesitan la misma 
 
 - [x] Rótulo devuelto a la landing (2026-08-02)
 - [x] Verificado que la landing **no** muestra engagement, seguidores ni resultados ficticios
-- [ ] Ficha de procedencia de las 8 fotos del feed — **pendiente**
+- [x] Ficha de procedencia de las 8 del feed — **CERRADA (2026-08-14)**: las generó
+      el propio producto. Sin licencia de terceros, sin personas reales, sin
+      marcas reales. El rótulo de la landing es exacto.
 - [ ] Decisión sobre el resto de imágenes públicas — **pendiente**
-- [ ] Revisión de las capturas que entren al video — **pendiente**
+      (`hero-foto-crecer.png`, `creativa_character*.png`, `bot_mark.png`)
+- [ ] Revisión de las capturas que entren al video — **pendiente**. Esta es la
+      que queda viva: ninguna captura puede mostrar el nombre, correo, teléfono
+      o métricas de un cliente real sin su permiso. La cuenta de evaluación
+      ("El Mejor Pan Del Mundo") es negocio inventado y sirve para grabar.
