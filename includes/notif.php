@@ -6,11 +6,40 @@
 //  Degrada con gracia: si la tabla no existe aún, no rompe nada.
 // ============================================================
 
-/** Crea una notificación para una marca. No lanza si la tabla no existe. */
+/**
+ * Crea una notificación para una marca. No lanza si la tabla no existe.
+ *
+ * NO REPITE (2026-08-14). Antes cada llamada insertaba una fila nueva, sin más.
+ * Como esto lo llaman los polls y los barridos —que corren en bucle mientras el
+ * dueño mira la pantalla— la campanita se llenaba de la MISMA notificación
+ * decenas de veces. El dueño las borraba y volvían a aparecer, porque el bucle
+ * seguía. Borrar no servía de nada: había que dejar de crearlas.
+ *
+ * Se agrupa en dos casos, los dos con la misma idea — no decir dos veces lo
+ * mismo:
+ *   · ya hay una idéntica SIN LEER  → repetirla no añade información;
+ *   · ya se creó una idéntica hace menos de 10 min → es el mismo suceso
+ *     avisando dos veces, no dos sucesos.
+ * Idéntica = misma marca, mismo tipo y mismo título.
+ *
+ * Si la consulta de comprobación falla por lo que sea, se inserta igual: más
+ * vale una notificación de más que perder un aviso de verdad.
+ */
 function notif_crear(PDO $pdo, int $marca_id, string $tipo, string $titulo, ?string $mensaje = null, ?string $link = null, ?string $icono = null): void {
+    $titulo = mb_substr($titulo, 0, 160);
+    try {
+        $dup = $pdo->prepare(
+            "SELECT 1 FROM crecer_notificaciones
+              WHERE marca_id=? AND tipo=? AND titulo=?
+                AND (leida=0 OR created_at > (NOW() - INTERVAL 10 MINUTE))
+              LIMIT 1");
+        $dup->execute([$marca_id, $tipo, $titulo]);
+        if ($dup->fetchColumn()) return;
+    } catch (Throwable $e) { /* si no se puede comprobar, se inserta */ }
+
     try {
         $pdo->prepare("INSERT INTO crecer_notificaciones (marca_id, tipo, icono, titulo, mensaje, link) VALUES (?,?,?,?,?,?)")
-            ->execute([$marca_id, $tipo, $icono, mb_substr($titulo, 0, 160), $mensaje !== null ? mb_substr($mensaje, 0, 400) : null, $link]);
+            ->execute([$marca_id, $tipo, $icono, $titulo, $mensaje !== null ? mb_substr($mensaje, 0, 400) : null, $link]);
     } catch (Throwable $e) { error_log('notif_crear: ' . $e->getMessage()); }
 }
 

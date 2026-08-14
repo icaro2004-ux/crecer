@@ -57,6 +57,22 @@ foreach ($cq->fetchAll() as $r) {
     if (isset($cuenta[$r['estado']])) $cuenta[$r['estado']] = (int)$r['n'];
 }
 
+// LOS FALLOS CADUCAN (2026-08-14). El aviso "un post no se pudo publicar" salía
+// del conteo de arriba, que no mira la fecha: una pieza que falló UNA VEZ hace
+// semanas seguía gritando en el Home todos los días, sin forma de callarla. El
+// dueño aprendía a ignorar la alerta — que es justo lo contrario de lo que una
+// alerta tiene que conseguir.
+// Para AVISAR solo cuentan los fallos de los últimos 7 días. Lo viejo no
+// desaparece: sigue en la biblioteca con su estado y se puede reintentar; lo
+// que deja de hacer es dar la matraca en la pantalla de inicio.
+try {
+    $fq = $pdo->prepare("SELECT COUNT(*) FROM crecer_contenido
+                          WHERE marca_id=? AND estado='fallido'
+                            AND COALESCE(updated_at, created_at) > (NOW() - INTERVAL 7 DAY)");
+    $fq->execute([$marca_id]);
+    $cuenta['fallido'] = (int)$fq->fetchColumn();
+} catch (Throwable $e) { /* si falla, se queda el conteo de arriba */ }
+
 // Metricas internas reales.
 $prod     = metricas_produccion($pdo, $marca_id);
 $racha    = metricas_racha($pdo, $marca_id);
