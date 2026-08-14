@@ -26,12 +26,28 @@ if (!defined('GCP_PROJECT_ID')) define('GCP_PROJECT_ID', '');
 if (!defined('GOOGLE_APPLICATION_CREDENTIALS')) define('GOOGLE_APPLICATION_CREDENTIALS', '');
 
 // Precio aprox por 1M tokens (USD). Ajustar según pricing vigente.
-// gemini-2.0-flash: ~$0.10 in / $0.40 out por 1M (orientativo).
+//
+// ESTA TABLA ALIMENTA LA EVIDENCIA DE LA ENTREGA (el costo acumulado de IA que
+// se reporta como gasto), así que un hueco aquí no es un detalle: sub-reportar
+// gastos infla el margen, que es justo el numerito que un jurado puede cruzar
+// contra la factura del proveedor.
+//
+// Faltaban 2.5-pro y 2.5-flash-lite, que el código sí usa — sus llamadas se
+// registraban a CERO. Añadidos (2026-08-14).
 const CRECER_IA_PRECIOS = [
-    'gemini-2.0-flash'      => ['in' => 0.10, 'out' => 0.40],
-    'gemini-2.5-flash'      => ['in' => 0.30, 'out' => 2.50],
+    'gemini-2.0-flash'      => ['in' => 0.10,  'out' => 0.40],
+    'gemini-2.5-flash'      => ['in' => 0.30,  'out' => 2.50],
+    'gemini-2.5-flash-lite' => ['in' => 0.10,  'out' => 0.40],
     'gemini-1.5-flash'      => ['in' => 0.075, 'out' => 0.30],
+    'gemini-2.5-pro'        => ['in' => 1.25,  'out' => 10.00],
 ];
+
+// Modelo desconocido: se cobra al precio del MÁS CARO que conocemos, no a cero.
+// Antes devolvía 0.0 en silencio, así que un modelo nuevo desaparecía de los
+// gastos sin que nadie se enterara. Ante la duda conviene pasarse de caro: un
+// gasto sobreestimado te hace ver peor, y por eso nadie lo falsea así. La cifra
+// de verdad sale de la factura del proveedor; esto es el reloj interno.
+const CRECER_IA_PRECIO_DESCONOCIDO = ['in' => 1.25, 'out' => 10.00];
 
 class IaSinCredenciales extends RuntimeException {}
 class IaError extends RuntimeException {}
@@ -52,7 +68,12 @@ function ia_transporte(): string {
  */
 function ia_costo(string $modelo, int $tokens_in, int $tokens_out): float {
     $p = CRECER_IA_PRECIOS[$modelo] ?? null;
-    if (!$p) return 0.0;
+    if (!$p) {
+        // Nunca cero por desconocer el modelo: deja rastro y cobra caro.
+        error_log("ia_costo: modelo sin precio en la tabla ('{$modelo}') — "
+                . "se estima al precio alto. Anadelo a CRECER_IA_PRECIOS.");
+        $p = CRECER_IA_PRECIO_DESCONOCIDO;
+    }
     return round(($tokens_in / 1_000_000) * $p['in']
                + ($tokens_out / 1_000_000) * $p['out'], 6);
 }
