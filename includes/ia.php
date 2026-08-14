@@ -878,7 +878,25 @@ function ia_imagen(PDO $pdo, string $agente, string $accion, string $prompt, str
       catch (IaError $e)        { $estado='error'; $err=$e->getMessage(); }
       catch (Throwable $e)      { $estado='error'; $err=substr($e->getMessage(),0,200); }
     $lat = (int)round((microtime(true) - $t0) * 1000);
-    $costo = $estado === 'ok' ? (['gemini-3-pro-image'=>0.134, 'gemini-2.5-flash-image'=>0.039, 'gpt-image-1'=>0.17, 'dall-e-3'=>0.08][$modelo] ?? CRECER_IMG_PRECIO) : 0;
+    // PRECIO POR IMAGEN. Aproximado y sujeto al pricing vigente — la cifra que
+    // se REPORTA como gasto sale de la factura del proveedor, no de aquí.
+    //
+    // Faltaba gpt-image-2, que es el motor de produccion de img_responses.php:
+    // sus 75 llamadas de julio-agosto cayeron al fallback CRECER_IMG_PRECIO,
+    // que es el precio de GEMINI FLASH ($0.039) aplicado a un modelo de OpenAI.
+    // Subestimaba por ~4x. El fallback tambien se corrige: una imagen de OpenAI
+    // desconocida se estima como gpt-image-1, no como Gemini.
+    $PRECIO_IMG = [
+        'gemini-3-pro-image'    => 0.134,
+        'gemini-2.5-flash-image'=> 0.039,
+        'gpt-image-1'           => 0.17,
+        'gpt-image-2'           => 0.17,   // aprox: se asume como gpt-image-1
+        'dall-e-3'              => 0.08,
+    ];
+    $es_openai = str_starts_with($modelo, 'gpt-') || str_starts_with($modelo, 'dall-e');
+    $costo = $estado === 'ok'
+        ? ($PRECIO_IMG[$modelo] ?? ($es_openai ? 0.17 : CRECER_IMG_PRECIO))
+        : 0;
     // La decisión del Director de Arte queda en la acción (evidencia del ruteo).
     // OJO: crecer_ia_log.accion es VARCHAR(80) → truncar para no romper el INSERT.
     $accion_log = mb_substr($razon ? ($accion . ' · ' . $razon) : $accion, 0, 80);
