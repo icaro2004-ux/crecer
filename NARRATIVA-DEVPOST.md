@@ -1,7 +1,18 @@
 # XPRIZE Written Narrative
 
-> v5 · 12 ago 2026 · campo de 500–1,000 palabras.
-> **983 palabras** medidas (el conteo de Devpost puede variar ±2%; hay margen).
+> v5 · 12 ago 2026 · **983 palabras** (dato, no límite).
+>
+> **NO hay límite de palabras.** Verificado el 14 ago en las dos fuentes
+> oficiales: ni `xprize.devpost.com/rules` ni `geminixprize.com/rules` mencionan
+> conteo, mínimo ni máximo. La versión anterior de este encabezado decía "campo
+> de 500–1,000 palabras" y era falso. Lo que las reglas sí exigen del texto:
+> **cómo el proyecto cumple los requisitos** y **su relevancia para la
+> categoría** (Small Business Services). Esta narrativa cubre ambos; si se
+> reescribe, que los siga cubriendo.
+>
+> Que no haya tope no es permiso para alargarla: un jurado lee decenas de
+> entregas. La brevedad sigue ganando por mérito propio, no por regla.
+>
 > En inglés porque así lo leen los jueces, con la voz boricua de Crecer.
 > Los resultados reales, el revenue related-party y las proyecciones van
 > deliberadamente separados — nada de posibilidad presentada como logro.

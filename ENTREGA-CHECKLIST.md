@@ -97,8 +97,11 @@ Guion completo en `LIBRETO_VIDEO.md`. Antes de grabar:
 
 ### 4. Devpost (45 min)
 
-- [ ] Narrativa: pegar `NARRATIVA-DEVPOST.md` (983 palabras) y **verificar el
-      contador de Devpost**. Antes de pegar, correr su checklist de honestidad:
+- [ ] Narrativa: pegar la versión final. **No hay límite de palabras**
+      (verificado el 14 ago en las dos fuentes oficiales; lo de "500–1000" era
+      falso). Lo que sí exigen: que el texto explique **cómo el proyecto cumple
+      los requisitos** y **su relevancia para la categoría**. Antes de pegar,
+      correr su checklist de honestidad:
       si el ciclo de la meta no quedó vivo en producción, ese párrafo se borra.
 - [ ] Link del video, link del repo, links de la app.
 - [ ] Campos financieros con las cifras del paquete — related-party declarado

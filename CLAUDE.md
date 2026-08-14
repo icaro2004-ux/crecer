@@ -44,9 +44,19 @@ Encuéntralo con clientes ya ganados.
 - Proyecto nuevo (creado después del 19 mayo 2026). El código reusado de
   Encuéntralo se declara en `REUSE.md`.
 - **Entrega:** repo (público, o privado compartido con `testing@devpost.com` y
-  `judging@hacker.fund`) + video ~3 min + narrativa 500–1000 palabras (tareas
-  humano vs. IA) + evidencia (revenue por mes, logs de IA, uso de API,
-  testimonios reales).
+  `judging@hacker.fund`) + video **de menos de 3 min** (YouTube/Vimeo/Youku) +
+  descripción escrita + evidencia. Lo que piden por nombre: revenue de terceros
+  total y **mes a mes** (may→ago), **gastos totales por categoría**, **gasto en
+  marketing/adquisición**, número de usuarios y demografía, testimonios,
+  related-party declarado aparte, y logs de agentes / uso de API / capturas.
+  Todo en inglés.
+- **La descripción escrita NO tiene límite de palabras.** Verificado el
+  2026-08-14 en las dos fuentes oficiales (`xprize.devpost.com/rules` y
+  `geminixprize.com/rules`): ninguna menciona conteo, ni mínimo ni máximo. Este
+  archivo decía "500–1000 palabras" bajo el título de regla verificada, y era
+  **falso** — se corrige aquí para que no se vuelva a dar por bueno. Lo que sí
+  exigen es el CONTENIDO: cómo el proyecto cumple los requisitos y su relevancia
+  para la categoría escogida.
 - Deadline: **17 ago 2026, 1:00 PM PT**.
 
 ## El producto (MVP — el loop mensual)
