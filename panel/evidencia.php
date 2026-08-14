@@ -29,7 +29,25 @@ if ($es_admin && $req_marca) {
 }
 if (!$marca) { header('Location: /crecer/onboarding.php'); exit; }
 $marca_id = (int)$marca['id'];
-if (!$es_admin) {
+
+// CUENTA DE EVALUACIÓN (2026-08-14). El jurado del XPRIZE necesita ver la
+// bitácora técnica —agente, modelo, tokens, costo, latencia— porque ES la
+// prueba del criterio #2: sin ella solo puede creernos de palabra.
+//
+// Antes esta pantalla era solo para admin, y darle admin al jurado no servía:
+// el admin ve TODAS las marcas con el correo de cada dueño, y la entrega
+// promete que no expone datos de ningún cliente real.
+//
+// Así que se abre a las cuentas de CRECER_TEST_EMAILS —la del jurado— y SOLO
+// para su propia marca: arriba, el selector de marca por ?marca= sigue siendo
+// exclusivo del admin, así que un evaluador cae en marca_del_usuario() y no
+// puede mirar la de nadie más. Ve las facturas de lo que él mismo generó.
+//
+// El cliente normal sigue yendo a la versión humana: los costos por llamada no
+// son asunto suyo.
+$es_evaluador = function_exists('activacion_de_prueba')
+             && activacion_de_prueba($usuario['email'] ?? null);
+if (!$es_admin && !$es_evaluador) {
     header('Location: /crecer/panel/actividad.php?marca=' . $marca_id);
     exit;
 }

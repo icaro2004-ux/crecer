@@ -127,8 +127,8 @@ new and what is reused is declared in **[REUSE.md](REUSE.md)**.
 |---|---|
 | **Evaluation account** | `_______________` |
 | **Password** | `_______________` |
-| **Test business** | clean account, no real customer data |
-| **Access** | free and complete during evaluation (no charge) |
+| **What you get** | a business already set up and running — you land inside the app, nothing to configure |
+| **Access** | free and complete during evaluation. This account is never charged, and it is reported as a courtesy account, never counted as a customer or as revenue |
 
 > If these credentials are blank at the time of evaluation, write to
 > **icaro2004@gmail.com** and we will grant access the same day.
@@ -145,23 +145,43 @@ This is an application **in production with real customers**. Please:
 
 ### Suggested five-minute route
 
-1. **Register** and complete onboarding — tell the crew about a made-up business (you can
-   speak to it out loud).
-2. Watch it **learn**: when you finish, it reflects back what it understood about your
-   business.
-3. It leaves you a **first post already made** — caption in your voice, generated artwork.
-4. **Approve it or adjust it.** If you edit it, the `aprendiz` agent learns from that edit.
-5. Go into **La Sala** (The Room) and ask for something in your own words: *"I need
-   something for Mother's Day"*. You will see the chain of agents working.
-6. **Set a goal** (*Tu Meta* / Your Goal in the menu): choose what you want to achieve, how
-   much and by when. The Strategist builds the plan in front of you — including its honest
-   diagnosis of whether the goal is reachable. Tap **"Que lo haga el corillo"** ("let the
+**Log in with the evaluation credentials above and you are straight inside a working
+business** — already set up, with the crew's work waiting. No signup, no onboarding, no
+setup screens. Your five minutes go to the product, not to filling forms.
+
+1. **Home.** What the crew got done on its own, and what is waiting for your OK.
+2. **Your Posts.** Approve one, or adjust the text. If you edit it, the `aprendiz` agent
+   learns from that edit — corrections are training data, not overrides.
+3. **The Room** (*La Sala*). Ask for something in plain words: *"I need something for
+   Mother's Day."* You will see the chain of agents working on it.
+4. **Your Goal** (*Tu Meta*). Pick what you want to achieve, how much, by when. The
+   Strategist builds the plan in front of you — including its honest verdict on whether the
+   goal is reachable with what this business has. Tap **"Que lo haga el corillo"** ("let the
    crew do it") on any play and the full production runs on its own. **This is the heart of
-   the product:** the rest of the panel works for that number.
-7. Under **Operaciones → Evidencia** (admin account) is the ledger: which agent decided
-   what, with real cost and latency. And under **Armar el paquete de evidencia** are all the
-   submission figures — real revenue with related-party separated out, API usage and the
-   agentic cycle — ordered by criterion and exportable as JSON/CSV.
+   the product:** everything else in the panel works for that number.
+7. Open **`/crecer/panel/evidencia.php`** — the ledger for everything you just did: which
+   agent decided what, with the real model, tokens, cost and latency of every call,
+   failures included. The evaluation account can see this for its own business. **This is
+   the receipt for criterion #2:** you run the product, then you audit what it actually
+   cost and who did it.
+
+The full submission figures — real revenue with related-party separated out, API usage and
+the agentic cycle, ordered by criterion and exportable as JSON/CSV — are attached to the
+Devpost entry. They come from an in-app packager that reads production directly; nothing
+is typed by hand.
+
+### If you want to see the onboarding too
+
+The route above deliberately skips signup so your time goes to the product. But the first
+five minutes of a real customer are themselves part of what we built: the owner **speaks**,
+Gemini transcribes, the crew asks the next question out loud, and it ends with a finished
+first post.
+
+To see it, **register with your own email** at
+[encuentraloahora.com/crecer](https://encuentraloahora.com/crecer/) and go through it as a
+new business would. That path shows you the real acquisition flow — including where it asks
+for payment, which is the honest boundary of the free trial. It takes about three minutes
+and works best on a phone.
 
 ### Local install
 

@@ -30,7 +30,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'corte
             // No pisar una suscripción real de Stripe
             if (empty($stripe)) {
                 $uid = (int)$pdo->query("SELECT usuario_id FROM crecer_marca WHERE id=$mid")->fetchColumn();
-                $pid = (int)$pdo->query("SELECT id FROM crecer_planes WHERE slug='despegar' LIMIT 1")->fetchColumn();
+                // El plan de cortesía es CRECER, no 'despegar'. Despegar está
+                // congelado (activo=0) y el README de la entrega lo declara como
+                // no disponible: regalarlo le enseñaba al jurado, en su propia
+                // cuenta, un plan que la documentación dice que no existe.
+                $pid = (int)$pdo->query("SELECT id FROM crecer_planes WHERE slug='crecer' LIMIT 1")->fetchColumn();
                 $pdo->prepare("INSERT INTO crecer_suscripciones (marca_id,usuario_id,plan_id,estado,es_early_adopter)
                                VALUES (?,?,?, 'activa', 1)
                                ON DUPLICATE KEY UPDATE plan_id=VALUES(plan_id), estado='activa', es_early_adopter=1")
