@@ -257,7 +257,10 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     padding:12px 16px calc(12px + env(safe-area-inset-bottom));
     background:color-mix(in srgb,#fff 80%,transparent);backdrop-filter:blur(16px) saturate(1.3);-webkit-backdrop-filter:blur(16px) saturate(1.3);
     border-top:1px solid color-mix(in srgb,var(--line,#E9E7E4) 70%,transparent)}
-  .en-input{flex:1;font-family:inherit;font-size:16px;border:1.5px solid var(--line,#E9E7E4);border-radius:99px;padding:14px 18px;background:#fff;color:var(--tinta,#231F20);transition:border-color .18s,box-shadow .18s}
+  /* min-width:0 es OBLIGATORIO: sin él el input no baja de su ancho intrínseco
+     (~220px) y empuja "Enviar" fuera de la pantalla — en 402px el botón acababa
+     en x=456 y solo se alcanzaba por una esquinita. */
+  .en-input{flex:1;min-width:0;font-family:inherit;font-size:16px;border:1.5px solid var(--line,#E9E7E4);border-radius:99px;padding:14px 18px;background:#fff;color:var(--tinta,#231F20);transition:border-color .18s,box-shadow .18s}
   .en-input:focus{outline:0;border-color:var(--magenta,#EF4375);box-shadow:0 0 0 4px color-mix(in srgb,var(--magenta,#EF4375) 14%,transparent)}
   .en-mic{border:1.5px solid var(--line,#E9E7E4);background:#fff;cursor:pointer;width:52px;height:52px;border-radius:50%;flex:none;display:grid;place-items:center;color:var(--tinta,#231F20);transition:transform .15s,border-color .15s,color .15s}
   .en-mic:hover{border-color:var(--teal,#00A49F);color:var(--teal,#00A49F)}
