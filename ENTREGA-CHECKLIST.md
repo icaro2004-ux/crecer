@@ -25,7 +25,12 @@ queman entero.
       Después corre `migrations/_verificar_meta.sql`: tiene que dar **16 OK**.
       *(El roadmap las da por hechas el 12 de agosto — esto es solo confirmar.)*
 - [ ] **Redeploy** en hPanel + `_cache.php?k=crecer` para limpiar OPcache.
-- [ ] **Stripe: precio $39 en LIVE** (si sigue abierto).
+- [x] **Stripe: precio $39 en LIVE** — VERIFICADO el 14 ago con
+      `_cache.php?k=crecer&test=precio`: llave LIVE, la app promete $39.00 y
+      Stripe cobraría $39.00 USD mensual, Price activo y en livemode
+      (`price_1TzTMz2NilhFQIouu1VxKluP`). Las cinco comprobaciones del guardián
+      en verde — un cliente real puede suscribirse hoy. "Despegar" sigue
+      congelado y sin price, como debe.
 - [ ] **Cuenta de juez creada** y sus credenciales puestas en el `README.md`
       (la tabla ya está lista, solo hay que llenar los dos campos).
 - [x] **Repo accesible para el jurado** — HECHO el 14 ago: se puso **público**
