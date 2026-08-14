@@ -16,7 +16,11 @@ require __DIR__ . '/includes/image_messenger.php';
 require __DIR__ . '/includes/auth.php';
 requiere_login();
 $usuario = usuario_actual($pdo);
-if (!(($usuario['rol'] ?? '') === 'admin' || (function_exists('activacion_de_prueba') && activacion_de_prueba($usuario['email'] ?? null)))) {
+// SOLO ADMIN (2026-08-14). El `||` de antes dejaba entrar a las cuentas de
+// CRECER_TEST_EMAILS — y ahi vive la cuenta de evaluacion del jurado, cuyas
+// credenciales se publican. Este laboratorio GASTA API de verdad (~$0.17 por
+// imagen): no puede quedar al alcance de nadie a quien se le da una contraseña.
+if (($usuario['rol'] ?? '') !== 'admin') {
     http_response_code(403); exit('Solo administradores.');
 }
 

@@ -12,7 +12,12 @@ require __DIR__ . '/../includes/ia.php';
 require __DIR__ . '/../includes/ref_lab.php';
 requiere_login();
 $usuario = usuario_actual($pdo);
-$es_admin = ($usuario['rol'] ?? '') === 'admin' || activacion_de_prueba($usuario['email'] ?? null);
+// SOLO ADMIN, de verdad (2026-08-14). El docblock de arriba dice "herramienta
+// INTERNA, NO visible para clientes" — pero el candado dejaba entrar tambien a
+// las cuentas de CRECER_TEST_EMAILS, y ahi vive la cuenta de evaluacion del
+// jurado. Se le entregan credenciales a un extraño: la puerta se cierra.
+// El fundador no pierde nada — entra por su cuenta admin.
+$es_admin = ($usuario['rol'] ?? '') === 'admin';
 if (!$es_admin) { http_response_code(403); exit('Solo administradores.'); }
 
 $msg = ''; $err = '';
