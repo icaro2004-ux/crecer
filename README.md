@@ -125,8 +125,8 @@ new and what is reused is declared in **[REUSE.md](REUSE.md)**.
 
 | | |
 |---|---|
-| **Evaluation account** | `_______________` |
-| **Password** | `_______________` |
+| **Evaluation account** | `icaro2004+jurado@gmail.com` |
+| **Password** | `crecer@1` |
 | **What you get** | a business already set up and running — you land inside the app, nothing to configure |
 | **Access** | free and complete during evaluation. This account is never charged, and it is reported as a courtesy account, never counted as a customer or as revenue |
 
