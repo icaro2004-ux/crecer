@@ -344,7 +344,29 @@ const CRECER_IMG_PRECIO = 0.039; // USD aprox por imagen (gemini-2.5-flash-image
  * Genera (o edita) una imagen con Gemini. Si pasas imagen_base64, la usa de
  * base (editar la foto real del negocio). Devuelve ['data'=>bytes,'mime','modelo'].
  */
+/**
+ * VETO DE PROPIEDAD AJENA — se aplica en el ÚLTIMO punto antes de llamar al modelo,
+ * no en cada prompt. Hay cuatro caminos que arman prompts de imagen por su cuenta
+ * (img_resp_brief, el director de agentes.php, direccion_arte.php y gen_async), y el
+ * quinto que se escriba nacería sin la regla. Poniéndolo aquí no se puede saltar.
+ *
+ * Pasó en producción (2026-08-14): el primer post de una repostería infantil salió
+ * con un bizcocho de Superman, muñequitos y escudo incluidos. Quien lo publica —y
+ * quien queda expuesto— es el dueño del negocio. La regla de IP del proyecto cubría
+ * las FOTOS de terceros; este es el mismo problema por el lado de lo generado.
+ *
+ * Va en inglés porque los prompts de imagen del proyecto ya se escriben en inglés.
+ */
+function ia_veto_ip(string $prompt): string {
+    return rtrim($prompt) . "\n\nHARD CONSTRAINT — no third-party IP: do not depict recognizable "
+         . "copyrighted or trademarked characters, mascots, logos, emblems, packaging or brands "
+         . "(superheroes, cartoon characters, princesses, movie or TV characters, sports teams, "
+         . "franchises). If the subject calls for a themed or children's motif, use original, generic "
+         . "elements instead: colors, balloons, confetti, shapes and your own figures.";
+}
+
 function gemini_imagen(string $prompt, array $opts = []): array {
+    $prompt = ia_veto_ip($prompt);
     $modelo = $opts['modelo'] ?? 'gemini-2.5-flash-image';
     if (ia_transporte() !== 'gemini_api') {
         throw new IaSinCredenciales('Generación de imágenes requiere GEMINI_API_KEY.');
@@ -551,6 +573,7 @@ function openai_extraer_img(string $resp, string $modelo): array {
  */
 function openai_imagen(string $prompt, array $opts = []): array {
     if (!openai_configurado()) throw new IaSinCredenciales('Falta OPENAI_API_KEY.');
+    $prompt   = ia_veto_ip($prompt);
     $modelo   = $opts['modelo_openai'] ?? OPENAI_IMG_MODEL;
     $aspect   = $opts['aspect'] ?? '1:1';
     $es_dalle = (stripos($modelo, 'dall-e') !== false);
@@ -558,6 +581,9 @@ function openai_imagen(string $prompt, array $opts = []): array {
     if ($es_dalle) {   // dall-e-3: solo generación (sin edits ni verificación de org); hd + vivid = lo máximo
         $size = ['1:1'=>'1024x1024','4:5'=>'1024x1792','9:16'=>'1024x1792','3:4'=>'1024x1792','16:9'=>'1792x1024','4:3'=>'1792x1024'][$aspect] ?? '1024x1024';
         $prompt = mb_substr($prompt, 0, 3800);   // DALL·E 3 corta a ~4000 chars → recorta o falla
+        // El recorte va por el final, que es justo donde quedó el veto de IP: si se
+        // lo comió, se vuelve a pegar (mejor perder descripción que perder la regla).
+        if (mb_strpos($prompt, 'HARD CONSTRAINT') === false) $prompt = ia_veto_ip(mb_substr($prompt, 0, 3300));
         $body = ['model'=>$modelo, 'prompt'=>$prompt, 'n'=>1, 'size'=>$size, 'response_format'=>'b64_json', 'quality'=>'hd', 'style'=>'vivid'];
         $resp = ia_http_post_retry('https://api.openai.com/v1/images/generations',
             ['Content-Type: application/json', 'Authorization: Bearer ' . OPENAI_API_KEY],

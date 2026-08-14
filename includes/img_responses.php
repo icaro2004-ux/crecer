@@ -96,6 +96,17 @@ function img_resp_brief(array $m, string $copy, ?bool $con_texto = null, bool $t
     if ($tiene_logo) $regla_logo = "Se adjunta el LOGO REAL del negocio: úsalo EXACTAMENTE ese (intégralo con buen gusto, en una esquina o como marca discreta). NO inventes ni dibujes otro logo.";
     else             $regla_logo = "NO inventes un logotipo ni una marca gráfica falsa. Si muestras el nombre del negocio, escríbelo como texto limpio y correcto: \"{$nombre}\" — nunca un logo ficticio.";
 
+    // PROPIEDAD AJENA (2026-08-14): en repostería infantil el modelo mete Superman,
+    // princesas o dibujos animados sin pestañear — pasó en prod con el primer post
+    // de una cuenta nueva. El que publica es el DUEÑO, y es él quien queda expuesto.
+    // La regla de IP del proyecto cubría las FOTOS de terceros; esto cierra el hueco
+    // por el lado de lo que la IA genera.
+    $regla_ip = "NADA DE PROPIEDAD AJENA: no incluyas personajes, mascotas, logotipos, escudos, "
+              . "envases ni marcas reconocibles de terceros (superhéroes, dibujos animados, princesas, "
+              . "equipos, franquicias, personajes de película). Si el tema pide un motivo infantil o "
+              . "temático, resuélvelo con elementos genéricos y originales: colores, globos, confeti, "
+              . "formas y figuras propias. El negocio responde por lo que publica.";
+
     // ANTI-SLOP (2026-08-12): el estilo de marca se respeta al pie de la letra,
     // pero la IDEA tiene que ser otra cada vez. Sin esto el modelo repite su
     // composición favorita y solo cambia el objeto ("una mano sosteniendo X",
@@ -116,7 +127,7 @@ function img_resp_brief(array $m, string $copy, ?bool $con_texto = null, bool $t
          . ($prods !== '' ? "Productos: {$prods}\n" : '')
          . ($publico !== '' ? "Público: {$publico}\n" : '')
          . "\nTexto del post que la imagen va a acompañar:\n\"{$copy}\"\n\n"
-         . "{$regla_texto}\n{$regla_logo}\n"
+         . "{$regla_texto}\n{$regla_logo}\n{$regla_ip}\n"
          . (($extra !== null && trim($extra) !== '') ? "Indicación extra del dueño (respétala con buen gusto): " . trim($extra) . "\n" : '')
          . "No inventes datos, precios ni promociones que no estén aquí.\n"
          . $bloque_variedad
