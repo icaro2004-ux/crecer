@@ -55,12 +55,59 @@ $rev_total    = (float)$val("SELECT COALESCE(SUM(monto),0) FROM pagos WHERE prod
 $rev_allegado = (float)$val("SELECT COALESCE(SUM(p.monto),0) FROM pagos p JOIN crecer_suscripciones s ON s.marca_id=p.marca_id
                               WHERE p.producto='crecer' AND p.estado='completado' AND s.es_early_adopter=1");
 $rev_frio     = $rev_total - $rev_allegado;
-$subs_activas = (int)$val("SELECT COUNT(*) FROM crecer_suscripciones WHERE estado='activa'");
-$subs_frias   = (int)$val("SELECT COUNT(*) FROM crecer_suscripciones WHERE estado='activa' AND es_early_adopter=0");
+// ── SUSCRIPCIONES Y MRR: solo las que Stripe cobra de verdad ──
+//
+//  CR-EV01 (2026-08-14). Estas cuatro cifras contaban `estado='activa'` a secas,
+//  y eso incluye las cuentas REGALADAS. Una cuenta de CRECER_TEST_EMAILS que
+//  pasa por el botón de suscribir crea una fila 'activa' sin Stripe y con
+//  es_early_adopter=0 (ver panel/crear_checkout.php). O sea: la cuenta gratuita
+//  del JURADO iba a aparecer, en el documento que se le entrega al jurado, como
+//  un cliente frío pagando — y a sumar $39 de MRR que nadie paga.
+//
+//  El corte honesto no es el flag —que nada pone solo— sino el hecho externo
+//  verificable: ¿existe una suscripción en Stripe? Sin `stripe_subscription_id`
+//  no hay cobro, y sin cobro no hay MRR. Las regaladas no se esconden: se
+//  cuentan aparte y se muestran como lo que son.
+$SUB_REAL = "s.stripe_subscription_id IS NOT NULL AND s.stripe_subscription_id <> ''";
+
+$subs_activas = (int)$val("SELECT COUNT(*) FROM crecer_suscripciones s WHERE s.estado='activa' AND $SUB_REAL");
+$subs_frias   = (int)$val("SELECT COUNT(*) FROM crecer_suscripciones s WHERE s.estado='activa' AND $SUB_REAL AND s.es_early_adopter=0");
+$subs_cortesia= (int)$val("SELECT COUNT(*) FROM crecer_suscripciones s WHERE s.estado='activa' AND NOT ($SUB_REAL)");
 $mrr = $rows("SELECT COALESCE(SUM(CASE WHEN s.es_early_adopter=0 THEN pl.precio_mensual ELSE 0 END),0) frio,
                      COALESCE(SUM(CASE WHEN s.es_early_adopter=1 THEN pl.precio_mensual ELSE 0 END),0) allegado
-                FROM crecer_suscripciones s JOIN crecer_planes pl ON pl.id=s.plan_id WHERE s.estado='activa'");
+                FROM crecer_suscripciones s JOIN crecer_planes pl ON pl.id=s.plan_id
+               WHERE s.estado='activa' AND $SUB_REAL");
 $mrr = $mrr[0] ?? ['frio'=>0,'allegado'=>0];
+
+// ── CHEQUEOS DE INTEGRIDAD (lo que no puede salir mal en silencio) ──
+//  No corrigen nada por su cuenta: avisan. Un número equivocado que se explica
+//  solo es peor que uno que grita.
+$alertas = [];
+
+//  1. El revenue del fundador tiene que ir declarado como related-party. Nada en
+//     el código pone es_early_adopter=1 cuando alguien paga por el checkout
+//     normal (el webhook lo deja en 0); solo lo marca el regalo desde admin.php.
+//     Si el fundador se suscribió por Stripe como cualquiera, su pago sale
+//     contado como CLIENTE FRÍO — justo lo que la narrativa promete que no pasa.
+$sin_flag = $rows(
+    "SELECT s.marca_id, u.email, s.stripe_subscription_id
+       FROM crecer_suscripciones s
+       JOIN usuarios u ON u.id = s.usuario_id
+      WHERE s.estado='activa' AND u.rol='admin' AND s.es_early_adopter=0");
+foreach ($sin_flag as $sf) {
+    $alertas[] = 'La suscripción de ' . $sf['email'] . ' (cuenta admin) NO está marcada '
+               . 'es_early_adopter=1, así que su pago se está contando como cliente FRÍO. '
+               . 'Si es tu propia suscripción, márcala en phpMyAdmin antes de exportar: '
+               . 'UPDATE crecer_suscripciones SET es_early_adopter=1 WHERE marca_id=' . (int)$sf['marca_id'] . ';';
+}
+
+//  2. Las cuentas de cortesía (jurado, pruebas) existen y es correcto que
+//     existan; lo que no puede pasar es que se cuelen en el conteo de clientes.
+if ($subs_cortesia > 0) {
+    $alertas[] = $subs_cortesia . ' suscripción(es) activa(s) SIN cobro en Stripe '
+               . '(cuentas de cortesía: jurado o pruebas). Quedan fuera del MRR y de '
+               . 'las suscripciones activas a propósito — se reportan aparte.';
+}
 
 // ══════════════════════════════════════════════════════════
 //  CRITERIO #2 — Operado por agentes de IA (la evidencia núcleo)
@@ -95,6 +142,11 @@ $lecciones  = (int)$val("SELECT COUNT(*) FROM crecer_meta_plan WHERE leccion IS 
 // ══════════════════════════════════════════════════════════
 //  CRITERIO #3 — Impacto de categoría
 // ══════════════════════════════════════════════════════════
+// OJO con el nombre de esta cifra: es TODA marca que se haya creado alguna vez
+// —incluidas las cuentas de prueba del fundador y la del jurado—, no clientes.
+// Se llamaba "negocios en la plataforma", que se lee como clientes y no lo es.
+// Los que pagan salen arriba, en $subs_activas, y esos sí están verificados
+// contra Stripe. Aquí no se recorta nada: se nombra bien.
 $clientes   = (int)$val("SELECT COUNT(*) FROM crecer_marca");
 $municipios = (int)$val("SELECT COUNT(DISTINCT municipio_id) FROM crecer_marca WHERE municipio_id IS NOT NULL");
 $categorias = (int)$val("SELECT COUNT(DISTINCT categoria_id) FROM crecer_marca WHERE categoria_id IS NOT NULL");
@@ -106,7 +158,10 @@ $ord_monto  = (float)$val("SELECT COALESCE(SUM(monto),0) FROM crecer_ordenes WHE
 $paquete = [
   'generado_en' => date('c'),
   'nota' => 'Todos los numeros salen de consultas a la BD de produccion de Crecer. '
-          . 'Sin estimaciones. El revenue related-party (fundador) va separado.',
+          . 'Sin estimaciones. El revenue related-party (fundador) va separado. '
+          . 'Las suscripciones y el MRR cuentan SOLO las que tienen cobro real en '
+          . 'Stripe; las cuentas de cortesia (jurado, pruebas) se reportan aparte.',
+  'avisos_de_integridad' => $alertas,
   'criterio_1_negocio' => [
     'revenue_total_usd' => round($rev_total, 2),
     'revenue_clientes_frios_usd' => round($rev_frio, 2),
@@ -115,6 +170,8 @@ $paquete = [
     'mrr_related_party_usd' => round((float)$mrr['allegado'], 2),
     'suscripciones_activas' => $subs_activas,
     'suscripciones_activas_frias' => $subs_frias,
+    'suscripciones_de_cortesia_sin_cobro' => $subs_cortesia,
+    'criterio_de_conteo' => 'Activa Y con stripe_subscription_id. Sin cobro en Stripe no cuenta.',
     'revenue_por_mes' => $rev_mes,
     'costo_ia_acumulado_usd' => round($ia_costo, 4),
     'margen_bruto_usd' => round($rev_total - $ia_costo, 2),
@@ -147,7 +204,9 @@ $paquete = [
     ],
   ],
   'criterio_3_impacto' => [
-    'negocios_en_la_plataforma' => $clientes,
+    // Nombre exacto: son cuentas creadas, no clientes. Incluye las de prueba y
+    // la del jurado. Los clientes que pagan estan en criterio_1.
+    'cuentas_de_negocio_creadas' => $clientes,
     'municipios_alcanzados' => $municipios,
     'categorias_de_negocio' => $categorias,
     'piezas_de_contenido_producidas' => $piezas_tot,
@@ -190,7 +249,10 @@ $resumen_txt = "CRECER — evidencia al " . date('j M Y') . " (todo medido en pr
  . "- Revenue total: " . $money($rev_total) . "  ·  clientes frios: " . $money($rev_frio)
  . "  ·  related-party (fundador): " . $money($rev_allegado) . "\n"
  . "- MRR: " . $money($mrr['frio']) . " frio + " . $money($mrr['allegado']) . " related-party\n"
- . "- Suscripciones activas: {$subs_activas} (frias: {$subs_frias})\n"
+ . "- Suscripciones activas (con cobro real en Stripe): {$subs_activas} (frias: {$subs_frias})\n"
+ . ($subs_cortesia > 0
+     ? "- Cuentas de cortesia sin cobro (jurado / pruebas): {$subs_cortesia} — NO cuentan como clientes ni en el MRR\n"
+     : '')
  . "- Costo de IA acumulado: " . $money($ia_costo) . "\n\n"
  . "OPERADO POR AGENTES (criterio 2)\n"
  . "- Llamadas de IA en produccion: " . $num($ia_total) . " (" . $num($ia_ok) . " ok / " . $num($ia_err) . " fallidas, todas logueadas)\n"
@@ -202,7 +264,8 @@ $resumen_txt = "CRECER — evidencia al " . date('j M Y') . " (todo medido en pr
  . "- Metas de negocio perseguidas: {$metas_n} · planes generados: {$planes_n} · jugadas cumplidas: {$jug_hechas}\n"
  . "- Piezas nacidas de un plan: " . $num($piezas_plan) . " · lecciones aprendidas: {$lecciones}\n\n"
  . "IMPACTO (criterio 3)\n"
- . "- Negocios en la plataforma: {$clientes} · municipios: {$municipios} · categorias: {$categorias}\n"
+ . "- Cuentas de negocio creadas: {$clientes} (incluye pruebas y la del jurado; los que pagan estan arriba)"
+ . " · municipios: {$municipios} · categorias: {$categorias}\n"
  . "- Piezas de contenido producidas: " . $num($piezas_tot) . "\n"
  . "- Ordenes recibidas por esos negocios: " . $num($ordenes) . " (" . $money($ord_monto) . ")\n";
 ?>
@@ -257,6 +320,18 @@ $resumen_txt = "CRECER — evidencia al " . date('j M Y') . " (todo medido en pr
     <a class="bt alt" href="admin_evidencia.php">← Centro de evidencia</a>
   </div>
 
+  <?php /* Los avisos van ARRIBA del bloque para copiar, no debajo: si están
+           después, se copia el texto sin haberlos leído. */ ?>
+  <?php if ($alertas): ?>
+    <div style="margin:18px 0;padding:14px 16px;border:1px solid #f0b429;border-left-width:5px;
+                border-radius:12px;background:#fffaf0">
+      <b style="display:block;margin-bottom:6px;color:#8a5a00">Revisa esto antes de exportar</b>
+      <?php foreach ($alertas as $a): ?>
+        <p style="margin:6px 0;font-size:14px;line-height:1.5"><?= $h($a) ?></p>
+      <?php endforeach; ?>
+    </div>
+  <?php endif; ?>
+
   <h2>Para pegar en Devpost</h2>
   <div class="pegar">
     <button class="bt copiar" id="cp">Copiar</button>
@@ -269,7 +344,10 @@ $resumen_txt = "CRECER — evidencia al " . date('j M Y') . " (todo medido en pr
     <div class="k frio"><b><?= $h($money($rev_frio)) ?></b><span>De clientes fríos</span></div>
     <div class="k rp"><b><?= $h($money($rev_allegado)) ?></b><span>Related-party (fundador)</span></div>
     <div class="k"><b><?= $h($money($mrr['frio'])) ?></b><span>MRR frío</span></div>
-    <div class="k"><b><?= (int)$subs_activas ?></b><span>Suscripciones activas (<?= (int)$subs_frias ?> frías)</span></div>
+    <div class="k"><b><?= (int)$subs_activas ?></b><span>Suscripciones con cobro real en Stripe (<?= (int)$subs_frias ?> frías)</span></div>
+    <?php if ($subs_cortesia > 0): ?>
+      <div class="k"><b><?= (int)$subs_cortesia ?></b><span>De cortesía, sin cobro — fuera del MRR</span></div>
+    <?php endif; ?>
     <div class="k"><b><?= $h($money($ia_costo)) ?></b><span>Costo de IA acumulado</span></div>
   </div>
   <?php if ($rev_mes): ?>
@@ -326,7 +404,7 @@ $resumen_txt = "CRECER — evidencia al " . date('j M Y') . " (todo medido en pr
 
   <h2>Criterio 3 · Impacto</h2>
   <div class="kpis">
-    <div class="k"><b><?= (int)$clientes ?></b><span>Negocios en la plataforma</span></div>
+    <div class="k"><b><?= (int)$clientes ?></b><span>Cuentas de negocio creadas (incluye pruebas)</span></div>
     <div class="k"><b><?= (int)$municipios ?></b><span>Municipios alcanzados</span></div>
     <div class="k"><b><?= (int)$categorias ?></b><span>Categorías de negocio</span></div>
     <div class="k"><b><?= $h($num($piezas_tot)) ?></b><span>Piezas de contenido producidas</span></div>

@@ -732,6 +732,67 @@ try {
     }
 
     // DIAGNÓSTICO STRIPE (solo sí/no + qué config se cargó; NUNCA los valores). No gasta.
+    // ── EL PAQUETE DE EVIDENCIA: ¿qué está contando de verdad?  &test=paquete
+    //    Solo lectura y GRATIS. Enseña, fila por fila, qué suscripción entra al
+    //    MRR y cuál no, y por qué. Existe porque el 14 de agosto se encontró que
+    //    el paquete contaba las cuentas REGALADAS como clientes pagando: la
+    //    cuenta del jurado iba a salir, en el documento del jurado, como un
+    //    cliente frío con $39 de MRR que nadie paga.
+    if ($__test === 'paquete') {
+        echo "EL PAQUETE DE EVIDENCIA — qué cuenta y qué no\n" . str_repeat('=', 50) . "\n\n";
+        $filas = $pdo->query(
+            "SELECT s.id, s.marca_id, s.estado, s.es_early_adopter AS rp,
+                    s.stripe_subscription_id AS stripe, u.email, u.rol,
+                    m.nombre_negocio AS negocio, pl.precio_mensual AS precio
+               FROM crecer_suscripciones s
+          LEFT JOIN usuarios u      ON u.id  = s.usuario_id
+          LEFT JOIN crecer_marca m  ON m.id  = s.marca_id
+          LEFT JOIN crecer_planes pl ON pl.id = s.plan_id
+              ORDER BY s.estado, s.id")->fetchAll(PDO::FETCH_ASSOC);
+
+        if (!$filas) { echo "(no hay suscripciones todavía)\n"; exit; }
+
+        $mrr_frio = 0.0; $mrr_rp = 0.0; $n_real = 0; $n_cortesia = 0;
+        printf("%-4s %-26s %-9s %-8s %-7s %s\n", 'id', 'negocio', 'estado', 'stripe', 'r-party', 'cuenta como…');
+        echo str_repeat('-', 96) . "\n";
+        foreach ($filas as $f) {
+            $activa = ($f['estado'] === 'activa');
+            $real   = trim((string)$f['stripe']) !== '';
+            $precio = (float)($f['precio'] ?? 0);
+            if ($activa && $real) {
+                $n_real++;
+                if ((int)$f['rp'] === 1) { $mrr_rp += $precio; $como = 'MRR RELATED-PARTY ($' . number_format($precio,2) . ')'; }
+                else                     { $mrr_frio += $precio; $como = 'MRR CLIENTE FRÍO ($' . number_format($precio,2) . ')'; }
+            } elseif ($activa) {
+                $n_cortesia++; $como = 'CORTESÍA — fuera del MRR y del conteo';
+            } else {
+                $como = 'no activa — no cuenta';
+            }
+            printf("%-4d %-26s %-9s %-8s %-7s %s\n", $f['id'],
+                mb_substr((string)($f['negocio'] ?: '—'), 0, 26), $f['estado'],
+                $real ? 'sí' : 'NO', ((int)$f['rp'] === 1 ? 'sí' : 'no'), $como);
+        }
+        echo "\nSuscripciones con cobro real : {$n_real}\n";
+        echo "De cortesía (sin Stripe)     : {$n_cortesia}\n";
+        echo "MRR frío                     : $" . number_format($mrr_frio, 2) . "\n";
+        echo "MRR related-party            : $" . number_format($mrr_rp, 2) . "\n";
+
+        echo "\n── AVISOS ──\n";
+        $hay = false;
+        foreach ($filas as $f) {
+            if ($f['estado'] !== 'activa') continue;
+            if (($f['rol'] ?? '') === 'admin' && (int)$f['rp'] === 0) {
+                $hay = true;
+                echo "  ! La suscripción de {$f['email']} (admin) NO está marcada related-party.\n"
+                   . "    Su pago se cuenta como CLIENTE FRÍO. Si es la tuya, corrígelo antes de exportar:\n"
+                   . "    UPDATE crecer_suscripciones SET es_early_adopter=1 WHERE marca_id={$f['marca_id']};\n";
+            }
+        }
+        if (!$hay) echo "  (ninguno — el corte de related-party está bien)\n";
+        echo "\n(Solo lee. No cambia nada ni gasta un centavo.)\n";
+        exit;
+    }
+
     if ($__test === 'stripe') {
         echo "\n--- Diagnóstico STRIPE (sin exponer secretos) ---\n";
         // ¿Cuál archivo de config existe y se cargaría PRIMERO? (misma lista que db.php)
