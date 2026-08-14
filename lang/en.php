@@ -289,6 +289,91 @@ return [
 'respondio tus dudas'           => 'answered your questions',
 'preparo un mensaje para un cliente' => 'prepared a message for a customer',
 
+// ── Evidencia del Corillo (panel/evidencia.php) ─────────────
+//  LA PANTALLA DEL CRITERIO #2. Es donde el jurado audita, llamada por llamada,
+//  qué agente decidió qué, con su modelo, tokens, costo y latencia reales. Si
+//  esta sale en español, el juez no puede leer la única prueba que le ofrecemos
+//  de que los agentes operan de verdad.
+'Evidencia del Corillo'         => 'Crew Evidence',
+'%s Evidencia del Corillo'      => '%s Crew Evidence',
+'Cada cosa que la IA decide y hace por tu negocio queda registrada. Esto es la prueba — cruda y real — de que el corillo opera, no solo asiste.'
+    => 'Every decision the AI makes and every action it takes for your business is recorded. This is the proof — raw and real — that the crew operates the business, it does not just assist.',
+'%s El corillo, en vivo'        => '%s The crew, live',
+'Oprime y mira al equipo de IA trabajar en tiempo real: cada agente, su decisión, el modelo, los tokens y el costo — según ocurre, en producción.'
+    => 'Press and watch the AI crew work in real time: each agent, its decision, the model, the tokens and the cost — as it happens, in production.',
+'Correr el corillo ahora'       => 'Run the crew now',
+'%s Correr el corillo ahora'    => '%s Run the crew now',
+'No se pudo arrancar. Intenta otra vez.' => 'Could not start. Try again.',
+'EN VIVO'                       => 'LIVE',
+
+// Los números
+'Acciones IA'                   => 'AI actions',
+'Acciones de IA (este negocio)' => 'AI actions (this business)',
+'Tokens'                        => 'Tokens',
+'Costo real'                    => 'Real cost',
+'Costo IA acumulado'            => 'Cumulative AI cost',
+'Agentes que trabajaron'        => 'Agents that worked',
+'Posts creados por IA'          => 'Posts created by AI',
+'Mensajes a clientes'           => 'Messages to customers',
+'En total, el corillo ha ejecutado' => 'In total, the crew has run',
+'acciones de IA para'           => 'AI actions for',
+
+// Autonomía
+'Operación autónoma (sin humano)' => 'Autonomous operation (no human)',
+'El piloto automático está'     => 'Autopilot is',
+'ON'                            => 'ON',
+': el corillo planifica y redacta posts' => ': the crew plans and writes posts',
+', por cron, y se los deja al dueño para aprobar.' => ', on a cron, and leaves them for the owner to approve.',
+'Última corrida autónoma:'      => 'Last autonomous run:',
+'%s Business Genome · lo que el corillo sabe de este negocio'
+    => '%s Business Genome · what the crew knows about this business',
+'hechos y preferencias del negocio' => 'facts and preferences about the business',
+'incluye %s lección(es) medidas de resultados (Optimizador)'
+    => 'includes %s lesson(s) measured from real results (the Optimizer)',
+
+// El relevo en vivo: quién es cada agente y qué hace
+'El Aprendiz'                   => 'The Apprentice',
+'El Gerente'                    => 'The Manager',
+'El Estratega'                  => 'The Strategist',
+'El Intake'                     => 'The Interviewer',
+'El Asistente'                  => 'The Assistant',
+'El Vendedor'                   => 'The Salesperson',
+'El Guionista'                  => 'The Scriptwriter',
+'El Conserje'                   => 'The Concierge',
+'El Productor'                  => 'The Producer',
+'El Business Genome'            => 'The Business Genome',
+'aprende tu línea visual'       => 'learns your visual style',
+'fija el enfoque de la semana'  => 'sets the focus for the week',
+'planifica el contenido'        => 'plans the content',
+'planificó contenido'           => 'planned content',
+'lanza ángulos atrevidos'       => 'pitches bold angles',
+'escribe el post en tu voz'     => 'writes the post in your voice',
+'escribe el post'               => 'writes the post',
+'escribió un caption'           => 'wrote a caption',
+'pule el texto'                 => 'polishes the text',
+'ajustó un texto'               => 'adjusted a text',
+'concibe el arte'               => 'conceives the artwork',
+'dirige la imagen'              => 'art-directs the image',
+'creó un arte'                  => 'created artwork',
+'cierra con los números'        => 'closes with the numbers',
+'reparte el trabajo'            => 'assigns the work',
+'aprendió el negocio'           => 'learned the business',
+'aprendió vocabulario'          => 'learned vocabulary',
+'resolvió una duda'             => 'answered a question',
+'escribió a un cliente'         => 'wrote to a customer',
+'atendió a un cliente'          => 'handled a customer',
+'resumió el mes'                => 'summed up the month',
+'armó un carrusel'              => 'built a carousel',
+'montó un reel'                 => 'built a reel',
+'redactó la radiografía'        => 'wrote the deep-dive',
+'ejecutó una acción'            => 'ran an action',
+
+// Cierre del relevo
+'El relevo sigue corriendo por detrás. Refresca en un momento para ver el cierre — todo queda en <code>crecer_ia_log</code>.'
+    => 'The relay is still running in the background. Refresh in a moment to see it close — everything is recorded in <code>crecer_ia_log</code>.',
+'El corillo revisó y ya tenías suficientes borradores — no amontonó trabajo. Cada decisión quedó registrada arriba.'
+    => 'The crew checked and you already had enough drafts — it did not pile on work. Every decision is recorded above.',
+
 // ── Métricas (Resultados) ───────────────────────────────────
 'Vistas'                        => 'Views',
 'Me gusta'                      => 'Likes',
