@@ -793,6 +793,51 @@ try {
         exit;
     }
 
+    // ── EL PRECIO: ¿lo que la app promete es lo que Stripe cobra?  &test=precio
+    //    Solo lectura y GRATIS (una consulta GET a Stripe, no crea nada).
+    //    Existe porque test=checkout solo dice si estas en LIVE, no si el importe
+    //    cuadra — y el 2 de agosto la app anuncio $39 mientras Stripe cobraba $49
+    //    durante semanas sin que nada lo detectara. El guardian ya impide cobrar
+    //    mal, pero FALLA CERRADO: si no cuadra, NADIE puede suscribirse. Asi que
+    //    hay que poder mirarlo antes de entregar, no descubrirlo por un cliente.
+    if ($__test === 'precio') {
+        require_once __DIR__ . '/includes/precio_guardian.php';
+        echo "EL PRECIO — lo prometido contra lo que Stripe cobraria\n" . str_repeat('=', 56) . "\n\n";
+        echo "Entorno de la llave: " . (precio_entorno_live() ? "LIVE (cobro real)" : "TEST (sandbox)") . "\n\n";
+
+        $planes = $pdo->query("SELECT * FROM crecer_planes ORDER BY orden, id")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($planes as $pl) {
+            $activo = (int)($pl['activo'] ?? 1) === 1;
+            echo "── {$pl['slug']} · {$pl['nombre']}" . ($activo ? '' : '  (CONGELADO, no se ofrece)') . "\n";
+            echo "   La app promete : \$" . number_format((float)$pl['precio_mensual'], 2) . "/mes\n";
+            echo "   stripe_price_id: " . (trim((string)($pl['stripe_price_id'] ?? '')) ?: '(vacio)') . "\n";
+            if (!$activo) { echo "   (congelado — no se verifica)\n\n"; continue; }
+
+            $r = precio_verificar($pl);
+            $d = $r['detalle'] ?? [];
+            if ($d) {
+                echo "   Stripe cobraria: \$" . number_format(max((int)($d['stripe_centavos'] ?? 0), 0) / 100, 2)
+                   . " " . strtoupper((string)($d['moneda'] ?? '?'))
+                   . " cada " . ($d['intervalo'] ?? '?') . "\n";
+                echo "   Price activo   : " . (!empty($d['activo']) ? 'si' : 'NO — esta archivado') . "\n";
+                echo "   Price livemode : " . (!empty($d['livemode']) ? 'live' : 'test') . "\n";
+            }
+            if ($r['ok']) {
+                echo "   VEREDICTO      : CUADRA — se puede cobrar\n\n";
+            } else {
+                echo "   VEREDICTO      : " . ($r['estado'] === PRECIO_DUDA ? 'NO VERIFICABLE' : 'NO CUADRA')
+                   . " — el checkout esta BLOQUEADO para este plan\n";
+                echo "   Motivo         : " . $r['motivo'] . "\n";
+                echo "   Como se arregla: en dashboard.stripe.com (en modo " . (precio_entorno_live() ? 'LIVE' : 'TEST')
+                   . ") crea o escoge un Price recurrente MENSUAL de \$"
+                   . number_format((float)$pl['precio_mensual'], 2) . " USD, activo, y pega su id\n"
+                   . "                    en crecer_planes.stripe_price_id de este plan.\n\n";
+            }
+        }
+        echo "(Solo lee. No crea sesiones ni cobra nada.)\n";
+        exit;
+    }
+
     if ($__test === 'stripe') {
         echo "\n--- Diagnóstico STRIPE (sin exponer secretos) ---\n";
         // ¿Cuál archivo de config existe y se cargaría PRIMERO? (misma lista que db.php)
