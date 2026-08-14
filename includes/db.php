@@ -110,3 +110,14 @@ try {
     }
     die('Error de conexión a la base de datos. Intenta de nuevo en un momento.');
 }
+
+// ── 4) Idioma de la interfaz ─────────────────────────────────
+//  Va aquí porque db.php es el único require que TODA página del producto hace,
+//  así el toggle vale en las 71 pantallas sin tocar ninguna.
+//
+//  En español —el default— i18n_arrancar() no hace absolutamente nada: no abre
+//  buffer, no carga diccionario, no cuesta un ciclo. La ruta del cliente real
+//  queda idéntica. Solo con ?lang=en (o su cookie) se enciende la traducción.
+//  En CLI (los crons) tampoco corre.
+require_once __DIR__ . '/i18n.php';
+i18n_arrancar();

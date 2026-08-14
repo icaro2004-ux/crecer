@@ -12,6 +12,12 @@
 //  externas. Solo plantillas estáticas + variables sanitizadas.
 // ============================================================
 
+// La landing es la única página del producto que NO toca la base de datos (es
+// estática a propósito: cero Gemini, cero consultas). Por eso engancha el
+// idioma a mano — en el resto lo hace includes/db.php.
+require_once __DIR__ . '/includes/i18n.php';
+i18n_arrancar();
+
 // Sanitiza el nombre del negocio (mostrado y reenviado por query string).
 function crecer_clean_negocio(string $s): string {
     $s = strip_tags($s);
@@ -382,6 +388,9 @@ $feed = [
   <footer class="foot">
     <a class="brand" href="/crecer/crecer.php" style="display:inline-flex;align-items:center;gap:7px;font-size:14px"><img src="/crecer/assets/brand/crecer-icon.png" alt="" style="height:24px;width:auto"><b style="display:inline-flex;flex-direction:column;line-height:1;gap:0;font-weight:700"><span style="color:var(--teal)">Crecer</span><span style="font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.02em;margin-top:1px">by Encuéntralo</span></b></a>
     · <a href="/crecer/terminos.php">Términos</a> · <a href="/crecer/privacidad.php">Privacidad</a>
+    <?php /* La landing es la primera puerta: el interruptor tiene que estar aquí
+             para quien llega sin saber español. */ ?>
+    <span style="display:block;margin-top:12px"><?= i18n_toggle_html() ?></span>
   </footer>
 </main>
 

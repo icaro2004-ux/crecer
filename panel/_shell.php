@@ -162,6 +162,13 @@ $nav_perfil = [
       <a href="<?= $BASE ?>/admin.php" style="display:flex;align-items:center;gap:10px;padding:10px 12px;margin-top:6px;border-radius:12px;text-decoration:none;color:var(--tinta);background:var(--crema-2);border:1px solid var(--line);font-weight:700;font-size:13.5px"><?= ico('settings') ?> Centro de Operaciones</a>
     <?php endif; ?>
     <a href="/crecer/logout.php" style="display:flex;align-items:center;gap:10px;padding:9px 12px;margin-top:6px;border-radius:12px;text-decoration:none;color:var(--muted);font-weight:600;font-size:13.5px">Salir</a>
+    <?php /* Idioma de la interfaz. Va junto a lo legal, no en la barra de arriba:
+             el dueño boricua lo cambia una vez o ninguna, y el espacio de arriba
+             es del negocio. Lo que escribe la IA no cambia de idioma nunca. */ ?>
+    <div class="side-lang" style="margin-top:10px;padding-left:12px;display:flex;align-items:center;gap:8px">
+      <span style="color:var(--muted);font-size:11.5px;font-weight:600">Idioma</span>
+      <?= i18n_toggle_html() ?>
+    </div>
     <div class="side-legal" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:4px 12px;padding-left:12px;padding-right:12px">
       <a href="/crecer/privacidad.php" style="color:var(--muted);font-size:12px;text-decoration:none">Privacidad</a>
       <a href="/crecer/terminos.php" style="color:var(--muted);font-size:12px;text-decoration:none">Términos</a>

@@ -162,6 +162,9 @@ $nf = fn($n) => number_format($n);
     <p class="legal">
       <a href="/crecer/terminos.php">Términos</a> ·
       <a href="/crecer/privacidad.php">Privacidad</a></p>
+    <?php /* El interruptor de idioma vive en la puerta de entrada: quien no lee
+             español tiene que poder cambiarlo ANTES de entrar, no después. */ ?>
+    <p class="legal" style="margin-top:10px"><?= i18n_toggle_html() ?></p>
   </div>
 </div>
 
