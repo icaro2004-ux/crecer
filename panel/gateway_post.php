@@ -129,6 +129,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     echo json_encode(['ok'=>false,'err'=>'Acción inválida.']); exit;
 }
 
+// RESCATE DEL ARTE. poll_imagen sólo completa jobs que ALCANZARON a tener id; si
+// el worker murió antes de crearlo, la pieza se queda en 'queued' para siempre y
+// aquí el dueño ve "toma un par de minutos" eternamente. El barrido es quien
+// levanta ese caso (Gemini de respaldo). Estaba en index/propuestas/aprobar2 —
+// todas DETRÁS del paywall, así que al del post gratis no lo rescataba nadie.
+try { require_once __DIR__ . '/../includes/img_responses.php'; img_sweep_pendientes($pdo, $marca_id); } catch (Throwable $e) {}
+
 // ¿Redes conectadas? (para ofrecer "publicar en mis redes")
 $redes_ok = false; $redes_conectadas = [];   // publicar SOLO a lo que de verdad esté conectado
 try {
