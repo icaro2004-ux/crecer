@@ -545,10 +545,101 @@ return [
 'No encuentro ese mensaje.'     => 'I cannot find that message.',
 'Sesión expiró. Recarga la página.' => 'Session expired. Reload the page.',
 
-// ── Wizard de creación ──────────────────────────────────────
+// ── Wizard de creación (panel/_crear_wizard.php) ────────────
+//  Paso 3 del recorrido. El dueño da una dirección en sus palabras y el corillo
+//  escribe y produce. Los estados de espera importan: son la única ventana a
+//  que hay agentes trabajando, no una barra de progreso falsa.
+'Crear un post guiado'          => 'Create a guided post',
+'Idea'                          => 'Idea',
+'Arte'                          => 'Artwork',
+'¿De qué hacemos el post?'      => 'What should the post be about?',
+'Toca una idea o escribe la tuya. Yo escribo el caption en tu voz.'
+    => 'Tap an idea or write your own. I write the caption in your voice.',
+'Arrástralas con el mouse o desliza para ver más →' => 'Drag with the mouse or swipe to see more →',
+'O escribe tu propia idea'      => 'Or write your own idea',
+'Escribe o elige una idea.'     => 'Write or pick an idea.',
+'Idea del día'                  => 'Idea of the day',
+'Ideas anteriores'              => 'Previous ideas',
+'Más ideas'                     => 'More ideas',
+'Dame otras ideas'              => 'Give me other ideas',
+'Ej: promo del bizcocho de guayaba para el Día de las Madres'
+    => 'E.g.: guava cake promo for Mother\'s Day',
+
+// Dirigir al corillo
+'Dile la dirección:'            => 'Give it a direction:',
+'menciona el especial'          => 'mention the special',
+'O dile qué cambiar:'           => 'Or tell it what to change:',
+'de noche'                      => 'at night',
+'sin la playa'                  => 'without the beach',
+'Reescribir con esa dirección'  => 'Rewrite with that direction',
+'Aplicar cambio'                => 'Apply change',
+'otra versión del texto'        => 'another version of the text',
+'El texto no puede quedar vacío.' => 'The text cannot be left empty.',
+
+// Los agentes trabajando (lo que prueba el criterio #2 a la vista)
+'El Provocador'                 => 'The Provocateur',
+'Creando tu post…'              => 'Creating your post…',
 'Escribiendo el caption en tu voz…' => 'Writing the caption in your voice…',
+'Ajustando el tono de la marca…' => 'Adjusting the brand tone…',
+'La Creativa está pensando otro texto…' => 'The Creative is thinking of another text…',
+'El Diseñador está pensando la idea…' => 'The Designer is thinking through the idea…',
+'Imaginando la escena…'         => 'Imagining the scene…',
+'Ajustando la luz y el encuadre…' => 'Adjusting the light and framing…',
+'Aplicando tu logo de marca…'   => 'Applying your brand logo…',
+'Puliendo texturas y detalles…' => 'Polishing textures and details…',
+'Buscando otro ángulo…'         => 'Looking for another angle…',
+'Casi lista…'                   => 'Almost ready…',
 'Casi listo…'                   => 'Almost ready…',
+'Casi…'                         => 'Almost…',
+'Generando tu imagen…'          => 'Generating your image…',
 'Describe qué debe mostrar la imagen…' => 'Describe what the image should show…',
+'Ahora el arte'                 => 'Now the artwork',
+'Usar este arte →'              => 'Use this artwork →',
+'No se pudo crear el arte. Intenta otra vez.' => 'Could not create the artwork. Try again.',
+'No se pudo crear. Intenta otra vez.' => 'Could not create it. Try again.',
+'El Diseñador sigue con tu imagen — la campanita te avisa cuando esté.'
+    => 'The Designer is still on your image — the bell will let you know when it is ready.',
+'Tu arte está listo — míralo en la campanita o en tus posts.'
+    => 'Your artwork is ready — see it in the bell or in your posts.',
+'El arte está tardando. Ábrelo en un momento en tus propuestas.'
+    => 'The artwork is taking a while. Open it in a moment under your proposals.',
+
+// Tus propias fotos y videos (la regla de IP: lo real gana)
+'El corillo está mirando tu foto…' => 'The crew is looking at your photo…',
+'Viendo lo que trajiste…'       => 'Looking at what you brought…',
+'El corillo está viendo tu video…' => 'The crew is watching your video…',
+'Mirando lo que grabaste…'      => 'Watching what you recorded…',
+'Mirando tu video otra vez…'    => 'Watching your video again…',
+'Tal cual, sin tocarla. Un momento…' => 'As is, untouched. One moment…',
+'La IA la realza un poco. Un momento…' => 'The AI enhances it a little. One moment…',
+'Subiendo tu foto…'             => 'Uploading your photo…',
+'Subiendo tu video…'            => 'Uploading your video…',
+'Puede tardar según el tamaño. Un momento…' => 'This may take a while depending on size. One moment…',
+'TENGO MI VIDEO LISTO'          => 'I ALREADY HAVE MY VIDEO',
+'Tu video está listo'           => 'Your video is ready',
+'Tu foto está lista'            => 'Your photo is ready',
+'Usar este video →'             => 'Use this video →',
+'Usar esta foto →'              => 'Use this photo →',
+'La foto es muy grande (máx 12MB).' => 'The photo is too large (max 12MB).',
+'El video es muy grande (máx 100MB).' => 'The video is too large (max 100MB).',
+'No se pudo subir la foto.'     => 'Could not upload the photo.',
+'No se pudo subir el video.'    => 'Could not upload the video.',
+'Error de conexión (¿video muy pesado?).' => 'Connection error (video too heavy?).',
+'No pude leer el video en este navegador — prueba con un MP4.'
+    => 'I could not read the video in this browser — try an MP4.',
+'No tengo los fotogramas de este video — súbelo de nuevo desde el paso 1.'
+    => 'I do not have this video\'s frames — upload it again from step 1.',
+
+// Publicar y cuotas
+'Publicando…'                   => 'Publishing…',
+'Subiendo tu post a las redes. No cierres la app.'
+    => 'Uploading your post to your accounts. Do not close the app.',
+'Tu post ya salió a tus redes.' => 'Your post is out on your accounts.',
+'No tienes redes conectadas. Conéctalas primero (Conectar redes).'
+    => 'You have no accounts connected. Connect them first (Connect accounts).',
+'Reintentar ahora'              => 'Retry now',
+'Guardado. Compártelo a mano desde el celular.' => 'Saved. Share it by hand from your phone.',
+'Usaste tu muestra. Actívate para crear más.' => 'You used your sample. Activate to create more.',
 
 // ── La landing (crecer.php) ─────────────────────────────────
 //  OJO con los fragmentos: el titular va partido en tres nodos de texto por un
