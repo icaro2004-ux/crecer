@@ -1,238 +1,262 @@
-# Crecer — un departamento de marketing operado por agentes de IA
+# Crecer — a marketing department operated by AI agents
 
-> **Build with Gemini XPRIZE** · categoría *Small Business Services*
-> Guía para jurado y evaluadores. Todo lo necesario para entender y probar el
-> producto en menos de cinco minutos.
+> **Build with Gemini XPRIZE** · *Small Business Services*
+> Guide for judges and evaluators. Everything you need to understand and test the
+> product in under five minutes.
+>
+> *Versión en español: [README.es.md](README.es.md)*
 
-## Qué es
+## What it is
 
-Crecer le da a un microempresario puertorriqueño —una repostera, un barbero, un food
-truck— el equipo de marketing que nunca podría pagar. No es una herramienta que el dueño
-tiene que aprender a usar: es un **corillo** (equipo) de agentes que planifica el mes,
-escribe en su voz, produce el arte, publica en sus redes y lee los resultados. El dueño
-solo aprueba desde el celular.
+Crecer gives a Puerto Rican microbusiness owner — a home baker, a barber, a food truck —
+the marketing team they could never afford. It is not a tool the owner has to learn to
+use: it is a **corillo** (a crew) of AI agents that plans the month, writes in the owner's
+own voice, produces the artwork, publishes to their social accounts and reads the results.
+The owner only approves, from their phone.
 
-El modelo es *done-for-you*, no *do-it-yourself*. Esa distinción gobierna cada decisión
-de producto: si el dueño tiene que entender el software, fallamos.
+The model is *done-for-you*, not *do-it-yourself*. That distinction governs every product
+decision: **if the owner has to understand the software, we failed.**
 
-**Público real:** negocios de economía de supervivencia que hoy viven en WhatsApp e
-Instagram, sin presupuesto de agencia y sin tiempo. En Puerto Rico, en español boricua
-auténtico — no traducido.
+**The real audience:** survival-economy businesses that today live inside WhatsApp and
+Instagram, with no agency budget and no time. In Puerto Rico, in authentic Puerto Rican
+Spanish — not translated.
 
-## Cómo lo operan los agentes
+## Reading the app in English
 
-**28 nombres de agente distintos** escriben en `crecer_ia_log`. No es una llamada a un
-modelo envuelta en una interfaz: cada paso del negocio lo ejecuta y lo registra un agente.
-(El log de producción muestra cuáles han corrido de verdad y cuántas veces — es la
-diferencia entre lo que existe en el código y lo que trabaja.)
+The product is written in Puerto Rican Spanish because that is the product. For evaluation,
+every screen carries an **ES | EN** switch — in the landing footer, on the login page, and
+in the panel sidebar under *Idioma*. You can also append `?lang=en` to any URL; the choice
+is remembered.
 
-| Agente | Qué decide |
+**What the switch does not translate, on purpose:** anything the AI wrote — captions,
+plans, the crew's replies, the demo posts on the landing page. That output is the product
+and it is the evidence for criterion #2. Translating it would show you a different product
+than the one that exists. Interface chrome switches to English; the AI's work stays in
+Puerto Rican Spanish.
+
+Coverage is deliberately partial and degrades safely: any string without a translation
+stays in Spanish rather than breaking. The entry flow, the navigation and the landing are
+complete; deeper screens still show Spanish in places.
+
+## How the agents operate it
+
+**28 distinct agent names** write to `crecer_ia_log`. This is not one model call wrapped in
+a UI: every step of the business is executed and recorded by an agent. (The production log
+shows which ones have actually run and how many times — that is the difference between what
+exists in the code and what does the work.)
+
+| Agent | What it decides |
 |---|---|
-| `intake`, `genoma`, `voice_dna` | Aprenden el negocio y su voz a partir de lo que el dueño cuenta |
-| `provocador`, `estratega`, `creador`, `editor` | El war room que discute y escribe cada pieza |
-| `director`, `director_editorial`, `director_imagen` | Deciden el concepto visual y dirigen la imagen |
-| `carruselista`, `reels` | Historias multi-slide y video |
-| `planificador` | El calendario del mes |
-| `analista`, `analitica` | Leen los números y le hablan al dueño solo cuando vale la pena |
-| `aprendiz` | Aprende de cada edición que hace el dueño |
-| `gerente`, `asistente` | Conversan con el dueño en La Sala |
-| `ayudante` | Soporte: diagnostica fallos, los repara y escala lo que no puede |
-| `ops_retencion`, `ops_conversion`, `ops_soporte`, `reporte_diario` | Operan el negocio **del fundador**, no el del cliente |
+| `intake`, `genoma`, `voice_dna` | Learn the business and its voice from what the owner tells them |
+| `provocador`, `estratega`, `creador`, `editor` | The war room that argues out and writes each piece |
+| `director`, `director_editorial`, `director_imagen` | Decide the visual concept and art-direct the image |
+| `carruselista`, `reels` | Multi-slide stories and video |
+| `planificador` | The month's calendar |
+| `analista`, `analitica` | Read the numbers and speak to the owner only when it is worth it |
+| `aprendiz` | Learns from every edit the owner makes |
+| `gerente`, `asistente` | Talk with the owner in La Sala (The Room) |
+| `ayudante` | Support: diagnoses failures, repairs them, escalates what it cannot |
+| `ops_retencion`, `ops_conversion`, `ops_soporte`, `reporte_diario` | Operate the **founder's** business, not the client's |
 
-Cada llamada queda con prompt, modelo, tokens, costo, latencia, estado y error — también
-**cuando falla**. Esa bitácora es la evidencia, no un adorno.
+Every call is stored with prompt, model, tokens, cost, latency, status and error — **including
+when it fails**. That log is the evidence, not decoration.
 
-### El corillo no publica: persigue un número
+### The crew does not publish — it chases a number
 
-Publicar contenido es fácil de simular. Lo que hace a Crecer un *departamento* y no un
-generador es el ciclo cerrado:
+Publishing content is easy to fake. What makes Crecer a *department* rather than a generator
+is the closed loop:
 
-1. **El dueño declara una meta** en sus palabras — *"quiero más pedidos"* — con cuánto,
-   para cuándo y qué presupuesto tiene para anuncios.
-2. **La Estratega diagnostica con honestidad** (*"esa meta es ambiciosa con lo que hay"*)
-   y arma un plan de jugadas concretas, cada una con cuántas piezas produce y qué se le
-   pide exactamente a la gente.
-3. **El corillo ejecuta las jugadas solo**, en su relevo semanal. Antes de gastar,
-   inventaría lo que ya existe: posts listos sin publicar, las fotos reales del negocio,
-   y los posts que ya midieron bien.
-4. **Cada jugada se cierra sola** cuando sus piezas se publican de verdad. El dueño no
-   marca checkboxes de trabajo que hizo la IA; solo confirma lo que ocurre fuera de
-   Crecer (poner el boost, hablar con un aliado).
-5. **El plan se mide y deja una lección** — cuánto movió el número — y **el plan
-   siguiente la hereda**: lo que no funcionó no se repite.
+1. **The owner names a goal** in plain words — *"I want more orders"* — with how much, by
+   when, and what budget they have for ads.
+2. **The Strategist diagnoses honestly** (*"that goal is ambitious with what you have"*) and
+   builds a plan of concrete plays, each one specifying how many pieces it produces and
+   exactly what it asks people to do.
+3. **The crew executes the plays on its own**, in its weekly relay. Before spending, it
+   inventories what already exists: approved posts not yet published, the business's real
+   photos, and the posts that already measured well.
+4. **Each play closes itself** when its pieces actually go live. The owner does not tick
+   checkboxes for work the AI did; they only confirm what happens outside Crecer (placing
+   the boost, talking to a partner).
+5. **The plan is measured and leaves a lesson** — how much it moved the number — and **the
+   next plan inherits it**: what did not work is not repeated.
 
-Todo ese ciclo queda en `crecer_meta`, `crecer_meta_plan` y `crecer_meta_tactica`, con
-las piezas amarradas al plan que las produjo. Es auditable pieza por pieza.
+That whole cycle lives in `crecer_meta`, `crecer_meta_plan` and `crecer_meta_tactica`, with
+each piece bound to the plan that produced it. It is auditable piece by piece.
 
 ## Google Cloud / Gemini
 
-- **Gemini** corre toda la capa de texto y decisión: aprender el negocio, planificar,
-  escribir, conversar, analizar. El transporte es **Gemini API** o **Vertex AI** según la
-  configuración del entorno; el que está activo se ve en *Operaciones → Salud*.
-- **Imágenes:** el arte desde cero usa `gpt-image-1` de OpenAI por calidad de composición;
-  cuando hay foto real del negocio, la edición la hace Gemini (es más fiel al original).
-  Lo decimos claro porque prefiere decirse a que se descubra: la capa de imagen es mixta.
-- El requisito de al menos una llamada a Gemini en la app desplegada se cumple con creces:
-  es el motor de todo el texto y de todas las decisiones del pipeline.
+- **Gemini** runs the entire text and decision layer: learning the business, planning,
+  writing, conversing, analyzing. Transport is **Gemini API** or **Vertex AI** depending on
+  the environment configuration; whichever is active is visible under *Operaciones → Salud*.
+- **Images:** artwork from scratch uses OpenAI's `gpt-image-1` for compositional quality;
+  when there is a real photo of the business, Gemini does the editing (it is more faithful
+  to the original). We say it plainly because it is better said than discovered: the image
+  layer is mixed.
+- The requirement of at least one Gemini call in the deployed app is met many times over:
+  it is the engine of all text and of every decision in the pipeline.
 
-## Arquitectura, en corto
+## Architecture, briefly
 
-PHP plano (sin framework) · MySQL/MariaDB · Hostinger · deploy por Git.
+Plain PHP (no framework) · MySQL/MariaDB · Hostinger · Git deploy.
 
 ```
-crecer.php            landing pública
-onboarding.php        el wizard que aprende el negocio (voz o texto)
-panel/                el app del dueño (Inicio · Crear · Calendario · Resultados · La Sala · Reels)
-panel/*_worker.php    workers async (arte, video, publicación, corillo) — llave obligatoria
-includes/             el motor: agentes, genoma, publicador, ayudante, billing
-scripts/cron_*.php    el trabajo que corre solo (publicar, métricas, corillo semanal, soporte)
-migrations/           SQL manual — el deploy NO aplica esquema automáticamente
+crecer.php            public landing
+onboarding.php        the wizard that learns the business (voice or text)
+panel/                the owner's app (Home · Create · Calendar · Results · The Room · Reels)
+panel/*_worker.php    async workers (art, video, publishing, the crew) — key required
+includes/             the engine: agents, genome, publisher, helper, billing
+includes/i18n.php     the ES/EN interface layer (see "Reading the app in English")
+scripts/cron_*.php    the work that runs itself (publish, metrics, weekly crew, support)
+migrations/           manual SQL — the deploy does NOT apply schema automatically
 ```
 
-Lo lento (generar arte, renderizar video, publicar) va a cola con workers, nunca en la
-pantalla del dueño. Las tablas nuevas llevan prefijo `crecer_`.
+Slow work (generating art, rendering video, publishing) goes to a queue with workers, never
+in front of the owner. New tables carry the `crecer_` prefix.
 
-**Código reutilizado:** Crecer es un repo nuevo (junio 2026) que reusa infraestructura de
-Encuéntralo — un directorio de servicios que nunca se lanzó (cero usuarios en producción).
-Qué es nuevo y qué se reusa está declarado en **[REUSE.md](REUSE.md)**.
+**Reused code:** Crecer is a new repository (June 2026) that reuses infrastructure from
+Encuéntralo — a services directory that never launched (zero users in production). What is
+new and what is reused is declared in **[REUSE.md](REUSE.md)**.
 
-## Probarlo
+## Trying it
 
-### Producción
+### Production
 
 **https://encuentraloahora.com/crecer/**
 
 | | |
 |---|---|
-| **Usuario de evaluación** | `_______________` |
-| **Contraseña** | `_______________` |
-| **Negocio de prueba** | cuenta limpia, sin datos de clientes reales |
-| **Acceso** | gratuito y completo durante la evaluación (sin cobro) |
+| **Evaluation account** | `_______________` |
+| **Password** | `_______________` |
+| **Test business** | clean account, no real customer data |
+| **Access** | free and complete during evaluation (no charge) |
 
-> Si estas credenciales aparecen en blanco al momento de evaluar, escribe a
-> **icaro2004@gmail.com** y te damos acceso el mismo día.
+> If these credentials are blank at the time of evaluation, write to
+> **icaro2004@gmail.com** and we will grant access the same day.
 
-### ⚠️ Antes de tocar nada
+### ⚠️ Before you touch anything
 
-Esta es una aplicación **en producción con clientes reales**. Por favor:
+This is an application **in production with real customers**. Please:
 
-- **No ejecutes cobros reales.** El checkout es Stripe en modo live.
-- **No publiques a redes** desde una cuenta que no sea la de evaluación: publicaría de
-  verdad en el Instagram/Facebook de un negocio.
-- **No uses las herramientas de `/panel/admin_*`** ni `_cache.php` / `_imgtry.php`: son de
-  operaciones y algunas gastan créditos de API.
+- **Do not run real charges.** Checkout is Stripe in live mode.
+- **Do not publish to social accounts** from anything other than the evaluation account:
+  it would really publish to a business's Instagram/Facebook.
+- **Do not use the `/panel/admin_*` tools** or `_cache.php` / `_imgtry.php`: they are
+  operational and some of them spend API credit.
 
-### Recorrido sugerido (5 minutos)
+### Suggested five-minute route
 
-1. **Regístrate** y completa el onboarding — cuéntale al corillo de un negocio inventado
-   (puedes hablarle por voz).
-2. Mira cómo **aprende**: al terminar te devuelve lo que entendió de tu negocio.
-3. Te deja un **primer post hecho** — caption en tu voz y arte generado.
-4. **Apruébalo o ajústalo**. Si lo editas, el `aprendiz` aprende de esa edición.
-5. Entra a **La Sala** y pídele algo en tus palabras: *"necesito algo para el Día de las
-   Madres"*. Verás la cadena de agentes trabajando.
-6. **Ponle una meta** (*Tu Meta* en el menú): escoge qué quieres lograr, cuánto y para
-   cuándo. La Estratega arma el plan delante de ti — con su diagnóstico honesto de si la
-   meta da o no. Toca **"Que lo haga el corillo"** en cualquier jugada y la producción
-   completa se ejecuta sola. **Esto es el corazón del producto:** el resto del panel
-   trabaja para ese número.
-7. En **Operaciones → Evidencia** (cuenta admin) está la bitácora: qué agente decidió qué,
-   con costo y latencia reales. Y en **Armar el paquete de evidencia** están todos los
-   datos de la entrega — revenue real con el related-party separado, uso de API y el
-   ciclo agéntico — ordenados por criterio y exportables en JSON/CSV.
+1. **Register** and complete onboarding — tell the crew about a made-up business (you can
+   speak to it out loud).
+2. Watch it **learn**: when you finish, it reflects back what it understood about your
+   business.
+3. It leaves you a **first post already made** — caption in your voice, generated artwork.
+4. **Approve it or adjust it.** If you edit it, the `aprendiz` agent learns from that edit.
+5. Go into **La Sala** (The Room) and ask for something in your own words: *"I need
+   something for Mother's Day"*. You will see the chain of agents working.
+6. **Set a goal** (*Tu Meta* / Your Goal in the menu): choose what you want to achieve, how
+   much and by when. The Strategist builds the plan in front of you — including its honest
+   diagnosis of whether the goal is reachable. Tap **"Que lo haga el corillo"** ("let the
+   crew do it") on any play and the full production runs on its own. **This is the heart of
+   the product:** the rest of the panel works for that number.
+7. Under **Operaciones → Evidencia** (admin account) is the ledger: which agent decided
+   what, with real cost and latency. And under **Armar el paquete de evidencia** are all the
+   submission figures — real revenue with related-party separated out, API usage and the
+   agentic cycle — ordered by criterion and exportable as JSON/CSV.
 
-### Instalación local
+### Local install
 
 ```bash
 # 1. Config
 cp includes/config.local.example.php includes/config.local.php
-#    Rellena: DB_*, GEMINI_API_KEY (o GCP_* para Vertex), y CRECER_WORKER_KEY.
-#    CRECER_WORKER_KEY es OBLIGATORIA: sin ella los workers async fallan cerrado (503).
+#    Fill in: DB_*, GEMINI_API_KEY (or GCP_* for Vertex), and CRECER_WORKER_KEY.
+#    CRECER_WORKER_KEY is MANDATORY: without it the async workers fail closed (503).
 
-# 2. Esquema — el deploy NO aplica SQL. Corre migrations/ en orden cronológico.
-#    Empieza por 2026-06-13_crecer_schema.sql.
+# 2. Schema — the deploy does NOT apply SQL. Run migrations/ in chronological order.
+#    Start with 2026-06-13_crecer_schema.sql.
 
-# 3. Pruebas (deben salir todas en verde, exit 0)
+# 3. Tests (all must come out green, exit 0)
 php tests/test_creative_thesis_unit.php
 php tests/test_pipeline_tesis_integracion.php
 php tests/test_creador_editorial.php
 php tests/smoke_creative_thesis_funcional.php
+php tests/test_i18n_unit.php
 ```
 
-Sin credenciales de IA la app corre en modo `mock` y lo dice: el modelo se registra como
-`mock` en el log, para que nunca se confunda una respuesta simulada con evidencia real.
+Without AI credentials the app runs in `mock` mode and says so: the model is recorded as
+`mock` in the log, so a simulated response can never be mistaken for real evidence.
 
-## Qué está activo y qué es roadmap
+## What is live and what is roadmap
 
-Honestidad sobre el estado real — el criterio que nos aplicamos es no presentar como
-operativo lo que todavía no gobierna producción.
+Honesty about the real state — the standard we hold ourselves to is not to present as
+operational anything that does not yet govern production.
 
-**Activo en producción:**
+**Live in production:**
 
-- Onboarding que aprende el negocio (voz o texto) y perfil de marca
-- Creación de posts, carruseles y reels con arte generado
-- Aprobación del dueño (nada se publica sin su OK)
-- Publicación automática a Instagram y Facebook, incluido video
-- Calendario, resultados con métricas reales de Meta, reporte semanal
-- La Sala: conversación con el equipo, por texto o voz
-- El Ayudante: soporte que diagnostica, repara y escala solo
-- Cobro por Stripe · verificación por SMS (Twilio)
-- El corillo trabaja solo por cron semanal
-- **La Meta y su plan** (desde el 12 ago): el dueño declara un número que perseguir, la
-  Estratega arma el plan, el corillo ejecuta las jugadas en su relevo, cada una se cierra
-  con la evidencia de publicación, y la lección del plan cerrado alimenta al siguiente
+- Onboarding that learns the business (voice or text) and a brand profile
+- Creation of posts, carousels and reels with generated artwork
+- Owner approval (nothing publishes without their OK)
+- Automatic publishing to Instagram and Facebook, video included
+- Calendar, results with real Meta metrics, weekly report
+- La Sala: conversation with the crew, by text or voice
+- El Ayudante: support that diagnoses, repairs and escalates on its own
+- Stripe billing · SMS verification (Twilio)
+- The crew works on its own via a weekly cron
+- **The Goal and its plan** (since Aug 12): the owner declares a number to chase, the
+  Strategist builds the plan, the crew executes the plays in its relay, each one closes
+  with proof of publication, and the closed plan's lesson feeds the next one
+- **ES/EN interface switch** for evaluation (partial coverage; falls back to Spanish)
 
-**Implementado pero NO gobernando producción:**
+**Implemented but NOT governing production:**
 
-- **Creative Thesis** (`includes/creative_thesis.php`) — la capa que decide *la idea* que
-  merece contarse y se abstiene cuando no sabe lo suficiente. Está construida y probada
-  (`tests/smoke_creative_thesis_funcional.php`), pero vive detrás del flag
-  `VOICE_DNA_ONBOARDING_ENABLED`, que está **OFF**. No debe presentarse como operación
-  activa mientras siga así.
+- **Creative Thesis** (`includes/creative_thesis.php`) — the layer that decides *the idea*
+  worth telling and abstains when it does not know enough. It is built and tested
+  (`tests/smoke_creative_thesis_funcional.php`), but it lives behind the
+  `VOICE_DNA_ONBOARDING_ENABLED` flag, which is **OFF**. It must not be presented as an
+  active operation while that remains true.
 
-**Roadmap, no construido:**
+**Roadmap, not built:**
 
-- Agente de WhatsApp con IA (falta número dedicado de la Cloud API)
-- ATH Móvil como método de pago (el que de verdad usa el cliente boricua)
-- Plan "Despegar" — congelado (`activo=0`)
-- El marketplace de dos lados de Encuéntralo (fase 2, fuera del alcance del concurso)
+- AI WhatsApp agent (needs a dedicated Cloud API number)
+- ATH Móvil as a payment method (what the Puerto Rican customer actually uses)
+- The "Despegar" plan — frozen (`activo=0`)
+- Encuéntralo's two-sided marketplace (phase 2, outside the scope of this submission)
 
-## Humano vs. IA
+## Human vs. AI
 
-**Lo hace la IA:** aprender el negocio, decidir el plan del mes, escribir cada caption en
-la voz del dueño, dirigir y generar el arte, montar carruseles y reels, publicar en las
-redes, leer las métricas y recomendar, responder en La Sala, diagnosticar y reparar fallos
-del sistema, y vigilar retención/conversión/soporte del negocio del fundador.
+**The AI does:** learn the business, decide the month's plan, write every caption in the
+owner's voice, art-direct and generate the imagery, assemble carousels and reels, publish to
+the social accounts, read the metrics and recommend, answer in La Sala, diagnose and repair
+system failures, and watch retention/conversion/support for the founder's own business.
 
-**Lo hace el humano (Manuel, fundador único):** construir el producto, decidir estrategia y
-precio, conseguir los clientes, atender lo que el Ayudante escala, y firmar las decisiones
-de negocio. El **dueño del negocio cliente** aprueba el contenido — esa aprobación es
-obligatoria y no se puede saltar.
+**The human does (Manuel, solo founder):** build the product, decide strategy and pricing,
+find the customers, handle what the Ayudante escalates, and sign off on business decisions.
+The **client business owner** approves the content — that approval is mandatory and cannot
+be skipped.
 
-**Lo que la IA no hace por decisión nuestra:** publicar sin aprobación del dueño, inventar
-productos o precios que el negocio no tiene, y usar fotos de terceros para un negocio real.
+**What the AI does not do, by our decision:** publish without the owner's approval, invent
+products or prices the business does not have, or use third-party photos for a real business.
 
-## Evidencia y privacidad
+## Evidence and privacy
 
-- `crecer_ia_log` — toda llamada a un modelo, con costo, tokens y resultado.
-- `crecer_incidencias` — lo que el soporte automático no pudo arreglar.
-- `pagos` — libro de ingresos, con `producto='crecer'` separado del marketplace.
-- *Operaciones → Evidencia* consolida la vista para el jurado.
+- `crecer_ia_log` — every model call, with cost, tokens and outcome.
+- `crecer_incidencias` — what automated support could not fix.
+- `pagos` — the revenue ledger, with `producto='crecer'` separated from the marketplace.
+- *Operaciones → Evidencia* consolidates the view for judges.
 
-**Privacidad:** ninguna captura, log o export de la entrega incluye datos personales de un
-cliente real. Las ~430 reseñas etiquetadas `[omega-seed-2026]` o con correos `*.mail.test`
-son **semilla ficticia** y nunca se presentan como usuarios reales. El feed de la landing
-son ejemplos, rotulados como tales.
+**Privacy:** no screenshot, log or export in this submission contains personal data of a
+real customer. The ~430 reviews tagged `[omega-seed-2026]` or with `*.mail.test` addresses
+are **fictional seed data** and are never presented as real users. The landing page feed is
+made of examples, labeled as such.
 
-## Licencia y régimen del repositorio
+## License and repository terms
 
-**Repositorio privado. Todos los derechos reservados © 2026 Manuel Pardo / Encuéntralo.**
+**Private repository. All rights reserved © 2026 Manuel Pardo / Encuéntralo.**
 
-Se comparte con los evaluadores del Build with Gemini XPRIZE con el único propósito de
-juzgar la entrega. No se concede licencia de uso, copia, modificación ni distribución.
-Si el repositorio se hiciera público más adelante, la licencia se decidirá antes de
-publicarlo — no se asuma ninguna licencia abierta por omisión.
+Shared with Build with Gemini XPRIZE evaluators for the sole purpose of judging this
+submission. No license is granted to use, copy, modify or distribute. If the repository is
+ever made public, its license will be decided before publication — no open license should be
+assumed by default.
 
-## Contacto
+## Contact
 
-Manuel Pardo · fundador único · Puerto Rico
+Manuel Pardo · solo founder · Puerto Rico

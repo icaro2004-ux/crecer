@@ -19,11 +19,11 @@
 Son las cosas que **necesitan tus manos** y que si se dejan para el sábado, lo
 queman entero.
 
-- [ ] **Migraciones en producción** (phpMyAdmin, en este orden):
-      `2026-08-12_crecer_meta.sql` → `2026-08-12_crecer_variedad_visual.sql` →
-      `2026-08-12_crecer_meta_plan.sql` → `2026-08-12_crecer_jugada_ejecuta.sql`.
-      Marca **"Continuar aunque haya errores"** (los 1060 son inofensivos) y al
-      final corre `migrations/_verificar_meta.sql` hasta que todo diga OK.
+- [ ] **Migraciones en producción** — un solo archivo, re-ejecutable:
+      `migrations/_TODO-META-2026-08-12.sql` (junta las **6** del 12 de agosto en
+      orden y comprueba cada paso antes de darlo, así que no se para a la mitad).
+      Después corre `migrations/_verificar_meta.sql`: tiene que dar **16 OK**.
+      *(El roadmap las da por hechas el 12 de agosto — esto es solo confirmar.)*
 - [ ] **Redeploy** en hPanel + `_cache.php?k=crecer` para limpiar OPcache.
 - [ ] **Stripe: precio $39 en LIVE** (si sigue abierto).
 - [ ] **Cuenta de juez creada** y sus credenciales puestas en el `README.md`
@@ -69,6 +69,15 @@ Guion completo en `LIBRETO_VIDEO.md`. Antes de grabar:
 
 - [ ] Abrir **Operaciones → Armar el paquete de evidencia**
       (`/crecer/panel/admin_paquete.php`).
+- [ ] **Leer los avisos amarillos de arriba antes de copiar nada.** Están sobre
+      el bloque de Devpost a propósito. El que más importa: si tu suscripción
+      (cuenta admin) no está marcada `es_early_adopter=1`, **tu propio pago se
+      está reportando como cliente frío** — que es justo lo que la narrativa
+      promete que no pasa. El aviso trae el UPDATE exacto para phpMyAdmin.
+- [ ] Confirmar el corte con `_cache.php?k=crecer&test=paquete`: enseña fila por
+      fila qué suscripción entra al MRR y cuál es de cortesía. La cuenta del
+      **jurado** tiene que salir como *CORTESÍA — fuera del MRR*, nunca como
+      cliente frío.
 - [ ] Bajar el **JSON** y los tres **CSV** (revenue, uso de API, log de IA).
 - [ ] Copiar el bloque *"Para pegar en Devpost"* — ya viene con el revenue de
       clientes fríos separado del related-party.
