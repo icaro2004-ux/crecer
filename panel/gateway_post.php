@@ -488,20 +488,47 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   function showLoad(m){ gloadMsg.textContent=m||'Trabajando…'; gload.classList.add('on'); }
   function hideLoad(){ gload.classList.remove('on'); }
   // Polling de la imagen en background (Responses/gpt-image-2). cb(url) o cb(null) si falla.
+  // EL POLLING SE RINDE. Antes preguntaba cada 4s PARA SIEMPRE: si el trabajo se
+  // quedaba en 'queued' —ni 'ok' ni 'error'— no habia salida, y el dueno se
+  // quedaba mirando "Tu equipo esta disenando otra imagen..." sin fin. El
+  // rescate del servidor (soltar el job a los 3 min y tirar de Gemini) tampoco
+  // cierra el agujero: si Gemini tambien falla, se reintenta cada 3 min y el
+  // navegador sigue esperando igual.
+  //
+  // Ahora hay tope de reloj. Al agotarse se llama cb(null) — el mismo camino que
+  // ya usa el error — asi que quien llama apaga el cargador, devuelve el boton y
+  // dice la verdad. Preferimos decir "no se pudo" que dejar a alguien atrapado.
+  var POLL_MS=4000, POLL_MAX_MS=180000;   // 3 minutos
   function pollImg(cb){
+    var gastado=0, fallosSeguidos=0, listo=false;
     var t=setInterval(function(){
+      gastado+=POLL_MS;
+      if(gastado>=POLL_MAX_MS){ clearInterval(t); if(!listo){ listo=true; cb(null); } return; }
       self('poll_imagen',{}).then(function(d){
-        if(d&&d.estado==='ok'&&d.img){ clearInterval(t); cb(d.img); }
-        else if(d&&d.estado==='error'){ clearInterval(t); cb(null); }
-      }).catch(function(){});
-    },4000);
+        fallosSeguidos=0;
+        if(d&&d.estado==='ok'&&d.img){ clearInterval(t); if(!listo){ listo=true; cb(d.img); } }
+        else if(d&&d.estado==='error'){ clearInterval(t); if(!listo){ listo=true; cb(null); } }
+      }).catch(function(){
+        // Se acabo el tragarse los errores en silencio: si la red no responde
+        // cinco veces seguidas, no va a responder la sexta.
+        if(++fallosSeguidos>=5){ clearInterval(t); if(!listo){ listo=true; cb(null); } }
+      });
+    },POLL_MS);
   }
   function swapImg(url){ var im=document.querySelector('.card .img');
     if(im){ im.src=url+(url.indexOf('?')>-1?'&':'?')+'v='+Date.now(); }
     else { location.reload(); }   // venía del estado "generando" (sin <img>) → recarga para pintar toda la UI
   }
   // Al cargar: si la imagen se está generando en background, espera y refresca solo.
-  if(IMG_PENDING){ pollImg(function(url){ location.reload(); }); }
+  // OJO con el null: antes recargaba pasara lo que pasara, asi que al agotarse el
+  // tiempo la pagina volvia a cargar, volvia a ver IMG_PENDING y volvia a esperar
+  // — un loop de recargas cada 3 minutos, peor que el original. Solo se recarga
+  // si de verdad hay imagen; si no, se avisa y el dueno decide.
+  if(IMG_PENDING){ pollImg(function(url){
+    if(url){ location.reload(); return; }
+    hideLoad();
+    T('El arte se está tardando. Sigue trabajando — vuelve en un rato y aquí estará.');
+  }); }
   // Pantalla de espera VIVA — el corillo trabajando + deck de trivias/novedades.
   (function(){
     var wait=document.getElementById('wait'); if(!wait) return;

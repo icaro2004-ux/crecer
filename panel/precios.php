@@ -147,11 +147,25 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   <?php if ($activa): /* ── FACTURACIÓN: plan actual + pagos/recibos (un solo plan) ── */ ?>
     <h1>Facturación</h1>
     <?= $msgs ?>
+    <?php
+      // CUENTA DE CORTESÍA: activa pero SIN cobro en Stripe — la cuenta de
+      // evaluación del jurado, o un plan regalado desde el Centro de
+      // Operaciones. Antes caía en el mismo bloque que un cliente pagando y
+      // mentía dos veces: decía "se renueva solo" (no se renueva nada, no hay
+      // suscripción) y ofrecía "Gestionar mi plan", que solo podía llevar al
+      // error rojo de portal.php — no hay customer de Stripe que gestionar.
+      // Se dice lo que es.
+      $es_cortesia = empty($su['stripe_customer_id']);
+    ?>
     <div class="now">
       <div class="lbl">Plan actual</div>
-      <div class="pn"><?= $h($plan_actual['nombre'] ?? suscripcion_etiqueta($su)) ?> <span class="pill">Activa</span></div>
-      <div class="pr"><?php if($plan_actual): ?>$<?= number_format((float)$plan_actual['precio_mensual'],0) ?>/mes · se renueva solo<?php else: ?>Se renueva solo<?php endif; ?></div>
-      <a class="btn pri" style="margin-top:20px" href="/crecer/panel/portal.php?marca=<?= $marca_id ?>">Gestionar mi plan</a>
+      <div class="pn"><?= $h($plan_actual['nombre'] ?? suscripcion_etiqueta($su)) ?> <span class="pill"><?= $es_cortesia ? 'Cortesía' : 'Activa' ?></span></div>
+      <?php if ($es_cortesia): ?>
+        <div class="pr">Acceso completo sin cobro. No hay tarjeta ni renovación — esta cuenta no se factura.</div>
+      <?php else: ?>
+        <div class="pr"><?php if($plan_actual): ?>$<?= number_format((float)$plan_actual['precio_mensual'],0) ?>/mes · se renueva solo<?php else: ?>Se renueva solo<?php endif; ?></div>
+        <a class="btn pri" style="margin-top:20px" href="/crecer/panel/portal.php?marca=<?= $marca_id ?>">Gestionar mi plan</a>
+      <?php endif; ?>
     </div>
 
     <div class="pays">

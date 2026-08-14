@@ -15,6 +15,9 @@
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/meta.php';
+// marca_es_pagada() y activacion_de_prueba() viven aquí — hacen falta para saber
+// si esta cuenta ya salió del gateway (ver el borrado de la bandera más abajo).
+require_once __DIR__ . '/../includes/suscripcion.php';
 requiere_login();
 
 $usuario = usuario_actual($pdo);
@@ -28,6 +31,21 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 // ¿Vengo del GATEWAY? (para volver al ESCENARIO del post, no al app). Se guarda en
 // sesión porque el rebote de OAuth pierde los query params. El app usa el default.
 if (($_GET['desde'] ?? '') === 'gateway') $_SESSION['conectar_return'] = 'gateway';
+
+// LA BANDERA SE BORRA CUANDO YA NO APLICA (2026-08-14).
+// Antes solo se ponía, nunca se quitaba: quien pasó una vez por el gateway se
+// quedaba con la marca pegada en la sesión PARA SIEMPRE, así que el botón
+// grande de "Volver" lo devolvía al post de prueba una y otra vez — incluso ya
+// pagando, cuando su sitio es el panel. Dos salidas:
+//   · llega sin ?desde=gateway (o sea, desde el app) → ya no viene del gateway;
+//   · la marca tiene acceso completo → el gateway se acabó para ella.
+$tiene_acceso = marca_es_pagada($pdo, $marca_id)
+             || (function_exists('activacion_de_prueba') && activacion_de_prueba($usuario['email'] ?? null));
+if ($tiene_acceso || (!isset($_GET['desde']) && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET'
+                      && ($_GET['action'] ?? '') === '')) {
+    unset($_SESSION['conectar_return']);
+}
+
 $es_gateway = ($_SESSION['conectar_return'] ?? '') === 'gateway';
 $volver_url = $es_gateway ? ('/crecer/panel/gateway_post.php?marca=' . $marca_id) : ($BASE . '/index.php?marca=' . $marca_id);
 
