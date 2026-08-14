@@ -124,6 +124,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($accion === 'poll_imagen') {
         require_once __DIR__ . '/../includes/img_responses.php';
         $r = img_resp_completar($pdo, $marca_id, $post_id);
+        // RESCATE EN CALIENTE. Si el worker murió antes de crear el job, la pieza
+        // queda 'queued' SIN img_job y img_resp_completar no tiene qué consultar:
+        // el dueño se queda mirando "toma un par de minutos" para siempre. Aquí es
+        // el único sitio donde se le puede ayudar, porque esperando no recarga la
+        // pantalla y el barrido del GET nunca corre.
+        // El UPDATE condicional hace de candado: quien lo gana mueve updated_at y
+        // deja fuera a los demás polls por 2 min, así no se generan dos imágenes.
+        if (($r['estado'] ?? '') !== 'ok' && function_exists('img_gemini_fallback')) {
+            $claim = $pdo->prepare("UPDATE crecer_contenido SET updated_at=NOW()
+                 WHERE id=? AND marca_id=? AND img_estado='queued'
+                   AND (img_job IS NULL OR img_job='')
+                   AND updated_at < (NOW() - INTERVAL 2 MINUTE)");
+            $claim->execute([$post_id, $marca_id]);
+            if ($claim->rowCount() > 0) {
+                $cap = (string)($pdo->query("SELECT caption FROM crecer_contenido WHERE id=" . (int)$post_id)->fetchColumn() ?: '');
+                try {
+                    $url = img_gemini_fallback($pdo, $marca_id, $post_id, $cap);
+                    if ($url !== '') $r = ['estado' => 'ok', 'img' => $url];
+                } catch (Throwable $e) { /* que el polling siga intentando */ }
+            }
+        }
         echo json_encode(['ok'=>true, 'estado'=>$r['estado'], 'img'=>$r['img']]); exit;
     }
     echo json_encode(['ok'=>false,'err'=>'Acción inválida.']); exit;
