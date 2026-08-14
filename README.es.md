@@ -228,12 +228,14 @@ son ejemplos, rotulados como tales.
 
 ## Licencia y régimen del repositorio
 
-**Repositorio privado. Todos los derechos reservados © 2026 Manuel Pardo / Encuéntralo.**
+**Todos los derechos reservados © 2026 Manuel Pardo / Encuéntralo.**
 
-Se comparte con los evaluadores del Build with Gemini XPRIZE con el único propósito de
-juzgar la entrega. No se concede licencia de uso, copia, modificación ni distribución.
-Si el repositorio se hiciera público más adelante, la licencia se decidirá antes de
-publicarlo — no se asuma ninguna licencia abierta por omisión.
+Este repositorio es público para que los evaluadores del Build with Gemini XPRIZE puedan
+revisar la entrega directamente, sin pedir acceso y sin depender de que alguien acepte
+una invitación.
+
+**Público no es licencia abierta.** No se concede licencia de uso, copia, modificación ni
+distribución. Aplica el copyright por defecto: se puede leer, no reutilizar.
 
 ## Contacto
 

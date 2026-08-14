@@ -250,12 +250,14 @@ made of examples, labeled as such.
 
 ## License and repository terms
 
-**Private repository. All rights reserved © 2026 Manuel Pardo / Encuéntralo.**
+**All rights reserved © 2026 Manuel Pardo / Encuéntralo.**
 
-Shared with Build with Gemini XPRIZE evaluators for the sole purpose of judging this
-submission. No license is granted to use, copy, modify or distribute. If the repository is
-ever made public, its license will be decided before publication — no open license should be
-assumed by default.
+This repository is public so that Build with Gemini XPRIZE evaluators can review the
+submission directly, with no access request and no waiting on an invitation.
+
+**Public visibility is not an open-source license.** No license is granted to use, copy,
+modify or distribute this code. Default copyright applies: you may read it, you may not
+reuse it.
 
 ## Contact
 

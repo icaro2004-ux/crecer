@@ -28,8 +28,12 @@ queman entero.
 - [ ] **Stripe: precio $39 en LIVE** (si sigue abierto).
 - [ ] **Cuenta de juez creada** y sus credenciales puestas en el `README.md`
       (la tabla ya está lista, solo hay que llenar los dos campos).
-- [ ] **Repo compartido** con `testing@devpost.com` y `judging@hacker.fund`
-      (o hacerlo público). Sin esto no se puede evaluar nada.
+- [x] **Repo accesible para el jurado** — HECHO el 14 ago: se puso **público**
+      (`https://github.com/icaro2004-ux/crecer`), verificado sin credencial.
+      Ya **no** hacen falta invitaciones a `testing@devpost.com` ni a
+      `judging@hacker.fund`: los jueces abren el enlace y entran. Con eso
+      desaparece el riesgo de que nadie acepte la invitación a tiempo.
+      Público **no** es licencia abierta — el README lo deja dicho.
 - [ ] **Rotar** `CRECER_WORKER_KEY` y `CRON_TOKEN` antes de abrir el repo.
 - [ ] **Draft abierto en Devpost** con los campos que ya se pueden pegar.
 
