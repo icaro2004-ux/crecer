@@ -124,18 +124,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($accion === 'poll_imagen') {
         require_once __DIR__ . '/../includes/img_responses.php';
         $r = img_resp_completar($pdo, $marca_id, $post_id);
-        // RESCATE EN CALIENTE. Si el worker murió antes de crear el job, la pieza
-        // queda 'queued' SIN img_job y img_resp_completar no tiene qué consultar:
-        // el dueño se queda mirando "toma un par de minutos" para siempre. Aquí es
-        // el único sitio donde se le puede ayudar, porque esperando no recarga la
-        // pantalla y el barrido del GET nunca corre.
+        // RESCATE EN CALIENTE, POR TIEMPO. Hay dos formas de quedarse esperando
+        // para siempre, y ninguna se distingue desde fuera:
+        //   · el worker murió antes de crear el job → 'queued' sin img_job;
+        //   · el job existe pero nunca completa, o img_resp_completar revienta en
+        //     cada poll — su catch devuelve 'queued' (img_responses.php:300), así
+        //     que un error permanente se ve idéntico a "todavía trabajando".
+        // Por eso no se mira el estado sino el RELOJ: si lleva >3 min en cola, se
+        // suelta el job y se pinta con Gemini. Medido en prod: se quedaba colgado
+        // 8+ minutos con el caption ya escrito.
         // El UPDATE condicional hace de candado: quien lo gana mueve updated_at y
-        // deja fuera a los demás polls por 2 min, así no se generan dos imágenes.
+        // deja fuera a los demás polls por 3 min, así no se generan dos imágenes.
         if (($r['estado'] ?? '') !== 'ok' && function_exists('img_gemini_fallback')) {
-            $claim = $pdo->prepare("UPDATE crecer_contenido SET updated_at=NOW()
+            $claim = $pdo->prepare("UPDATE crecer_contenido SET img_job=NULL, updated_at=NOW()
                  WHERE id=? AND marca_id=? AND img_estado='queued'
-                   AND (img_job IS NULL OR img_job='')
-                   AND updated_at < (NOW() - INTERVAL 2 MINUTE)");
+                   AND updated_at < (NOW() - INTERVAL 3 MINUTE)");
             $claim->execute([$post_id, $marca_id]);
             if ($claim->rowCount() > 0) {
                 $cap = (string)($pdo->query("SELECT caption FROM crecer_contenido WHERE id=" . (int)$post_id)->fetchColumn() ?: '');

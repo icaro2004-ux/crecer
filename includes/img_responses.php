@@ -297,7 +297,17 @@ function img_resp_completar(PDO $pdo, int $marca_id, int $post_id): array {
             return ['estado' => 'error', 'img' => null];
         }
         return ['estado' => 'queued', 'img' => null];   // in_progress / queued
-    } catch (Throwable $e) { return ['estado' => 'queued', 'img' => null]; }   // transitorio → reintenta el próximo poll
+    } catch (Throwable $e) {
+        // Se sigue devolviendo 'queued' (puede ser transitorio y el próximo poll
+        // lo resuelve), PERO se deja rastro: si el fallo es permanente, sin esto
+        // el dueño espera para siempre y no queda constancia de por qué.
+        error_log('img_resp_completar: ' . $e->getMessage());
+        try { $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,estado,error_msg)
+                             VALUES (?,?,?,?,?,?, 'error', ?)")
+            ->execute([$marca_id, 'director_imagen', 'No pude consultar el job de imagen', 'responses',
+                       'post_id=' . $post_id . ' job=' . $rid, '', mb_substr($e->getMessage(), 0, 400)]); } catch (Throwable $e2) {}
+        return ['estado' => 'queued', 'img' => null];
+    }
 }
 
 // ─── LOGOS por Responses (gpt-image-2) — más preciso, sobre todo el nombre/tipografía ───
