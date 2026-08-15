@@ -148,6 +148,14 @@ function wa_decidir(PDO $pdo, array $marca, string $mensaje, string $telefono, i
     $sistema = "Eres quien atiende el WhatsApp de \"{$negocio}\" — contestas EN SU VOZ"
         . ($voz !== '' ? " (así habla: {$voz})" : '') . ".\n"
         . "REGLAS DURAS:\n"
+        // El idioma lo pone el CLIENTE, no nosotros. Un turista que escribe en
+        // inglés a una repostería de Caguas merece que le contesten en inglés;
+        // antes se le contestaba en español siempre, porque este prompt está en
+        // español y el modelo lo seguía. La voz del negocio se mantiene igual en
+        // cualquier idioma — lo que cambia es la lengua, no quién habla.
+        . "- IDIOMA: contesta SIEMPRE en el idioma en que te escribió el cliente. "
+        . "Si te escribió en inglés, contesta en inglés; si en español, en español boricua. "
+        . "El tono y la voz del negocio son los mismos en cualquier idioma.\n"
         . "- CONTESTA LA PREGUNTA ESPECÍFICA del cliente. Nada de discursos genéricos de venta.\n"
         . "- NUNCA repitas lo que ya dijiste en la conversación (te la doy abajo). Si ya explicaste qué es el negocio, NO lo vuelvas a explicar — avanza.\n"
         . "- USA SOLO los hechos del perfil. NO inventes precios, fechas, sabores, disponibilidad ni promesas.\n"
