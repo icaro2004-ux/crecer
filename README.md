@@ -248,7 +248,7 @@ owner's voice, art-direct and generate the imagery, assemble carousels and reels
 the social accounts, read the metrics and recommend, answer in La Sala, diagnose and repair
 system failures, and watch retention/conversion/support for the founder's own business.
 
-**The human does (Manuel, solo founder):** build the product, decide strategy and pricing,
+**The human does (Jesús, solo founder):** build the product, decide strategy and pricing,
 find the customers, handle what the Ayudante escalates, and sign off on business decisions.
 The **client business owner** approves the content — that approval is mandatory and cannot
 be skipped.
@@ -270,7 +270,7 @@ made of examples, labeled as such.
 
 ## License and repository terms
 
-**All rights reserved © 2026 Manuel Pardo / Encuéntralo.**
+**All rights reserved © 2026 Jesús Pérez / Encuéntralo.**
 
 This repository is public so that Build with Gemini XPRIZE evaluators can review the
 submission directly, with no access request and no waiting on an invitation.
@@ -281,4 +281,4 @@ reuse it.
 
 ## Contact
 
-Manuel Pardo · solo founder · Puerto Rico
+Jesús Pérez · solo founder · Puerto Rico

@@ -206,7 +206,7 @@ la voz del dueño, dirigir y generar el arte, montar carruseles y reels, publica
 redes, leer las métricas y recomendar, responder en La Sala, diagnosticar y reparar fallos
 del sistema, y vigilar retención/conversión/soporte del negocio del fundador.
 
-**Lo hace el humano (Manuel, fundador único):** construir el producto, decidir estrategia y
+**Lo hace el humano (Jesús, fundador único):** construir el producto, decidir estrategia y
 precio, conseguir los clientes, atender lo que el Ayudante escala, y firmar las decisiones
 de negocio. El **dueño del negocio cliente** aprueba el contenido — esa aprobación es
 obligatoria y no se puede saltar.
@@ -228,7 +228,7 @@ son ejemplos, rotulados como tales.
 
 ## Licencia y régimen del repositorio
 
-**Todos los derechos reservados © 2026 Manuel Pardo / Encuéntralo.**
+**Todos los derechos reservados © 2026 Jesús Pérez / Encuéntralo.**
 
 Este repositorio es público para que los evaluadores del Build with Gemini XPRIZE puedan
 revisar la entrega directamente, sin pedir acceso y sin depender de que alguien acepte
@@ -239,4 +239,4 @@ distribución. Aplica el copyright por defecto: se puede leer, no reutilizar.
 
 ## Contacto
 
-Manuel Pardo · fundador único · Puerto Rico
+Jesús Pérez · fundador único · Puerto Rico
