@@ -179,7 +179,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $lock = $pdo->prepare(
                     "UPDATE crecer_contenido SET img_estado='rescatando', updated_at=NOW()
                       WHERE id=? AND marca_id=? AND img_estado='queued' AND img_job IS NULL
-                        AND updated_at < (NOW() - INTERVAL 15 SECOND)");
+                        -- 90s, no 15. gpt-image-1 en calidad alta tarda 30-60s:
+                        -- con 15 segundos el rescate le quitaba la imagen a
+                        -- OpenAI ANTES de que terminara, y se la regalaba al
+                        -- respaldo. Era la razon principal de que tantas piezas
+                        -- salieran con el motor equivocado.
+                        AND updated_at < (NOW() - INTERVAL 90 SECOND)");
                 $lock->execute([$pid, $marca_id]);
                 if ($lock->rowCount() === 1) {
                     $cap = (string)($pdo->query("SELECT caption FROM crecer_contenido WHERE id=" . $pid)->fetchColumn() ?: '');

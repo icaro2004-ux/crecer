@@ -198,7 +198,52 @@ function img_resp_encolar(PDO $pdo, int $marca_id, int $post_id, string $copy, ?
  * gemini-3-pro-image) y guarda en la pieza. Usa el logo real si hay. Devuelve la URL o ''.
  * Corre donde haya tiempo (worker), NUNCA en la pantalla del dueño.
  */
+/**
+ * RESCATE de un arte que se quedó en cola. Intenta OPENAI primero; Gemini es el
+ * último recurso, no el atajo.
+ *
+ * Por qué se reescribió (2026-08-14). El rescate llamaba a Gemini directo, y eso
+ * tapaba el fallo de verdad: el disparador del worker dejó de funcionar el 12 de
+ * agosto y NADIE se enteró, porque cada pieza salía igual — con otro motor y
+ * otra calidad. Tres días con cero llamadas a OpenAI y el producto "funcionando".
+ *
+ * El punto clave: cuando el worker no arranca, OPENAI NO HA FALLADO. Lo que
+ * falló fue el disparo (curl del servidor a sí mismo). Una llamada síncrona a
+ * OpenAI desde aquí sí funciona — por eso reintentarla recupera la mayoría de
+ * los casos con el motor bueno, en vez de regalárselos a Gemini.
+ *
+ * Gemini se queda como red: mejor una imagen de respaldo que ninguna. Pero pasa
+ * a ser lo que debe ser — el último recurso — y queda en el log cuál de los dos
+ * la hizo, para poder medirlo.
+ *
+ * OJO: esto es SOLO el rescate. La edición de FOTOS REALES del negocio sigue
+ * yendo por Gemini como siempre; ahí es el motor correcto, no un sustituto.
+ */
 function img_gemini_fallback(PDO $pdo, int $marca_id, int $post_id, string $copy): string {
+    // ── 1) Reintento con OPENAI, que es el que queremos que gane ──
+    // arte_worker.php no carga agentes.php, así que sin esto el reintento se
+    // saltaba justo en uno de los cuatro caminos. Los require_once de agentes
+    // hacia este archivo viven dentro de funciones, así que no hay círculo.
+    if (!function_exists('generar_grafica') && is_file(__DIR__ . '/agentes.php')) {
+        try { require_once __DIR__ . '/agentes.php'; } catch (Throwable $e) {}
+    }
+    if (function_exists('generar_grafica')) {
+        try {
+            $g = generar_grafica($pdo, $marca_id, null, ['copy' => $copy, 'con_logo' => false]);
+            if (!empty($g['archivo'])) {
+                $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, img_estado='ok', updated_at=NOW()
+                                WHERE id=? AND marca_id=?")
+                    ->execute([$g['archivo'], $post_id, $marca_id]);
+                error_log("rescate #{$post_id}: recuperado por OPENAI (el worker no habia disparado).");
+                return (string)$g['archivo'];
+            }
+        } catch (Throwable $e) {
+            error_log("rescate #{$post_id}: OpenAI tampoco pudo (" . mb_substr($e->getMessage(), 0, 120) . "); va Gemini.");
+        }
+    }
+
+    // ── 2) Último recurso: Gemini. Mejor algo que nada. ──
+    error_log("rescate #{$post_id}: cae a GEMINI.");
     try {
         $m = function_exists('leer_marca') ? leer_marca($pdo, $marca_id)
            : $pdo->query("SELECT * FROM crecer_marca WHERE id=" . (int)$marca_id)->fetch(PDO::FETCH_ASSOC);
