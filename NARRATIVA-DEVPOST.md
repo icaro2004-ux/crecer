@@ -14,8 +14,13 @@
 > entregas. La brevedad sigue ganando por mérito propio, no por regla.
 >
 > En inglés porque así lo leen los jueces, con la voz boricua de Crecer.
-> Los resultados reales, el revenue related-party y las proyecciones van
-> deliberadamente separados — nada de posibilidad presentada como logro.
+> Los resultados reales y las proyecciones van deliberadamente separados —
+> nada de posibilidad presentada como logro.
+>
+> **REVENUE = $0** (verificado el 14 ago con `test=paquete`: cero suscripciones
+> con cobro real en Stripe). La versión anterior afirmaba que el fundador pagaba
+> $39/mes como primer cliente; **era falso** y se reescribió. No volver a
+> introducir esa frase sin un pago real que se pueda enseñar en Stripe.
 
 ---
 
@@ -51,11 +56,23 @@ The division of labor is clear. The AI does the department's repeatable work: in
 
 Our integrity rule matters as much as automation: persuasive content must be grounded in facts the business provided. If the crew does not know enough, it abstains and asks. We would rather pause than invent something about a customer's livelihood.
 
-## Our first customer—and our honest starting line
+## Our honest starting line
 
-I am Crecer's first paying customer. I use the product to operate and grow Crecer itself, and I pay the same live Stripe subscription price of $39 per month. We report that payment honestly and separately as related-party revenue, not as an arms-length customer.
+**Revenue during the window: $0. We are in controlled testing, and that is a decision, not a stall.**
 
-We are not ashamed of beginning with one: someone had to trust Crecer first, and I decided it should be me. We report exactly what exists by the deadline—no inflated users, no imaginary testimonials.
+Billing is built and live, not theoretical. Stripe runs in live mode, and the $39/month price is verified against what the app promises—the app refuses to open a checkout if those two numbers disagree, so a mismatch cannot reach a customer. A live checkout session opens. What has never happened is a completed payment.
+
+We could have run our own card through it and printed a revenue figure on this page. We did not. A founder paying himself is not a customer, and a number that needs an asterisk is worth less than a zero that does not.
+
+Here is what we would rather you weigh instead.
+
+**We know what this business costs to run.** Building and operating Crecer across the window cost **$132.68**, from provider invoices—Google Cloud, Twilio, hosting, video rendering—with the OpenAI portion estimated from usage data rather than guessed. Under a hundred and fifty dollars to put an AI-operated marketing department into production.
+
+**We can see where the money goes, per call.** Every model call is recorded with its agent, model, tokens, latency and outcome—failures included. The dollar figures in that log are our own estimates from a price table, and the provider invoice is what we report; but the shape is exact, and it says something useful: **roughly two thirds of our AI spend is images. The layer that actually runs the business—planning, writing, analyzing, deciding—is the cheap part.** That is the number that decides whether $39/month is a business or a hobby.
+
+**And the product works**, because it is in production now, publishing to real Instagram and Facebook accounts, with agents running the weekly cycle on a schedule. Judges have a live account and can watch it happen, then open the ledger and audit what it cost.
+
+A company that reports a zero it can defend is telling you something about how it will report the first million. We report exactly what exists by the deadline—no inflated users, no imaginary testimonials, no revenue that is really an expense wearing a costume.
 
 Our early customer count reflects that compressed window; it does not define the market. The U.S. Small Business Administration's 2025 Puerto Rico profile counts **41,362 small employers** on the island, together employing **407,296 people**—**98.4% of Puerto Rico's employers**. And that count misses the community we see every day: solo entrepreneurs and informal microbusinesses selling through social media and word of mouth.
 
