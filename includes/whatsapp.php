@@ -128,6 +128,51 @@ function wa_historial(PDO $pdo, int $marca_id, string $telefono, int $limit = 8,
 }
 
 /**
+ * Idioma del mensaje del cliente: 'en' o 'es'. DETERMINISTA a propósito.
+ *
+ * Pedirle al modelo que "conteste en el idioma del cliente" no basta: el prompt
+ * lleva el historial del hilo, y si los ocho turnos anteriores están en español
+ * el modelo sigue en español aunque el cliente acabe de escribir en inglés. La
+ * voz del negocio, que también va en español, empuja para el mismo lado.
+ * Aquí se decide fuera del modelo y se le dice explícito.
+ *
+ * Ante la duda, español: es el idioma del negocio y de casi todos sus clientes.
+ */
+function wa_idioma(string $texto): string {
+    // Puntuación fuera: "thanks!" tiene que contar igual que "thanks".
+    $t = mb_strtolower(trim($texto), 'UTF-8');
+    $t = ' ' . trim(preg_replace('/[^\p{L}\p{N}]+/u', ' ', $t)) . ' ';
+    if (trim($t) === '') return 'es';
+
+    // Las palabras función mandan, NO los acentos: "do you deliver to Bayamón?"
+    // es inglés con un nombre de pueblo dentro.
+    //
+    // SOLO palabras función. Nada de vocabulario de negocio: aquí había
+    // "delivery", "order", "price" y "open", y con eso "Uds hacen delivery a
+    // Bayamon?" salía inglés — en Puerto Rico esos préstamos se hablan en
+    // español todos los días. Lo que delata el idioma es el andamiaje de la
+    // frase, no los sustantivos.
+    $pal_es = ['el','la','los','las','un','una','unos','unas','de','del','al','que','por','para','con',
+               'como','donde','cuando','cuanto','cuanta','tienen','tienes','tiene','hacen','hace',
+               'quiero','quisiera','necesito','hola','gracias','buenas','buenos','dias','tardes','noches',
+               'me','mi','su','sus','les','le','lo','es','son','esta','estan','ustedes','uds','usted',
+               'y','o','pero','si','no','hay','puedo','puedes','pueden','favor','muy','mas','tambien'];
+    $pal_en = ['the','an','of','that','this','for','with','how','where','when','what','which','do','does',
+               'did','you','your','i','my','is','are','was','were','and','or','but','if','have','has','had',
+               'can','could','would','should','hi','hello','hey','thanks','thank','please','much','many',
+               'there','they','we','it','to','from','about','any','some','need','want'];
+    $n_es = 0; $n_en = 0;
+    foreach ($pal_es as $w) if (strpos($t, ' ' . $w . ' ') !== false) $n_es++;
+    foreach ($pal_en as $w) if (strpos($t, ' ' . $w . ' ') !== false) $n_en++;
+
+    if ($n_en !== $n_es) return $n_en > $n_es ? 'en' : 'es';
+
+    // Empate — pasa con mensajes de una palabra ("menú", "?"). Español, que es
+    // el idioma del negocio y de casi toda su gente.
+    return 'es';
+}
+
+/**
  * La decisión para un MENSAJE DIRECTO de WhatsApp — misma compuerta que el
  * Conserje de comentarios, con el arma extra del canal: puede mandar el LINK
  * de órdenes del negocio cuando el cliente quiere ordenar.
@@ -144,18 +189,20 @@ function wa_decidir(PDO $pdo, array $marca, string $mensaje, string $telefono, i
 
     $link_cta = defined('WHATSAPP_LINK_CTA') ? trim((string)WHATSAPP_LINK_CTA) : '';
     $historial = wa_historial($pdo, (int)$marca['id'], $telefono, 8, $excluir_id);
+    $idioma    = wa_idioma($mensaje);   // fuera del modelo: ver wa_idioma()
 
     $sistema = "Eres quien atiende el WhatsApp de \"{$negocio}\" — contestas EN SU VOZ"
         . ($voz !== '' ? " (así habla: {$voz})" : '') . ".\n"
         . "REGLAS DURAS:\n"
-        // El idioma lo pone el CLIENTE, no nosotros. Un turista que escribe en
-        // inglés a una repostería de Caguas merece que le contesten en inglés;
-        // antes se le contestaba en español siempre, porque este prompt está en
-        // español y el modelo lo seguía. La voz del negocio se mantiene igual en
-        // cualquier idioma — lo que cambia es la lengua, no quién habla.
-        . "- IDIOMA: contesta SIEMPRE en el idioma en que te escribió el cliente. "
-        . "Si te escribió en inglés, contesta en inglés; si en español, en español boricua. "
-        . "El tono y la voz del negocio son los mismos en cualquier idioma.\n"
+        // El idioma lo pone el CLIENTE, no nosotros, y no se deja a criterio del
+        // modelo: viene decidido por wa_idioma() y se le ordena. El historial del
+        // hilo (todo en español) lo arrastraba a contestar en español aunque el
+        // cliente escribiera en inglés. Cambia la lengua, no quién habla.
+        . ($idioma === 'en'
+            ? "- IDIOMA: el cliente te escribió EN INGLÉS. Contesta ENTERAMENTE EN INGLÉS, "
+              . "aunque la conversación anterior esté en español y aunque la voz del negocio "
+              . "esté descrita en español. Mismo tono y misma calidez, en inglés.\n"
+            : "- IDIOMA: contesta en español boricua natural, en la voz del negocio.\n")
         . "- CONTESTA LA PREGUNTA ESPECÍFICA del cliente. Nada de discursos genéricos de venta.\n"
         . "- NUNCA repitas lo que ya dijiste en la conversación (te la doy abajo). Si ya explicaste qué es el negocio, NO lo vuelvas a explicar — avanza.\n"
         . "- USA SOLO los hechos del perfil. NO inventes precios, fechas, sabores, disponibilidad ni promesas.\n"
@@ -172,7 +219,13 @@ function wa_decidir(PDO $pdo, array $marca, string $mensaje, string $telefono, i
         . ($link_cta !== '' ? "- Link para empezar/registrarse: {$link_cta}\n" : '')
         . ($link_ordenes !== '' ? "- Link para ordenar: {$link_ordenes}\n" : '')
         . ($historial !== '' ? "\nCONVERSACIÓN RECIENTE (lo ya dicho — NO te repitas):\n{$historial}\n" : '')
-        . "\nMENSAJE NUEVO del cliente:\n\"{$mensaje}\"\n\nDecide y responde a LO QUE PREGUNTÓ.";
+        // La orden de idioma se repite pegada al mensaje nuevo: lo último que lee
+        // el modelo pesa más que lo que quedó arriba, sobre todo con historial.
+        . "\nMENSAJE NUEVO del cliente:\n\"{$mensaje}\"\n\n"
+        . ($idioma === 'en'
+            ? "Este mensaje está EN INGLÉS. Tu \"respuesta\" tiene que ir EN INGLÉS.\n"
+            : "Este mensaje está en español. Tu \"respuesta\" va en español boricua.\n")
+        . "Decide y responde a LO QUE PREGUNTÓ.";
 
     $r = ia_ejecutar($pdo, 'conserje', 'Responder WhatsApp', $prompt, [
         'marca_id'        => (int)$marca['id'],
