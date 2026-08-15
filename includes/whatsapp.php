@@ -136,13 +136,14 @@ function wa_historial(PDO $pdo, int $marca_id, string $telefono, int $limit = 8,
  * voz del negocio, que también va en español, empuja para el mismo lado.
  * Aquí se decide fuera del modelo y se le dice explícito.
  *
- * Ante la duda, español: es el idioma del negocio y de casi todos sus clientes.
+ * Devuelve 'en', 'es', o NULL cuando el mensaje no da señal ("ok", "yes", un
+ * emoji). En ese caso manda el hilo, no un valor por defecto.
  */
-function wa_idioma(string $texto): string {
+function wa_idioma(string $texto): ?string {
     // Puntuación fuera: "thanks!" tiene que contar igual que "thanks".
     $t = mb_strtolower(trim($texto), 'UTF-8');
     $t = ' ' . trim(preg_replace('/[^\p{L}\p{N}]+/u', ' ', $t)) . ' ';
-    if (trim($t) === '') return 'es';
+    if (trim($t) === '') return null;   // solo emoji o signos: sin señal, manda el hilo
 
     // Las palabras función mandan, NO los acentos: "do you deliver to Bayamón?"
     // es inglés con un nombre de pueblo dentro.
@@ -167,9 +168,41 @@ function wa_idioma(string $texto): string {
 
     if ($n_en !== $n_es) return $n_en > $n_es ? 'en' : 'es';
 
-    // Empate — pasa con mensajes de una palabra ("menú", "?"). Español, que es
-    // el idioma del negocio y de casi toda su gente.
-    return 'es';
+    // Un acento o un signo de apertura, sin nada en contra, alcanza.
+    if (preg_match('/[áéíóúñ¿¡]/u', mb_strtolower($texto, 'UTF-8'))) return 'es';
+
+    // SIN SEÑAL. Aquí caen "yes", "ok", "sure", "gracias?", "👍" — que es la
+    // mitad de lo que se escribe en un chat. Antes esto devolvía 'es' y por eso
+    // la conversación arrancaba en inglés y se caía al español en el segundo
+    // mensaje. No se adivina: decide el hilo (ver wa_idioma_hilo).
+    return null;
+}
+
+/**
+ * El idioma del HILO: se miran los mensajes que ESTE cliente ha escrito, del
+ * más nuevo al más viejo, y manda el primero que dé señal.
+ *
+ * El idioma es una propiedad de la conversación, no de cada mensaje suelto. Si
+ * alguien abrió en inglés y ahora escribe "ok", sigue siendo una conversación
+ * en inglés. Solo se miran los mensajes DEL CLIENTE: si se miraran también las
+ * respuestas del agente, un error se realimentaría solo.
+ */
+function wa_idioma_hilo(PDO $pdo, int $marca_id, string $telefono, int $excluir_id = 0, int $limit = 10): ?string {
+    $tel = preg_replace('/\D+/', '', $telefono);
+    if ($tel === '') return null;
+    try {
+        $q = $pdo->prepare(
+            "SELECT mensaje_entrante FROM crecer_mensajes
+              WHERE marca_id=? AND plataforma='whatsapp' AND remitente LIKE ? AND id<>?
+                AND mensaje_entrante IS NOT NULL AND mensaje_entrante <> ''
+              ORDER BY id DESC LIMIT " . max(1, (int)$limit));
+        $q->execute([$marca_id, '%' . $tel, $excluir_id]);
+        foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $texto) {
+            $l = wa_idioma((string)$texto);
+            if ($l !== null) return $l;          // el más reciente con señal manda
+        }
+    } catch (Throwable $e) { /* sin hilo, se cae al idioma del negocio */ }
+    return null;
 }
 
 /**
@@ -189,7 +222,12 @@ function wa_decidir(PDO $pdo, array $marca, string $mensaje, string $telefono, i
 
     $link_cta = defined('WHATSAPP_LINK_CTA') ? trim((string)WHATSAPP_LINK_CTA) : '';
     $historial = wa_historial($pdo, (int)$marca['id'], $telefono, 8, $excluir_id);
-    $idioma    = wa_idioma($mensaje);   // fuera del modelo: ver wa_idioma()
+    // Fuera del modelo, y en cascada: lo que dice ESTE mensaje → lo que venía
+    // hablando el hilo → el idioma del negocio. Sin el paso del medio, un "ok"
+    // tumbaba al español una conversación que iba en inglés.
+    $idioma = wa_idioma($mensaje)
+           ?? wa_idioma_hilo($pdo, (int)$marca['id'], $telefono, $excluir_id)
+           ?? 'es';
 
     $sistema = "Eres quien atiende el WhatsApp de \"{$negocio}\" — contestas EN SU VOZ"
         . ($voz !== '' ? " (así habla: {$voz})" : '') . ".\n"
