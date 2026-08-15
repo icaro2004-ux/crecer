@@ -374,15 +374,84 @@ return [
 'El corillo revisó y ya tenías suficientes borradores — no amontonó trabajo. Cada decisión quedó registrada arriba.'
     => 'The crew checked and you already had enough drafts — it did not pile on work. Every decision is recorded above.',
 
-// ── Métricas (Resultados) ───────────────────────────────────
+// ── Resultados (panel/resultados.php) ───────────────────────
+//  Las métricas REALES que devuelve Meta. Es donde el juez comprueba que los
+//  números no son de adorno: vienen de la Graph API, post por post.
 'Vistas'                        => 'Views',
 'Me gusta'                      => 'Likes',
 'Comentarios'                   => 'Comments',
 'Guardados'                     => 'Saves',
 'Compartidos'                   => 'Shares',
+'Reacciones'                    => 'Reactions',
 'Alcance'                       => 'Reach',
 'Interacciones'                 => 'Interactions',
 'Seguidores'                    => 'Followers',
+'Engagement'                    => 'Engagement',
+'de engagement'                 => 'engagement',
+'Actualizar métricas'           => 'Refresh metrics',
+'Actualizar'                    => 'Refresh',
+'Recientes'                     => 'Recent',
+'Más vistos'                    => 'Most viewed',
+'Más interacción'               => 'Most engagement',
+'(sin texto)'                   => '(no text)',
+'Listo.'                        => 'Done.',
+
+// Resumen del mes
+'%s Resumen del mes'            => '%s Month summary',
+'personas únicas te vieron'     => 'unique people saw you',
+'de alcance en Instagram'       => 'reach on Instagram',
+'de alcance en Facebook'        => 'reach on Facebook',
+'no aplica en FB'               => 'not available on FB',
+'%s IG vs FB — el cara a cara'  => '%s IG vs FB — head to head',
+'Alcance por post'              => 'Reach per post',
+'%s post(s) con datos'          => '%s post(s) with data',
+'Por post, <b>%s</b> te está dando más alcance y más interacción.'
+    => 'Per post, <b>%s</b> is giving you more reach and more engagement.',
+'Por post, <b>%s</b> te alcanza más gente y <b>%s</b> te da más interacción.'
+    => 'Per post, <b>%s</b> reaches more people and <b>%s</b> gives you more engagement.',
+
+// Lo que el Optimizador aprendió — el loop cerrado, criterio #2
+'%s Lo que aprendí de tus números' => '%s What I learned from your numbers',
+'Medido de tus posts reales — no es opinión. El plan de cada semana usa estas lecciones solo.'
+    => 'Measured from your real posts — not an opinion. Each week\'s plan uses these lessons on its own.',
+'%s Tu post estrella'           => '%s Your top post',
+'%s Post por post'              => '%s Post by post',
+'Ver publicado ↗'               => 'View published ↗',
+'números capturados el %s'      => 'numbers captured on %s',
+'Mostrando los 12 más recientes de %s publicados.' => 'Showing the 12 most recent of %s published.',
+
+// Estados y avisos
+'Métricas al día · traje datos de {%s['  => 'Metrics up to date · brought data from {%s[',
+'de Meta.'                      => 'from Meta.',
+'Ya estabas al día — Meta no tenía nada nuevo por ahora. Si acabas de publicar, dale unos minutos.'
+    => 'You were already up to date — Meta had nothing new for now. If you just published, give it a few minutes.',
+'Todavía no traje los números — dale a <b>Actualizar</b> arriba. Los KPIs de abajo se llenan solos.'
+    => 'I have not pulled the numbers yet — tap <b>Refresh</b> above. The KPIs below fill in on their own.',
+'Sin números todavía — dale a'  => 'No numbers yet — tap',
+'arriba y vuelve en un momento.' => 'above and come back in a moment.',
+'sin números todavía'           => 'no numbers yet',
+'leyendo tus números…'          => 'reading your numbers…',
+'No pude leer los números ahora. Dale a Actualizar y regresa en un momento.'
+    => 'I could not read the numbers right now. Tap Refresh and come back in a moment.',
+'No pude actualizar las métricas ahora mismo. Intenta de nuevo en un momento.'
+    => 'I could not refresh the metrics right now. Try again in a moment.',
+'Se cayó la conexión al leer tus números. Intenta de nuevo.'
+    => 'The connection dropped while reading your numbers. Try again.',
+'La sesión expiró. Recarga la página e intenta otra vez.'
+    => 'Your session expired. Reload the page and try again.',
+'Sesión expiró.'                => 'Session expired.',
+
+// Sin redes conectadas
+'%s Conecta tus redes'          => '%s Connect your accounts',
+'Conectar mis redes'            => 'Connect my accounts',
+'Conecta Instagram/Facebook y estos KPIs se empiezan a llenar con datos reales, con la lectura del Analista.'
+    => 'Connect Instagram/Facebook and these KPIs start filling with real data, with the Analyst\'s reading.',
+'Conecta Instagram/Facebook primero para traer métricas.'
+    => 'Connect Instagram/Facebook first to pull metrics.',
+'Los KPIs de abajo están en cero hasta que conectes tus redes. Conéctalas y verás crecer los números.'
+    => 'The KPIs below stay at zero until you connect your accounts. Connect them and you will see the numbers grow.',
+'La app de Meta aún no está configurada en el servidor.'
+    => 'The Meta app is not configured on the server yet.',
 
 // ── La Meta (el corazón del producto) ───────────────────────
 //  Es LA pantalla del recorrido del jurado. Aquí el corillo deja de publicar al
