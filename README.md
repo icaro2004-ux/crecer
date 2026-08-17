@@ -40,7 +40,7 @@ complete; deeper screens still show Spanish in places.
 
 ## How the agents operate it
 
-**28 distinct agent names** write to `crecer_ia_log`. This is not one model call wrapped in
+**31 distinct agent names** write to `crecer_ia_log`. This is not one model call wrapped in
 a UI: every step of the business is executed and recorded by an agent. (The production log
 shows which ones have actually run and how many times — that is the difference between what
 exists in the code and what does the work.)
@@ -135,7 +135,8 @@ new and what is reused is declared in **[REUSE.md](REUSE.md)**.
 
 ### ⚠️ Before you touch anything
 
-This is an application **in production with real customers**. Please:
+This is a **live production application** — real Stripe in live mode, real social
+accounts connected, agents running on a schedule. Please:
 
 - **Do not run real charges.** Checkout is Stripe in live mode.
 - **Do not publish to social accounts** from anything other than the evaluation account:
