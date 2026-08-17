@@ -632,6 +632,130 @@ try {
         }
     }
 
+    // EL EXPEDIENTE DE UN CASO: todo lo que se sabe de una incidencia, junto.
+    //   &test=caso&id=123      (el "Caso #123" que viene en el correo del Ayudante)
+    //   &test=caso             (sin id: lista los casos abiertos de los últimos días)
+    //
+    //  Existe para cerrar el lazo del soporte: el correo avisa, pero para
+    //  entender POR QUÉ se colgó algo había que ir picando tablas a mano. Esto
+    //  lo escupe todo en texto plano, listo para copiar y pegarle a quien vaya
+    //  a arreglarlo — la incidencia, la fila que reventó, los errores de IA de
+    //  esa marca alrededor de la hora, y si el problema es un patrón o un caso
+    //  suelto. Solo lectura.
+    if ($__test === 'caso') {      // solo lectura · ya estás dentro como admin
+        $cid = (int)($_GET['id'] ?? 0);
+        $cortar = fn($s, $n = 600) => $s === null || $s === '' ? '—' : mb_substr(preg_replace('/\s+/', ' ', (string)$s), 0, $n);
+
+        if (!$cid) {
+            echo "\n--- CASOS ABIERTOS (últimos 7 días) ---\n";
+            try {
+                $q = $pdo->query("SELECT i.id, i.created_at, i.severidad, i.estado, i.codigo, i.titulo, i.intentos,
+                                         i.marca_id, m.nombre_negocio
+                                    FROM crecer_incidencias i
+                               LEFT JOIN crecer_marca m ON m.id = i.marca_id
+                                   WHERE i.estado IN ('abierta','escalada')
+                                     AND i.created_at >= (NOW() - INTERVAL 7 DAY)
+                                ORDER BY i.id DESC LIMIT 40");
+                $n = 0;
+                foreach ($q as $r) {
+                    $n++;
+                    printf("  #%-5d [%s/%s] %-22s %s\n", $r['id'], $r['severidad'], $r['estado'], $r['codigo'], $r['created_at']);
+                    printf("         %s%s  (intentos: %d)\n", $r['titulo'],
+                        $r['nombre_negocio'] ? ' — ' . $r['nombre_negocio'] : ' — plataforma', $r['intentos']);
+                }
+                if (!$n) echo "  (ninguno abierto — nada colgado ahora mismo)\n";
+                echo "\nPara el expediente completo:  &test=caso&id=NUMERO\n";
+            } catch (Throwable $e) { echo "  (no pude leer crecer_incidencias: " . $e->getMessage() . ")\n"; }
+        } else {
+            try {
+                $q = $pdo->prepare("SELECT i.*, m.nombre_negocio, u.email AS dueno_email
+                                      FROM crecer_incidencias i
+                                 LEFT JOIN crecer_marca m ON m.id = i.marca_id
+                                 LEFT JOIN usuarios u ON u.id = m.usuario_id
+                                     WHERE i.id = ?");
+                $q->execute([$cid]); $c = $q->fetch(PDO::FETCH_ASSOC);
+            } catch (Throwable $e) { $c = null; echo "  (error leyendo el caso: " . $e->getMessage() . ")\n"; }
+
+            if (!$c) { echo "\nNo existe el caso #{$cid}.\n"; }
+            else {
+                echo "\n=== EXPEDIENTE DEL CASO #{$cid} ===\n";
+                echo "abierto      : {$c['created_at']}   (últ. cambio {$c['updated_at']})\n";
+                echo "clase        : {$c['codigo']}\n";
+                echo "severidad    : {$c['severidad']}   estado: {$c['estado']}   intentos: {$c['intentos']}\n";
+                echo "origen       : {$c['origen']}\n";
+                echo "negocio      : " . ($c['marca_id'] ? "#{$c['marca_id']} {$c['nombre_negocio']} <{$c['dueno_email']}>" : "(plataforma, no es de un cliente)") . "\n";
+                echo "afecta       : " . ($c['ref_tipo'] ? "{$c['ref_tipo']} #{$c['ref_id']}" : '—') . "\n";
+                echo "título       : {$c['titulo']}\n";
+                echo "\nLO TÉCNICO (lo que reventó):\n  " . $cortar($c['detalle'], 1500) . "\n";
+                echo "\nDIAGNÓSTICO DEL AYUDANTE:\n  " . $cortar($c['diagnostico'], 900) . "\n";
+                echo "\nQUÉ INTENTÓ:\n  acción: " . ($c['accion'] ?: '— ninguna') . "\n  resultado: " . $cortar($c['resultado'], 900) . "\n";
+                echo "\nAVISOS:  email=" . ((int)$c['aviso_email'] ? 'sí' : 'no')
+                    . "  sms=" . ((int)$c['aviso_sms'] ? 'sí' : 'no')
+                    . ($c['aviso_error'] ? "  (falló: {$c['aviso_error']})" : '') . "\n";
+
+                // La fila que reventó, si sabemos cuál es.
+                $tablas = ['contenido' => 'crecer_contenido', 'carrusel' => 'crecer_carrusel',
+                           'sala' => 'crecer_sala_jobs', 'generacion' => 'crecer_contenido',
+                           'conexion' => 'crecer_conexiones'];
+                if (!empty($c['ref_tipo']) && !empty($c['ref_id']) && isset($tablas[$c['ref_tipo']])) {
+                    $t = $tablas[$c['ref_tipo']];
+                    echo "\n--- LA FILA AFECTADA ({$t} #{$c['ref_id']}) ---\n";
+                    try {
+                        $r = $pdo->prepare("SELECT * FROM {$t} WHERE id=?");
+                        $r->execute([(int)$c['ref_id']]);
+                        if ($fila = $r->fetch(PDO::FETCH_ASSOC)) {
+                            foreach ($fila as $k => $v) {
+                                if ($v === null || $v === '') continue;
+                                if (in_array($k, ['prompt', 'respuesta', 'caption', 'texto', 'cuerpo'], true)) $v = $cortar($v, 300);
+                                echo "  " . str_pad($k, 18) . ": " . $cortar($v, 300) . "\n";
+                            }
+                        } else echo "  (la fila ya no existe — se borró después de abrirse el caso)\n";
+                    } catch (Throwable $e) { echo "  (no pude leerla: " . $e->getMessage() . ")\n"; }
+                }
+
+                // Los errores de IA de esa marca alrededor de la hora del caso.
+                echo "\n--- ERRORES DE IA DE ESA MARCA (±6h del caso) ---\n";
+                try {
+                    $l = $pdo->prepare("SELECT id, created_at, agente, modelo, estado, accion,
+                                               COALESCE(error_msg,'') err, latencia_ms
+                                          FROM crecer_ia_log
+                                         WHERE (marca_id <=> ?) AND estado <> 'ok'
+                                           AND created_at BETWEEN (? - INTERVAL 6 HOUR) AND (? + INTERVAL 6 HOUR)
+                                      ORDER BY id DESC LIMIT 25");
+                    $l->execute([$c['marca_id'], $c['created_at'], $c['created_at']]);
+                    $n = 0;
+                    foreach ($l as $r) {
+                        $n++;
+                        echo "  {$r['created_at']}  {$r['agente']}/{$r['modelo']} [{$r['estado']}] {$r['latencia_ms']}ms\n";
+                        echo "     acción: " . $cortar($r['accion'], 120) . "\n";
+                        if ($r['err'] !== '') echo "     ERROR : " . $cortar($r['err'], 400) . "\n";
+                    }
+                    if (!$n) echo "  (ninguno — el fallo NO fue del modelo; mira el estado de la fila de arriba)\n";
+                } catch (Throwable $e) { echo "  (no pude leer crecer_ia_log: " . $e->getMessage() . ")\n"; }
+
+                // ¿Es un patrón o un caso suelto? Es la diferencia entre parchar y arreglar.
+                echo "\n--- ¿PATRÓN O CASO SUELTO? ---\n";
+                try {
+                    $p = $pdo->prepare("SELECT COUNT(*) n, MIN(created_at) desde, MAX(created_at) hasta,
+                                               COUNT(DISTINCT marca_id) marcas
+                                          FROM crecer_incidencias
+                                         WHERE codigo=? AND created_at >= (NOW() - INTERVAL 14 DAY)");
+                    $p->execute([$c['codigo']]);
+                    $x = $p->fetch(PDO::FETCH_ASSOC);
+                    if ((int)$x['n'] > 1) {
+                        echo "  '{$c['codigo']}' salió {$x['n']} veces en 14 días, en {$x['marcas']} negocio(s).\n";
+                        echo "  Desde {$x['desde']} hasta {$x['hasta']}.\n";
+                        echo "  LECTURA: es un PATRÓN. Arreglar la causa, no este caso.\n";
+                    } else {
+                        echo "  Único en 14 días. LECTURA: caso suelto.\n";
+                    }
+                } catch (Throwable $e) { echo "  (no pude contar: " . $e->getMessage() . ")\n"; }
+
+                echo "\n=== FIN DEL CASO #{$cid} — copia desde 'EXPEDIENTE' hasta aquí ===\n";
+            }
+        }
+    }
+
     // DIAGNÓSTICO DE ACCESO/PAYWALL: por qué un email entra (o no) al app.
     //   &test=gate&email=X
     if ($__test === 'gate') {      // solo lectura · ya estás dentro como admin

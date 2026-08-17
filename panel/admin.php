@@ -49,6 +49,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'corte
     header('Location: /crecer/panel/admin.php'); exit;
 }
 
+// ── PILOTO AUTOMÁTICO: prender/apagar el corillo autónomo por marca ─────────
+//  El corillo autónomo (cron_corillo, lunes) planifica y REDACTA posts solo
+//  para cada marca con autopilot=1 — y redactar cuesta tokens. Las cuentas de
+//  prueba lo heredan encendido y siguen gastando en silencio. Esto lo apaga
+//  desde aquí, sin entrar cuenta por cuenta a Configuración.
+//  `solo` deja el piloto encendido en UNA marca y lo apaga en todas las demás.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'autopilot' && csrf_ok()) {
+    $mid   = (int)($_POST['marca_id'] ?? 0);
+    $modo  = (string)($_POST['modo'] ?? 'toggle');   // toggle | todas_off | solo
+    try {
+        if ($modo === 'todas_off') {
+            $pdo->exec("UPDATE crecer_marca SET autopilot=0");
+        } elseif ($modo === 'solo' && $mid) {
+            $pdo->exec("UPDATE crecer_marca SET autopilot=0");
+            $pdo->prepare("UPDATE crecer_marca SET autopilot=1 WHERE id=?")->execute([$mid]);
+        } elseif ($mid) {
+            $on = ($_POST['on'] ?? '') === '1' ? 1 : 0;
+            $pdo->prepare("UPDATE crecer_marca SET autopilot=? WHERE id=?")->execute([$on, $mid]);
+        }
+    } catch (Throwable $e) { error_log('admin autopilot: ' . $e->getMessage()); }
+    header('Location: /crecer/panel/admin.php#clientes'); exit;
+}
+
 // ── SOPORTE: arreglar/resetear los posts de un cliente ───────────────────────
 //  "retry"    = destraba fallidos/trabados → 'aprobado' (para reintentar publicar).
 //  "borrador" = devuelve a 'borrador' lo no publicado (para rehacer si la IA hizo
@@ -475,7 +498,31 @@ $ago = function($ts){ if(!$ts) return '—'; $s=time()-strtotime($ts);
           <td class="num" data-v="<?= (int)($c['inter'] ?? 0) ?>"><?= number_format((int)($c['inter'] ?? 0)) ?></td>
           <td class="num" data-v="<?= (float)$c['ia'] ?>"><?= $money($c['ia']) ?></td>
           <td style="color:var(--muted)"><?= $ago($c['ult']) ?></td>
-          <td><?= $c['autopilot']?'Sí':'—' ?></td>
+          <td>
+            <?php $ap = (int)$c['autopilot']; ?>
+            <form method="post" data-n="<?= $h($c['nombre_negocio']) ?>" style="display:block"
+                  onsubmit="return confirm((<?= $ap?'true':'false' ?> ? 'PAUSAR el corillo autónomo de: ' : 'ENCENDER el corillo autónomo de: ')+this.dataset.n+'\n\nPausado deja de planificar y redactar solo (deja de gastar tokens). No borra nada.\n\n¿Confirmas?')">
+              <?= csrf_field() ?><input type="hidden" name="accion" value="autopilot">
+              <input type="hidden" name="marca_id" value="<?= (int)$c['id'] ?>">
+              <input type="hidden" name="on" value="<?= $ap ? '0' : '1' ?>">
+              <button type="submit" title="<?= $ap ? 'Pausar el corillo autónomo de este negocio' : 'Encender el corillo autónomo' ?>"
+                style="border:1.5px solid <?= $ap?'#f4b8c6':'var(--line)' ?>;cursor:pointer;background:<?= $ap?'#fdeaea':'#fff' ?>;color:<?= $ap?'#b3123b':'var(--muted)' ?>;font-weight:800;font-size:11px;padding:4px 9px;border-radius:8px;white-space:nowrap">
+                <?= $ap ? 'ON · pausar' : 'pausado' ?>
+              </button>
+            </form>
+            <?php if (!$ap): ?>
+            <form method="post" data-n="<?= $h($c['nombre_negocio']) ?>" style="display:block;margin-top:3px"
+                  onsubmit="return confirm('Dejar el corillo autónomo SOLO en: '+this.dataset.n+'\n\nSe apaga en todas las demás cuentas. No borra nada.\n\n¿Confirmas?')">
+              <?= csrf_field() ?><input type="hidden" name="accion" value="autopilot">
+              <input type="hidden" name="marca_id" value="<?= (int)$c['id'] ?>">
+              <input type="hidden" name="modo" value="solo">
+              <button type="submit" title="Encender aquí y apagar en todas las demás"
+                style="border:0;cursor:pointer;background:none;color:var(--terracota);font-weight:700;font-size:10.5px;padding:0;text-decoration:underline">
+                solo esta
+              </button>
+            </form>
+            <?php endif; ?>
+          </td>
           <td>
             <?php if ($real_paid): ?>
               <span class="pill act">paga</span>

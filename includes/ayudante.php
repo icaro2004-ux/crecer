@@ -33,7 +33,17 @@ if (!defined('AY_MIN_ARTE'))     define('AY_MIN_ARTE', 6);
 if (!defined('AY_MIN_SALA'))     define('AY_MIN_SALA', 3);
 if (!defined('AY_MIN_REEL'))     define('AY_MIN_REEL', 20);
 if (!defined('AY_MIN_PUB'))      define('AY_MIN_PUB', 10);
-if (!defined('AY_HORAS_AVISO'))  define('AY_HORAS_AVISO', 6);   // no repetir aviso del mismo caso
+//  (AY_HORAS_AVISO ya no gobierna el anti-spam de avisos: mientras el caso siga
+//   abierto no se vuelve a avisar, sin ventana de tiempo. Se conserva porque el
+//   texto de las incidencias todavía la cita.)
+if (!defined('AY_HORAS_AVISO'))  define('AY_HORAS_AVISO', 6);
+//  TOPE DE VIDA de reintentos pagados sobre la MISMA fila. La ventana de 6h de
+//  arriba evita pagar dos veces seguidas, pero es deslizante: pasadas 6 horas
+//  volvía a pagar, y una imagen que nunca va a salir (prompt que el filtro
+//  rechaza, config que falta) se reintentaba cada 6 horas para siempre —
+//  cuatro cobros al día y cuatro correos, indefinidamente. Después de este
+//  tope el Ayudante deja de gastar, lo deja escrito una vez, y se calla.
+if (!defined('AY_MAX_PAGADOS'))  define('AY_MAX_PAGADOS', 3);
 
 /** Log de evidencia del Ayudante (determinista, sin tokens). */
 function _ay_log(PDO $pdo, ?int $marca_id, string $accion, string $respuesta): void {
@@ -318,6 +328,20 @@ function ayudante_ya_intentado(PDO $pdo, int $marca_id, string $accion, ?int $re
 }
 
 /**
+ * ¿Cuántas veces se ha pagado YA por arreglar ESTA fila, desde siempre?
+ * La bitácora es la memoria: si la respuesta es alta, el problema no se
+ * arregla reintentando y seguir pagando es tirar dinero.
+ */
+function ayudante_pagados_totales(PDO $pdo, int $marca_id, string $accion, ?int $ref_id): int {
+    try {
+        $s = $pdo->prepare("SELECT COUNT(*) FROM crecer_ia_log
+                            WHERE marca_id=? AND agente='ayudante' AND accion=?");
+        $s->execute([$marca_id, 'Arreglo: ' . $accion . ($ref_id ? ' #' . $ref_id : '')]);
+        return (int)$s->fetchColumn();
+    } catch (Throwable $e) { return 0; }
+}
+
+/**
  * Ejecuta UNA reparación. Siempre acotada a $marca_id (nadie toca datos ajenos).
  * Devuelve ['ok'=>bool, 'msg'=>texto para el dueño, 'tecnico'=>detalle].
  */
@@ -559,12 +583,16 @@ function ayudante_reportar(PDO $pdo, ?int $marca_id, array $inc): int {
     $codigo = (string)($inc['codigo'] ?? 'situacion');
     $ref_id = isset($inc['ref_id']) && $inc['ref_id'] !== null ? (int)$inc['ref_id'] : null;
 
-    // Anti-spam: el mismo caso no se reporta dos veces en AY_HORAS_AVISO horas.
+    // Anti-spam: mientras el caso siga ABIERTO no se vuelve a avisar, dé igual
+    //  cuánto lleve. Antes esto llevaba un `created_at >= NOW() - 6 HOUR`, y el
+    //  efecto era el contrario del buscado: pasadas 6 horas el mismo caso ya no
+    //  contaba como duplicado, se reabría y salía otro correo — cada 6 horas,
+    //  para siempre. Si está abierto, el fundador ya lo sabe; se le suma un
+    //  intento y punto.
     try {
         $s = $pdo->prepare("SELECT id FROM crecer_incidencias
                             WHERE codigo=? AND (marca_id <=> ?) AND (ref_id <=> ?)
                               AND estado IN ('abierta','escalada')
-                              AND created_at >= (NOW() - INTERVAL " . AY_HORAS_AVISO . " HOUR)
                             ORDER BY id DESC LIMIT 1");
         $s->execute([$codigo, $marca_id, $ref_id]);
         if ($ya = (int)$s->fetchColumn()) {
@@ -669,7 +697,19 @@ function ayudante_avisar_fundador(PDO $pdo, int $inc_id, ?int $marca_id, array $
                     : '<p style="margin:0 0 14px;color:#3f3a4a">No hay arreglo automático para este caso: necesita mano humana.</p>')
               . '<p style="margin:18px 0 0"><a href="' . BASE_URL . '/panel/admin_incidencias.php" '
               . 'style="display:inline-block;background:#EF4375;color:#fff;text-decoration:none;padding:11px 18px;'
-              . 'border-radius:10px;font-weight:700">Ver el caso</a></p>';
+              . 'border-radius:10px;font-weight:700">Ver el caso</a></p>'
+              // EL EXPEDIENTE. El correo dice QUÉ pasó; para arreglarlo hace falta
+              //  el contexto entero — la fila que reventó, los errores de IA de esa
+              //  marca alrededor de la hora, y si es patrón o caso suelto. Este
+              //  enlace lo escupe en texto plano, listo para copiar y pegárselo a
+              //  quien vaya a arreglarlo, sin ir picando tablas a mano.
+              . '<p style="margin:22px 0 4px;font-weight:700">Para arreglarlo</p>'
+              . '<p style="margin:0 0 6px;color:#3f3a4a;font-size:13px">Abre el expediente completo y copia todo lo que salga:</p>'
+              . '<p style="margin:0 0 4px"><a href="' . BASE_URL . '/_cache.php?test=caso&amp;id=' . $inc_id . '" '
+              . 'style="color:#00827e;font-weight:700;word-break:break-all">'
+              . BASE_URL . '/_cache.php?test=caso&amp;id=' . $inc_id . '</a></p>'
+              . '<p style="margin:0;color:#8A837E;font-size:12px">Código del caso: <b>CR-' . $inc_id . '-'
+              . $e(strtoupper((string)($inc['codigo'] ?? 'X'))) . '</b> · pide admin</p>';
             $html = function_exists('crecer_email_shell')
                 ? crecer_email_shell('Caso #' . $inc_id . ' — ' . $titulo, $cuerpo)
                 : $cuerpo;
@@ -710,6 +750,18 @@ function ayudante_atender(PDO $pdo, int $marca_id, array $opts = []): array {
 
     foreach ($hallazgos as $x) {
         if (!empty($x['accion'])) {
+            // Techo duro: esta fila ya consumió su presupuesto de reintentos.
+            // No se paga más y NO se vuelve a avisar — el caso ya está escrito y
+            // reabrirlo cada 6 horas solo llena el correo del fundador.
+            if (in_array($x['accion'], ayudante_acciones_con_costo(), true)
+                && ayudante_pagados_totales($pdo, $marca_id, (string)$x['accion'], $x['ref_id'] ?? null) >= AY_MAX_PAGADOS) {
+                $escalados[] = ['id' => 0, 'titulo' => $x['titulo'], 'codigo' => $x['codigo'],
+                                'silencioso' => true,
+                                'msg' => 'Agotó los ' . AY_MAX_PAGADOS . ' reintentos. Necesita mano humana.'];
+                _ay_log($pdo, $marca_id, 'Tope de reintentos: ' . $x['accion'] . ' #' . (int)($x['ref_id'] ?? 0),
+                        'Se alcanzó AY_MAX_PAGADOS (' . AY_MAX_PAGADOS . '). No se gasta más ni se vuelve a avisar.');
+                continue;
+            }
             // Guarda-créditos: si ya se intentó este arreglo pagado hace poco y el
             // problema sigue ahí, no se gasta otra vez — se escala.
             if (in_array($x['accion'], ayudante_acciones_con_costo(), true)

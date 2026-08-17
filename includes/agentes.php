@@ -2954,7 +2954,20 @@ function idea_del_dia(PDO $pdo, int $marca_id): string {
     $sys = "Eres " . equipo_nombre($m, 'estratega') . ", EL ESTRATEGA del corillo. Da UNA idea para HOY: de contenido "
         . "o de negocio, corta (1-2 frases), CONCRETA y accionable, pegada a ESTE negocio. Nada de relleno, nada de "
         . "jerga, NUNCA emojis.\n" . reglas_idioma($m) . tono_instruccion($m);
-    $prompt = "Negocio:\n" . marca_contexto($m) . "\n\nHoy es {$dia}. Dame UNA sola idea fresca para hoy (no repitas siempre lo "
+    // LA META MANDA también aquí. Sin esto, el Estratega aconsejaba a ciegas: el
+    //  dueño declara que quiere más pedidos y el consejo del día le hablaba de
+    //  otra cosa. Es el mismo consejo, mirando el número que el negocio persigue.
+    $meta_txt = '';
+    try {
+        require_once __DIR__ . '/meta_negocio.php';
+        if ($__m = meta_activa($pdo, $marca_id)) {
+            $meta_txt = "\n\nLO QUE ESTE NEGOCIO PERSIGUE AHORA MISMO: \"" . trim((string)$__m['titulo']) . "\""
+                . " (objetivo: " . (string)$__m['objetivo'] . ")."
+                . " La idea de hoy tiene que EMPUJAR eso. Si no lo empuja, no es la idea de hoy.";
+        }
+    } catch (Throwable $e) { /* sin meta (o migración pendiente): aconseja como antes */ }
+
+    $prompt = "Negocio:\n" . marca_contexto($m) . $meta_txt . "\n\nHoy es {$dia}. Dame UNA sola idea fresca para hoy (no repitas siempre lo "
         . "mismo). Responde SOLO con la idea, sin comillas ni introducción.";
     $r = ia_ejecutar($pdo, 'estratega', 'Idea del día', $prompt, [
         'marca_id' => $marca_id, 'sistema' => $sys, 'temperatura' => 0.95, 'max_tokens' => 180, 'thinking_budget' => 0,
