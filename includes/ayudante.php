@@ -37,13 +37,24 @@ if (!defined('AY_MIN_PUB'))      define('AY_MIN_PUB', 10);
 //   abierto no se vuelve a avisar, sin ventana de tiempo. Se conserva porque el
 //   texto de las incidencias todavía la cita.)
 if (!defined('AY_HORAS_AVISO'))  define('AY_HORAS_AVISO', 6);
-//  TOPE DE VIDA de reintentos pagados sobre la MISMA fila. La ventana de 6h de
-//  arriba evita pagar dos veces seguidas, pero es deslizante: pasadas 6 horas
-//  volvía a pagar, y una imagen que nunca va a salir (prompt que el filtro
-//  rechaza, config que falta) se reintentaba cada 6 horas para siempre —
-//  cuatro cobros al día y cuatro correos, indefinidamente. Después de este
-//  tope el Ayudante deja de gastar, lo deja escrito una vez, y se calla.
-if (!defined('AY_MAX_PAGADOS'))  define('AY_MAX_PAGADOS', 3);
+//  CUÁNTAS VECES PUEDE EL AYUDANTE GASTAR DINERO SOLO, sobre la misma fila.
+//
+//  EN CERO A PROPÓSITO. El Ayudante detecta, recoge lo que ya está pagado y
+//  escala — pero NO vuelve a llamar a un motor de imagen por su cuenta. Nunca.
+//
+//  Por qué: un reintento automático es un gasto que se multiplica por la
+//  cantidad de clientes. Con un puñado de cuentas de prueba esto vació una
+//  cuenta de OpenAI en dos días; con mil clientes, un fallo sistémico —una
+//  clave vencida, un filtro que empieza a rechazar, un cambio de API— hace
+//  que cada pieza rota se reintente sola, en paralelo, sin techo. El riesgo no
+//  es proporcional al beneficio: reintentar arregla un fallo transitorio, y
+//  los transitorios ya los cubre el barrido, que es gratis.
+//
+//  El reintento sigue existiendo donde debe: como BOTÓN, en admin_incidencias,
+//  apretado por una persona que está mirando. Subir esto de 0 es decidir que
+//  la máquina puede gastar sin que nadie mire — no se hace sin un techo de
+//  gasto por encima (ver ADR-0006).
+if (!defined('AY_MAX_PAGADOS'))  define('AY_MAX_PAGADOS', 0);
 
 /** Log de evidencia del Ayudante (determinista, sin tokens). */
 function _ay_log(PDO $pdo, ?int $marca_id, string $accion, string $respuesta): void {
@@ -325,6 +336,90 @@ function ayudante_ya_intentado(PDO $pdo, int $marca_id, string $accion, ?int $re
         $s->execute([$marca_id, 'Arreglo: ' . $accion . ($ref_id ? ' #' . $ref_id : '')]);
         return (int)$s->fetchColumn() > 0;
     } catch (Throwable $e) { return false; }
+}
+
+/**
+ * POR QUÉ FALLÓ — y por tanto, si reintentar puede servir de algo.
+ *
+ * El Ayudante era terco, no inteligente: reintentaba igual un timeout que un
+ * prompt rechazado por el filtro de contenido. El primero se arregla solo al
+ * segundo intento; el segundo no va a funcionar nunca, y reintentarlo 22 veces
+ * es quemar dinero con probabilidad cero.
+ *
+ * La clasificación es determinista y gratis a propósito: usar un modelo para
+ * decidir si gastar dinero sería gastar dinero para decidir gastar dinero.
+ *
+ * @return array{clase:string, humano:string, reintentar:bool, arregla:string}
+ *   clase: transitorio | permanente | presupuesto | desconocido
+ */
+function falla_clasificar(?string $error): array {
+    $e = mb_strtolower(trim((string)$error));
+    if ($e === '') {
+        return ['clase' => 'desconocido', 'reintentar' => false,
+                'humano' => 'Falló sin dejar mensaje de error.',
+                'arregla' => 'Mira el expediente del caso: el motor no dijo por qué.'];
+    }
+    $tiene = fn(array $ag) => (bool)array_filter($ag, fn($a) => str_contains($e, $a));
+
+    // Se acabó el dinero o la cuota. Reintentar no solo falla: empeora.
+    if ($tiene(['insufficient_quota', 'exceeded your current quota', 'billing', 'insufficient funds',
+                'payment required', 'quota exceeded', 'credit'])) {
+        return ['clase' => 'presupuesto', 'reintentar' => false,
+                'humano' => 'Se acabó el crédito o la cuota del proveedor.',
+                'arregla' => 'Recarga la cuenta del proveedor. Hasta entonces NADA va a salir, y cada intento suma cero.'];
+    }
+    // El proveedor no nos deja pasar. Es configuración, no suerte.
+    if ($tiene(['invalid_api_key', 'incorrect api key', 'unauthorized', '401', 'authentication',
+                'permission', 'forbidden', '403'])) {
+        return ['clase' => 'permanente', 'reintentar' => false,
+                'humano' => 'La llave del proveedor no sirve o no tiene permiso.',
+                'arregla' => 'Revisa la clave en config.local.php. Reintentar con la misma llave da el mismo error, siempre.'];
+    }
+    // El contenido en sí es el problema. Mismo prompt = mismo rechazo.
+    if ($tiene(['safety', 'content_policy', 'content policy', 'moderation', 'blocked',
+                'responsible ai', 'prohibited'])) {
+        return ['clase' => 'permanente', 'reintentar' => false,
+                'humano' => 'El filtro del proveedor rechazó el contenido de la pieza.',
+                'arregla' => 'Hay que cambiar el texto o la instrucción de la imagen. Reintentar el mismo prompt lo rechaza igual.'];
+    }
+    // El trabajo ya no existe del otro lado. Reintentar consulta un fantasma.
+    if ($tiene(['expired', 'not found', '404', 'no such', 'does not exist', 'cancelled', 'canceled'])) {
+        return ['clase' => 'permanente', 'reintentar' => false,
+                'humano' => 'El trabajo ya no existe en el proveedor (expiró o se canceló).',
+                'arregla' => 'Esa imagen se perdió. Hay que generarla de nuevo desde cero, no reintentar este trabajo.'];
+    }
+    // Petición mal formada: es un bug nuestro, no del día.
+    if ($tiene(['invalid_request', 'bad request', '400', 'unsupported', 'invalid value',
+                'too large', 'context length'])) {
+        return ['clase' => 'permanente', 'reintentar' => false,
+                'humano' => 'La petición estaba mal formada.',
+                'arregla' => 'Es un bug de código, no del proveedor. Reintentar manda la misma petición mala.'];
+    }
+    // Esto sí es cosa del momento: aquí reintentar tiene sentido de verdad.
+    if ($tiene(['timeout', 'timed out', 'rate limit', '429', 'overloaded', 'unavailable',
+                '503', '502', '504', 'connection', 'network', 'temporarily', 'try again'])) {
+        return ['clase' => 'transitorio', 'reintentar' => true,
+                'humano' => 'Fallo pasajero del proveedor (saturación, límite de ritmo o red).',
+                'arregla' => 'Esto sí se arregla reintentando más tarde. Es el único caso donde vale la pena.'];
+    }
+    // No lo reconozco. Con dinero de por medio, la duda se resuelve NO gastando.
+    return ['clase' => 'desconocido', 'reintentar' => false,
+            'humano' => 'Error no reconocido: ' . mb_substr((string)$error, 0, 160),
+            'arregla' => 'Sin clasificar. Con dinero de por medio, la duda se resuelve no gastando: míralo antes de relanzar.'];
+}
+
+/** El último error real que dejó un motor para esta marca (la bitácora sabe). */
+function ayudante_ultimo_error(PDO $pdo, ?int $marca_id): ?string {
+    try {
+        $s = $pdo->prepare("SELECT error_msg FROM crecer_ia_log
+                            WHERE (marca_id <=> ?) AND estado='error'
+                              AND error_msg IS NOT NULL AND error_msg <> ''
+                              AND created_at >= (NOW() - INTERVAL 48 HOUR)
+                         ORDER BY id DESC LIMIT 1");
+        $s->execute([$marca_id]);
+        $v = $s->fetchColumn();
+        return $v === false ? null : (string)$v;
+    } catch (Throwable $e) { return null; }
 }
 
 /**
@@ -750,16 +845,27 @@ function ayudante_atender(PDO $pdo, int $marca_id, array $opts = []): array {
 
     foreach ($hallazgos as $x) {
         if (!empty($x['accion'])) {
-            // Techo duro: esta fila ya consumió su presupuesto de reintentos.
-            // No se paga más y NO se vuelve a avisar — el caso ya está escrito y
-            // reabrirlo cada 6 horas solo llena el correo del fundador.
+            // TECHO DE GASTO. Con AY_MAX_PAGADOS=0 (el valor de fábrica) esto se
+            //  cumple siempre: el Ayudante no llama a un motor que cobra, ni una
+            //  vez. Deja el caso escrito y sigue. Reintentar es un botón que
+            //  aprieta una persona, no algo que decide un cron a las 3 AM.
+            //  ayudante_reportar se de-duplica solo: el primer hallazgo avisa,
+            //  los siguientes solo suman un intento al caso ya abierto.
             if (in_array($x['accion'], ayudante_acciones_con_costo(), true)
                 && ayudante_pagados_totales($pdo, $marca_id, (string)$x['accion'], $x['ref_id'] ?? null) >= AY_MAX_PAGADOS) {
-                $escalados[] = ['id' => 0, 'titulo' => $x['titulo'], 'codigo' => $x['codigo'],
-                                'silencioso' => true,
-                                'msg' => 'Agotó los ' . AY_MAX_PAGADOS . ' reintentos. Necesita mano humana.'];
-                _ay_log($pdo, $marca_id, 'Tope de reintentos: ' . $x['accion'] . ' #' . (int)($x['ref_id'] ?? 0),
-                        'Se alcanzó AY_MAX_PAGADOS (' . AY_MAX_PAGADOS . '). No se gasta más ni se vuelve a avisar.');
+                // Antes de escribir el caso, entender POR QUÉ falló. No para
+                //  reintentar solo —eso no lo hace— sino para decirle al humano
+                //  si apretar el botón tiene alguna posibilidad de servir.
+                $f = falla_clasificar(ayudante_ultimo_error($pdo, $marca_id));
+                $id = ayudante_reportar($pdo, $marca_id, $x + [
+                    'origen' => $origen,
+                    'diagnostico' => $x['cliente'] . ' No lo relanzo yo: regenerar cuesta dinero y eso lo decide '
+                                   . 'una persona. ' . $f['humano'] . ' ' . $f['arregla'],
+                    'resultado' => 'sin reintento automático · causa: ' . $f['clase']
+                                 . ($f['reintentar'] ? ' (reintentar PUEDE servir)' : ' (reintentar NO va a servir)'),
+                ]);
+                $escalados[] = ['id' => $id, 'titulo' => $x['titulo'], 'codigo' => $x['codigo'],
+                                'msg' => $f['humano'] . ' ' . $f['arregla']];
                 continue;
             }
             // Guarda-créditos: si ya se intentó este arreglo pagado hace poco y el
