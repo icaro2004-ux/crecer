@@ -632,6 +632,74 @@ try {
         }
     }
 
+    // ¿PAGASTE POR IMÁGENES QUE NO TE ENTREGARON?  &test=imgcobro
+    //   Separa lo que hay que tragarse de lo que se puede reclamar. La diferencia
+    //   está en de quién fue la culpa, y eso lo dice el error que dejó cada
+    //   llamada. Sin este corte, un reclamo a soporte es una queja; con él, es
+    //   una lista de fechas, modelos y montos.
+    if ($__test === 'imgcobro') {   // solo lectura · ya estás dentro como admin
+        require_once __DIR__ . '/includes/ayudante.php';   // falla_clasificar()
+        echo "\n--- IMÁGENES: LO COBRADO CONTRA LO ENTREGADO ---\n";
+        $img_sql = "(modelo LIKE '%image%' OR modelo LIKE 'responses:%')";
+        try {
+            $t = $pdo->query("SELECT COUNT(*) n, COALESCE(SUM(costo_usd),0) c,
+                                     SUM(estado='ok') ok, SUM(estado='error') err
+                                FROM crecer_ia_log WHERE $img_sql")->fetch(PDO::FETCH_ASSOC);
+            printf("  Llamadas de imagen registradas : %d\n", $t['n']);
+            printf("    entregaron                   : %d\n", $t['ok']);
+            printf("    fallaron                     : %d\n", $t['err']);
+            printf("  Costo estimado en la bitácora  : $%.4f\n", $t['c']);
+            echo "  (el costo REAL es el de la factura: OpenAI \$45.10 + Google \$25.15)\n";
+
+            echo "\n  LAS QUE FALLARON, POR CAUSA:\n";
+            $filas = $pdo->query("SELECT id, created_at, modelo, costo_usd, error_msg
+                                    FROM crecer_ia_log
+                                   WHERE $img_sql AND estado='error'
+                                ORDER BY id DESC LIMIT 400")->fetchAll(PDO::FETCH_ASSOC);
+            $grupo = [];
+            foreach ($filas as $f) {
+                $cl = falla_clasificar($f['error_msg']);
+                $k  = $cl['clase'];
+                $grupo[$k]['n'] = ($grupo[$k]['n'] ?? 0) + 1;
+                $grupo[$k]['c'] = ($grupo[$k]['c'] ?? 0) + (float)$f['costo_usd'];
+                $grupo[$k]['ej'] = $grupo[$k]['ej'] ?? mb_substr((string)$f['error_msg'], 0, 110);
+                $grupo[$k]['hum'] = $cl['humano'];
+            }
+            if (!$grupo) echo "    (ninguna llamada de imagen quedó registrada como error)\n";
+            $reclamable = 0.0; $reclamable_n = 0;
+            foreach ($grupo as $clase => $g) {
+                // Transitorio = se cayó del lado del proveedor. Eso es lo que se reclama.
+                $suyo = ($clase === 'transitorio');
+                printf("    %-12s %3d llamadas   $%7.4f   %s\n", $clase, $g['n'], $g['c'],
+                       $suyo ? '<-- RECLAMABLE (falló su servicio)' : '(no reclamable)');
+                printf("                 %s\n", $g['hum']);
+                printf("                 ej: %s\n", $g['ej']);
+                if ($suyo) { $reclamable += $g['c']; $reclamable_n += $g['n']; }
+            }
+
+            // Piezas que se quedaron sin arte: el sintoma que ve el dueno.
+            $q = $pdo->query("SELECT img_estado, COUNT(*) n FROM crecer_contenido
+                               WHERE (grafica_path IS NULL OR grafica_path='')
+                                 AND img_estado IN ('queued','error')
+                            GROUP BY img_estado");
+            echo "\n  PIEZAS SIN ARTE AHORA MISMO:\n";
+            $sin = 0;
+            foreach ($q as $r) { printf("    img_estado=%-8s %d\n", $r['img_estado'], $r['n']); $sin += (int)$r['n']; }
+            if (!$sin) echo "    (ninguna)\n";
+
+            echo "\n  ── EL VEREDICTO ──\n";
+            printf("  Reclamable a OpenAI/Google : $%.4f  (%d llamadas que fallaron del lado de ELLOS)\n",
+                   $reclamable, $reclamable_n);
+            echo "  El resto NO es reclamable, y conviene saberlo antes de escribir:\n";
+            echo "    · 'permanente' = la imagen se generó y expiró sin que la recogiéramos, o el\n";
+            echo "      filtro rechazó el prompt. Prestaron el servicio; el fallo fue nuestro.\n";
+            echo "    · 'presupuesto' = se acabó el crédito. No hay nada que reclamar.\n";
+            echo "\n  Para escribir a soporte hace falta fecha, modelo y monto de cada una:\n";
+            echo "    SELECT id, created_at, modelo, costo_usd, error_msg FROM crecer_ia_log\n";
+            echo "     WHERE $img_sql AND estado='error' ORDER BY id DESC;\n";
+        } catch (Throwable $e) { echo "  (error: " . $e->getMessage() . ")\n"; }
+    }
+
     // EL GASTO CONTRA EL TECHO: para que el tope no sea un número que hay que
     //   creerse, sino uno que se comprueba.   &test=gasto
     if ($__test === 'gasto') {     // solo lectura · ya estás dentro como admin
