@@ -2317,7 +2317,19 @@ function trabajo_autonomo(PDO $pdo, int $marca_id, string $enfoque = ''): array 
         try { $rr = redactar_pieza($pdo, $cid); $cap = (string)($rr['caption'] ?? ''); $visual = (string)($rr['debate']['visual'] ?? ''); } catch (Throwable $e) { /* queda la idea para editar */ }
         // El Diseñador deja el ARTE listo también → el dueño recibe el post COMPLETO
         // (arte + copy), no un caption pelao. El concepto visual del corillo maneja la imagen.
-        if ($cap !== '') {
+        //
+        // PERO SOLO SI HAY META. Recibir el post hecho tiene sentido cuando ese
+        //  post persigue algo: entonces el arte es la inversión de una jugada.
+        //  Sin meta se paga caro, temprano y a ciegas — y se nota: de $33.35
+        //  gastados en imágenes, $13.71 fueron 97 imágenes del `creador` que
+        //  nadie usó jamás, y este es justamente el camino que corre cuando no
+        //  hay plan que avanzar. El corillo sigue trabajando y dejando el texto
+        //  escrito; lo que no hace es comprar una imagen para algo que nadie
+        //  pidió y que no persigue ningún número. Ver ADR-0006.
+        if ($cap !== '' && $meta_id === null) {
+            error_log("relevo: pieza {$cid} sin arte — no hay meta activa (ADR-0006)");
+        }
+        if ($cap !== '' && $meta_id !== null) {
             try {
                 $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => true, 'instrucciones' => $visual]);
                 if (!empty($g['archivo'])) {
