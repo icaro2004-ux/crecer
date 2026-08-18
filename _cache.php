@@ -632,6 +632,84 @@ try {
         }
     }
 
+    // CONCILIACIÓN: dinero salido contra entregable recibido.  &test=conciliar
+    //   La regla: cada centavo gastado tiene que tener su archivo, y cada
+    //   archivo tiene que estar colgado de una pieza. Tres estados posibles y
+    //   solo uno es bueno:
+    //     pagado -> archivo -> usado    OK
+    //     pagado -> archivo -> huérfano  se generó y nadie lo usa (dinero tirado)
+    //     pagado -> sin archivo          se cobró y no hay nada (fuga)
+    //   Sin esto, "gasté $70" es un número sin contraparte.
+    if ($__test === 'conciliar') {   // solo lectura · ya estás dentro como admin
+        $dias = max(1, min(400, (int)($_GET['dias'] ?? 120)));
+        echo "\n--- CONCILIACIÓN: LO PAGADO CONTRA LO RECIBIDO (últimos {$dias} días) ---\n";
+        try {
+            $q = $pdo->prepare("SELECT id, created_at, marca_id, modelo, costo_usd, respuesta
+                                  FROM crecer_ia_log
+                                 WHERE (modelo LIKE '%image%' OR modelo LIKE 'responses:%')
+                                   AND estado='ok' AND costo_usd > 0
+                                   AND created_at >= (NOW() - INTERVAL {$dias} DAY)
+                              ORDER BY id DESC");
+            $q->execute();
+            $filas = $q->fetchAll(PDO::FETCH_ASSOC);
+
+            $n = 0; $pagado = 0.0;
+            $ok = 0; $ok_usd = 0.0;
+            $huerf = 0; $huerf_usd = 0.0; $huerf_ej = [];
+            $fuga = 0; $fuga_usd = 0.0; $fuga_ej = [];
+            $sinArchivo = 0; $sinArchivo_usd = 0.0;
+
+            $base_url  = defined('UPLOADS_URL')  ? rtrim(UPLOADS_URL, '/')   : '';
+            $base_path = defined('UPLOADS_PATH') ? rtrim(UPLOADS_PATH, '/\\') : '';
+
+            // ¿Qué archivos están colgados de una pieza? Una sola consulta.
+            $usados = [];
+            foreach ($pdo->query("SELECT grafica_path FROM crecer_contenido WHERE grafica_path IS NOT NULL AND grafica_path<>''") as $r)
+                $usados[trim((string)$r['grafica_path'])] = true;
+            try {
+                foreach ($pdo->query("SELECT img_path FROM crecer_carrusel WHERE img_path IS NOT NULL AND img_path<>''") as $r)
+                    $usados[trim((string)$r['img_path'])] = true;
+            } catch (Throwable $e) { /* la columna puede llamarse distinto */ }
+
+            foreach ($filas as $f) {
+                $n++; $c = (float)$f['costo_usd']; $pagado += $c;
+                $rel = trim((string)($f['respuesta'] ?? ''));
+                if ($rel === '') { $sinArchivo++; $sinArchivo_usd += $c; $fuga++; $fuga_usd += $c;
+                    if (count($fuga_ej) < 5) $fuga_ej[] = "#{$f['id']} {$f['created_at']} {$f['modelo']} (el log no guardó ruta)";
+                    continue; }
+                // ¿Existe en disco?
+                $existe = true;
+                if ($base_url !== '' && $base_path !== '' && str_starts_with($rel, $base_url)) {
+                    $abs = $base_path . str_replace('/', DIRECTORY_SEPARATOR, substr($rel, strlen($base_url)));
+                    $existe = is_file($abs);
+                }
+                if (!$existe) { $fuga++; $fuga_usd += $c;
+                    if (count($fuga_ej) < 5) $fuga_ej[] = "#{$f['id']} {$f['created_at']} \$" . number_format($c,4) . " — archivo no está en disco: {$rel}";
+                    continue; }
+                if (isset($usados[$rel])) { $ok++; $ok_usd += $c; }
+                else { $huerf++; $huerf_usd += $c;
+                    if (count($huerf_ej) < 5) $huerf_ej[] = "#{$f['id']} {$f['created_at']} \$" . number_format($c,4) . " — {$rel}"; }
+            }
+
+            printf("  Llamadas pagadas         : %d   ($%.4f)\n", $n, $pagado);
+            printf("  · con archivo Y usado    : %d   ($%.4f)   %s\n", $ok, $ok_usd, $n ? sprintf('%.1f%%', 100*$ok/$n) : '');
+            printf("  · con archivo, HUÉRFANO  : %d   ($%.4f)   se generó y nadie lo usa\n", $huerf, $huerf_usd);
+            printf("  · SIN archivo (FUGA)     : %d   ($%.4f)   se pagó y no hay entregable\n", $fuga, $fuga_usd);
+            if ($sinArchivo) printf("      (de esas, %d el log ni guardó ruta: $%.4f)\n", $sinArchivo, $sinArchivo_usd);
+
+            if ($fuga_ej)  { echo "\n  FUGAS (lo que hay que perseguir):\n";     foreach ($fuga_ej as $e) echo "    $e\n"; }
+            if ($huerf_ej) { echo "\n  HUÉRFANOS (pagado y sin usar):\n";        foreach ($huerf_ej as $e) echo "    $e\n"; }
+
+            echo "\n  ── CÓMO SE LEE ──\n";
+            echo "  El único estado bueno es 'con archivo Y usado'. Si ese porcentaje baja,\n";
+            echo "  hay dinero saliendo sin producto entrando, y hay que parar antes de seguir.\n";
+            echo "  HUÉRFANO no es fraude del proveedor: entregó. Es que se generó algo que\n";
+            echo "  nadie colgó de una pieza — regeneraciones, pruebas, o un flujo que se cayó\n";
+            echo "  a mitad. Es la definición de dinero tirado, y es NUESTRO problema.\n";
+            echo "  FUGA es lo grave: se cobró y no hay archivo. Ahí sí hay que abrir el caso.\n";
+        } catch (Throwable $e) { echo "  (error: " . $e->getMessage() . ")\n"; }
+    }
+
     // ¿PAGASTE POR IMÁGENES QUE NO TE ENTREGARON?  &test=imgcobro
     //   Separa lo que hay que tragarse de lo que se puede reclamar. La diferencia
     //   está en de quién fue la culpa, y eso lo dice el error que dejó cada
