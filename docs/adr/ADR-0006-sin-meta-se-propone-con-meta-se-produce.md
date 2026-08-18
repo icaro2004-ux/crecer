@@ -1,8 +1,56 @@
-# ADR-0006 — La cuota gobierna el plan (y "Crear" deja de ser el camino principal)
+# ADR-0006 — Sin meta, el corillo propone. Con meta, produce.
 
 - **Fecha:** 2026-08-17
 - **Estado:** ACEPTADA como dirección · **NO implementada** (post-XPRIZE)
 - **Origen:** Manuel, revisando por qué se colgaban imágenes y se iban tokens.
+
+## La regla, primero
+
+**Sin meta, el corillo propone. Con meta, produce.**
+
+- **Sin meta declarada** — el relevo entrega **ideas en texto**, no piezas
+  terminadas. Cuesta centavos y no compromete nada. Despertar con *"se me
+  ocurrieron tres cosas para tu negocio"* invita a participar; despertar con
+  tres posts terminados que nadie pidió es un hecho consumado, y encima caro.
+  La ausencia de meta deja de ser un hueco silencioso y pasa a ser una
+  invitación: *dime qué quieres lograr y te lo convierto en trabajo hecho*.
+- **Con meta** — el plan manda y el arte está justificado, porque cada pieza
+  persigue un número declarado. Ahí sí vale gastar por adelantado: se sabe
+  para qué es.
+- **El cliente crea cuando quiera, siempre.** Eso no se toca. Pero el corillo
+  lo acompaña hacia la meta: le sugiere el ángulo, el CTA, cómo encaja con lo
+  que persigue. **Guía, no bloquea.** Si el dueño quiere algo que no empuja la
+  meta, lo hace igual; simplemente el corillo se lo dice.
+
+### La evidencia que la sostiene
+
+Conciliación del 2026-08-17, 120 días, `_cache.php?test=conciliar`:
+
+| | llamadas | costo | |
+|---|---|---|---|
+| Pagadas | 228 | $33.35 | |
+| · con archivo **y usado** | 122 | $18.76 | **53.5%** |
+| · con archivo, **huérfano** | 94 | $14.12 | se generó y nadie lo usó |
+| · **sin archivo** (fuga) | 12 | $0.47 | residual, todo de fin de junio |
+
+De los huérfanos, **97 imágenes y $13.71 salieron del agente `creador`**, con
+picos de 12 a 15 en un solo día coincidiendo con los relevos semanales.
+
+Y `creador` corre en exactamente una circunstancia. De `relevo_del_corillo`:
+
+```php
+if ($del_plan === 0) { $res = trabajo_autonomo($pdo, $marca_id, $enfoque); }
+```
+
+Es decir: **el 96% del gasto desperdiciado salió de la rama que corre cuando
+NO hay meta que perseguir.** El dinero se fue por el camino sin dirección. No
+fue mala suerte ni un bucle: fue el diseño funcionando como se le dijo, en doce
+cuentas donde no había nadie y no había nada que lograr.
+
+Por eso la premisa del arte anticipado se cae cuando no hay meta. Recibir al
+dueño con el post hecho tiene sentido si ese post persigue algo. Sin meta se
+paga **caro, temprano y a ciegas** — las tres peores juntas — y la tasa de
+huérfanos deja de ser un accidente para ser estructura.
 
 ## El problema
 
@@ -70,6 +118,17 @@ Y dentro de la capa 2, el caso del plan:
    fotos reales del negocio y los ganadores anteriores ya se aprovechan en
    ejecución (`relevo_del_corillo`); el plan debería *elegir* reusar cuando el
    saldo aprieta, en vez de descubrirlo.
+
+## Qué hay que tocar para cumplir la regla
+
+1. **`relevo_del_corillo`** — cuando `$del_plan === 0`, en vez de llamar a
+   `trabajo_autonomo` (que produce piezas con arte), producir **ideas en texto**
+   y dejarlas en el Home. Cero llamadas a motor de imagen sin meta.
+2. **`trabajo_autonomo`** — pasa a ser el camino de la meta, no el de relleno.
+3. **La Sala y Crear** — siguen abiertos siempre; el corillo añade el encuadre
+   de la meta a lo que el dueño pida, sin bloquear.
+4. **El Home** — el estado "sin meta" deja de ser un vacío y pasa a ser la
+   invitación, con las ideas del corillo como carnada.
 
 ## Y "Crear" pasa a segundo plano
 
