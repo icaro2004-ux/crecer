@@ -632,6 +632,47 @@ try {
         }
     }
 
+    // EL GASTO CONTRA EL TECHO: para que el tope no sea un número que hay que
+    //   creerse, sino uno que se comprueba.   &test=gasto
+    if ($__test === 'gasto') {     // solo lectura · ya estás dentro como admin
+        require_once __DIR__ . '/includes/presupuesto.php';
+        echo "\n--- GASTO DE IA CONTRA EL TECHO ---\n";
+        $tope_p = presupuesto_tope_plataforma($pdo);
+        $hoy    = presupuesto_gastado_hoy($pdo, null);
+        $marcas = (int)$pdo->query("SELECT COUNT(*) FROM crecer_marca")->fetchColumn();
+        printf("  Negocios en la base : %d\n", $marcas);
+        printf("  Techo de plataforma : $%.2f/día  (%s)\n", $tope_p,
+            defined('CRECER_TOPE_DIA_PLATAFORMA') ? 'fijado en config'
+            : sprintf('calculado: max($%.2f, %d x $%.2f)', CRECER_TOPE_PLATAFORMA_PISO, $marcas, CRECER_TOPE_PLATAFORMA_POR_MARCA));
+        printf("  Gastado HOY         : $%.4f   → %s\n", $hoy,
+            $hoy >= $tope_p ? '*** CORTADO ***' : sprintf('queda $%.2f', $tope_p - $hoy));
+        printf("  Techo por negocio   : $%.2f/día\n", CRECER_TOPE_DIA_MARCA);
+        try {
+            echo "\n  Últimos 7 días (plataforma):\n";
+            foreach ($pdo->query("SELECT DATE(created_at) d, COALESCE(SUM(costo_usd),0) c, COUNT(*) n
+                                    FROM crecer_ia_log WHERE created_at >= (CURDATE() - INTERVAL 7 DAY)
+                                GROUP BY DATE(created_at) ORDER BY d DESC") as $r) {
+                printf("    %s   $%7.4f   %d llamadas%s\n", $r['d'], $r['c'], $r['n'],
+                    (float)$r['c'] >= $tope_p ? '   <-- habría cortado' : '');
+            }
+            echo "\n  Los que más gastan HOY:\n";
+            $q = $pdo->query("SELECT l.marca_id, m.nombre_negocio, COALESCE(SUM(l.costo_usd),0) c
+                                FROM crecer_ia_log l LEFT JOIN crecer_marca m ON m.id=l.marca_id
+                               WHERE l.created_at >= CURDATE() GROUP BY l.marca_id
+                            ORDER BY c DESC LIMIT 8");
+            $hay = 0;
+            foreach ($q as $r) {
+                $hay++;
+                printf("    #%-4s %-26s $%7.4f%s\n", $r['marca_id'] ?: '—',
+                    mb_substr((string)($r['nombre_negocio'] ?: 'plataforma'), 0, 26), $r['c'],
+                    (float)$r['c'] >= CRECER_TOPE_DIA_MARCA ? '   <-- CORTADO' : '');
+            }
+            if (!$hay) echo "    (nadie ha gastado hoy)\n";
+        } catch (Throwable $e) { echo "  (error: " . $e->getMessage() . ")\n"; }
+        echo "\n  LECTURA: si el gasto normal se acerca al techo, el techo está corto — súbelo\n";
+        echo "  en config.local.php. Si un negocio solo se dispara, ahí está el bucle.\n";
+    }
+
     // EL EXPEDIENTE DE UN CASO: todo lo que se sabe de una incidencia, junto.
     //   &test=caso&id=123      (el "Caso #123" que viene en el correo del Ayudante)
     //   &test=caso             (sin id: lista los casos abiertos de los últimos días)

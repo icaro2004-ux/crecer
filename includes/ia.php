@@ -285,6 +285,20 @@ function ia_ejecutar(PDO $pdo, string $agente, string $accion, string $prompt, a
     $marca_id = $opts['marca_id'] ?? null;
     $t0 = microtime(true);
 
+    // EL BREAKER. Este es el embudo por el que pasa todo lo que cuesta dinero,
+    //  así que el techo del día se comprueba aquí y no en cada superficie que
+    //  llame. Ninguna pantalla, cron o worker lo puede saltar por olvido.
+    //  Se lanza IaError, que es lo que ya lanza cualquier fallo del modelo: los
+    //  llamantes lo tratan como un fallo más y degradan solos.
+    try {
+        require_once __DIR__ . '/presupuesto.php';
+        $__corte = presupuesto_guardia($pdo, $marca_id === null ? null : (int)$marca_id);
+        if ($__corte !== '') {
+            throw new IaError('Gasto detenido por el techo del día — ' . $__corte);
+        }
+    } catch (IaError $e) { throw $e; }
+      catch (Throwable $e) { error_log('breaker: ' . $e->getMessage()); }   // guardián roto no tumba el producto
+
     $estado = 'ok';
     $error_msg = null;
     $texto = '';
@@ -868,7 +882,24 @@ function motor_imagen(string $prompt, array $opts = []): array {
  */
 function ia_imagen(PDO $pdo, string $agente, string $accion, string $prompt, string $destino_rel, array $opts = []): array {
     $t0 = microtime(true); $estado = 'ok'; $err = null; $modelo = 'gemini-2.5-flash-image'; $rel = null; $razon = null;
+
+    // EL BREAKER, otra vez — y este es el que de verdad importa. Las imágenes no
+    //  pasan por ia_ejecutar: tienen su propio camino y su propio log. Son dos
+    //  tercios del gasto, así que un techo que solo mirara el texto habría
+    //  dejado suelto justo lo caro. Se cae por el mismo sitio que un fallo del
+    //  motor (estado='error'), que es lo que los llamantes ya saben manejar.
     try {
+        require_once __DIR__ . '/presupuesto.php';
+        $__mid = isset($opts['marca_id']) ? (int)$opts['marca_id'] : null;
+        $__corte = presupuesto_guardia($pdo, $__mid);
+        if ($__corte !== '') {
+            $estado = 'error';
+            $err = 'Gasto detenido por el techo del día — ' . $__corte;
+        }
+    } catch (Throwable $e) { error_log('breaker imagen: ' . $e->getMessage()); }
+
+    try {
+        if ($estado === 'error') throw new IaError((string)$err);   // ni se llama al motor
         $img = motor_imagen($prompt, $opts); $modelo = $img['modelo']; $razon = $img['razon'] ?? null;
         $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . $destino_rel;
         @mkdir(dirname($abs), 0775, true);
