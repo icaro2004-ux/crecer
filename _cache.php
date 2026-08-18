@@ -700,6 +700,35 @@ try {
             if ($fuga_ej)  { echo "\n  FUGAS (lo que hay que perseguir):\n";     foreach ($fuga_ej as $e) echo "    $e\n"; }
             if ($huerf_ej) { echo "\n  HUÉRFANOS (pagado y sin usar):\n";        foreach ($huerf_ej as $e) echo "    $e\n"; }
 
+            // ¿DE DÓNDE SALEN LOS HUÉRFANOS? No todos son iguales. Si el dueño
+            //  rechaza un arte y pide otro, el primero queda huérfano y eso es
+            //  el producto funcionando. Si un agente los produce en serie sin que
+            //  nadie los pida, eso es una fuga con otro nombre. La diferencia
+            //  está en QUIÉN los generó y en qué ritmo.
+            if ($huerf > 0) {
+                echo "\n  HUÉRFANOS POR AGENTE (aquí se ve si es el dueño rechazando o un bucle):\n";
+                $ids = [];
+                foreach ($filas as $f) {
+                    $rel = trim((string)($f['respuesta'] ?? ''));
+                    if ($rel !== '' && !isset($usados[$rel])) $ids[] = (int)$f['id'];
+                }
+                if ($ids) {
+                    $in = implode(',', array_slice($ids, 0, 2000));
+                    foreach ($pdo->query("SELECT agente, COUNT(*) n, COALESCE(SUM(costo_usd),0) c,
+                                                 MIN(DATE(created_at)) d1, MAX(DATE(created_at)) d2
+                                            FROM crecer_ia_log WHERE id IN ($in)
+                                        GROUP BY agente ORDER BY c DESC") as $g) {
+                        printf("    %-22s %3d imgs   $%7.4f   %s → %s\n",
+                               $g['agente'], $g['n'], $g['c'], $g['d1'], $g['d2']);
+                    }
+                    echo "\n  Y por día (un pico en un solo día = bucle, no uso normal):\n";
+                    $pico = $pdo->query("SELECT DATE(created_at) d, COUNT(*) n, COALESCE(SUM(costo_usd),0) c
+                                           FROM crecer_ia_log WHERE id IN ($in)
+                                       GROUP BY DATE(created_at) ORDER BY c DESC LIMIT 6");
+                    foreach ($pico as $g) printf("    %s   %3d imgs   $%7.4f\n", $g['d'], $g['n'], $g['c']);
+                }
+            }
+
             echo "\n  ── CÓMO SE LEE ──\n";
             echo "  El único estado bueno es 'con archivo Y usado'. Si ese porcentaje baja,\n";
             echo "  hay dinero saliendo sin producto entrando, y hay que parar antes de seguir.\n";
