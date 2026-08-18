@@ -1,0 +1,20 @@
+Description,May,June,July,August,"Full 90 Days"
+REVENUE,,,,,
+"Independent Sales (ie. sales of product or service)",0.00,0.00,0.00,0.00,0.00
+"Related Party Revenue (ie. see Rules)",0.00,0.00,0.00,0.00,0.00
+"TOTAL REVENUE",0.00,0.00,0.00,0.00,0.00
+,,,,,
+EXPENSES,,,,,
+COGS,,,,,
+Personnel,0.00,0.00,0.00,0.00,0.00
+"Software Subscriptions",0.00,0.00,0.59,39.00,39.59
+Tokens,0.00,0.00,30.00,40.25,70.25
+SG&A,,,,,
+Personnel,0.00,0.00,0.00,0.00,0.00
+"Software Subscriptions",111.50,111.50,111.50,0.00,334.50
+Tokens,0.00,0.00,0.00,0.00,0.00
+"Other Expenses",,,,,
+"Other expenses (see Legend)",0.00,0.00,0.00,0.00,0.00
+"TOTAL EXPENSES",111.50,111.50,142.09,79.25,444.34
+,,,,,
+"PROFIT (LOSS)",-111.50,-111.50,-142.09,-79.25,-444.34

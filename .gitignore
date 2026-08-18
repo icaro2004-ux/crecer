@@ -50,3 +50,6 @@ QA_BUGS_CRECER_*.csv
 # jurado: un documento que explica cómo escribir la narrativa del concurso es
 # herramienta del fundador, no parte de lo que se evalúa.
 BRIEF-CRECER-PARA-NARRATIVA.md
+
+# Evidencia: los HTML son intermedios del generador (pl_pdf.php); el PDF es el entregable.
+evidencia/*.html

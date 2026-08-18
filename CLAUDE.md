@@ -50,13 +50,22 @@ Encuéntralo con clientes ya ganados.
   marketing/adquisición**, número de usuarios y demografía, testimonios,
   related-party declarado aparte, y logs de agentes / uso de API / capturas.
   Todo en inglés.
-- **La descripción escrita NO tiene límite de palabras.** Verificado el
-  2026-08-14 en las dos fuentes oficiales (`xprize.devpost.com/rules` y
-  `geminixprize.com/rules`): ninguna menciona conteo, ni mínimo ni máximo. Este
-  archivo decía "500–1000 palabras" bajo el título de regla verificada, y era
-  **falso** — se corrige aquí para que no se vuelva a dar por bueno. Lo que sí
-  exigen es el CONTENIDO: cómo el proyecto cumple los requisitos y su relevancia
-  para la categoría escogida.
+- **Son DOS textos distintos, no uno** (verificado el 2026-08-16 leyendo las tres
+  páginas oficiales; la nota anterior de este archivo —"no hay límite de
+  palabras"— salía de leer solo las de reglas y era **incompleta**):
+  1. **Descripción de cumplimiento** (`/rules`, sin conteo): *"a text description
+     how your Project meets the above requirements... explain the relevance to
+     the chosen Category"*. Aquí van: producto de Google Cloud usado, la llamada
+     a Gemini en la app desplegada, proyecto nuevo tras el 19 mayo, y la
+     **explicación del código pre-existente reusado** (`REUSE.md`) — las reglas
+     la exigen por nombre.
+  2. **Written narrative, 500–1000 palabras** (portada de `xprize.devpost.com`,
+     literal): *"how the team uses AI day to day, what humans do versus what AI
+     does, **the jobs and economic opportunities the business creates or enables
+     for people beyond the founding team (actual and potential)**, and the story
+     of building the business this way."* El rango **sí existe** y los cuatro
+     contenidos son obligatorios; el tercero es el que se olvida.
+     `NARRATIVA-DEVPOST.md` va en 983 palabras: no crecerla.
 - Deadline: **17 ago 2026, 1:00 PM PT**.
 
 ## El producto (MVP — el loop mensual)

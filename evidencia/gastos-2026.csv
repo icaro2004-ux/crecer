@@ -1,0 +1,22 @@
+fecha_pago,proveedor,concepto,categoria,rubro,monto_usd,fuente,nota
+# LIBRO DE GASTOS — ventana XPRIZE (19 may - 17 ago 2026). BASE DE CAJA: la fecha es la del COBRO, no la del uso.
+# Cada fila sale de un recibo en Documents/mio/encuentralo/crecer/xprize/payments. Si un cargo cae fuera de la ventana, el script lo saca y lo lista aparte.
+# categoria: COGS (costo directo de operar el servicio en produccion) | SGA (no escala por cliente) | OTRO
+# rubro:     Tokens (APIs de modelos) | Software Subscriptions | Personnel | Other
+# fuente:    factura (hay PDF que ensenar) | estimado (calculado de uso)
+2026-04-25,Hostinger,Business Web Hosting anual (Abr 25 2026 - Jun 25 2027),COGS,Software Subscriptions,59.88,factura,HCY-24490180 PAID. FUERA DE VENTANA: se pago antes del 19 may. Se declara como recurso pre-hackathon.
+2026-08-17,Google Cloud,Gemini API (jun-ago),COGS,Tokens,25.15,factura,Reporte oficial de facturacion 1 jun - 31 ago 2026. La cuenta se abrio en junio PARA este concurso: todo el gasto es de la ventana. Va en una sola linea porque el reporte se exporto por periodo completo.
+2026-07-21,OpenAI,Credito de API (gpt-image-1),COGS,Tokens,30.00,factura,Recibo 2236-2709-0831 / invoice 6SFNXD4M-0002. Credito prepagado: base de caja = dia de la compra.
+2026-08-10,OpenAI,Credito de API - auto-reload,COGS,Tokens,15.10,factura,Recibo 2689-9533-3895 / invoice 6SFNXD4M-0004. Auto-reload. Estas dos recargas son TODO el gasto de API de OpenAI en la ventana (confirmado 16 ago).
+2026-07-31,Twilio,Verify SMS (gate del post gratis),COGS,Software Subscriptions,0.59,factura,Invoice NWWWYO-2026-07. Dice "No payment due" - salio de saldo. Se incluye por conservador.
+2026-08-15,Shotstack,Render de video - 200 creditos/mes,COGS,Software Subscriptions,39.00,factura,Invoice IDXR8QYP-0001. Servicio Ago 15 - Sep 15; base de caja lo pone entero en agosto. PAGADO el 15 ago (antes estaba en el plan gratuito: este es el primer y unico cobro).
+# Herramientas con las que se CONSTRUYE el producto: van en SG&A, no en COGS (no escalan por cliente).
+# Una fila por cargo mensual. Pon la FECHA REAL del cargo y borra los meses que no apliquen.
+2026-05-23,Anthropic,Claude Max 5x (Claude Code) - May 23 a Jun 23,SGA,Software Subscriptions,111.50,factura,Recibo 2134-8842-0486 / invoice MC7YRZYB-0006. Incluye 11.50 de IVU PR (11.5%). A nombre de Manuel Rivers, seudonimo de Jesus Manuel Perez Rivera: misma persona, mismo correo y direccion.
+2026-06-23,Anthropic,Claude Max 5x (Claude Code) - Jun 23 a Jul 23,SGA,Software Subscriptions,111.50,factura,Recibo 2431-6302-5643 / invoice MC7YRZYB-0007.
+2026-07-23,Anthropic,Claude Max 5x (Claude Code) - Jul 23 a Ago 23,SGA,Software Subscriptions,111.50,factura,Recibo 2132-5317-6440 / invoice MC7YRZYB-0008. El cobro de Ago 23 cae despues del cierre: no entra.
+2026-06-15,OpenAI,ChatGPT - suscripcion,SGA,Software Subscriptions,,factura,Distinto de los creditos de API de arriba
+2026-07-15,OpenAI,ChatGPT - suscripcion,SGA,Software Subscriptions,,factura,
+2026-08-15,OpenAI,ChatGPT - suscripcion,SGA,Software Subscriptions,,factura,
+2026-08-17,Marketing y adquisicion,Sin gasto de mercadeo ni adquisicion,SGA,Other,0.00,factura,Devpost exige declararlo aunque sea cero
+2026-08-17,Personnel,Fundador sin salario; sin contratistas,SGA,Personnel,0.00,factura,Devpost exige declararlo aunque sea cero

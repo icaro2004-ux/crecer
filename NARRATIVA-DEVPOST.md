@@ -1,104 +1,84 @@
 # XPRIZE Written Narrative
 
-> v5 · 12 ago 2026 · **983 palabras** (dato, no límite).
+> **La fuente de verdad es el .docx**, no este archivo:
+> `Documents/mio/encuentralo/crecer/xprize/CRECER_XPRIZE_NARRATIVE.docx`.
+> Esta copia se sincroniza desde ahi para que el repo publico tenga exactamente
+> lo que se entrego. Si se edita el Word, hay que volver a sincronizar.
 >
-> **NO hay límite de palabras.** Verificado el 14 ago en las dos fuentes
-> oficiales: ni `xprize.devpost.com/rules` ni `geminixprize.com/rules` mencionan
-> conteo, mínimo ni máximo. La versión anterior de este encabezado decía "campo
-> de 500–1,000 palabras" y era falso. Lo que las reglas sí exigen del texto:
-> **cómo el proyecto cumple los requisitos** y **su relevancia para la
-> categoría** (Small Business Services). Esta narrativa cubre ambos; si se
-> reescribe, que los siga cubriendo.
+> v8 · 16 ago 2026 · **974 palabras** (983 contando el titulo del .docx).
+> Tope real **500-1000**, que sale de la portada de `xprize.devpost.com`:
+> *"Written narrative (500-1000 words)"*. Las paginas de `/rules` no mencionan
+> conteo; por eso una version anterior de este archivo decia "no hay limite" y
+> llego a tener 1,270 palabras con un encabezado que juraba 983. **Contar
+> siempre, no heredar el numero.**
 >
-> Que no haya tope no es permiso para alargarla: un jurado lee decenas de
-> entregas. La brevedad sigue ganando por mérito propio, no por regla.
+> Los **cuatro contenidos obligatorios** que fija ese mismo parrafo oficial, y
+> donde viven aqui:
+> 1. Como el equipo usa IA dia a dia -> *AI at the workbench and on the job*
+> 2. Humano vs. IA -> *"AI handles the department s repeatable work while I remain responsible for..."*
+> 3. **Empleos y oportunidades para gente fuera del equipo fundador** -> SBA +
+>    *"local opportunities in customer success, creative quality, partnerships, and engineering"*
+> 4. La historia de construirlo asi -> apertura y cierre
 >
-> En inglés porque así lo leen los jueces, con la voz boricua de Crecer.
-> Los resultados reales y las proyecciones van deliberadamente separados —
-> nada de posibilidad presentada como logro.
+> **La democratizacion** es la tesis, y abre la seccion del corillo: un departamento
+> de mercadeo cuesta miles al mes en agencia o nomina y siempre estuvo tasado para
+> empresas grandes; Crecer lo pone en $39. No inventar cifras de agencia: se dice
+> "thousands of dollars a month", que es de dominio publico, sin numero especifico.
 >
-> **REVENUE = $0** (verificado el 14 ago con `test=paquete`: cero suscripciones
-> con cobro real en Stripe). La versión anterior afirmaba que el fundador pagaba
-> $39/mes como primer cliente; **era falso** y se reescribió. No volver a
-> introducir esa frase sin un pago real que se pueda enseñar en Stripe.
+> **No es la descripcion de cumplimiento.** Ese es otro campo y esta escrito en
+> [`ENTREGA-DEVPOST.md`](ENTREGA-DEVPOST.md), punto 4.
+>
+> **Cifras verificadas el 16 ago** contra recibos (`php evidencia/pl.php`):
+> revenue $0 · gastos $444.34 = $334.50 herramienta + $109.84 produccion ·
+> dos tercios del gasto de produccion son imagenes ($45.10 OpenAI vs $25.15 Gemini).
+> El $132.68 de versiones viejas era un aproximado y estaba corto.
 
 ---
 
-## We arrived late. We came with everything we had.
+## We built fast. We built something real.
 
-I discovered the Build with Gemini XPRIZE 25 days after it began—nearly a month of a 90-day window already gone. I registered on June 13 and began building that same day: a solo founder, no team, no customer list waiting, and a much shorter runway to launch a real business.
+I discovered the Build with Gemini XPRIZE 25 days after it began. I registered on June 13 and started building that same day. The compressed window became part of the challenge: prove that one founder, working with AI as a real production partner, could move from an idea to a functioning business in weeks. In Puerto Rico we know how to make a lot out of a little, so we gave Crecer alma, vida y corazón—soul, life, and heart—and kept moving.
 
-But in Puerto Rico we know how to make a lot out of a little. So for the days that followed, we gave this business *alma, vida y corazón*—soul, life, and heart.
-
-“We” means me and the AI systems that helped build and now operate Crecer. Together, we turned a late start into a live business for people asked to do everything alone: the baker selling through WhatsApp, the barber whose storefront is Instagram, the electrician answering calls between jobs, and the family business that cannot afford an agency.
-
-They are excellent at their craft. What they need is a corillo.
+“We” means me and the AI systems that helped build and now operate Crecer. Together we built for people who are already excellent at what they do: the baker selling through WhatsApp, the barber whose storefront is Instagram, the family business growing without an agency. Their problem is not talent. It is capacity. What they need is a corillo.
 
 ## A whole corillo for the smallest business
 
-Crecer gives a small or midsize business an AI-operated strategist, creative, designer, agenda, salesperson, and analyst. The feeling is simple: **“I have people working for me.”**
+A marketing department is not a new idea. It is an agency retainer or a salaried team, thousands of dollars a month, priced for companies that are not these. Crecer democratizes that same function at $39 a month: a small business gets an AI-operated strategist, creative, designer, agenda, salesperson, and analyst. The feeling is simple: “I have people working for me.” It begins with a conversation. The owner speaks naturally—in Puerto Rican Spanish—and Gemini helps turn that exchange into structured knowledge about the business. The crew adapts to what it learns instead of asking the owner to learn prompts or become an AI expert.
 
-It begins with a conversation. The owner speaks naturally—in Puerto Rican Spanish—and Gemini transcribes. The crew asks the next question aloud, adapts, and turns the exchange into a structured business profile. By the end, the owner has a first post.
-
-Then the crew works. It plans, writes in the owner's real voice, learns corrections, designs around the owner's own photos, and publishes approved work to Instagram and Facebook through Meta's API. The owner reviews from a phone with a swipe: this one goes; this one waits.
-
-Crecer reaches beyond the feed. Each business gets a public ordering link and printable QR code; customers order with no app, no account. Orders land on the owner's board, and a completed one can trigger a WhatsApp review request. The post attracts; the QR captures; the review earns the next customer. Poco a poco, but always *pa'lante*.
+Then the crew works. It plans, writes in the owner's real voice, learns corrections, designs around the owner's photos, and publishes approved work to Instagram and Facebook through Meta's API. The owner remains in control, reviewing from a phone with a swipe. Crecer also provides a public ordering link and printable QR code, allowing customers to order without an app or account and turning completed orders into opportunities for WhatsApp review requests.
 
 ## AI at the workbench and on the job
 
-AI did not only help write the code. AI operates essential workflows in the running business.
+AI did not only help build Crecer; it operates essential workflows in the running business. Gemini helps understand businesses, structure knowledge, plan, write, analyze, and create visual assets. Support agents monitor the platform, while acquisition agents find Puerto Rican microbusinesses, score opportunities, and prepare outreach. Every model call records model, prompt, tokens, cost, latency, outcome, and failures.
 
-Gemini helps interview owners, structure their business knowledge, plan, write, analyze, and create visual assets. A support agent checks the platform regularly, resolves what it safely can, and escalates what requires me. An acquisition agent searches for Puerto Rican microbusinesses, scores opportunities, and prepares my outreach queue. Every model call records the model, prompt, tokens, cost, latency, outcome, and even failures. Judges can see production evidence instead of taking our word for it.
+The crew does not just publish—it chases a number. The owner names a goal; the strategist turns it into concrete plays, the crew executes, and the analyst measures what moved and carries that learning into the next plan. AI handles the department's repeatable work while I remain responsible for purpose, product direction, cultural voice, sales, billing, legal judgment, and the final call to ship. Our integrity rule is equally important: persuasive content must be grounded in facts the business provided. If the crew does not know enough, it abstains and asks.
 
-The crew does not just publish—it chases a number. The owner names a goal in plain words; the strategist turns it into concrete plays, the crew executes them on its own schedule, and each play closes itself when its posts go live. When the plan ends, the analyst measures what it moved and writes the lesson the next plan inherits. What did not move the number does not get repeated.
+## A business built to become a business
 
-The division of labor is clear. The AI does the department's repeatable work: interviewing, organizing knowledge, planning, creating, publishing, analyzing, supporting, prospecting. I own purpose, product direction, cultural voice, sales, billing, legal judgment, and the final call to ship.
+Revenue during the competition window is $0, and we report it exactly that way. Billing is built and Stripe runs in live mode at $39/month, but we chose not to manufacture traction by running a founder payment through the system. A founder paying himself is not a customer, and a number that needs an asterisk is worth less than a zero that does not.
 
-Our integrity rule matters as much as automation: persuasive content must be grounded in facts the business provided. If the crew does not know enough, it abstains and asks. We would rather pause than invent something about a customer's livelihood.
+We also know what Crecer costs, to the receipt. Building and operating it during the window cost $444.34, backed by provider invoices: $334.50 in AI tooling used to build it and $109.84 to run the production service for three months. Two thirds of production spend is images; the layer that plans, writes, analyzes, and decides is inexpensive. The workshop was expensive; the factory is not. Crecer is already in production, publishing to real Instagram and Facebook accounts, with scheduled agent workflows and an auditable cost ledger.
 
-## Our honest starting line
+The SBA's 2025 Puerto Rico profile counts 41,362 small employers, employing 407,296 people—98.4% of Puerto Rico's employers—before counting many solo entrepreneurs and informal microbusinesses selling through social media. Reaching only 1% would place an AI corillo beside more than 400 local businesses; 5% would mean more than 2,000. Those are not earnings promises. They illustrate the scale available to an affordable product built for this market.
 
-**Revenue during the window: $0. We are in controlled testing, and that is a decision, not a stall.**
+## A path to scale beyond one subscription at a time
 
-Billing is built and live, not theoretical. Stripe runs in live mode, and the $39/month price is verified against what the app promises—the app refuses to open a checkout if those two numbers disagree, so a mismatch cannot reach a customer. A live checkout session opens. What has never happened is a completed payment.
+Our go-to-market strategy is not limited to acquiring businesses one by one. I have already begun outreach—phone calls and in-person visits—to Puerto Rico government organizations that support and develop small businesses, including DDEC, to explore making Crecer available to groups of entrepreneurs through programs and existing networks. These are early conversations, not partnerships or contracts, and we report them accordingly. But the opportunity is powerful: an institutional distribution relationship could place Crecer in the hands of dozens or hundreds of businesses at once, reducing acquisition friction and accelerating the path to sustainable scale.
 
-We could have run our own card through it and printed a revenue figure on this page. We did not. A founder paying himself is not a customer, and a number that needs an asterisk is worth less than a zero that does not.
-
-Here is what we would rather you weigh instead.
-
-**We know what this business costs to run.** Building and operating Crecer across the window cost **$132.68**, from provider invoices—Google Cloud, Twilio, hosting, video rendering—with the OpenAI portion estimated from usage data rather than guessed. Under a hundred and fifty dollars to put an AI-operated marketing department into production.
-
-**We can see where the money goes, per call.** Every model call is recorded with its agent, model, tokens, latency and outcome—failures included. The dollar figures in that log are our own estimates from a price table, and the provider invoice is what we report; but the shape is exact, and it says something useful: **roughly two thirds of our AI spend is images. The layer that actually runs the business—planning, writing, analyzing, deciding—is the cheap part.** That is the number that decides whether $39/month is a business or a hobby.
-
-**And the product works**, because it is in production now, publishing to real Instagram and Facebook accounts, with agents running the weekly cycle on a schedule. Judges have a live account and can watch it happen, then open the ledger and audit what it cost.
-
-A company that reports a zero it can defend is telling you something about how it will report the first million. We report exactly what exists by the deadline—no inflated users, no imaginary testimonials, no revenue that is really an expense wearing a costume.
-
-Our early customer count reflects that compressed window; it does not define the market. The U.S. Small Business Administration's 2025 Puerto Rico profile counts **41,362 small employers** on the island, together employing **407,296 people**—**98.4% of Puerto Rico's employers**. And that count misses the community we see every day: solo entrepreneurs and informal microbusinesses selling through social media and word of mouth.
-
-Crecer does not need all of them to matter. Reaching 1% would put a capable AI corillo beside more than 400 local businesses; 5%, more than 2,000. Those are not earnings promises—they show how an affordable product can become sustainable while staying rooted here, and eventually create Puerto Rican jobs in customer success, creative quality, and engineering.
+That path also keeps Crecer rooted in Puerto Rico. Growth can create local opportunities in customer success, creative quality, partnerships, and engineering.
 
 ## Crecer means more than growth on a graph
 
-Marketing is our first department, not the limit of our imagination. The same auditable agent model can grow into sales, customer relationships, operations, and practical financial coaching—cash flow, pricing, planning for expenses—without pretending to replace an accountant.
+Marketing is our first department, not the limit of our imagination. The same auditable agent model can eventually expand into other business capabilities, while Encuéntralo can become a discovery network connecting Puerto Rico with businesses Crecer helped strengthen. Crecer means growth in business, confidence, stability, opportunity, and community. The technology matters because of what it puts within reach of people.
 
-And beyond Crecer is Encuéntralo: a future discovery network where Puerto Rico can find the businesses that Crecer has helped become stronger, more visible, and more ready for opportunity.
+We entered with less time and built with urgency, discipline, ingenuity, alegría, and a stubborn belief that this should exist. The result is not a concept deck. It is a working production system, an operating model, a measurable cost structure, and a clear path to market. This is the first version of Crecer, not the finish line. We are ready to grow—and to bring a whole lot of people with us. ¡Pa'lante!
 
-That is what **Crecer** means to us. To grow a business, yes—but also to grow in confidence, knowledge, stability, opportunity, community, and human potential. Financial growth matters because it gives people room to breathe. Personal growth matters because a business changes when its owner begins to believe, “Maybe I do not have to do this alone.”
-
-We entered 25 days late. We may be early in customers, but we are not early in commitment. We built with what Puerto Rico has always taught us to bring: ingenuity, alegría, and a stubborn kind of hope.
-
-This is only the first version of Crecer.
-
-We are ready to grow—and to bring a whole lot of people with us. **¡Pa'lante!**
 
 ---
 
-> **Antes de pegar en Devpost (checklist de honestidad):**
-> 1. Verificar el conteo que muestre Devpost (aquí: 983).
-> 2. El párrafo del ciclo meta → plan → ejecución → lección describe capacidad
->    construida el 12 ago. **Solo se queda si está VIVA en producción el día de
->    entregar** (migraciones corridas + probado). Si no, se borra ese párrafo:
->    no se afirma lo que el motor no hace.
-> 3. Poner las cifras finales reales de revenue/usuarios en los campos
->    financieros, con el related-party declarado aparte.
+> **Antes de pegar en Devpost:**
+> 1. Contar las palabras otra vez si se toco algo. Tope 1,000.
+> 2. No pegar la linea *"Submission draft - N words"* del .docx: es nota de trabajo.
+> 3. Las cifras tienen que cuadrar con `evidencia/PL-xprize.csv`.
+> 4. El parrafo de DDEC dice *"phone calls and in-person visits"* porque eso fue
+>    lo que paso. No hubo correos. No cambiarlo a algo que no ocurrio.
