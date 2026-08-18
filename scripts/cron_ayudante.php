@@ -59,6 +59,13 @@ foreach ($marcas as $mk) {
             require_once __DIR__ . '/../includes/img_responses.php';
             img_sweep_pendientes($pdo, $mid, true, 25);
         } catch (Throwable $e) { error_log('cron_ayudante/sweep: ' . $e->getMessage()); }
+        // Los carruseles tenian la MISMA enfermedad: carrusel_sweep_pendientes
+        //  solo se llamaba desde carrusel.php, index.php y propuestas.php. El
+        //  mismo bug esperando su turno, en otra tabla.
+        try {
+            require_once __DIR__ . '/../includes/carrusel.php';
+            if (function_exists('carrusel_sweep_pendientes')) carrusel_sweep_pendientes($pdo, $mid);
+        } catch (Throwable $e) { error_log('cron_ayudante/carrusel: ' . $e->getMessage()); }
 
         $r = ayudante_atender($pdo, $mid, ['origen' => 'barrido']);
     } catch (Throwable $e) {

@@ -63,7 +63,19 @@ $fallidos      = (int)$q1("SELECT COUNT(*) FROM crecer_contenido WHERE estado='f
 $soporte_sin   = (int)$q1("SELECT COUNT(*) FROM crecer_soporte WHERE de='cliente' AND leido=0");
 $msgs_pend     = (int)$q1("SELECT COUNT(*) FROM crecer_mensajes WHERE estado='pendiente'");
 $trial_termina = (int)$q1("SELECT COUNT(*) FROM crecer_suscripciones WHERE estado IN ('incompleta','trial','prueba') AND periodo_fin IS NOT NULL AND periodo_fin BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 3 DAY)");
-$decisiones    = $fallidos + $soporte_sin + $msgs_pend + $trial_termina;
+
+// TRABAJO ENCOLADO QUE NO AVANZA. El termometro que faltaba: durante dias hubo
+//  imagenes pagadas esperando a que alguien las recogiera, y nadie lo supo
+//  porque ningun numero lo contaba. Un job asincrono que lleva horas parado es
+//  siempre una senal, venga de donde venga. Si esto sube, algo dejo de recoger.
+$colgado_img  = (int)$q1("SELECT COUNT(*) FROM crecer_contenido WHERE img_estado='queued' AND updated_at < (NOW() - INTERVAL 2 HOUR)");
+$colgado_carr = (int)$q1("SELECT COUNT(*) FROM crecer_carrusel  WHERE img_estado='queued' AND updated_at < (NOW() - INTERVAL 2 HOUR)");
+$colgado      = $colgado_img + $colgado_carr;
+
+// El breaker: si corto hoy, es lo primero que hay que mirar.
+$corte_hoy    = (int)$q1("SELECT COUNT(*) FROM crecer_ia_log WHERE agente='presupuesto' AND DATE(created_at)=CURDATE()");
+
+$decisiones    = $fallidos + $soporte_sin + $msgs_pend + $trial_termina + ($colgado > 0 ? 1 : 0) + ($corte_hoy > 0 ? 1 : 0);
 
 $m = fn($n) => '$' . number_format((float)$n, 2);
 $hechos =
@@ -73,6 +85,11 @@ $hechos =
   "soporte de clientes sin leer: {$soporte_sin}\n" .
   "DMs de clientes pendientes: {$msgs_pend}\n" .
   "pruebas que terminan en <=3 días: {$trial_termina}\n" .
+  "TRABAJO ENCOLADO PARADO >2h (imágenes {$colgado_img} + carruseles {$colgado_carr}): {$colgado}"
+    . ($colgado > 0 ? "  <-- algo dejó de recoger: mira _cache.php?test=caso\n" : "\n") .
+  ($corte_hoy > 0
+    ? "EL BREAKER CORTÓ EL GASTO HOY ({$corte_hoy} veces) <-- mira _cache.php?test=gasto ANTES de subir el tope\n"
+    : "") .
   "-- Lo que la IA hizo hoy --\n" .
   "posts creados hoy: {$posts_hoy}\n" .
   "posts publicados hoy: {$publicados_hoy}\n" .
