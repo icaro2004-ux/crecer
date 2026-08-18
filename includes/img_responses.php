@@ -286,14 +286,24 @@ function img_gemini_fallback(PDO $pdo, int $marca_id, int $post_id, string $copy
  * Y CREA la notificación (el worker no alcanzó). Si gpt cayó → re-dispara Gemini. No bloquea:
  * cada job es un GET corto; tope de 4. Llamar en GET de las pantallas principales.
  */
-function img_sweep_pendientes(PDO $pdo, int $marca_id): void {
+/**
+ * @param bool $solo_recoger  true = SOLO cobra lo ya pagado (consulta el job y
+ *        guarda la imagen si completó). No dispara ningún motor: ni el fallback
+ *        de Gemini ni el re-disparo cuando gpt falló. Es el modo del cron —
+ *        recoger es gratis, regenerar cuesta, y esa decisión no la toma un
+ *        barrido a las 3 de la mañana sin que nadie lo mire.
+ * @param int  $limite  cuántas piezas por corrida. En una página van 4 para no
+ *        hacer esperar al dueño; en el cron no hay nadie esperando.
+ */
+function img_sweep_pendientes(PDO $pdo, int $marca_id, bool $solo_recoger = false, int $limite = 4): void {
     try {
+        $limite = max(1, min(50, $limite));
         // Recoge jobs con response_id, Y TAMBIÉN los colgados sin job >2 min (el worker
         // se murió/bloqueó antes de crear el job → sin esto quedaban en 'queued' para siempre).
         $pend = $pdo->prepare("SELECT id, img_job FROM crecer_contenido
              WHERE marca_id=? AND img_estado='queued'
                AND (img_job IS NOT NULL OR updated_at < (NOW() - INTERVAL 2 MINUTE))
-             ORDER BY id DESC LIMIT 4");
+             ORDER BY id DESC LIMIT " . $limite);
         $pend->execute([$marca_id]);
         $rows = $pend->fetchAll(PDO::FETCH_ASSOC);
         if (!$rows) return;
@@ -303,6 +313,7 @@ function img_sweep_pendientes(PDO $pdo, int $marca_id): void {
             $pid = (int)$row['id'];
             // Colgado sin job → el worker nunca arrancó: rescátalo directo por Gemini (síncrono, fiable).
             if (empty($row['img_job'])) {
+                if ($solo_recoger) continue;          // eso cuesta: no lo decide el cron
                 if (function_exists('img_gemini_fallback')) {
                     $cap = (string)($pdo->query("SELECT caption FROM crecer_contenido WHERE id=" . $pid)->fetchColumn() ?: '');
                     $url = img_gemini_fallback($pdo, $marca_id, $pid, $cap);
@@ -318,7 +329,7 @@ function img_sweep_pendientes(PDO $pdo, int $marca_id): void {
             if ($est === 'ok' && function_exists('notif_crear')) {
                 notif_crear($pdo, $marca_id, 'arte', 'Tu arte ya está listo',
                     'El corillo terminó la imagen de tu post — dale un vistazo.', $link, 'image');
-            } elseif ($est === 'error' && function_exists('arte_disparar')) {
+            } elseif ($est === 'error' && !$solo_recoger && function_exists('arte_disparar')) {
                 arte_disparar($marca_id, $pid, null, null, true);   // gpt cayó → Gemini en background
             }
         }

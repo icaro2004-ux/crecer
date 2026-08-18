@@ -47,6 +47,19 @@ $n_marcas = 0; $n_hall = 0; $n_fix = 0; $n_esc = 0;
 foreach ($marcas as $mk) {
     $mid = (int)$mk['id'];
     try {
+        // PRIMERO RECOGER, DESPUÉS QUEJARSE. El arte se produce por cron, pero
+        //  hasta ahora recogerlo dependía de que un humano abriera el panel:
+        //  img_sweep_pendientes solo se llamaba desde index/propuestas/aprobar2.
+        //  En una cuenta que nadie visita, los trabajos terminados se quedaban
+        //  en 'queued' para siempre — pagados y sin cobrar — y este mismo cron
+        //  los reportaba como colgados. Modo solo_recoger: consulta y guarda lo
+        //  que ya está hecho, sin disparar ningún motor (recoger es gratis;
+        //  regenerar cuesta, y eso no lo decide un barrido a las 3 AM).
+        try {
+            require_once __DIR__ . '/../includes/img_responses.php';
+            img_sweep_pendientes($pdo, $mid, true, 25);
+        } catch (Throwable $e) { error_log('cron_ayudante/sweep: ' . $e->getMessage()); }
+
         $r = ayudante_atender($pdo, $mid, ['origen' => 'barrido']);
     } catch (Throwable $e) {
         echo "marca #{$mid}: ERROR " . $e->getMessage() . "\n";
