@@ -259,24 +259,51 @@ class MetaSnapshotReader
     private static function observacion(PDO $pdo, int $marca_id, int $meta_id): ?array
     {
         try {
-            $q = $pdo->prepare("SELECT id, version, inicio_at, cierre_at, estado
-                                  FROM crecer_meta_plan
-                                 WHERE marca_id = ? AND meta_id = ? AND estado <> 'activo'
-                                 ORDER BY cierre_at DESC, id DESC LIMIT 1");
+            // La consulta ELIGE el plan correcto; no elige uno y luego se
+            // arrepiente. Antes se tomaba el último cerrado y, si resultaba que
+            // no había publicado nada, se devolvía null — y el plan anterior,
+            // que sí tenía piezas midiéndose, quedaba invisible para siempre.
+            //
+            // Tres condiciones, todas dentro del SQL:
+            //  · estado cerrado de verdad: completado o reemplazado (abandonado
+            //    no se mide: se abandonó);
+            //  · SIN lección: un plan ya evaluado no está en observación. Sin
+            //    esto, un plan juzgado sin métricas producía K eternamente y L
+            //    no llegaba nunca;
+            //  · que TENGA al menos una pieza publicada, o no hay nada que medir;
+            //  · y que NO exista un plan cerrado MÁS RECIENTE ya evaluado. Sin
+            //    esta última, un plan viejo que nunca se midió resucitaba K por
+            //    encima de la lección de uno posterior: el ciclo ya siguió, y
+            //    volver atrás bloquearía L igual que el caso que arregla la
+            //    condición de la lección. Lo viejo sin medir es historia, no
+            //    algo que esté pasando.
+            $q = $pdo->prepare(
+                "SELECT p.id, p.version, p.inicio_at, p.cierre_at, p.estado
+                   FROM crecer_meta_plan p
+                  WHERE p.marca_id = ? AND p.meta_id = ?
+                    AND p.estado IN ('completado','reemplazado')
+                    AND (p.leccion IS NULL OR p.leccion = '')
+                    AND EXISTS (SELECT 1 FROM crecer_contenido c
+                                 WHERE c.plan_id = p.id
+                                   AND c.marca_id = p.marca_id
+                                   AND c.estado = 'publicado')
+                    AND NOT EXISTS (SELECT 1 FROM crecer_meta_plan q
+                                     WHERE q.meta_id = p.meta_id
+                                       AND q.marca_id = p.marca_id
+                                       AND q.leccion IS NOT NULL AND q.leccion <> ''
+                                       AND (q.cierre_at > p.cierre_at
+                                            OR (q.cierre_at = p.cierre_at AND q.id > p.id)))
+                  ORDER BY p.cierre_at DESC, p.id DESC
+                  LIMIT 1");
             $q->execute([$marca_id, $meta_id]);
             $p = $q->fetch(PDO::FETCH_ASSOC);
             if (!$p) return null;
-
-            $piezas = self::piezas($pdo, $marca_id, (int)$p['id']);
-            $publicadas = 0;
-            foreach ($piezas as $x) if (($x['estado'] ?? '') === 'publicado') $publicadas++;
-            if ($publicadas === 0) return null;      // sin nada publicado no hay nada que medir
 
             return [
                 'plan' => ['id' => (int)$p['id'], 'version' => (int)$p['version'],
                            'estado' => (string)$p['estado'],
                            'cierre_at' => (string)($p['cierre_at'] ?? '')],
-                'piezas' => $piezas,
+                'piezas' => self::piezas($pdo, $marca_id, (int)$p['id']),
             ];
         } catch (Throwable $e) { return null; }
     }

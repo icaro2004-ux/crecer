@@ -162,6 +162,86 @@ try {
     ok('y enseña la lección', strpos($e2->instruccion, 'measured') !== false
        || strpos($e2->instruccion, 'midieron') !== false, $e2->instruccion);
 
+    // ── 7 · A QUÉ PLAN se le pone la lupa ───────────────────
+    //  Escenario que rompía el lector viejo: el plan cerrado MÁS RECIENTE no
+    //  publicó nada, pero el anterior sí y sigue sin medir. Antes se elegía el
+    //  reciente, se veía que no tenía nada y se devolvía null: el que de verdad
+    //  se estaba midiendo quedaba invisible.
+    echo "\n  — a qué plan se le pone la lupa —\n";
+
+    // Se limpia el terreno: se cierra la lección puesta arriba para que no
+    // interfiera, y se parte de cero con dos planes nuevos.
+    $pdo->prepare("UPDATE crecer_meta_plan SET leccion = NULL, funciono = NULL WHERE meta_id = ?")
+        ->execute([$meta_id]);
+    $pdo->prepare("DELETE FROM crecer_metricas WHERE marca_id = ?")->execute([$M]);
+    $pdo->prepare("DELETE FROM crecer_contenido WHERE meta_id = ?")->execute([$meta_id]);
+    $pdo->prepare("DELETE FROM crecer_meta_tactica WHERE meta_id = ?")->execute([$meta_id]);
+    $pdo->prepare("DELETE FROM crecer_meta_plan WHERE meta_id = ?")->execute([$meta_id]);
+
+    // ANTIGUO (cerró hace 12 días): publicó una pieza y nadie la ha medido.
+    $pdo->prepare("INSERT INTO crecer_meta_plan (meta_id, marca_id, version, estado, inicio_at, cierre_at)
+                   VALUES (?,?,?, 'completado', ?, ?)")
+        ->execute([$meta_id, $M, 10, date('Y-m-d H:i:s', strtotime('-25 days')),
+                   date('Y-m-d H:i:s', strtotime('-12 days'))]);
+    $plan_viejo = (int)$pdo->lastInsertId(); $creados['plan'][] = $plan_viejo;
+    $pdo->prepare("INSERT INTO crecer_contenido (marca_id, plataforma, tipo, caption, estado, meta_id, plan_id, publicado_at)
+                   VALUES (?, 'instagram','post','Publicado del plan viejo','publicado', ?, ?, ?)")
+        ->execute([$M, $meta_id, $plan_viejo, date('Y-m-d H:i:s', strtotime('-11 days'))]);
+    $creados['contenido'][] = (int)$pdo->lastInsertId();
+
+    // RECIENTE (cerró hace 3 días): se reemplazó sin llegar a publicar nada.
+    $pdo->prepare("INSERT INTO crecer_meta_plan (meta_id, marca_id, version, estado, inicio_at, cierre_at)
+                   VALUES (?,?,?, 'reemplazado', ?, ?)")
+        ->execute([$meta_id, $M, 11, date('Y-m-d H:i:s', strtotime('-10 days')),
+                   date('Y-m-d H:i:s', strtotime('-3 days'))]);
+    $plan_reciente = (int)$pdo->lastInsertId(); $creados['plan'][] = $plan_reciente;
+    $pdo->prepare("INSERT INTO crecer_contenido (marca_id, plataforma, tipo, caption, estado, meta_id, plan_id)
+                   VALUES (?, 'instagram','post','Borrador que nunca salió','borrador', ?, ?)")
+        ->execute([$M, $meta_id, $plan_reciente]);
+    $creados['contenido'][] = (int)$pdo->lastInsertId();
+
+    $s = MetaSnapshotReader::leer($pdo, $M);
+    $e = MetaStateComposer::componer($s);
+    ok('el reciente NO publicó, así que se observa el ANTERIOR',
+       (int)($s['observacion']['plan']['id'] ?? 0) === $plan_viejo,
+       'observó: ' . ($s['observacion']['plan']['id'] ?? 'null') . ' · esperaba ' . $plan_viejo);
+    ok('sin lección y con publicación sin métricas → K',
+       $e->estado === MetaState::K_MIDIENDO, "obtenido: {$e->estado}/{$e->razon}");
+    ok('K nombra el plan que está mirando',
+       (int)($e->evidencia['plan_id'] ?? 0) === $plan_viejo);
+
+    // ── 8 · Un plan ya evaluado NO está en observación ──────
+    echo "\n  — con lección, el plan sale de observación —\n";
+    $pdo->prepare("UPDATE crecer_meta_plan SET leccion = ?, funciono = 0 WHERE id = ?")
+        ->execute(['Publicamos poco y tarde; hay que apretar el ritmo.', $plan_viejo]);
+
+    $s2 = MetaSnapshotReader::leer($pdo, $M);
+    $e2 = MetaStateComposer::componer($s2);
+    ok('con lección, el lector ya no lo pone en observación', $s2['observacion'] === null,
+       'siguió observando: ' . ($s2['observacion']['plan']['id'] ?? '-'));
+    ok('y por tanto NO produce K (aunque siga sin métricas)',
+       $e2->estado !== MetaState::K_MIDIENDO, "obtenido: {$e2->estado}/{$e2->razon}");
+    ok('deja pasar a L', $e2->estado === MetaState::L_APRENDIZAJE,
+       "obtenido: {$e2->estado}/{$e2->razon}");
+    ok('y L trae la lección de ESE plan', (int)($e2->evidencia['plan_id'] ?? 0) === $plan_viejo);
+
+    // Quitando la lección, vuelve a observarse: la condición es la lección, no el tiempo.
+    $pdo->prepare("UPDATE crecer_meta_plan SET leccion = NULL, funciono = NULL WHERE id = ?")
+        ->execute([$plan_viejo]);
+    $s3 = MetaSnapshotReader::leer($pdo, $M);
+    ok('sin lección otra vez, vuelve a estar en observación',
+       (int)($s3['observacion']['plan']['id'] ?? 0) === $plan_viejo);
+
+    // ── 9 · 'abandonado' no se mide ─────────────────────────
+    echo "\n  — un plan abandonado no se mide —\n";
+    $pdo->prepare("UPDATE crecer_meta_plan SET estado = 'abandonado' WHERE id = ?")
+        ->execute([$plan_viejo]);
+    $s4 = MetaSnapshotReader::leer($pdo, $M);
+    ok('abandonado queda fuera de la observación', $s4['observacion'] === null,
+       'observó: ' . ($s4['observacion']['plan']['id'] ?? '-'));
+    $pdo->prepare("UPDATE crecer_meta_plan SET estado = 'completado' WHERE id = ?")
+        ->execute([$plan_viejo]);
+
     // ── 6 · Aislamiento por marca ───────────────────────────
     echo "\n  — aislamiento por marca —\n";
     $sv = MetaSnapshotReader::leer($pdo, $M2);
