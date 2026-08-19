@@ -242,9 +242,17 @@ function jugada_ideas(PDO $pdo, int $marca_id, array $t, int $n, array $inv): ar
         . "desmenuzas en {$n} pieza(s) CONCRETA(S) y DISTINTAS entre sí — distinto ángulo, distinto gancho, "
         . "distinto momento. Nada de la misma idea repetida con otras palabras.\n"
         . "Cada idea es de ESTE negocio y sirve para cumplir ESA jugada, no otra cosa.\n"
-        . "Responde SOLO JSON válido: {\"piezas\":[{\"plataforma\":\"instagram|facebook\",\"tipo\":\"post|reel|story\","
+        // El contrato de formatos: SOLO lo que el motor sabe producir de verdad.
+        // Si aquí se abre un formato, abajo tiene que existir quien lo haga.
+        . "Responde SOLO JSON válido: {\"piezas\":[{\"plataforma\":\"instagram|facebook\",\"tipo\":\"post|carrusel|reel|story\","
         . "\"tema\":\"2-4 palabras\",\"idea\":\"1-2 oraciones: qué se ve y por qué engancha\",\"usa_foto\":true|false}]}\n"
-        . "- `usa_foto`: true si esta pieza debería ir con una FOTO REAL del negocio (si te di fotos disponibles).";
+        . "- `usa_foto`: true si esta pieza debería ir con una FOTO REAL del negocio (si te di fotos disponibles).\n"
+        . "QUÉ ES CADA FORMATO (respeta el que pide la jugada):\n"
+        . "- post: una imagen y su texto.\n"
+        . "- carrusel: UNA historia en 5 slides que la gente desliza (el corillo la escribe y hace las imágenes).\n"
+        . "- reel: video. El dueño lo graba con su celular; nosotros escribimos el guion y lo montamos.\n"
+        . "- story: pieza de 24 horas, informal.\n"
+        . "Si la jugada pide un formato, ESA pieza va en ese formato — no lo cambies por uno más fácil.";
 
     $prompt = "Negocio:\n{$ctx}\n\n"
         . "LA JUGADA A CUMPLIR:\n"
@@ -431,10 +439,38 @@ function jugada_ejecutar(PDO $pdo, int $marca_id, int $tactica_id): array {
             if ($faltan <= 0) break;
             $plat = in_array($idea['plataforma'] ?? '', ['instagram','facebook'], true) ? $idea['plataforma']
                   : ($t['canal'] === 'facebook' ? 'facebook' : 'instagram');
-            $tipo = in_array($idea['tipo'] ?? '', ['post','story','reel'], true) ? $idea['tipo'] : 'post';
+            $tipo = in_array($idea['tipo'] ?? '', ['post','story','reel','carrusel'], true) ? $idea['tipo'] : 'post';
             $txt  = trim((string)($idea['tema'] ?? '') . ' — ' . (string)($idea['idea'] ?? ''));
             if ($txt === '—') $txt = (string)$t['que_hacer'];
             $fecha = $fecha_de($dia);
+
+            // ── CARRUSEL: lo arma el Guionista, slide por slide ─────────────
+            //  Antes 'carrusel' ni existía en la lista de arriba: la jugada
+            //  decía "haz un carrusel", el tipo se degradaba a 'post' EN
+            //  SILENCIO y salía una sola foto. El motor prometía un formato
+            //  que no sabía producir.
+            if ($tipo === 'carrusel') {
+                try {
+                    require_once __DIR__ . '/carrusel.php';
+                    $cr = carrusel_generar($pdo, $marca_id, $txt, 5);
+                    if (empty($cr['ok']) || empty($cr['contenido_id'])) {
+                        $notas[] = 'El carrusel no se pudo armar: ' . (string)($cr['err'] ?? 'sin motivo');
+                        continue;
+                    }
+                    $cid = (int)$cr['contenido_id'];
+                    // Amarrarlo a la jugada, al plan y a la meta, con SU fecha.
+                    $pdo->prepare("UPDATE crecer_contenido
+                                      SET plataforma=?, fecha_programada=?, meta_id=?, tactica_id=?, plan_id=?, updated_at=NOW()
+                                    WHERE id=? AND marca_id=?")
+                        ->execute([$plat, $fecha, $meta_id, $tactica_id, $plan_id, $cid, $marca_id]);
+                    $ids[] = $cid; $faltan--; $dia++;
+                    $notas[] = 'Carrusel de ' . count($cr['slides']) . ' slides: la historia está escrita, faltan las imágenes.';
+                } catch (Throwable $e) {
+                    error_log('jugada carrusel: ' . $e->getMessage());
+                    $notas[] = 'El carrusel no se pudo armar: ' . $e->getMessage();
+                }
+                continue;
+            }
 
             try {
                 $pdo->prepare(
