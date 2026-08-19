@@ -594,6 +594,78 @@ try {
         } catch (Throwable $e) { echo "  ERR: ".$e->getMessage()."\n"; }
     }
 
+    // ── ¿POR QUÉ RESULTADOS DICE 0?  &test=insights&marca=ID ──────────────
+    //  El dueño ve views y reach en Instagram, y el app le enseña cero. Esto
+    //  corre el refresco DE VERDAD contra Meta y enseña la respuesta cruda,
+    //  post por post: qué se pidió, qué contestó Meta y por qué quedó en null.
+    //  El botón de Operaciones se traga los errores con un catch vacío, así que
+    //  sin esto no hay manera de saber si es token, permiso o formato.
+    if ($__test === 'insights') {
+        require_once __DIR__ . '/includes/metricas.php';
+        require_once __DIR__ . '/includes/meta.php';
+        $mid = (int)($_GET['marca'] ?? 1);
+        echo "\n--- ¿Por qué Resultados dice 0? · marca {$mid} ---\n";
+
+        $conx = conexion_de_marca($pdo, $mid);
+        echo "conexión: " . (($conx['estado'] ?? '(ninguna)')) . " · token: "
+           . (empty($conx['page_access_token']) ? 'NO HAY' : 'presente') . "\n";
+        echo "ig_user_id: " . (($conx['ig_user_id'] ?? '—')) . " · página: " . (($conx['page_id'] ?? '—')) . "\n\n";
+
+        // Publicaciones con id de Meta (lo único que se puede medir).
+        $q = $pdo->prepare(
+            "SELECT p.contenido_id, p.plataforma, p.external_id, c.tipo, c.publicado_at,
+                    m.alcance, m.impresiones, m.interacciones, m.actualizado_at
+               FROM crecer_publicaciones p
+               JOIN crecer_contenido c ON c.id=p.contenido_id AND c.estado='publicado'
+          LEFT JOIN crecer_metricas m ON m.contenido_id=p.contenido_id AND m.plataforma=p.plataforma
+              WHERE p.marca_id=? AND p.estado='ok' AND p.external_id IS NOT NULL
+              ORDER BY c.publicado_at DESC LIMIT 12");
+        $q->execute([$mid]);
+        $filas = $q->fetchAll(PDO::FETCH_ASSOC);
+        echo "publicaciones medibles (con external_id): " . count($filas) . "\n";
+        foreach ($filas as $f) {
+            echo sprintf("  #%-5s %-9s %-9s alcance=%-6s views=%-6s inter=%-5s medido=%s\n",
+                $f['contenido_id'], $f['plataforma'], $f['tipo'],
+                $f['alcance'] ?? 'null', $f['impresiones'] ?? 'null',
+                $f['interacciones'] ?? 'null', $f['actualizado_at'] ?? 'nunca');
+        }
+
+        // Cuántas publicadas NO tienen fila de publicación (esas nunca se miden).
+        $sin = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido c
+                                  WHERE c.marca_id={$mid} AND c.estado='publicado'
+                                    AND NOT EXISTS (SELECT 1 FROM crecer_publicaciones p
+                                                     WHERE p.contenido_id=c.id AND p.estado='ok'
+                                                       AND p.external_id IS NOT NULL)")->fetchColumn();
+        echo "\npublicadas SIN id de Meta (invisibles para métricas): {$sin}\n";
+
+        // La llamada real, cruda, al primer post de cada tipo.
+        if (!empty($_GET['vivo']) && $filas && !empty($conx['page_access_token'])) {
+            $tok = (string)$conx['page_access_token'];
+            $vistos = [];
+            foreach ($filas as $f) {
+                $clave = $f['plataforma'] . ':' . $f['tipo'];
+                if (isset($vistos[$clave]) || count($vistos) >= 4) continue;
+                $vistos[$clave] = true;
+                echo "\n▶ {$clave} · contenido #{$f['contenido_id']} · media {$f['external_id']}\n";
+                try {
+                    $ins = ($f['plataforma'] === 'facebook')
+                         ? meta_insights_fb((string)$f['external_id'], $tok)
+                         : meta_insights_ig((string)$f['external_id'], $tok);
+                    echo "   alcance=" . var_export($ins['alcance'], true)
+                       . " views=" . var_export($ins['impresiones'] ?? null, true)
+                       . " me_gusta=" . var_export($ins['me_gusta'], true) . "\n";
+                    echo "   crudo: " . substr((string)($ins['crudo'] ?? '(vacío)'), 0, 420) . "\n";
+                } catch (Throwable $e) { echo "   ERROR: " . $e->getMessage() . "\n"; }
+            }
+        } else {
+            echo "\n(añade &vivo=1 para llamar a Meta de verdad y ver la respuesta cruda)\n";
+        }
+
+        $r = metricas_refrescar_insights($pdo, $mid, 12, 0);
+        echo "\nrefresco completo → " . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n";
+        exit;
+    }
+
     // DIAGNÓSTICO DE PUBLICACIÓN: ¿de verdad salió a las redes o falló calladito?
     //   &test=pub&marca=ID   (o &email=X para buscar su marca)
     if ($__test === 'pub') {       // solo lectura · ya estás dentro como admin
