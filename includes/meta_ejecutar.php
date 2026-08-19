@@ -107,6 +107,66 @@ function jugadas_sincronizar_marca(PDO $pdo, int $marca_id): int {
     return $n;
 }
 
+/**
+ * LAS PUERTAS DE UNA JUGADA — una cosa a la vez, y cada una abre DONDE se hace.
+ *
+ * Antes la jugada solo ofrecía "Ver las N piezas", que soltaba al dueño en una
+ * lista filtrada: el carrusel no se podía abrir como carrusel y al reel no se
+ * llegaba nunca. Aquí cada pieza sabe su puerta:
+ *   carrusel → carrusel.php?id=   ·   reel → reels.php?pieza=   ·   post → aprobar2.php?ver=
+ * La primera sin cerrar es la ACTIVA; las demás esperan su turno.
+ *
+ * @return array<int,array{n:int,total:int,tipo:string,titulo:string,href:string,listo:bool,activa:bool,cuando:string}>
+ */
+function jugada_puertas(PDO $pdo, array $t, int $marca_id, string $BASE): array {
+    $filas = [];
+    try {
+        $q = $pdo->prepare("SELECT id, tipo, estado, fecha_programada, necesita_material
+                              FROM crecer_contenido
+                             WHERE tactica_id=? AND marca_id=?
+                             ORDER BY fecha_programada IS NULL, fecha_programada ASC, id ASC");
+        $q->execute([(int)$t['id'], $marca_id]);
+        $filas = $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable $e) { return []; }
+    if (!$filas) return [];
+
+    $verbo = ['carrusel'=>'Hagamos el carrusel', 'reel'=>'Grabemos el reel',
+              'story'=>'Veamos la story',        'post'=>'Veamos el post'];
+    $dias  = ['Sun'=>'domingo','Mon'=>'lunes','Tue'=>'martes','Wed'=>'miércoles',
+              'Thu'=>'jueves','Fri'=>'viernes','Sat'=>'sábado'];
+    $total = count($filas);
+    $out = []; $n = 0; $activa_dada = false;
+    foreach ($filas as $f) {
+        $n++;
+        $tipo  = (string)$f['tipo'];
+        $cid   = (int)$f['id'];
+        $listo = in_array((string)$f['estado'], ['aprobado','programado','publicado'], true);
+        // El reel no está listo mientras el dueño no suba sus clips.
+        if ($tipo === 'reel' && !empty($f['necesita_material']) && (string)$f['estado'] !== 'publicado') $listo = false;
+        if ($tipo === 'carrusel')   $href = "{$BASE}/carrusel.php?marca={$marca_id}&id={$cid}";
+        elseif ($tipo === 'reel')   $href = "{$BASE}/reels.php?marca={$marca_id}&pieza={$cid}";
+        else                        $href = "{$BASE}/aprobar2.php?marca={$marca_id}&ver={$cid}";
+        $cuando = '';
+        if (!empty($f['fecha_programada'])) {
+            $ts = strtotime((string)$f['fecha_programada']);
+            if ($ts) {
+                $hoy = date('Y-m-d'); $dia = date('Y-m-d', $ts);
+                $cual = $dia === $hoy ? 'hoy'
+                      : ($dia === date('Y-m-d', strtotime('+1 day')) ? 'mañana'
+                      : ($dias[date('D', $ts)] ?? date('d/m', $ts)));
+                $cuando = $cual . ' ' . date('g:i A', $ts);
+            }
+        }
+        $activa = false;
+        if (!$listo && !$activa_dada) { $activa = true; $activa_dada = true; }
+        $out[] = ['n'=>$n, 'total'=>$total, 'id'=>$cid, 'tipo'=>$tipo,
+                  'titulo'=>$verbo[$tipo] ?? 'Veamos la pieza', 'href'=>$href,
+                  'listo'=>$listo, 'activa'=>$activa, 'cuando'=>$cuando,
+                  'estado'=>(string)$f['estado']];
+    }
+    return $out;
+}
+
 // ── EL INVENTARIO: mirar antes de gastar ─────────────────────
 /**
  * ¿Con qué contamos YA para esta jugada? Devuelve material reusable:

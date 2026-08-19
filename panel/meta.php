@@ -343,6 +343,40 @@ if ($meta) {
   .jg-video a{display:inline-flex;align-items:center;gap:7px;margin-top:10px;background:#5c4409;color:#fff;text-decoration:none;font-weight:800;font-size:13px;padding:9px 14px;border-radius:10px}
   .jg-video a svg{width:14px;height:14px}
 
+  /* ── LAS PUERTAS DE LA JUGADA ──────────────────────────────────────────
+     Móvil: una fila por pieza, gorda, de borde a borde, pulgar abajo.
+     Desktop: las mismas filas pero con aire y el estado a la derecha, para
+     leer la secuencia completa de un vistazo. Misma pieza, dos densidades. */
+  .jg-puertas{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+  .jg-puertas .pu{display:flex;align-items:center;gap:12px;text-decoration:none;
+    background:#fff;border:1.5px solid #e9e4dc;border-radius:14px;padding:13px 14px;color:inherit;
+    transition:transform .16s cubic-bezier(.22,1,.36,1),box-shadow .16s,border-color .16s}
+  .jg-puertas .pu:active{transform:scale(.985)}
+  .jg-puertas .pu-n{flex:none;min-width:44px;height:30px;display:inline-flex;align-items:center;justify-content:center;
+    background:#f4f1ec;color:#6b6560;border-radius:8px;font-size:11.5px;font-weight:800;letter-spacing:.02em}
+  .jg-puertas .pu-n svg{width:15px;height:15px}
+  .jg-puertas .pu-t{flex:1;min-width:0}
+  .jg-puertas .pu-t b{display:block;font-size:14.5px;line-height:1.25}
+  .jg-puertas .pu-t small{display:block;color:#6b6560;font-size:12px;line-height:1.45;margin-top:2px}
+  .jg-puertas .pu-go{flex:none;color:#b9b2a9}
+  .jg-puertas .pu-go svg{width:16px;height:16px;display:block}
+  /* La activa es la que manda: la única con color. */
+  .jg-puertas .pu.on{border-color:var(--magenta,#EF4375);box-shadow:0 10px 24px -18px rgba(239,67,117,.75)}
+  .jg-puertas .pu.on .pu-n{background:linear-gradient(135deg,#FF6B3D,#EF4375);color:#fff}
+  .jg-puertas .pu.on .pu-go{color:var(--magenta,#EF4375)}
+  .jg-puertas .pu.on:hover{transform:translateY(-1px);box-shadow:0 14px 30px -18px rgba(239,67,117,.85)}
+  /* Las que esperan turno no gritan. */
+  .jg-puertas .pu.esp{opacity:.62}
+  .jg-puertas .pu.ok{background:#f7fbf8;border-color:#d8ece0}
+  .jg-puertas .pu.ok .pu-n{background:#e6f7f0;color:#0a6a4a}
+  @media (min-width:820px){
+    .jg-puertas{gap:10px}
+    .jg-puertas .pu{padding:15px 18px;gap:14px}
+    .jg-puertas .pu-n{min-width:58px;height:34px;font-size:12px}
+    .jg-puertas .pu-t b{font-size:15.5px}
+    .jg-puertas .pu-t small{font-size:12.5px}
+  }
+
   /* Encabezado del plan vigente + cumplimiento */
   .plan-cab{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin:0 0 12px;flex-wrap:wrap}
   .plan-cab h2{font-family:var(--font-display,'Oswald',sans-serif);font-size:17px;letter-spacing:.4px;color:var(--tinta);margin:0}
@@ -769,7 +803,37 @@ if ($meta) {
                 </span>
               </div>
 
-              <?php if ((int)$jp['espera_video'] > 0): ?>
+              <?php /* LAS PUERTAS — una cosa a la vez, y cada una abre DONDE se
+                       hace: el carrusel en su constructor, el reel en el estudio
+                       con su guion, el post en su preview. Nada de listas. */ ?>
+              <?php $puertas = jugada_puertas($pdo, $t, $marca_id, $BASE); ?>
+              <?php if ($puertas): ?>
+                <div class="jg-puertas">
+                  <?php foreach ($puertas as $pu): ?>
+                    <a class="pu<?= $pu['listo'] ? ' ok' : ($pu['activa'] ? ' on' : ' esp') ?>"
+                       href="<?= $h($pu['href']) ?>">
+                      <span class="pu-n"><?= $pu['listo'] ? ico('check-circle') : $pu['n'] . ' de ' . $pu['total'] ?></span>
+                      <span class="pu-t">
+                        <b><?= $h($pu['titulo']) ?></b>
+                        <small>
+                          <?php if ($pu['listo']): ?>
+                            <?= $pu['estado'] === 'publicado' ? 'Publicado' : 'Listo' ?><?= $pu['cuando'] !== '' ? ' · sale ' . $h($pu['cuando']) : '' ?>
+                          <?php elseif ($pu['tipo'] === 'reel'): ?>
+                            El guion está escrito — falta tu video
+                          <?php elseif ($pu['tipo'] === 'carrusel'): ?>
+                            La historia está escrita — faltan las imágenes
+                          <?php else: ?>
+                            Míralo y dale tu OK<?= $pu['cuando'] !== '' ? ' · sale ' . $h($pu['cuando']) : '' ?>
+                          <?php endif; ?>
+                        </small>
+                      </span>
+                      <span class="pu-go"><?= ico('send') ?></span>
+                    </a>
+                  <?php endforeach; ?>
+                </div>
+              <?php endif; ?>
+
+              <?php if ((int)$jp['espera_video'] > 0 && !$puertas): ?>
                 <?php /* Lo único que el corillo NO puede hacer solo: el video.
                          Se dice claro y se le da el camino, en vez de fingir
                          que la pieza está lista. */ ?>
