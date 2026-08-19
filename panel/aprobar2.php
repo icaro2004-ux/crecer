@@ -2028,6 +2028,20 @@ $cf = [
     card.scrollIntoView({behavior:'smooth',block:'center'});
   })();
 
+  // Auto-abrir el PREVIEW de una pieza concreta: ?ver=<id>
+  // Es el enlace que usa el Relevo (Inicio) para que nada se apruebe ni se
+  // publique sin tener el post delante. Se engancha después de definir openPrev.
+  function verPieza(id){
+    var card=document.querySelector('.post[data-id="'+id+'"]');
+    if(!card){ return false; }
+    card.scrollIntoView({behavior:'smooth',block:'center'});
+    var a=card.querySelector('.prevlink');
+    if(a){ openPrev(a.dataset.img, a.dataset.copy, id); return true; }
+    // Sin arte todavía: no hay preview de redes, pero la pieza se ve en su tarjeta.
+    card.classList.add('resaltada');
+    return true;
+  }
+
   // Preview "cómo se ve en redes"
   var prevId=null;
   function openPrev(img, copy, id){
@@ -2073,6 +2087,16 @@ $cf = [
   document.querySelectorAll('.prevlink').forEach(function(a){
     a.addEventListener('click', function(e){ e.preventDefault(); var c=a.closest('.post'); openPrev(a.dataset.img, a.dataset.copy, c?c.dataset.id:null); });
   });
+  // ?ver=<id> → abre esa pieza. Si la pieza no está en la pestaña actual, se
+  // salta a la pestaña donde vive en vez de dejar al dueño mirando una lista.
+  (function(){
+    var m=location.search.match(/[?&]ver=(\d+)/); if(!m) return;
+    if (verPieza(m[1])) return;
+    var t=(location.search.match(/[?&]tab=([a-z]+)/)||[])[1]||'';
+    var saltos={'':'revisar','revisar':'listos','listos':'programados','programados':'publicados'};
+    var sig=saltos[t]; if(!sig) return;
+    var u=new URL(location.href); u.searchParams.set('tab',sig); location.replace(u.toString());
+  })();
 
   // Reprogramar un post (el dueño escoge el día)
   document.querySelectorAll('.fecha-in').forEach(function(inp){

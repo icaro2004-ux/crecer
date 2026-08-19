@@ -242,14 +242,14 @@ foreach ($dec_pieces as $p) {
     if ($p['estado'] === 'fallido') {
         $decisiones[] = $base + ['tipo'=>'reintentar','kick'=>'No se pudo publicar','ico'=>'bolt',
             'titulo'=>'Reintentar este post',
-            'acciones'=>[['t'=>'Reintentar','cls'=>'pri','href'=>"{$BASE}/aprobar2.php?tab=listos&{$mid}"]]];
+            'acciones'=>[['t'=>'Reintentar','cls'=>'pri','href'=>"{$BASE}/aprobar2.php?ver={$p['id']}&tab=listos&{$mid}"]]];
     } elseif ($p['estado'] === 'publicando') {
         // Quedó a mitad de camino (ej. la conexión se cayó publicando un video).
         // El lock se libera solo a los 10 min; reintentar antes es inofensivo
         // (el publicador dice "ya tomado" y no duplica).
         $decisiones[] = $base + ['tipo'=>'publicando','kick'=>'Saliendo a tus redes','ico'=>'clock',
             'titulo'=>'Este post se está publicando…',
-            'acciones'=>[['t'=>'Ver / Reintentar','cls'=>'pri','href'=>"{$BASE}/aprobar2.php?tab=listos&{$mid}"]]];
+            'acciones'=>[['t'=>'Ver / Reintentar','cls'=>'pri','href'=>"{$BASE}/aprobar2.php?ver={$p['id']}&tab=listos&{$mid}"]]];
     } elseif ($p['estado'] === 'borrador') {
         $decisiones[] = $base + ['tipo'=>'aprobar','kick'=>'Listo para tu OK','ico'=>'check-circle',
             'titulo'=>'¿Apruebas este post?',
@@ -262,7 +262,7 @@ foreach ($dec_pieces as $p) {
         if ($meta_ok) {
             $decisiones[] = $base + ['tipo'=>'publicar','kick'=>'Aprobado','ico'=>'image',
                 'titulo'=>'Publicar este post',
-                'acciones'=>[['t'=>'Publicar','cls'=>'pri','href'=>"{$BASE}/aprobar2.php?tab=listos&{$mid}"]]];
+                'acciones'=>[['t'=>'Publicar','cls'=>'pri','href'=>"{$BASE}/aprobar2.php?ver={$p['id']}&tab=listos&{$mid}"]]];
         } elseif (!$conectar_listo) {
             $conectar_listo = true;
             $decisiones[] = ['tipo'=>'conectar','kick'=>'Falta un paso','ico'=>'bolt','id'=>0,
@@ -367,19 +367,52 @@ if (defined('CRECER_KERNEL_V1_ENABLED') && CRECER_KERNEL_V1_ENABLED) {
             if (isset($kb['decision_feed'])) {
                 $df_ico  = ['resolve_failed_content'=>'bolt','review_content'=>'check-circle','publish_ready_content'=>'image','connect_networks'=>'bolt','prepare_first_week'=>'sparkles','suggest_autopilot'=>'refresh','complete_business_profile'=>'palette','complete_profile'=>'palette','show_sample_post'=>'image'];
                 $df_kick = ['resolve_failed_content'=>'No se pudo publicar','review_content'=>'Listo para tu OK','publish_ready_content'=>'Aprobado','connect_networks'=>'Falta un paso','prepare_first_week'=>'Empieza aquí','suggest_autopilot'=>'Sugerencia','complete_business_profile'=>'Completa tu marca','complete_profile'=>'Completa tu marca','show_sample_post'=>'Tu primer post'];
-                $decisiones = array_map(function ($d) use ($df_ico, $df_kick) {
+                // La pieza REAL detrás de cada decisión. El feed del Kernel solo
+                // trae el content_id: sin esto la tarjeta salía sin arte y con la
+                // explicación del agente en vez del caption — se aprobaba y se
+                // publicaba a ciegas. Nada se decide sin la pieza delante.
+                $df_ids = [];
+                foreach ($kb['decision_feed'] as $__d) {
+                    $__i = (int)($__d['evidence']['content_id'] ?? 0);
+                    if ($__i > 0) $df_ids[$__i] = true;
+                }
+                $df_pieza = [];
+                if ($df_ids) {
+                    $__in = implode(',', array_fill(0, count($df_ids), '?'));
+                    try {
+                        $__q = $pdo->prepare("SELECT id, caption, plataforma, grafica_path
+                                                FROM crecer_contenido
+                                               WHERE marca_id=? AND id IN ($__in)");
+                        $__q->execute(array_merge([$marca_id], array_keys($df_ids)));
+                        foreach ($__q->fetchAll(PDO::FETCH_ASSOC) as $__r) $df_pieza[(int)$__r['id']] = $__r;
+                    } catch (Throwable $e) { error_log('decision_feed piezas: ' . $e->getMessage()); }
+                }
+                // Decisiones que tocan una pieza: la acción principal SIEMPRE la abre.
+                $df_verla = ['review_content'=>1, 'publish_ready_content'=>1, 'resolve_failed_content'=>1];
+                $decisiones = array_map(function ($d) use ($df_ico, $df_kick, $df_pieza, $df_verla, $BASE, $mid) {
                     $t = $d['type'] ?? 'decision';
+                    $id = (int)($d['evidence']['content_id'] ?? 0);
+                    $pz = $df_pieza[$id] ?? null;
                     $acc = [];
                     $pa = $d['primary_action'] ?? [];
-                    if (!empty($pa['label'])) $acc[] = ['t'=>$pa['label'], 'cls'=>'pri', 'href'=>$pa['href'] ?? '#'];
+                    if (!empty($pa['label'])) {
+                        $href = $pa['href'] ?? '#';
+                        if ($id > 0 && isset($df_verla[$t])) {
+                            $href = "{$BASE}/aprobar2.php?ver={$id}&{$mid}";
+                        }
+                        $acc[] = ['t'=>$pa['label'], 'cls'=>'pri', 'href'=>$href];
+                    }
                     foreach (($d['secondary_actions'] ?? []) as $sa) {
                         if (!empty($sa['label'])) $acc[] = ['t'=>$sa['label'], 'cls'=>'gho', 'href'=>$sa['href'] ?? '#'];
                     }
+                    $cap = $pz ? trim((string)$pz['caption']) : '';
                     return [
-                        'tipo'=>$t, 'id'=>(int)($d['evidence']['content_id'] ?? 0),
+                        'tipo'=>$t, 'id'=>$id,
                         'kick'=>$df_kick[$t] ?? 'Para ti', 'ico'=>$df_ico[$t] ?? 'sparkles',
                         'titulo'=>$d['headline'] ?? 'Próxima decisión',
-                        'preview'=>$d['explanation'] ?? '', 'plataforma'=>'', 'grafica'=>'',
+                        'preview'=>($cap !== '' ? $cap : ($d['explanation'] ?? '')),
+                        'plataforma'=>$pz ? (string)$pz['plataforma'] : '',
+                        'grafica'=>$pz ? (string)$pz['grafica_path'] : '',
                         'acciones'=>$acc,
                     ];
                 }, $kb['decision_feed']);

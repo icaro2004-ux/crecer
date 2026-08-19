@@ -231,6 +231,65 @@ function reels_analizar(PDO $pdo, array $reel, array $clips): array {
     }
 
     $marca = reels_marca($pdo, $marca_id);
+
+    // ── UN SOLO CLIP ────────────────────────────────────────────────────────
+    // El dueño que sube un video ya editado NO viene a que se lo cortemos: viene
+    // por música, captions y el 9:16. Aquí el video se respeta entero (un solo
+    // segmento, sin transiciones internas) y lo único que se le pide al modelo
+    // son el gancho, el mood de la música y los rótulos con su tiempo.
+    if (count($clips) === 1) {
+        $c0   = $clips[0];
+        $dur0 = $c0['dur_orig'] !== null ? (float)$c0['dur_orig'] : 0.0;
+        $largo = $dur0 > 0 ? min($dur0, 30.0) : 15.0;    // se respeta tal cual, tope 30s
+        $sis1 = "Eres el editor de video del Corillo de Crecer, para un micronegocio "
+            . "boricua. El dueño YA editó este video: NO se corta, NO se reordena, "
+            . "se publica entero. Tu trabajo es ponerle el gancho, escoger el mood de "
+            . "la música y escribir los rótulos que aparecen encima, con su tiempo. "
+            . "Los rótulos NO narran lo obvio: rematan, dan contexto o empujan a la acción. "
+            . "NO inventes productos ni promesas que no se vean en el video. Devuelve SOLO JSON válido."
+            . reels_voz_sistema($marca);
+        $pr1 = "El video dura " . number_format($largo, 1) . "s"
+            . ($imagenes ? " y te mando su fotograma para que veas qué se ve." : ".") . "\n"
+            . ($contexto !== '' ? "Contexto que dio el dueño: \"{$contexto}\"\n" : "")
+            . "Estilo pedido: {$preset['nombre']} ({$preset['ritmo']}).\n\n"
+            . "Devuelve EXACTAMENTE este JSON:\n"
+            . "{\n"
+            . "  \"hook\": \"gancho MUY corto para el primer segundo (máx 5 palabras)\",\n"
+            . "  \"musica_mood\": \"upbeat|energetico|elegante\",\n"
+            . "  \"resumen\": \"una línea de qué se ve\",\n"
+            . "  \"captions\": [ {\"t\": 0.0, \"len\": 3.0, \"texto\": \"rótulo corto\"} ]\n"
+            . "}\n"
+            . "- Entre 2 y 5 rótulos, en orden, sin solaparse, dentro de los "
+            . number_format($largo, 1) . "s.\n"
+            . "- Cada rótulo máximo 8 palabras.";
+        $r1 = ia_ejecutar($pdo, 'reels', 'analizar_clip_unico', $pr1, [
+            'marca_id' => $marca_id, 'sistema' => $sis1, 'imagenes' => $imagenes,
+            'json' => true, 'max_tokens' => 1200, 'temperatura' => 0.7, 'thinking_budget' => 0,
+        ]);
+        if (!empty($r1['ia_log_id'])) reels_set($pdo, (int)$reel['id'], ['ia_log_id' => (int)$r1['ia_log_id']]);
+        $p1 = json_decode(trim((string)$r1['texto']), true);
+        if (!is_array($p1)) $p1 = [];
+        $caps = [];
+        foreach ((array)($p1['captions'] ?? []) as $cp) {
+            $txt = trim((string)($cp['texto'] ?? ''));
+            if ($txt === '') continue;
+            $t   = max(0.0, (float)($cp['t'] ?? 0));
+            $len = (float)($cp['len'] ?? 2.5);
+            if ($len < 1.0) $len = 1.0;
+            if ($t >= $largo) continue;
+            if ($t + $len > $largo) $len = max(1.0, $largo - $t);
+            $caps[] = ['t' => round($t, 2), 'len' => round($len, 2), 'texto' => mb_substr($txt, 0, 90)];
+        }
+        return [
+            'hook'        => mb_substr(trim((string)($p1['hook'] ?? '')), 0, 60),
+            'musica_mood' => (string)($p1['musica_mood'] ?? $preset['mood']),
+            'resumen'     => mb_substr(trim((string)($p1['resumen'] ?? '')), 0, 240),
+            'segmentos'   => [['clip' => 0, 'in' => 0.0, 'out' => round($largo, 2), 'caption' => '']],
+            'captions'    => $caps,
+            'entero'      => true,   // el video va tal cual: sin transiciones internas
+        ];
+    }
+
     $sistema = "Eres el editor de video del Corillo de Crecer, para un micronegocio "
         . "(repostería, comida, servicios). Montas un REEL vertical corto "
         . "(8–22s) para Instagram/Facebook. Estilo pedido: {$preset['nombre']} "
@@ -501,8 +560,12 @@ function reels_construir_timeline(array $reel, array $clips, array $edl, ?array 
             'fit'   => 'crop',                 // llena el 9:16 sin bordes
             'transition' => ['in' => $preset['trans_in'], 'out' => $preset['trans_out']],
         ];
-        if (!empty($preset['filtro'])) $vc['filter'] = $preset['filtro'];   // color por estilo
-        if (!empty($preset['efecto'])) $vc['effect'] = $preset['efecto'];
+        // Video ya editado por el dueño: se respeta. Nada de ken burns ni de
+        // recolorearlo por estilo — el estilo entra por música y rótulos.
+        if (empty($edl['entero'])) {
+            if (!empty($preset['filtro'])) $vc['filter'] = $preset['filtro'];   // color por estilo
+            if (!empty($preset['efecto'])) $vc['effect'] = $preset['efecto'];
+        }
         if ($subs) $vc['alias'] = 'seg' . $idx;   // para transcribir su voz
         $video_clips[] = $vc;
 
@@ -524,6 +587,25 @@ function reels_construir_timeline(array $reel, array $clips, array $edl, ?array 
     }
 
     $total = round($cursor + $overlap, 2);
+
+    // Rótulos con tiempo propio (reel de un solo clip): el video va entero, así
+    // que los captions no cuelgan de los cortes — tienen su propio reloj.
+    if (!$subs && !empty($edl['captions']) && is_array($edl['captions'])) {
+        foreach ($edl['captions'] as $cp) {
+            $txt = trim((string)($cp['texto'] ?? ''));
+            if ($txt === '') continue;
+            $t   = max(0.0, (float)($cp['t'] ?? 0));
+            if ($t >= $total) continue;
+            $len = min((float)($cp['len'] ?? 2.5), max(0.8, $total - $t));
+            $caption_clips[] = [
+                'asset'    => reels_caption_asset($txt, $preset, false),
+                'start'    => round($t, 2),
+                'length'   => round($len, 2),
+                'position' => 'bottom',
+                'transition' => ['in' => 'fade', 'out' => 'fade'],
+            ];
+        }
+    }
 
     // Cierre de marca (end card ~2.6s).
     $endcard = reels_endcard_asset($marca, $preset);

@@ -117,10 +117,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        if ($guardados < 2) {
+        // Un clip basta. El dueño que ya editó su video no viene a que se lo
+        // corten: viene por los captions, la música y el montaje 9:16. Exigirle
+        // un segundo clip era una regla nuestra, no una necesidad del reel.
+        if ($guardados < 1) {
             $pdo->prepare("DELETE FROM crecer_reel_clips WHERE reel_id=?")->execute([$reel_id]);
             $pdo->prepare("DELETE FROM crecer_reels WHERE id=?")->execute([$reel_id]);
-            echo json_encode(['ok'=>false,'err'=>($errores[0] ?? 'Necesito al menos 2 clips.')]); exit;
+            echo json_encode(['ok'=>false,'err'=>($errores[0] ?? 'Necesito al menos un clip.')]); exit;
         }
 
         reels_disparar($reel_id); // fire-and-forget: analiza → arma → renderiza
@@ -515,7 +518,7 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
     <div class="card">
       <div class="kick">Paso 1 de 3</div>
       <h2 class="qh">Tira tus clips aquí</h2>
-      <p class="sub">Mínimo 2. Mientras más ángulos, mejor la mezcla. (mp4/mov, máx 100 MB c/u)</p>
+      <p class="sub">Con uno basta — si ya tienes tu video editado, súbelo y le ponemos música y captions. Si tiras varios, el corillo los mezcla. (mp4/mov, máx 100 MB c/u)</p>
       <div class="drop" id="drop">
         <div class="big"><?= ico('camera') ?></div>
         <b>Toca para escoger tus videos</b>
@@ -750,7 +753,7 @@ function renderClips(){
   });
   gate();
 }
-function gate(){ $('#n1').disabled = files.length < 2; }
+function gate(){ $('#n1').disabled = files.length < 1; }
 
 // Extrae 1 fotograma (mitad) + la duración, en el navegador.
 function extractFrame(item){
