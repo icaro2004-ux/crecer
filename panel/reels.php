@@ -309,6 +309,15 @@ $active = 'reels';
 $page_title = 'Reels Studio';
 require __DIR__ . '/_shell.php';
 ?>
+<?php /* Regreso predecible: si se llegó desde Tu Meta, hay una salida clara de
+         vuelta. Sin esto la acción del estado dominante era un viaje de ida. */ ?>
+<?php if (($_GET["volver"] ?? "") === "meta"): ?>
+<a href="/crecer/panel/meta.php?marca=<?= (int)$marca_id ?>"
+   style="display:inline-flex;align-items:center;gap:7px;min-height:44px;line-height:44px;
+          font-size:14px;font-weight:700;color:var(--muted);text-decoration:none">&larr; Volver a tu meta</a>
+<?php endif; ?>
+<?php
+?>
 <style>
 :root{
   --rosa:#EF4375; --teal:#00A49F; --navy:#231F20;
