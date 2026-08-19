@@ -59,7 +59,10 @@ if ($row && trim((string)($row['img_job'] ?? '')) === '') {
 // 2) Sondea gpt-image-2. ok → avisa. error → Gemini. sigue en progreso → espera.
 $estado = 'queued';
 for ($i = 0; $i < 80; $i++) {                 // ~4 min de ventana (gpt-image-2 tarda ~3)
-    try { $r = img_resp_completar($pdo, $mid, $pid); $estado = (string)($r['estado'] ?? 'queued'); }
+    // dedicado=true: este worker existe para ESTA pieza y el dueno esta mirando.
+    // Sin el flag heredaria el backoff del barrido (1-2-4 min) y su bucle de 3s
+    // se volveria inutil - el camino rapido moriria por culpa del arreglo.
+    try { $r = img_resp_completar($pdo, $mid, $pid, true); $estado = (string)($r['estado'] ?? 'queued'); }
     catch (Throwable $e) { $estado = 'queued'; }
     if ($estado === 'ok') { $notif_ok(); exit; }
     if ($estado === 'error') { error_log("arte_worker #{$pid}: gpt error → Gemini"); $respaldo_gemini(); }

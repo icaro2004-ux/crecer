@@ -33,22 +33,26 @@ function img_resp_activo(): bool {
 //  al log se escribe UNA vez por TRANSICIÓN, no una por sondeo.
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Sondeos fallidos seguidos tras los que el job se da por muerto. */
-if (!defined('IMG_POLL_MAX_INTENTOS')) define('IMG_POLL_MAX_INTENTOS', 12);
-/** Edad máxima de un job, aunque el proveedor lo siga reportando vivo. */
-if (!defined('IMG_POLL_MAX_HORAS'))    define('IMG_POLL_MAX_HORAS', 24);
+/** Cuanto espera un sondeo OPORTUNISTA (barrido de pantalla) antes de reintentar. */
+if (!defined('IMG_POLL_LEASE_SEG'))     define('IMG_POLL_LEASE_SEG', 120);
+/** Lo mismo para el worker DEDICADO, que sondea cada 3s mientras el dueno mira. */
+if (!defined('IMG_POLL_LEASE_DED_SEG')) define('IMG_POLL_LEASE_DED_SEG', 10);
+/** Horas sin poder CONSULTAR tras las que el job se aparca (no se da por fallido). */
+if (!defined('IMG_POLL_MAX_HORAS'))     define('IMG_POLL_MAX_HORAS', 24);
+/** Tope duro para un job que el proveedor sigue reportando VIVO. */
+if (!defined('IMG_POLL_VIVO_DIAS'))     define('IMG_POLL_VIVO_DIAS', 7);
 
 /**
  * Clasifica un fallo de sondeo en una etiqueta corta y estable. El texto crudo
  * del error NO se guarda en la pieza: puede traer cuerpos de respuesta del
- * proveedor, y lo único que necesitamos para decidir es la clase.
+ * proveedor, y lo unico que necesitamos para decidir es la clase.
  */
 function img_poll_clase_error(?string $msg): string {
     $m = strtolower((string)$msg);
     if ($m === '')                                            return 'sin_detalle';
     // Config antes que HTTP: IaSinCredenciales dice "Falta OPENAI_API_KEY.", que
-    // no trae la palabra 'credenciales' ni código alguno. Sin este caso caía en
-    // 'no_clasificado' — y es justo el fallo que más veces se va a ver.
+    // no trae la palabra 'credenciales' ni codigo alguno. Sin este caso caia en
+    // 'no_clasificado' - y es justo el fallo que mas veces se va a ver.
     if (strpos($m, 'credencial') !== false || strpos($m, 'api_key') !== false
         || strpos($m, 'api key') !== false)                   return 'sin_credenciales';
     if (strpos($m, '429') !== false)                          return 'rate_limit_429';
@@ -62,69 +66,118 @@ function img_poll_clase_error(?string $msg): string {
 }
 
 /**
- * DECISIÓN PURA: qué hacer con un job de imagen. No toca base, ni red, ni reloj
- * del sistema — el ahora entra como parámetro. Así las pruebas cubren el
- * backoff, el tope de intentos y la transición sin llamar a ningún proveedor.
+ * DECISION PURA: que hacer con un job de imagen. No toca base, ni red, ni reloj
+ * del sistema - el ahora entra como parametro.
  *
- * @param array   $j       ['intentos'=>int, 'job_at'=>?string]
- * @param ?string $status  estado remoto (completed|failed|cancelled|incomplete|
- *                         queued|in_progress). null = NO se pudo consultar.
- * @param ?string $err     mensaje crudo del fallo de sondeo, si lo hubo
- * @param string  $ahora   'Y-m-d H:i:s'
- * @return array ['accion'=>'guardar'|'fallar'|'esperar', 'intentos'=>int,
+ * LA DISTINCION QUE MANDA: "no pude preguntar" NO es "el proveedor fallo".
+ *   - Solo failed/cancelled/incomplete CONFIRMADOS habilitan el respaldo.
+ *   - Si no se pudo consultar (red, auth, timeout), el trabajo sigue pudiendo
+ *     completar: se conserva img_job, no hay respaldo y no hay error terminal.
+ *     A lo sumo se APARCA, que es diferido y reconciliable, no muerto.
+ *
+ * @param array   $j      ['intentos'=>int, 'job_at'=>?string]
+ * @param ?string $status estado remoto. null = NO se pudo consultar.
+ * @param ?string $err    mensaje crudo del fallo de consulta, si lo hubo
+ * @param string  $ahora  'Y-m-d H:i:s'
+ * @param bool    $dedicado true = worker con el dueno esperando (cadencia corta)
+ * @return array ['accion'=>'guardar'|'fallback'|'esperar'|'aparcar', 'intentos'=>int,
  *                'next_poll_at'=>?string, 'incidente'=>bool, 'clase'=>?string]
  *
- * 'incidente' = true significa UNA fila en crecer_ia_log. Solo se enciende en
- * la transición a fallido: es la diferencia entre 852 filas y 8.
+ * 'incidente' = UNA fila en crecer_ia_log, y solo en una transicion.
  */
-function img_poll_decidir(array $j, ?string $status, ?string $err, string $ahora): array {
+function img_poll_decidir(array $j, ?string $status, ?string $err, string $ahora, bool $dedicado = false): array {
     $intentos = (int)($j['intentos'] ?? 0);
     $t        = strtotime($ahora) ?: time();
     $edad_h   = !empty($j['job_at']) ? max(0, ($t - (int)strtotime((string)$j['job_at'])) / 3600) : 0;
 
-    // Llegó la imagen: se acabó el ciclo. El éxito no necesita incidente.
+    // Llego la imagen.
     if ($status === 'completed') {
         return ['accion'=>'guardar', 'intentos'=>$intentos, 'next_poll_at'=>null,
                 'incidente'=>false, 'clase'=>null];
     }
 
-    // El proveedor dice que ese trabajo ya no va a salir. Una transición, un log.
+    // El PROVEEDOR confirma que ese trabajo no va a salir. Unico caso que
+    // habilita el respaldo automatico, porque es el unico donde consta.
     if (in_array((string)$status, ['failed', 'cancelled', 'incomplete'], true)) {
-        return ['accion'=>'fallar', 'intentos'=>$intentos, 'next_poll_at'=>null,
+        return ['accion'=>'fallback', 'intentos'=>$intentos, 'next_poll_at'=>null,
                 'incidente'=>true, 'clase'=>'proveedor_' . $status];
     }
 
     $intentos++;
-    // Backoff exponencial con techo: 1, 2, 4, 8, 16, 32, 60, 60...
-    $espera = min(60, (int)pow(2, max(0, $intentos - 1)));
-    $prox   = date('Y-m-d H:i:s', $t + $espera * 60);
+    // El backoff depende de QUIEN sondea. El worker dedicado mantiene su cadencia
+    // de 3s (el dueno esta mirando); el barrido de pantalla sube 1-2-4...60 min.
+    // Sin esta distincion el backoff mataria el camino rapido: un dano mayor que
+    // la amplificacion que vino a arreglar.
+    $prox = $dedicado
+        ? date('Y-m-d H:i:s', $t + 3)
+        : date('Y-m-d H:i:s', $t + min(60, (int)pow(2, max(0, $intentos - 1))) * 60);
 
     if ($status === null) {
-        // No se pudo consultar. Se rinde por intentos o por edad — pero UNA vez.
-        if ($intentos >= (int)IMG_POLL_MAX_INTENTOS || $edad_h >= (float)IMG_POLL_MAX_HORAS) {
-            return ['accion'=>'fallar', 'intentos'=>$intentos, 'next_poll_at'=>null,
+        // NO SE PUDO CONSULTAR. Nunca terminal, nunca respaldo. Se aparca por
+        // TIEMPO, no por numero de intentos: asi la decision no depende de la
+        // cadencia con que se pregunte.
+        if ($edad_h >= (float)IMG_POLL_MAX_HORAS) {
+            return ['accion'=>'aparcar', 'intentos'=>$intentos, 'next_poll_at'=>null,
                     'incidente'=>true, 'clase'=>img_poll_clase_error($err)];
         }
         return ['accion'=>'esperar', 'intentos'=>$intentos, 'next_poll_at'=>$prox,
                 'incidente'=>false, 'clase'=>img_poll_clase_error($err)];
     }
 
-    // El proveedor lo reporta VIVO (queued/in_progress). Un trabajo que el
-    // proveedor sostiene no lo mata nuestro contador de intentos: solo la edad.
-    if ($edad_h >= (float)IMG_POLL_MAX_HORAS) {
-        return ['accion'=>'fallar', 'intentos'=>$intentos, 'next_poll_at'=>null,
-                'incidente'=>true, 'clase'=>'vencido_por_edad'];
+    // El proveedor lo reporta VIVO. Mientras lo sostenga puede completar, asi que
+    // no se lanza un segundo proveedor ni se le pone fecha de muerte a las 24h.
+    // Solo el tope duro lo aparca, y aparcar tampoco autoriza respaldo.
+    if ($edad_h >= (float)IMG_POLL_VIVO_DIAS * 24) {
+        return ['accion'=>'aparcar', 'intentos'=>$intentos, 'next_poll_at'=>null,
+                'incidente'=>true, 'clase'=>'vivo_tope_duro'];
     }
     return ['accion'=>'esperar', 'intentos'=>$intentos, 'next_poll_at'=>$prox,
             'incidente'=>false, 'clase'=>null];
 }
 
 /**
+ * Esta aplicada la migracion del backoff? Se consulta UNA vez por proceso.
+ *
+ * Existe para que el codigo pueda desplegarse ANTES que el SQL sin tumbar
+ * ninguna pantalla. Sin las columnas se pierde el backoff, pero se conserva lo
+ * esencial del arreglo: un sondeo fallido NO escribe en el log.
+ */
+function img_poll_columnas(PDO $pdo): bool {
+    static $hay = null;
+    if ($hay !== null) return $hay;
+    try { $hay = (bool)$pdo->query("SHOW COLUMNS FROM crecer_contenido LIKE 'img_next_poll_at'")->fetch(); }
+    catch (Throwable $e) { $hay = false; }
+    return $hay;
+}
+
+/**
+ * LEASE ATOMICO. Un solo UPDATE condicional decide quien puede preguntarle al
+ * proveedor: quien mueva la fila gana. Los demas reciben false y se van sin
+ * llamar a nadie.
+ *
+ * Se apoya en img_next_poll_at, que ya es la puerta del backoff: tomar el lease
+ * es adelantarla, de modo que un proceso caido solo bloquea lo que dure.
+ */
+function img_poll_tomar_lease(PDO $pdo, int $marca_id, int $post_id, string $rid, bool $dedicado = false): bool {
+    if (!img_poll_columnas($pdo)) return true;   // sin migracion no hay lease que tomar
+    $seg = $dedicado ? (int)IMG_POLL_LEASE_DED_SEG : (int)IMG_POLL_LEASE_SEG;
+    try {
+        $u = $pdo->prepare("UPDATE crecer_contenido
+                               SET img_next_poll_at = DATE_ADD(NOW(), INTERVAL {$seg} SECOND)
+                             WHERE id=? AND marca_id=? AND img_job=?
+                               AND (img_next_poll_at IS NULL OR img_next_poll_at <= NOW())");
+        $u->execute([$post_id, $marca_id, $rid]);
+        return $u->rowCount() === 1;
+    } catch (Throwable $e) { error_log('img_poll_tomar_lease: ' . $e->getMessage()); return false; }
+}
+
+/**
  * Reinicia el ciclo de sondeo de una pieza. Se llama donde se ENCOLA o donde el
- * dueño pide un reintento explícito: eso es una operación NUEVA, con su propio
- * presupuesto de intentos, no la continuación de la que se rindió.
+ * dueno pide un reintento explicito: eso es una operacion NUEVA, con su propio
+ * presupuesto, no la continuacion de la que se aparco.
  */
 function img_poll_reiniciar(PDO $pdo, int $marca_id, int $post_id): void {
+    if (!img_poll_columnas($pdo)) return;
     try {
         $pdo->prepare("UPDATE crecer_contenido
                           SET img_intentos=0, img_next_poll_at=NULL,
@@ -277,10 +330,11 @@ function img_resp_encolar(PDO $pdo, int $marca_id, int $post_id, string $copy, ?
         $brief = img_resp_brief($m, $copy, $con_texto, $logo !== null, $extra, $estilo, $lente, $evitar);
         $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1'] + ($logo ? ['logo' => $logo] : []));
         // img_job_at fecha el nacimiento del job y los contadores arrancan limpios:
-        // un job nuevo no hereda el backoff del que se rindio.
+        // un job nuevo no hereda el backoff del que se aparco.
+        $nuevo = img_poll_columnas($pdo)
+            ? ", img_job_at=NOW(), img_intentos=0, img_next_poll_at=NULL, img_error_clase=NULL" : "";
         $pdo->prepare("UPDATE crecer_contenido
-                          SET img_job=?, img_estado='queued', img_job_at=NOW(),
-                              img_intentos=0, img_next_poll_at=NULL, img_error_clase=NULL
+                          SET img_job=?, img_estado='queued'" . $nuevo . "
                         WHERE id=? AND marca_id=?")
             ->execute([$bg['id'], $post_id, $marca_id]);
         // La huella se registra AL ENCOLAR (no al terminar): así dos piezas
@@ -417,12 +471,15 @@ function img_sweep_pendientes(PDO $pdo, int $marca_id, bool $solo_recoger = fals
         $limite = max(1, min(50, $limite));
         // Recoge jobs con response_id, Y TAMBIÉN los colgados sin job >2 min (el worker
         // se murió/bloqueó antes de crear el job → sin esto quedaban en 'queued' para siempre).
-        // La puerta del backoff va EN EL SELECT, no en PHP: una pieza que todavía
-        // no toca sondear ni siquiera se trae. Sin esto, cada pantalla volvía a
-        // evaluar todos los jobs trancados — que es como se llegó a 852 filas.
+        // La puerta del backoff va EN EL SELECT, no en PHP: una pieza que todavia
+        // no toca sondear ni siquiera se trae. Sin esto, cada pantalla volvia a
+        // evaluar todos los jobs trancados - que es como se llego a 852 filas.
+        // El filtro se omite si aun no corrio la migracion: el codigo puede ir
+        // por delante del SQL sin tumbar ninguna pantalla.
+        $puerta = img_poll_columnas($pdo)
+            ? " AND (img_next_poll_at IS NULL OR img_next_poll_at <= NOW())" : "";
         $pend = $pdo->prepare("SELECT id, img_job FROM crecer_contenido
-             WHERE marca_id=? AND img_estado='queued'
-               AND (img_next_poll_at IS NULL OR img_next_poll_at <= NOW())
+             WHERE marca_id=? AND img_estado='queued'" . $puerta . "
                AND (img_job IS NOT NULL OR updated_at < (NOW() - INTERVAL 2 MINUTE))
              ORDER BY id DESC LIMIT " . $limite);
         $pend->execute([$marca_id]);
@@ -462,23 +519,26 @@ function img_sweep_pendientes(PDO $pdo, int $marca_id, bool $solo_recoger = fals
  * actualiza crecer_contenido. Devuelve ['estado'=>ok|queued|error|none, 'img'=>url|null].
  * Idempotente: si ya no hay job pendiente, reporta el estado actual.
  */
-function img_resp_completar(PDO $pdo, int $marca_id, int $post_id): array {
-    $q = $pdo->prepare("SELECT img_job, img_estado, grafica_path, img_intentos, img_job_at, img_next_poll_at
-                          FROM crecer_contenido WHERE id=? AND marca_id=?");
+function img_resp_completar(PDO $pdo, int $marca_id, int $post_id, bool $dedicado = false): array {
+    $cols = img_poll_columnas($pdo);
+    $sel  = $cols
+        ? "SELECT img_job, img_estado, grafica_path, img_intentos, img_job_at, img_next_poll_at FROM crecer_contenido WHERE id=? AND marca_id=?"
+        : "SELECT img_job, img_estado, grafica_path FROM crecer_contenido WHERE id=? AND marca_id=?";
+    $q = $pdo->prepare($sel);
     $q->execute([$post_id, $marca_id]);
     $row = $q->fetch(PDO::FETCH_ASSOC);
     if (!$row) return ['estado' => 'error', 'img' => null];
     $rid = trim((string)($row['img_job'] ?? ''));
     if ($rid === '') return ['estado' => ($row['grafica_path'] ? 'ok' : 'none'), 'img' => $row['grafica_path'] ?: null];
 
-    // ── LA PUERTA. Aquí se corta la amplificación: si el backoff no venció, se
-    //    sale ANTES de llamar al proveedor y sin escribir una sola fila. Cien
-    //    cargas de pantalla seguidas cuestan cien SELECT y cero logs.
-    $ahora = date('Y-m-d H:i:s');
-    if (!empty($row['img_next_poll_at']) && $row['img_next_poll_at'] > $ahora) {
+    // ── EL LEASE. Un UPDATE condicional decide quien pregunta: quien mueva la
+    //    fila gana y llama al proveedor; los demas se van sin llamar a nadie.
+    //    Va ANTES de la llamada, no despues, que es lo unico que sirve.
+    if (!img_poll_tomar_lease($pdo, $marca_id, $post_id, $rid, $dedicado)) {
         return ['estado' => 'queued', 'img' => null, 'diferido' => true];
     }
 
+    $ahora  = date('Y-m-d H:i:s');
     $status = null; $err = null; $st = [];
     try {
         $st = openai_responses_estado($rid);
@@ -487,56 +547,99 @@ function img_resp_completar(PDO $pdo, int $marca_id, int $post_id): array {
         if ($status === 'completed' && ($st['b64'] ?? '') === '') $status = 'in_progress';
     } catch (Throwable $e) {
         error_log('img_resp_completar: ' . $e->getMessage());
-        $err = $e->getMessage();          // status queda null = no se pudo consultar
+        $err = $e->getMessage();          // status queda null = NO se pudo consultar
     }
 
     $d = img_poll_decidir(
-        ['intentos' => (int)$row['img_intentos'], 'job_at' => $row['img_job_at']],
-        $status, $err, $ahora
+        ['intentos' => (int)($row['img_intentos'] ?? 0), 'job_at' => $row['img_job_at'] ?? null],
+        $status, $err, $ahora, $dedicado
     );
 
+    // ── GUARDAR ────────────────────────────────────────────────────────────
     if ($d['accion'] === 'guardar') {
-        $bin = base64_decode((string)($st['b64'] ?? ''));
-        $rel = "marca_{$marca_id}/graficas/resp_{$post_id}_" . substr(md5((string)microtime(true)), 0, 6) . '.png';
+        // Nombre DETERMINISTA a partir del job: si dos procesos llegaran a
+        // guardar, escriben el mismo archivo con los mismos bytes. Antes el
+        // nombre salia de microtime() y cada uno dejaba su copia.
+        $rel = "marca_{$marca_id}/graficas/resp_{$post_id}_" . substr(md5($rid), 0, 8) . '.png';
         $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
-        @mkdir(dirname($abs), 0775, true); @file_put_contents($abs, $bin);
+        @mkdir(dirname($abs), 0775, true);
+        @file_put_contents($abs, base64_decode((string)($st['b64'] ?? '')));
         $url = rtrim(UPLOADS_URL, '/') . '/' . $rel;
-        // Cuenta el intento SOLO al producir la imagen (no al encolar). Ver aprobar2 'arte'.
-        $pdo->prepare("UPDATE crecer_contenido
-                          SET grafica_path=?, img_estado='ok', img_job=NULL,
-                              img_next_poll_at=NULL, img_error_clase=NULL,
-                              arte_intentos=arte_intentos+1, updated_at=NOW()
-                        WHERE id=? AND marca_id=?")->execute([$url, $post_id, $marca_id]);
+        // La guarda 'AND img_job=?' hace que solo el primero cierre el ciclo:
+        // el segundo afecta 0 filas y no vuelve a subir arte_intentos.
+        $extra = $cols ? ", img_next_poll_at=NULL, img_error_clase=NULL" : "";
+        $u = $pdo->prepare("UPDATE crecer_contenido
+                               SET grafica_path=?, img_estado='ok', img_job=NULL{$extra},
+                                   arte_intentos=arte_intentos+1, updated_at=NOW()
+                             WHERE id=? AND marca_id=? AND img_job=?");
+        $u->execute([$url, $post_id, $marca_id, $rid]);
         return ['estado' => 'ok', 'img' => $url];
     }
 
-    if ($d['accion'] === 'fallar') {
-        // La transición la gana UN solo proceso: el WHERE exige que el job siga
-        // puesto, así que dos barridos simultáneos no la registran dos veces.
+    // ── FALLBACK: el proveedor CONFIRMO que ese trabajo no sale ────────────
+    //    Unico camino que suelta img_job y habilita el respaldo automatico.
+    if ($d['accion'] === 'fallback') {
+        $extra = $cols ? ", img_intentos={$d['intentos']}, img_next_poll_at=NULL, img_error_clase=" . $pdo->quote((string)$d['clase']) : "";
         $u = $pdo->prepare("UPDATE crecer_contenido
-                               SET img_estado='error', img_job=NULL, img_intentos=?,
-                                   img_next_poll_at=NULL, img_error_clase=?, updated_at=NOW()
+                               SET img_estado='error', img_job=NULL{$extra}, updated_at=NOW()
                              WHERE id=? AND marca_id=? AND img_job=?");
-        $u->execute([$d['intentos'], $d['clase'], $post_id, $marca_id, $rid]);
+        $u->execute([$post_id, $marca_id, $rid]);
         if ($u->rowCount() === 1 && $d['incidente']) {
-            // UN incidente por transición. Antes era uno por sondeo: de ahí las 852.
-            try { $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,estado,error_msg)
-                                 VALUES (?,?,?,?,?,?, 'error', ?)")
-                ->execute([$marca_id, 'director_imagen', 'Job de imagen dado por perdido', 'responses',
-                           'post_id=' . $post_id . ' job=' . $rid, '',
-                           mb_substr('clase=' . (string)$d['clase'] . ' intentos=' . $d['intentos'], 0, 400)]);
-            } catch (Throwable $e2) {}
+            img_poll_incidente($pdo, $marca_id, $post_id, $rid,
+                'El proveedor descarto el job de imagen', (string)$d['clase'], (int)$d['intentos']);
         }
         return ['estado' => 'error', 'img' => null];
     }
 
-    // 'esperar': se anota el backoff y NO se escribe en el log. El motivo del
-    // fallo vive en la pieza (img_error_clase), que es donde sirve para ayudar.
-    $pdo->prepare("UPDATE crecer_contenido
-                      SET img_intentos=?, img_next_poll_at=?, img_error_clase=?
-                    WHERE id=? AND marca_id=? AND img_job=?")
-        ->execute([$d['intentos'], $d['next_poll_at'], $d['clase'], $post_id, $marca_id, $rid]);
+    // ── APARCAR: no se pudo consultar, o el job vivo paso el tope duro ─────
+    //    NO se toca img_job: sin el no hay forma de reconciliar despues, y "no
+    //    pude preguntar" nunca es prueba de que el proveedor fallara. La pieza
+    //    sigue en cola, diferida y recuperable; no se dispara ningun respaldo.
+    if ($d['accion'] === 'aparcar') {
+        if ($cols) {
+            // El prefijo 'ap:' MARCA que ya se aparco. Antes la guarda comparaba
+            // img_intentos con el valor nuevo, y eso no protege nada: el contador
+            // sube en cada sondeo, asi que siempre difiere y volvia a registrar.
+            // Aparcar es un estado, no un numero.
+            $marca = mb_substr('ap:' . (string)$d['clase'], 0, 24);
+            $u = $pdo->prepare("UPDATE crecer_contenido
+                                   SET img_intentos=?, img_error_clase=?,
+                                       img_next_poll_at = DATE_ADD(NOW(), INTERVAL 1 DAY)
+                                 WHERE id=? AND marca_id=? AND img_job=?
+                                   AND (img_error_clase IS NULL OR img_error_clase NOT LIKE 'ap:%')");
+            $u->execute([$d['intentos'], $marca, $post_id, $marca_id, $rid]);
+            if ($u->rowCount() === 1 && $d['incidente']) {
+                img_poll_incidente($pdo, $marca_id, $post_id, $rid,
+                    'Job de imagen aparcado sin confirmacion del proveedor', (string)$d['clase'], (int)$d['intentos']);
+            }
+        }
+        return ['estado' => 'queued', 'img' => null, 'aparcado' => true];
+    }
+
+    // ── ESPERAR: se anota el backoff y NO se escribe en el log. El motivo vive
+    //    en la pieza (img_error_clase), que es donde sirve para ayudar.
+    if ($cols) {
+        $pdo->prepare("UPDATE crecer_contenido
+                          SET img_intentos=?, img_next_poll_at=?, img_error_clase=?
+                        WHERE id=? AND marca_id=? AND img_job=?")
+            ->execute([$d['intentos'], $d['next_poll_at'], $d['clase'], $post_id, $marca_id, $rid]);
+    }
     return ['estado' => 'queued', 'img' => null];
+}
+
+/**
+ * UN incidente, y solo en una transicion. Antes se escribia uno por sondeo: de
+ * ahi salieron las 852 filas de agosto sobre 4 operaciones reales.
+ */
+function img_poll_incidente(PDO $pdo, int $marca_id, int $post_id, string $rid,
+                            string $accion, string $clase, int $intentos): void {
+    try {
+        $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,estado,error_msg)
+                       VALUES (?,?,?,?,?,?, 'error', ?)")
+            ->execute([$marca_id, 'director_imagen', mb_substr($accion, 0, 80), 'responses',
+                       'post_id=' . $post_id . ' job=' . $rid, '',
+                       mb_substr('clase=' . $clase . ' intentos=' . $intentos, 0, 400)]);
+    } catch (Throwable $e) { error_log('img_poll_incidente: ' . $e->getMessage()); }
 }
 
 // ─── LOGOS por Responses (gpt-image-2) — más preciso, sobre todo el nombre/tipografía ───

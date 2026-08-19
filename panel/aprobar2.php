@@ -253,11 +253,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Marcamos 'queued' y el WORKER crea el job + sondea + avisa por notificación.
             // NO contar el intento aquí: se cuenta cuando la imagen SE PRODUCE (img_responses).
             // Antes se contaba al encolar → si el worker fallaba, quemaba el intento sin dar imagen.
-            $pdo->prepare("UPDATE crecer_contenido
-                              SET img_estado='queued', img_job=NULL, img_job_at=NOW(),
-                                  img_intentos=0, img_next_poll_at=NULL, img_error_clase=NULL,
-                                  updated_at=NOW()
-                            WHERE id=? AND marca_id=?")->execute([$id, $marca_id]);
+            $pdo->prepare("UPDATE crecer_contenido SET img_estado='queued', img_job=NULL, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$id, $marca_id]);
+            // Reintento explicito del dueno = operacion NUEVA, no la continuacion
+            // de la que se aparco: los contadores de sondeo vuelven a cero.
+            if (function_exists('img_poll_reiniciar')) img_poll_reiniciar($pdo, $marca_id, $id);
             arte_disparar($marca_id, $id, $con_txt, $extra !== '' ? $extra : null, false, $est_arte);
             header('Content-Type: application/json');
             echo json_encode(['ok'=>true, 'async'=>true, 'id'=>$id,
