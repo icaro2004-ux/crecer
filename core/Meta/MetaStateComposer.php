@@ -345,23 +345,36 @@ class MetaStateComposer
     //     borrador o programado, decir "ya salió todo" sería mentira.
     private static function reglaMidiendo(array $s): ?MetaState
     {
-        $publicadas = 0; $sin_metricas = 0; $pendiente_publicable = 0;
-        foreach (($s['piezas'] ?? []) as $p) {
-            $estado = (string)($p['estado'] ?? '');
-            if ($estado === 'publicado') {
-                $publicadas++;
-                if (empty($p['tiene_metricas'])) $sin_metricas++;
-                continue;
-            }
-            if (in_array($estado, ['borrador', 'aprobado', 'programado', 'publicando'], true)) {
-                $pendiente_publicable++;
-            }
+        // K mira EXCLUSIVAMENTE el plan en observación: un plan que ya cerró y
+        // cuyas piezas todavía se están midiendo. Si no lo hay, se mira el plan
+        // activo — pero solo cuando ya no queda nada suyo por publicar.
+        $obs = $s['observacion'] ?? null;
+        $piezas = $obs ? ($obs['piezas'] ?? []) : ($s['piezas'] ?? []);
+        $de_observacion = $obs !== null;
+
+        // De las piezas que se están midiendo solo interesa lo PUBLICADO. Un
+        // borrador que se quedó dentro de un plan ya cerrado no va a salir
+        // nunca: es residuo, no trabajo pendiente, y no puede bloquear la
+        // medición del plan al que sí pertenece lo publicado.
+        $publicadas = 0; $sin_metricas = 0;
+        foreach ($piezas as $p) {
+            if ((string)($p['estado'] ?? '') !== 'publicado') continue;
+            $publicadas++;
+            if (empty($p['tiene_metricas'])) $sin_metricas++;
         }
-        // Jugadas de producción sin resolver también son trabajo publicable vivo.
+
+        // Lo que sí bloquea: trabajo vivo del PLAN ACTIVO. Si queda algo por
+        // salir hoy, decir "ya salió todo" sería mentira.
+        $pendiente_publicable = 0;
         foreach (($s['jugadas'] ?? []) as $t) {
             if ((string)($t['clase'] ?? 'produccion') !== 'produccion') continue;
             if (in_array((string)($t['estado'] ?? ''), ['hecha', 'descartada'], true)) continue;
             $pendiente_publicable++;
+        }
+        foreach (($s['piezas'] ?? []) as $p) {   // siempre las del plan activo
+            if (in_array((string)($p['estado'] ?? ''), ['borrador','aprobado','programado','publicando'], true)) {
+                $pendiente_publicable++;
+            }
         }
 
         if ($publicadas === 0)         return null;
@@ -373,7 +386,9 @@ class MetaStateComposer
             'Ya salió todo lo del plan; ahora toca medir',
             'Instagram y Facebook reportan con retraso. Vuelve en un día.',
             null,
-            ['publicadas' => $publicadas, 'sin_metricas' => $sin_metricas],
+            ['publicadas' => $publicadas, 'sin_metricas' => $sin_metricas,
+             'plan_id' => (int)($obs['plan']['id'] ?? ($s['plan']['id'] ?? 0)),
+             'de_observacion' => $de_observacion],
             self::camino($s), self::cobertura($s), 'publicado_sin_metricas');
     }
 
