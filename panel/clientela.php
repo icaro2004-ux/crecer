@@ -29,7 +29,10 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
 $susc   = suscripcion_de_marca($pdo, $marca_id);
 $plan   = suscripcion_activa($susc) ? ($susc['plan_slug'] ?? null) : null;
-$es_despegar = ($plan === 'despegar') && suscripcion_activa($susc);  // capa IA de retención
+// Un solo plan: el de $39. Antes esto exigia un plan "Despegar" que ya no se
+// vende — la pantalla quedaba tras un muro con un boton que no llevaba a nada.
+// Ahora entra cualquier suscripcion activa.  // capa IA de retención
+$es_despegar = suscripcion_activa($susc);
 
 // Expresión de agrupación de cliente (contacto si hay; si no, el nombre).
 const CKEY_SQL = "COALESCE(NULLIF(TRIM(cliente_contacto),''), cliente_nombre)";

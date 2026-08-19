@@ -118,6 +118,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // "Repasar el recorrido" — borra el visto de TODAS las pantallas, no solo del
     // Inicio: si lo quiere repasar, que se lo den completo otra vez. Es de una sola
     // vez por diseño, pero el dueño manda.
+    // ── LIMPIAR BORRADORES VIEJOS ───────────────────────────────────────────
+    //  Una cuenta que lleva meses probando acumula borradores que nadie va a
+    //  publicar, y no son solo ruido: tapan el trabajo nuevo en Revisar.
+    //  REGLA: se borra lo suelto y lo de planes ya reemplazados. Lo del plan
+    //  VIGENTE no se toca — eso es el trabajo de esta semana, no basura.
+    if ($accion === 'limpiar_borradores') {
+        $borrados = 0; $err = '';
+        try {
+            $plan_vig = 0;
+            try {
+                require_once __DIR__ . '/../includes/meta_negocio.php';
+                $mm = meta_activa($pdo, $marca_id);
+                if ($mm) { $pv = meta_plan_activo($pdo, (int)$mm['id']); if ($pv) $plan_vig = (int)$pv['id']; }
+            } catch (Throwable $e) {}
+
+            $sql = "SELECT id FROM crecer_contenido
+                     WHERE marca_id=? AND estado='borrador'"
+                 . ($plan_vig ? " AND (plan_id IS NULL OR plan_id <> {$plan_vig})" : '');
+            $q = $pdo->prepare($sql); $q->execute([$marca_id]);
+            $ids = $q->fetchAll(PDO::FETCH_COLUMN) ?: [];
+
+            if ($ids) {
+                // Por lotes: una cuenta con cientos de borradores no cabe en un IN gigante.
+                foreach (array_chunk($ids, 200) as $lote) {
+                    $in = implode(',', array_map('intval', $lote));
+                    // Lo que cuelga de la pieza. En Hostinger las FK con CASCADE no
+                    // siempre existen, así que se limpia a mano y sin asumir nada.
+                    foreach (['crecer_carrusel','crecer_metricas','crecer_publicacion',
+                              'crecer_visual_huella','crecer_generaciones'] as $tabla) {
+                        try { $pdo->exec("DELETE FROM {$tabla} WHERE contenido_id IN ({$in})"); }
+                        catch (Throwable $e) { /* esa tabla no existe en esta instalación */ }
+                    }
+                    try { $pdo->exec("UPDATE crecer_reels SET contenido_id=NULL WHERE contenido_id IN ({$in})"); }
+                    catch (Throwable $e) {}
+                    $pdo->exec("DELETE FROM crecer_contenido WHERE id IN ({$in}) AND marca_id=" . (int)$marca_id);
+                    $borrados += count($lote);
+                }
+            }
+        } catch (Throwable $e) { $err = $e->getMessage(); }
+
+        $msg = $err !== ''
+            ? 'No se pudieron borrar: ' . substr($err, 0, 120)
+            : ($borrados === 0 ? 'No había borradores viejos que borrar.'
+               : "Listo — fuera {$borrados} borrador" . ($borrados === 1 ? '' : 'es') . " viejo" . ($borrados === 1 ? '' : 's') . '. El trabajo del plan vigente quedó intacto.');
+        header('Location: ' . $volver . 'cuenta&' . ($err !== '' ? 'error=' : 'ok=') . urlencode($msg)); exit;
+    }
+
     if ($accion === 'tour_repetir') {
         try {
             $pdo->prepare("DELETE t FROM crecer_tour_visto t
@@ -423,6 +470,32 @@ $turl = fn($t) => "$BASE/configuracion.php?marca=$marca_id&tab=$t";
         <button class="cfg-save" type="submit">Guardar datos</button>
       </div>
     </form>
+
+    <?php
+      // Cuántos borradores viejos hay ahora mismo (los del plan vigente NO cuentan).
+      $viejos = 0; $plan_vig_id = 0;
+      try {
+          require_once __DIR__ . '/../includes/meta_negocio.php';
+          $mm = meta_activa($pdo, $marca_id);
+          if ($mm) { $pv = meta_plan_activo($pdo, (int)$mm['id']); if ($pv) $plan_vig_id = (int)$pv['id']; }
+          $sqlv = "SELECT COUNT(*) FROM crecer_contenido WHERE marca_id=? AND estado='borrador'"
+                . ($plan_vig_id ? " AND (plan_id IS NULL OR plan_id <> {$plan_vig_id})" : '');
+          $qv = $pdo->prepare($sqlv); $qv->execute([$marca_id]); $viejos = (int)$qv->fetchColumn();
+      } catch (Throwable $e) {}
+    ?>
+    <?php if ($viejos > 0): ?>
+    <form method="post" action="<?= $turl('cuenta') ?>"
+          onsubmit="return confirm('¿Borrar <?= $viejos ?> borradores viejos?\n\nSe van los sueltos y los de planes ya reemplazados.\nLo del plan vigente, lo publicado y lo programado NO se toca.\n\nEsto no se puede deshacer.');">
+      <?= csrf_field() ?><input type="hidden" name="accion" value="limpiar_borradores">
+      <div class="cfg-card">
+        <h2>Limpiar borradores viejos <?= ico('trash') ?></h2>
+        <p class="sub">Tienes <b><?= $viejos ?></b> borrador<?= $viejos === 1 ? '' : 'es' ?> que nadie va a
+        publicar, tapando el trabajo nuevo en Revisar. Se borran los sueltos y los de planes ya
+        reemplazados; <b>el trabajo del plan vigente, lo programado y lo publicado se quedan</b>.</p>
+        <button class="cfg-save" type="submit">Borrar los <?= $viejos ?></button>
+      </div>
+    </form>
+    <?php endif; ?>
 
     <form method="post" action="<?= $turl('cuenta') ?>">
       <?= csrf_field() ?><input type="hidden" name="accion" value="cuenta_pass">

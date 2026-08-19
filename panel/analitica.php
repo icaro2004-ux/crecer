@@ -28,9 +28,12 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
 $susc = suscripcion_de_marca($pdo, $marca_id);
 $plan = suscripcion_activa($susc) ? ($susc['plan_slug'] ?? null) : null;
-$es_despegar = ($plan === 'despegar') && suscripcion_activa($susc);
+// Un solo plan: el de $39. Antes esto exigia un plan "Despegar" que ya no se
+// vende — la pantalla quedaba tras un muro con un boton que no llevaba a nada.
+// Ahora entra cualquier suscripcion activa.
 
 // ── Helpers de métricas (datos reales) ───────────────────────
+$es_despegar = suscripcion_activa($susc);
 function ventas_periodo(PDO $pdo, int $marca_id, int $anio, int $mes): array {
     $q = $pdo->prepare(
         "SELECT COUNT(*) n, COALESCE(SUM(monto),0) total
@@ -90,7 +93,7 @@ if (($_GET['ajax'] ?? '') === 'insight' && $_SERVER['REQUEST_METHOD'] === 'POST'
     if (empty($in['csrf']) || !hash_equals($_SESSION['csrf'] ?? '', (string)$in['csrf'])) {
         http_response_code(403); echo json_encode(['ok'=>false,'err'=>'Token vencido. Recarga.']); exit;
     }
-    if (!$es_despegar) { echo json_encode(['ok'=>false,'err'=>'Esta función es del plan Despegar.']); exit; }
+    if (!$es_despegar) { echo json_encode(['ok'=>false,'err'=>'Activa tu plan para ver la analítica.']); exit; }
     try {
         $r = resumen_analitica($pdo, $marca_id, [
             'ventas_mes'=>(float)$este['total'], 'ordenes_mes'=>(int)$este['n'],
@@ -114,9 +117,9 @@ if (!$es_despegar):
   <h1 class="page-h">Analítica</h1>
   <div style="background:var(--card);border:1px dashed var(--line);border-radius:16px;padding:30px;text-align:center;margin-top:14px">
     <div><?= ico('chart','ic ic-xl') ?></div>
-    <p style="font-weight:800;color:var(--tinta);margin:10px 0 4px">Analítica viene con el plan Despegar</p>
+    <p style="font-weight:800;color:var(--tinta);margin:10px 0 4px">Analítica viene con tu plan</p>
     <p style="color:var(--muted);font-size:14px;max-width:42ch;margin:0 auto 16px">Mira tus ventas mes a mes, cuánto trabajó el corillo por ti, y recibe un resumen claro de cómo va tu negocio.</p>
-    <a href="<?= $BASE ?>/precios.php?marca=<?= $marca_id ?>" style="display:inline-block;background:linear-gradient(135deg,var(--coral,#e3683f),var(--magenta,#c0395f));color:#fff;font-weight:800;padding:12px 24px;border-radius:99px;text-decoration:none"><?= ico('rocket') ?> Súbete a Despegar</a>
+    <a href="<?= $BASE ?>/precios.php?marca=<?= $marca_id ?>" style="display:inline-block;background:linear-gradient(135deg,var(--coral,#e3683f),var(--magenta,#c0395f));color:#fff;font-weight:800;padding:12px 24px;border-radius:99px;text-decoration:none"><?= ico('rocket') ?> Activar mi plan</a>
   </div>
 </div>
 <?php require __DIR__ . '/_shell_foot.php'; exit; endif; ?>
