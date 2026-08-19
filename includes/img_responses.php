@@ -21,6 +21,118 @@ function img_resp_activo(): bool {
     return (defined('IMAGE_ENGINE') ? IMAGE_ENGINE : 'actual') === 'responses';
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+//  SONDEO CON BACKOFF — el corazón del hotfix de amplificación.
+//
+//  Antes: cada carga de index/propuestas/aprobar2/gateway_post sondeaba TODOS
+//  los jobs en cola, y cada sondeo fallido insertaba una fila en crecer_ia_log.
+//  Un puñado de jobs trancados produjo 852 filas de error con solo 2-4
+//  operaciones únicas al día — hasta 113 registros por operación.
+//
+//  Ahora: la decisión de volver a sondear vive en datos (img_next_poll_at), y
+//  al log se escribe UNA vez por TRANSICIÓN, no una por sondeo.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Sondeos fallidos seguidos tras los que el job se da por muerto. */
+if (!defined('IMG_POLL_MAX_INTENTOS')) define('IMG_POLL_MAX_INTENTOS', 12);
+/** Edad máxima de un job, aunque el proveedor lo siga reportando vivo. */
+if (!defined('IMG_POLL_MAX_HORAS'))    define('IMG_POLL_MAX_HORAS', 24);
+
+/**
+ * Clasifica un fallo de sondeo en una etiqueta corta y estable. El texto crudo
+ * del error NO se guarda en la pieza: puede traer cuerpos de respuesta del
+ * proveedor, y lo único que necesitamos para decidir es la clase.
+ */
+function img_poll_clase_error(?string $msg): string {
+    $m = strtolower((string)$msg);
+    if ($m === '')                                            return 'sin_detalle';
+    // Config antes que HTTP: IaSinCredenciales dice "Falta OPENAI_API_KEY.", que
+    // no trae la palabra 'credenciales' ni código alguno. Sin este caso caía en
+    // 'no_clasificado' — y es justo el fallo que más veces se va a ver.
+    if (strpos($m, 'credencial') !== false || strpos($m, 'api_key') !== false
+        || strpos($m, 'api key') !== false)                   return 'sin_credenciales';
+    if (strpos($m, '429') !== false)                          return 'rate_limit_429';
+    if (strpos($m, '401') !== false || strpos($m, '403') !== false) return 'auth_401_403';
+    if (strpos($m, '404') !== false)                          return 'no_encontrado_404';
+    if (strpos($m, '400') !== false)                          return 'peticion_400';
+    if (strpos($m, 'timeout') !== false || strpos($m, 'timed out') !== false) return 'timeout';
+    if (strpos($m, 'curl') !== false)                         return 'red_curl';
+    if (preg_match('/\b5\d{2}\b/', $m))                       return 'servidor_5xx';
+    return 'no_clasificado';
+}
+
+/**
+ * DECISIÓN PURA: qué hacer con un job de imagen. No toca base, ni red, ni reloj
+ * del sistema — el ahora entra como parámetro. Así las pruebas cubren el
+ * backoff, el tope de intentos y la transición sin llamar a ningún proveedor.
+ *
+ * @param array   $j       ['intentos'=>int, 'job_at'=>?string]
+ * @param ?string $status  estado remoto (completed|failed|cancelled|incomplete|
+ *                         queued|in_progress). null = NO se pudo consultar.
+ * @param ?string $err     mensaje crudo del fallo de sondeo, si lo hubo
+ * @param string  $ahora   'Y-m-d H:i:s'
+ * @return array ['accion'=>'guardar'|'fallar'|'esperar', 'intentos'=>int,
+ *                'next_poll_at'=>?string, 'incidente'=>bool, 'clase'=>?string]
+ *
+ * 'incidente' = true significa UNA fila en crecer_ia_log. Solo se enciende en
+ * la transición a fallido: es la diferencia entre 852 filas y 8.
+ */
+function img_poll_decidir(array $j, ?string $status, ?string $err, string $ahora): array {
+    $intentos = (int)($j['intentos'] ?? 0);
+    $t        = strtotime($ahora) ?: time();
+    $edad_h   = !empty($j['job_at']) ? max(0, ($t - (int)strtotime((string)$j['job_at'])) / 3600) : 0;
+
+    // Llegó la imagen: se acabó el ciclo. El éxito no necesita incidente.
+    if ($status === 'completed') {
+        return ['accion'=>'guardar', 'intentos'=>$intentos, 'next_poll_at'=>null,
+                'incidente'=>false, 'clase'=>null];
+    }
+
+    // El proveedor dice que ese trabajo ya no va a salir. Una transición, un log.
+    if (in_array((string)$status, ['failed', 'cancelled', 'incomplete'], true)) {
+        return ['accion'=>'fallar', 'intentos'=>$intentos, 'next_poll_at'=>null,
+                'incidente'=>true, 'clase'=>'proveedor_' . $status];
+    }
+
+    $intentos++;
+    // Backoff exponencial con techo: 1, 2, 4, 8, 16, 32, 60, 60...
+    $espera = min(60, (int)pow(2, max(0, $intentos - 1)));
+    $prox   = date('Y-m-d H:i:s', $t + $espera * 60);
+
+    if ($status === null) {
+        // No se pudo consultar. Se rinde por intentos o por edad — pero UNA vez.
+        if ($intentos >= (int)IMG_POLL_MAX_INTENTOS || $edad_h >= (float)IMG_POLL_MAX_HORAS) {
+            return ['accion'=>'fallar', 'intentos'=>$intentos, 'next_poll_at'=>null,
+                    'incidente'=>true, 'clase'=>img_poll_clase_error($err)];
+        }
+        return ['accion'=>'esperar', 'intentos'=>$intentos, 'next_poll_at'=>$prox,
+                'incidente'=>false, 'clase'=>img_poll_clase_error($err)];
+    }
+
+    // El proveedor lo reporta VIVO (queued/in_progress). Un trabajo que el
+    // proveedor sostiene no lo mata nuestro contador de intentos: solo la edad.
+    if ($edad_h >= (float)IMG_POLL_MAX_HORAS) {
+        return ['accion'=>'fallar', 'intentos'=>$intentos, 'next_poll_at'=>null,
+                'incidente'=>true, 'clase'=>'vencido_por_edad'];
+    }
+    return ['accion'=>'esperar', 'intentos'=>$intentos, 'next_poll_at'=>$prox,
+            'incidente'=>false, 'clase'=>null];
+}
+
+/**
+ * Reinicia el ciclo de sondeo de una pieza. Se llama donde se ENCOLA o donde el
+ * dueño pide un reintento explícito: eso es una operación NUEVA, con su propio
+ * presupuesto de intentos, no la continuación de la que se rindió.
+ */
+function img_poll_reiniciar(PDO $pdo, int $marca_id, int $post_id): void {
+    try {
+        $pdo->prepare("UPDATE crecer_contenido
+                          SET img_intentos=0, img_next_poll_at=NULL,
+                              img_error_clase=NULL, img_job_at=NOW()
+                        WHERE id=? AND marca_id=?")->execute([$post_id, $marca_id]);
+    } catch (Throwable $e) { error_log('img_poll_reiniciar: ' . $e->getMessage()); }
+}
+
 /**
  * Dispara el worker de arte por auto-HTTP (fire-and-forget): sondea el job en
  * background hasta que la imagen esté y AVISA por notificación (campanita). Así el
@@ -164,7 +276,12 @@ function img_resp_encolar(PDO $pdo, int $marca_id, int $post_id, string $copy, ?
 
         $brief = img_resp_brief($m, $copy, $con_texto, $logo !== null, $extra, $estilo, $lente, $evitar);
         $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1'] + ($logo ? ['logo' => $logo] : []));
-        $pdo->prepare("UPDATE crecer_contenido SET img_job=?, img_estado='queued' WHERE id=? AND marca_id=?")
+        // img_job_at fecha el nacimiento del job y los contadores arrancan limpios:
+        // un job nuevo no hereda el backoff del que se rindio.
+        $pdo->prepare("UPDATE crecer_contenido
+                          SET img_job=?, img_estado='queued', img_job_at=NOW(),
+                              img_intentos=0, img_next_poll_at=NULL, img_error_clase=NULL
+                        WHERE id=? AND marca_id=?")
             ->execute([$bg['id'], $post_id, $marca_id]);
         // La huella se registra AL ENCOLAR (no al terminar): así dos piezas
         // encoladas seguidas no reciben el mismo lente.
@@ -300,8 +417,12 @@ function img_sweep_pendientes(PDO $pdo, int $marca_id, bool $solo_recoger = fals
         $limite = max(1, min(50, $limite));
         // Recoge jobs con response_id, Y TAMBIÉN los colgados sin job >2 min (el worker
         // se murió/bloqueó antes de crear el job → sin esto quedaban en 'queued' para siempre).
+        // La puerta del backoff va EN EL SELECT, no en PHP: una pieza que todavía
+        // no toca sondear ni siquiera se trae. Sin esto, cada pantalla volvía a
+        // evaluar todos los jobs trancados — que es como se llegó a 852 filas.
         $pend = $pdo->prepare("SELECT id, img_job FROM crecer_contenido
              WHERE marca_id=? AND img_estado='queued'
+               AND (img_next_poll_at IS NULL OR img_next_poll_at <= NOW())
                AND (img_job IS NOT NULL OR updated_at < (NOW() - INTERVAL 2 MINUTE))
              ORDER BY id DESC LIMIT " . $limite);
         $pend->execute([$marca_id]);
@@ -342,39 +463,80 @@ function img_sweep_pendientes(PDO $pdo, int $marca_id, bool $solo_recoger = fals
  * Idempotente: si ya no hay job pendiente, reporta el estado actual.
  */
 function img_resp_completar(PDO $pdo, int $marca_id, int $post_id): array {
-    $row = $pdo->query("SELECT img_job,img_estado,grafica_path FROM crecer_contenido WHERE id=" . (int)$post_id)->fetch(PDO::FETCH_ASSOC);
+    $q = $pdo->prepare("SELECT img_job, img_estado, grafica_path, img_intentos, img_job_at, img_next_poll_at
+                          FROM crecer_contenido WHERE id=? AND marca_id=?");
+    $q->execute([$post_id, $marca_id]);
+    $row = $q->fetch(PDO::FETCH_ASSOC);
     if (!$row) return ['estado' => 'error', 'img' => null];
     $rid = trim((string)($row['img_job'] ?? ''));
     if ($rid === '') return ['estado' => ($row['grafica_path'] ? 'ok' : 'none'), 'img' => $row['grafica_path'] ?: null];
+
+    // ── LA PUERTA. Aquí se corta la amplificación: si el backoff no venció, se
+    //    sale ANTES de llamar al proveedor y sin escribir una sola fila. Cien
+    //    cargas de pantalla seguidas cuestan cien SELECT y cero logs.
+    $ahora = date('Y-m-d H:i:s');
+    if (!empty($row['img_next_poll_at']) && $row['img_next_poll_at'] > $ahora) {
+        return ['estado' => 'queued', 'img' => null, 'diferido' => true];
+    }
+
+    $status = null; $err = null; $st = [];
     try {
         $st = openai_responses_estado($rid);
-        if (($st['status'] ?? '') === 'completed' && ($st['b64'] ?? '') !== '') {
-            $bin = base64_decode($st['b64']);
-            $rel = "marca_{$marca_id}/graficas/resp_{$post_id}_" . substr(md5((string)microtime(true)), 0, 6) . '.png';
-            $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
-            @mkdir(dirname($abs), 0775, true); @file_put_contents($abs, $bin);
-            $url = rtrim(UPLOADS_URL, '/') . '/' . $rel;
-            // Cuenta el intento SOLO al producir la imagen (no al encolar). Ver aprobar2 'arte'.
-            $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, img_estado='ok', img_job=NULL, arte_intentos=arte_intentos+1, updated_at=NOW() WHERE id=? AND marca_id=?")
-                ->execute([$url, $post_id, $marca_id]);
-            return ['estado' => 'ok', 'img' => $url];
-        }
-        if (in_array($st['status'] ?? '', ['failed', 'cancelled', 'incomplete'], true)) {
-            $pdo->prepare("UPDATE crecer_contenido SET img_estado='error', img_job=NULL WHERE id=? AND marca_id=?")->execute([$post_id, $marca_id]);
-            return ['estado' => 'error', 'img' => null];
-        }
-        return ['estado' => 'queued', 'img' => null];   // in_progress / queued
+        $status = (string)($st['status'] ?? '');
+        // 'completed' sin bytes no es un completado utilizable: se trata como vivo.
+        if ($status === 'completed' && ($st['b64'] ?? '') === '') $status = 'in_progress';
     } catch (Throwable $e) {
-        // Se sigue devolviendo 'queued' (puede ser transitorio y el próximo poll
-        // lo resuelve), PERO se deja rastro: si el fallo es permanente, sin esto
-        // el dueño espera para siempre y no queda constancia de por qué.
         error_log('img_resp_completar: ' . $e->getMessage());
-        try { $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,estado,error_msg)
-                             VALUES (?,?,?,?,?,?, 'error', ?)")
-            ->execute([$marca_id, 'director_imagen', 'No pude consultar el job de imagen', 'responses',
-                       'post_id=' . $post_id . ' job=' . $rid, '', mb_substr($e->getMessage(), 0, 400)]); } catch (Throwable $e2) {}
-        return ['estado' => 'queued', 'img' => null];
+        $err = $e->getMessage();          // status queda null = no se pudo consultar
     }
+
+    $d = img_poll_decidir(
+        ['intentos' => (int)$row['img_intentos'], 'job_at' => $row['img_job_at']],
+        $status, $err, $ahora
+    );
+
+    if ($d['accion'] === 'guardar') {
+        $bin = base64_decode((string)($st['b64'] ?? ''));
+        $rel = "marca_{$marca_id}/graficas/resp_{$post_id}_" . substr(md5((string)microtime(true)), 0, 6) . '.png';
+        $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+        @mkdir(dirname($abs), 0775, true); @file_put_contents($abs, $bin);
+        $url = rtrim(UPLOADS_URL, '/') . '/' . $rel;
+        // Cuenta el intento SOLO al producir la imagen (no al encolar). Ver aprobar2 'arte'.
+        $pdo->prepare("UPDATE crecer_contenido
+                          SET grafica_path=?, img_estado='ok', img_job=NULL,
+                              img_next_poll_at=NULL, img_error_clase=NULL,
+                              arte_intentos=arte_intentos+1, updated_at=NOW()
+                        WHERE id=? AND marca_id=?")->execute([$url, $post_id, $marca_id]);
+        return ['estado' => 'ok', 'img' => $url];
+    }
+
+    if ($d['accion'] === 'fallar') {
+        // La transición la gana UN solo proceso: el WHERE exige que el job siga
+        // puesto, así que dos barridos simultáneos no la registran dos veces.
+        $u = $pdo->prepare("UPDATE crecer_contenido
+                               SET img_estado='error', img_job=NULL, img_intentos=?,
+                                   img_next_poll_at=NULL, img_error_clase=?, updated_at=NOW()
+                             WHERE id=? AND marca_id=? AND img_job=?");
+        $u->execute([$d['intentos'], $d['clase'], $post_id, $marca_id, $rid]);
+        if ($u->rowCount() === 1 && $d['incidente']) {
+            // UN incidente por transición. Antes era uno por sondeo: de ahí las 852.
+            try { $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,estado,error_msg)
+                                 VALUES (?,?,?,?,?,?, 'error', ?)")
+                ->execute([$marca_id, 'director_imagen', 'Job de imagen dado por perdido', 'responses',
+                           'post_id=' . $post_id . ' job=' . $rid, '',
+                           mb_substr('clase=' . (string)$d['clase'] . ' intentos=' . $d['intentos'], 0, 400)]);
+            } catch (Throwable $e2) {}
+        }
+        return ['estado' => 'error', 'img' => null];
+    }
+
+    // 'esperar': se anota el backoff y NO se escribe en el log. El motivo del
+    // fallo vive en la pieza (img_error_clase), que es donde sirve para ayudar.
+    $pdo->prepare("UPDATE crecer_contenido
+                      SET img_intentos=?, img_next_poll_at=?, img_error_clase=?
+                    WHERE id=? AND marca_id=? AND img_job=?")
+        ->execute([$d['intentos'], $d['next_poll_at'], $d['clase'], $post_id, $marca_id, $rid]);
+    return ['estado' => 'queued', 'img' => null];
 }
 
 // ─── LOGOS por Responses (gpt-image-2) — más preciso, sobre todo el nombre/tipografía ───
