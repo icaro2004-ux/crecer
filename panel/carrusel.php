@@ -288,7 +288,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($tid) { $t = jugada_por_id($pdo, $tid, $marca_id); if ($t) jugada_sincronizar($pdo, $t); }
         } catch (Throwable $e) {}
         $jout(['ok' => true, 'cuando' => $cuando,
-               'texto' => 'Calendarizado para el ' . fecha_humana_es($cuando)]);
+               'texto' => 'Calendarizado para ' . fecha_humana_es($cuando)]);
     }
 
     // Publicar → cover thumbnail + aprobado + publicar en BACKGROUND (IG swipe / FB álbum).
