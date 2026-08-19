@@ -661,6 +661,36 @@ try {
             echo "\n(añade &vivo=1 para llamar a Meta de verdad y ver la respuesta cruda)\n";
         }
 
+        // EL ERROR EXACTO. meta_insights_ig() se traga el MetaError para no
+        // tumbar el refresco, así que aquí se llama a pelo: sin catch que
+        // esconda nada. Es la diferencia entre "no hay datos" y "no tienes
+        // permiso para pedirlos".
+        if (!empty($_GET['vivo']) && $filas && !empty($conx['page_access_token'])) {
+            $tok = (string)$conx['page_access_token'];
+            echo "\n--- La llamada cruda, sin red de seguridad ---\n";
+            try {
+                $perm = meta_api('GET', 'me/permissions', ['access_token' => $tok]);
+                $ok = []; $no = [];
+                foreach ($perm['data'] ?? [] as $pp) {
+                    if (($pp['status'] ?? '') === 'granted') $ok[] = $pp['permission']; else $no[] = $pp['permission'];
+                }
+                echo "permisos concedidos: " . (implode(', ', $ok) ?: '(ninguno)') . "\n";
+                if ($no) echo "permisos NO concedidos: " . implode(', ', $no) . "\n";
+                echo "¿tiene instagram_manage_insights?: " . (in_array('instagram_manage_insights', $ok, true) ? 'SÍ' : 'NO ←') . "\n";
+                echo "¿tiene read_insights (FB)?: " . (in_array('read_insights', $ok, true) ? 'SÍ' : 'NO ←') . "\n";
+            } catch (Throwable $e) { echo "me/permissions falló: " . $e->getMessage() . "\n"; }
+
+            foreach ($filas as $f) {
+                if (($f['plataforma'] ?? '') !== 'instagram') continue;
+                echo "\nGET {$f['external_id']}/insights?metric=reach  (pieza {$f['tipo']})\n";
+                try {
+                    $r0 = meta_api('GET', $f['external_id'] . '/insights', ['metric' => 'reach', 'access_token' => $tok]);
+                    echo "  respuesta: " . substr(json_encode($r0, JSON_UNESCAPED_UNICODE), 0, 300) . "\n";
+                } catch (Throwable $e) { echo "  ERROR DE META: " . $e->getMessage() . "\n"; }
+                break;
+            }
+        }
+
         $r = metricas_refrescar_insights($pdo, $mid, 12, 0);
         echo "\nrefresco completo → " . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n";
         exit;
