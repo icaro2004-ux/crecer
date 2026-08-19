@@ -228,7 +228,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $out = [];
         try {
             $q = $pdo->prepare("SELECT id, archivo, nombre, nota FROM crecer_activos
-                                 WHERE marca_id=? AND tipo='foto' AND estado='activo'
+                                 WHERE marca_id=? AND tipo IN ('imagen','foto') AND estado='activo'
                                  ORDER BY id DESC LIMIT 60");
             $q->execute([$marca_id]);
             foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $f) {
@@ -246,7 +246,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $own = $pdo->prepare("SELECT id FROM crecer_carrusel WHERE id=? AND contenido_id=? AND marca_id=?");
         $own->execute([$sid, $cid, $marca_id]);
         if (!$own->fetchColumn()) $jout(['ok' => false, 'err' => 'Slide no encontrado.']);
-        $qf = $pdo->prepare("SELECT archivo FROM crecer_activos WHERE id=? AND marca_id=? AND tipo='foto' AND estado='activo'");
+        $qf = $pdo->prepare("SELECT archivo FROM crecer_activos WHERE id=? AND marca_id=? AND tipo IN ('imagen','foto') AND estado='activo'");
         $qf->execute([$fid, $marca_id]);
         $url = (string)$qf->fetchColumn();
         if ($url === '') $jout(['ok' => false, 'err' => 'Esa foto ya no está en tu biblioteca.']);

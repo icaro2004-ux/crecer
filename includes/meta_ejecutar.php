@@ -278,7 +278,7 @@ function jugada_inventario(PDO $pdo, int $marca_id, array $t, int $faltan): arra
             foreach ($qu->fetchAll(PDO::FETCH_COLUMN) as $l) $usadas[] = (int)substr((string)$l, 5);
         } catch (Throwable $e) {}
         $sql = "SELECT id, archivo, nombre, nota FROM crecer_activos
-                 WHERE marca_id=? AND estado='activo' AND tipo='foto'";
+                 WHERE marca_id=? AND estado='activo' AND tipo IN ('imagen','foto')";
         if ($usadas) $sql .= " AND id NOT IN (" . implode(',', array_map('intval', $usadas)) . ")";
         $sql .= " ORDER BY id DESC LIMIT 6";
         $q = $pdo->prepare($sql);
