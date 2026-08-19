@@ -199,6 +199,7 @@ function jugada_guion_reel(PDO $pdo, int $marca_id, array $t, string $idea): str
         $prompt = "Negocio:\n{$ctx}\n\nLa jugada: {$t['titulo']} — {$t['que_hacer']}\n"
                 . "La idea de este reel: {$idea}\n"
                 . (trim((string)$t['cta']) !== '' ? "Al final se le pide a la gente: {$t['cta']}\n" : '')
+                . (($__mp = meta_para_prompt($pdo, $marca_id)) !== '' ? "\n{$__mp}\n" : '')
                 . "\nEscribe el guion de los clips.";
         $r = ia_ejecutar($pdo, 'guionista', 'Guion de reel para la jugada', $prompt, [
             'marca_id' => $marca_id, 'sistema' => $sistema,
@@ -254,7 +255,11 @@ function jugada_ideas(PDO $pdo, int $marca_id, array $t, int $n, array $inv): ar
         . "- Canal: {$t['canal']} · Formato pedido: {$t['formato']}\n\n"
         . ($fotos !== '' ? $fotos . "\n" : '')
         . ($ganadores !== '' ? $ganadores . "\n" : '')
-        . "Dame {$n} pieza(s) distintas para cumplir esta jugada.";
+        // El mismo parte de situación que reciben los demás agentes: sin él, el
+        // que desmenuza la jugada trabajaba a ciegas — no sabía la meta, ni los
+        // días que quedan, ni si el negocio va atrasado.
+        . (($__mp = meta_para_prompt($pdo, $marca_id)) !== '' ? "\n{$__mp}\n" : '')
+        . "\nDame {$n} pieza(s) distintas para cumplir esta jugada.";
 
     try {
         $r = ia_ejecutar($pdo, 'planificador', "Desmenuzar jugada: {$t['titulo']}", $prompt, [
@@ -357,9 +362,42 @@ function jugada_ejecutar(PDO $pdo, int $marca_id, int $tactica_id): array {
         if (($mom['hora'] ?? null) !== null) $hora = (int)$mom['hora'];
     } catch (Throwable $e) {}
 
+    // ── LA FECHA LA DECIDE LA META, NO UN CONTADOR ──────────────────────────
+    //  Antes esto era $dia=1 y $dia++: mañana, pasado, pasado-pasado, pasara lo
+    //  que pasara. Calendarizaba para el sábado aunque la meta estuviera
+    //  atrasada y venciera el martes. Ahora la fecha sale del estado real:
+    //  cuánto falta, cuántos días quedan y si vas en ritmo.
+    $mprog = null;
+    if ($meta) { try { $mprog = meta_progreso($pdo, $meta); } catch (Throwable $e) {} }
+    $apura = $mprog && ($mprog['al_dia'] === false
+                        || ($mprog['dias_rest'] !== null && $mprog['dias_rest'] <= 7));
+    $sem   = max(1, (int)($t['semana'] ?? 1));
+    // Al día: la jugada respeta su semana y las piezas se separan 2 días.
+    // Atrasado: la semana se comprime y las piezas salen un día tras otro.
+    $arranque = $apura ? min(($sem - 1) * 2, 3) : ($sem - 1) * 7;
+    $paso     = $apura ? 1 : 2;
+    // ¿Cabe hoy? Solo si la hora buena aún no pasó (con una hora de margen).
+    $hoy_cabe = ((int)date('G') + 1) <= $hora;
+    $limite   = !empty($meta['fecha_limite']) ? (string)$meta['fecha_limite'] : '';
+    $fecha_de = function (int $orden) use ($hora, $arranque, $paso, $hoy_cabe, $limite): string {
+        $d = $arranque + ($orden - 1) * $paso;
+        if ($d === 0 && !$hoy_cabe) $d = 1;              // hoy ya se hizo tarde
+        $f = date('Y-m-d', strtotime('+' . $d . ' day')) . ' ' . sprintf('%02d', $hora) . ':00:00';
+        // Nunca después de la fecha límite de la meta: publicar tarde no cuenta.
+        if ($limite !== '' && substr($f, 0, 10) > $limite) {
+            $f = $limite . ' ' . sprintf('%02d', $hora) . ':00:00';
+        }
+        return $f;
+    };
+
     // ── 1. INVENTARIO: qué hay ya ──
     $inv = jugada_inventario($pdo, $marca_id, $t, $faltan);
     $ids = []; $recicladas = 0; $notas = []; $pide_video = 0;
+    if ($apura) {
+        $notas[] = $hoy_cabe
+            ? 'Vas atrasado para tu meta: la primera pieza sale HOY y las demás un día tras otro.'
+            : 'Vas atrasado para tu meta: hoy ya se hizo tarde, así que arranca mañana temprano y sigue día a día.';
+    }
 
     // ── 2. LA GAVETA: piezas listas que nadie publicó, puestas a trabajar ──
     //  No se les toca el texto (pueden ser del dueño): se amarran a la jugada
@@ -368,7 +406,7 @@ function jugada_ejecutar(PDO $pdo, int $marca_id, int $tactica_id): array {
     foreach ($inv['gaveta'] as $g) {
         if ($faltan <= 0) break;
         try {
-            $fecha = date('Y-m-d ' . sprintf('%02d', $hora) . ':00:00', strtotime('+' . $dia . ' day'));
+            $fecha = $fecha_de($dia);
             $pdo->prepare("UPDATE crecer_contenido SET tactica_id=?, meta_id=?, plan_id=?, fecha_programada=?, updated_at=NOW()
                             WHERE id=? AND marca_id=?")
                 ->execute([$tactica_id, $meta_id, $plan_id, $fecha, (int)$g['id'], $marca_id]);
@@ -396,7 +434,7 @@ function jugada_ejecutar(PDO $pdo, int $marca_id, int $tactica_id): array {
             $tipo = in_array($idea['tipo'] ?? '', ['post','story','reel'], true) ? $idea['tipo'] : 'post';
             $txt  = trim((string)($idea['tema'] ?? '') . ' — ' . (string)($idea['idea'] ?? ''));
             if ($txt === '—') $txt = (string)$t['que_hacer'];
-            $fecha = date('Y-m-d ' . sprintf('%02d', $hora) . ':00:00', strtotime('+' . $dia . ' day'));
+            $fecha = $fecha_de($dia);
 
             try {
                 $pdo->prepare(
