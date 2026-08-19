@@ -411,6 +411,9 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
   .wz-fin .fin-ok svg{width:32px;height:32px}
 
   @media (max-width:719px){
+    /* El botón de Ayuda flota justo donde cae la acción del wizard: se sube,
+       porque en el móvil la acción del paso manda sobre el soporte. */
+    .ay-fab{bottom:calc(env(safe-area-inset-bottom,0px) + 148px)!important}
     /* La acción vive pegada al pulgar, no al final del scroll. */
     .wz-nav{position:sticky;bottom:calc(env(safe-area-inset-bottom,0px) + 74px);z-index:5;
       background:linear-gradient(180deg,rgba(253,252,250,0),var(--crema,#FDFCFA) 34%);
@@ -569,8 +572,10 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
       <li>
         <span class="n"><?= (int)$s['orden'] ?></span>
         <div>
-          <?php if ($v['visual'] !== ''): ?><b><?= $h($v['visual']) ?></b><?php endif; ?>
-          <?php if ($v['copy'] !== ''): ?><small>«<?= $h($v['copy']) ?>»</small><?php endif; ?>
+          <?php /* Lo que el slide DICE va primero; cómo se verá, debajo. Al revés
+                   el dueño leía descripciones de arte y no su propia historia. */ ?>
+          <?php if ($v['copy'] !== ''): ?><b><?= $h($v['copy']) ?></b><?php endif; ?>
+          <?php if ($v['visual'] !== ''): ?><small>Se verá: <?= $h($v['visual']) ?></small><?php endif; ?>
         </div>
       </li>
     <?php endforeach; ?>
