@@ -244,16 +244,27 @@ function jugada_inventario(PDO $pdo, int $marca_id, array $t, int $faltan): arra
     $out = ['gaveta' => [], 'fotos' => [], 'ganadores' => []];
 
     // 1. La gaveta: borradores hechos por la IA, sin publicar y sin jugada.
+    //
+    //    OJO — la gaveta SOLO aporta piezas DEL FORMATO QUE LA JUGADA PIDE.
+    //    Sin este filtro, una cuenta con borradores viejos se comía el plan
+    //    entero: la jugada decía "1 carrusel y 1 reel", la gaveta le metía
+    //    tres posts viejos, la jugada se daba por servida y el carrusel y el
+    //    reel nunca se producían. Reusar es bueno; reusar cualquier cosa es
+    //    exactamente el humo del que se queja el dueño.
+    $formato = (string)($t['formato'] ?? 'post');
+    $tipos = ['post'=>['post'], 'carrusel'=>['carrusel'], 'reel'=>['reel'],
+              'historia'=>['story','historia'], 'mixto'=>['post','carrusel','reel','story']];
+    $permitidos = $tipos[$formato] ?? ['post'];
     try {
+        $marcas = implode(',', array_fill(0, count($permitidos), '?'));
         $q = $pdo->prepare(
             "SELECT id, caption, grafica_path, plataforma, tipo
                FROM crecer_contenido
               WHERE marca_id=? AND estado='borrador' AND tactica_id IS NULL
                 AND caption IS NOT NULL AND CHAR_LENGTH(caption) > 40
-              ORDER BY id DESC LIMIT ?");
-        $q->bindValue(1, $marca_id, PDO::PARAM_INT);
-        $q->bindValue(2, max(1, $faltan), PDO::PARAM_INT);
-        $q->execute();
+                AND tipo IN ($marcas)
+              ORDER BY id DESC LIMIT " . max(1, (int)$faltan));
+        $q->execute(array_merge([$marca_id], $permitidos));
         $out['gaveta'] = $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
     } catch (Throwable $e) {}
 
