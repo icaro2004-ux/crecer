@@ -61,10 +61,31 @@ $respaldo_gemini = function () use ($pdo, $mid, $pid, $copy, $link, $notif_ok) {
 // Re-disparo desde el sweep: ir DIRECTO a Gemini (gpt ya falló antes).
 if (($_GET['fb'] ?? '') === '1') { error_log("arte_worker #{$pid}: re-disparo → Gemini directo"); $respaldo_gemini(); }
 
-// 1) CREAR el job de gpt-image-2. Si NO se pudo crear (ej. 429/rate limit) → respaldo Gemini.
+// 1) CREAR el job de gpt-image-2.
+//    Aquí "no me devolvieron id" tampoco alcanza para llamar a otro proveedor:
+//    si la petición se fue en timeout, OpenAI pudo haberla aceptado y el trabajo
+//    existe con un id que nunca recibimos. Por eso encolar devuelve un veredicto
+//    y no una cadena vacía que confunde el rechazo con la duda.
 if ($row && trim((string)($row['img_job'] ?? '')) === '') {
-    $jid = img_resp_encolar($pdo, $mid, $pid, $copy, $con_texto, $extra !== '' ? $extra : null, $estilo);
-    if ($jid === '') { error_log("arte_worker #{$pid}: gpt no creó → Gemini"); $respaldo_gemini(); }
+    $enc = img_resp_encolar_res($pdo, $mid, $pid, $copy, $con_texto, $extra !== '' ? $extra : null, $estilo);
+
+    // El proveedor contestó que no (401, 400, 429, sin credenciales…): no quedó
+    // nada creado, nadie va a cobrar dos veces. El respaldo puede correr.
+    if ($enc['res'] === 'rechazado_confirmado') {
+        error_log("arte_worker #{$pid}: gpt rechazó el job ({$enc['clase']}) → Gemini");
+        $respaldo_gemini();
+    }
+
+    // No sabemos si quedó trabajo creado. No se llama a nadie. img_resp_encolar_res
+    // ya dejó la pieza en cola y marcada 'enc:' para que el barrido tampoco la
+    // rescate: la única regeneración posible es la que pida el dueño.
+    if ($enc['res'] === 'incierto') {
+        error_log("arte_worker #{$pid}: encolado incierto ({$enc['clase']}); sin respaldo");
+        notif_crear($pdo, $mid, 'arte', 'Tu arte va en camino',
+            'Se está tardando un poco más de lo normal. Seguimos en eso y te avisamos apenas esté.',
+            $link, 'image');
+        exit;
+    }
 }
 
 // 2) Sondea gpt-image-2. ok → avisa. error CONFIRMADO por el proveedor → Gemini.

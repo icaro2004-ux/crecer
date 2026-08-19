@@ -725,7 +725,13 @@ function _openai_responses_modelo(array $opts): string {
  * MODO ChatGPT en BACKGROUND — crea la respuesta con background:true (OpenAI la corre por
  * su lado) y devuelve el id AL INSTANTE. No hay llamada larga que el servidor deba sostener.
  * Devuelve ['id','modelo','status'].
+ *
+ * La guarda function_exists no cambia nada en producción —aquí se define una
+ * sola vez—; deja que una prueba sustituya EL BORDE DE RED, que es lo único
+ * que no se puede ejercitar sin gastar. Lo de adentro (clasificación del
+ * fallo, veredicto, estado de la pieza) se prueba de verdad.
  */
+if (!function_exists('openai_responses_crear_bg')) {
 function openai_responses_crear_bg(string $brief, array $opts = []): array {
     if (!openai_configurado()) throw new IaSinCredenciales('Falta OPENAI_API_KEY.');
     $modelo = _openai_responses_modelo($opts);
@@ -758,6 +764,7 @@ function openai_responses_crear_bg(string $brief, array $opts = []): array {
     $id = (string)($d['id'] ?? '');
     if ($id === '')         throw new IaError('Responses(bg) sin id: ' . substr($resp, 0, 300));
     return ['id' => $id, 'modelo' => $modelo, 'status' => (string)($d['status'] ?? 'queued')];
+}
 }
 
 /**

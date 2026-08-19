@@ -12,15 +12,37 @@
 //  proceso, contra el archivo real — con su bucle, sus salidas y
 //  sus notificaciones — y la prueba mira lo que quedó en la base.
 //
-//    php tests/_arte_worker_runner.php <marca> <pieza> <sondeos> [fb]
+//    php tests/_arte_worker_runner.php <marca> <pieza> <sondeos> [fb] [sim]
+//
+//  <sim> sustituye SOLO el borde de red al crear el job, que es lo único que
+//  no se puede ejercitar sin gastar dinero: 'timeout' simula que la petición
+//  se fue sin respuesta (incierto) y 'rechazo' que OpenAI contestó 400
+//  (confirmado). La clasificación, el veredicto y lo que se hace con la pieza
+//  son los de producción.
 // ============================================================
 
 $mid = (int)($argv[1] ?? 0);
 $pid = (int)($argv[2] ?? 0);
 $max = (int)($argv[3] ?? 3);
 $fb  = (string)($argv[4] ?? '');
+$sim = (string)($argv[5] ?? '');
 
-if (!$mid || !$pid) { fwrite(STDERR, "uso: runner <marca> <pieza> <sondeos> [fb]\n"); exit(2); }
+if (!$mid || !$pid) { fwrite(STDERR, "uso: runner <marca> <pieza> <sondeos> [fb] [sim]\n"); exit(2); }
+
+// Se declara ANTES de cargar ia.php, que la define bajo function_exists. Lo que
+// se sustituye es la llamada a OpenAI, no la decisión que se está probando.
+if ($sim !== '') {
+    $GLOBALS['AW_SIM'] = $sim;
+    function openai_responses_crear_bg(string $brief, array $opts = []): array {
+        switch ($GLOBALS['AW_SIM'] ?? '') {
+            // Se fue la petición y no volvió nada: pudo quedar trabajo creado.
+            case 'timeout': throw new RuntimeException('cURL error 28: Operation timed out after 200000 ms');
+            // OpenAI contestó que no. No quedó trabajo creado.
+            case 'rechazo': throw new RuntimeException('Responses(bg): 400 invalid_request_error');
+        }
+        return ['id' => 'resp_sim_' . bin2hex(random_bytes(4)), 'modelo' => 'simulado', 'status' => 'queued'];
+    }
+}
 
 // ── SIN CRÉDITOS, PASE LO QUE PASE ───────────────────────────
 //  El defecto que se está probando es "llama al proveedor cuando no debe", y

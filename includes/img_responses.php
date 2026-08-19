@@ -300,15 +300,56 @@ function img_resp_brief(array $m, string $copy, ?bool $con_texto = null, bool $t
 }
 
 /**
- * Encola un trabajo Responses para una pieza de contenido. Guarda el response_id
- * en crecer_contenido.img_job (estado 'queued'). Devuelve el id, o '' si falla
- * (el llamador cae al motor viejo). Loguea en crecer_ia_log (evidencia XPRIZE #2).
+ * ¿Un fallo al ENCOLAR deja confirmado que no quedó trabajo creado, o es incierto?
+ *
+ * La distinción es la misma del sondeo, un paso antes: allá era "no pude
+ * preguntar" contra "el proveedor falló"; aquí es "no quedó nada creado"
+ * contra "no sé si quedó algo creado".
+ *
+ * CONFIRMADO solo cuando la API contestó que no: sin credenciales (no se llegó
+ * a llamar), 401/403, 400, 404, 429. En todos, OpenAI respondió y no hay
+ * trabajo. Ahí un segundo proveedor es legítimo.
+ *
+ * INCIERTO todo lo demás — timeout, cURL, 5xx, sin clasificar. Puede que la
+ * petición llegara y el trabajo exista con un id que nunca recibimos. Pedir la
+ * imagen a otro proveedor sería pedir —y pagar— la segunda. Ante la duda no se
+ * llama a nadie.
+ */
+function img_encolar_veredicto(string $clase): string {
+    static $confirmado = ['sin_credenciales', 'auth_401_403', 'peticion_400',
+                          'no_encontrado_404', 'rate_limit_429', 'sin_marca'];
+    return in_array($clase, $confirmado, true) ? 'rechazado_confirmado' : 'incierto';
+}
+
+/**
+ * Encola un trabajo Responses para una pieza. Igual que img_resp_encolar_res()
+ * pero devolviendo solo el id — para los llamadores a los que les basta con
+ * saber si salió o no.
  */
 function img_resp_encolar(PDO $pdo, int $marca_id, int $post_id, string $copy, ?bool $con_texto = null, ?string $extra = null, string $estilo = 'realista'): string {
+    return img_resp_encolar_res($pdo, $marca_id, $post_id, $copy, $con_texto, $extra, $estilo)['job'];
+}
+
+/**
+ * Encola un trabajo Responses para una pieza de contenido. Guarda el response_id
+ * en crecer_contenido.img_job (estado 'queued'). Loguea en crecer_ia_log
+ * (evidencia XPRIZE #2).
+ *
+ * @return array{res:string, job:string, clase:string}
+ *   res = 'encolado'              → job trae el response_id.
+ *         'rechazado_confirmado'  → no quedó trabajo creado; el respaldo puede correr.
+ *         'incierto'              → puede existir un trabajo cuyo id no recibimos;
+ *                                   NINGÚN proveedor puede correr detrás de esto.
+ *
+ * En el caso incierto la pieza se deja recuperable y MARCADA ('enc:<clase>' en
+ * img_error_clase): sigue en 'queued' para que el dueño la vea procesando, y esa
+ * marca es la que impide que el barrido la rescate por su cuenta.
+ */
+function img_resp_encolar_res(PDO $pdo, int $marca_id, int $post_id, string $copy, ?bool $con_texto = null, ?string $extra = null, string $estilo = 'realista'): array {
     try {
         $m = function_exists('leer_marca') ? leer_marca($pdo, $marca_id)
            : $pdo->query("SELECT * FROM crecer_marca WHERE id=" . (int)$marca_id)->fetch(PDO::FETCH_ASSOC);
-        if (!$m) return '';
+        if (!$m) return ['res' => 'rechazado_confirmado', 'job' => '', 'clase' => 'sin_marca'];
         // LOGO REAL del negocio (si subió/tiene uno) → se pasa como referencia para NO inventar.
         $logo = null;
         if (!empty($m['logo_path'])) {
@@ -353,14 +394,30 @@ function img_resp_encolar(PDO $pdo, int $marca_id, int $post_id, string $copy, ?
                 ->execute([$marca_id, 'director_imagen', 'Encolar anuncio (Responses/gpt-image-2)',
                            'responses:' . ($bg['modelo'] ?? ''), $brief, $bg['id']]);
         } catch (Throwable $e) { /* log best-effort */ }
-        return $bg['id'];
+        return ['res' => 'encolado', 'job' => (string)$bg['id'], 'clase' => ''];
     } catch (Throwable $e) {
-        error_log('img_resp_encolar: ' . $e->getMessage());
+        $clase = img_poll_clase_error($e->getMessage());
+        $ver   = img_encolar_veredicto($clase);
+        error_log("img_resp_encolar: {$ver} ({$clase}) — " . $e->getMessage());
         // Deja el error EXACTO en el log (para ver por qué gpt-image-2 cae a Gemini: 429/key/modelo/tool).
         try { $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,estado,error_msg)
                              VALUES (?,?,?,?,?,?, 'error', ?)")
-            ->execute([$marca_id, 'director_imagen', 'gpt-image-2 NO pudo crear el job', 'responses', mb_substr($copy, 0, 400), '', mb_substr($e->getMessage(), 0, 400)]); } catch (Throwable $e2) {}
-        return '';
+            ->execute([$marca_id, 'director_imagen', 'gpt-image-2 NO pudo crear el job', 'responses', mb_substr($copy, 0, 400), $ver, mb_substr($e->getMessage(), 0, 400)]); } catch (Throwable $e2) {}
+
+        // INCIERTO: puede haber quedado un trabajo allá afuera con un id que no
+        // recibimos. Se deja la pieza en cola y MARCADA, que es lo que impide
+        // que el barrido la rescate por su cuenta y pague la segunda imagen.
+        // La marca se limpia sola: encolar de nuevo pone img_error_clase=NULL.
+        if ($ver === 'incierto' && img_poll_columnas($pdo)) {
+            try {
+                $pdo->prepare("UPDATE crecer_contenido
+                                  SET img_estado='queued', img_job=NULL,
+                                      img_error_clase=?, updated_at=NOW()
+                                WHERE id=? AND marca_id=?")
+                    ->execute(['enc:' . $clase, $post_id, $marca_id]);
+            } catch (Throwable $e2) { error_log('marcar encolado incierto: ' . $e2->getMessage()); }
+        }
+        return ['res' => $ver, 'job' => '', 'clase' => $clase];
     }
 }
 
@@ -476,9 +533,10 @@ function img_sweep_pendientes(PDO $pdo, int $marca_id, bool $solo_recoger = fals
         // evaluar todos los jobs trancados - que es como se llego a 852 filas.
         // El filtro se omite si aun no corrio la migracion: el codigo puede ir
         // por delante del SQL sin tumbar ninguna pantalla.
-        $puerta = img_poll_columnas($pdo)
-            ? " AND (img_next_poll_at IS NULL OR img_next_poll_at <= NOW())" : "";
-        $pend = $pdo->prepare("SELECT id, img_job FROM crecer_contenido
+        $cols   = img_poll_columnas($pdo);
+        $puerta = $cols ? " AND (img_next_poll_at IS NULL OR img_next_poll_at <= NOW())" : "";
+        $clase  = $cols ? ", img_error_clase" : "";
+        $pend = $pdo->prepare("SELECT id, img_job{$clase} FROM crecer_contenido
              WHERE marca_id=? AND img_estado='queued'" . $puerta . "
                AND (img_job IS NOT NULL OR updated_at < (NOW() - INTERVAL 2 MINUTE))
              ORDER BY id DESC LIMIT " . $limite);
@@ -492,6 +550,11 @@ function img_sweep_pendientes(PDO $pdo, int $marca_id, bool $solo_recoger = fals
             // Colgado sin job → el worker nunca arrancó: rescátalo directo por Gemini (síncrono, fiable).
             if (empty($row['img_job'])) {
                 if ($solo_recoger) continue;          // eso cuesta: no lo decide el cron
+                // ENCOLADO INCIERTO ('enc:'): no hay id, pero OpenAI PUDO haber
+                // creado el trabajo igual. Rescatar aquí sería pedir la segunda
+                // imagen y pagarla. Nadie automático la pide: solo el dueño,
+                // volviendo a darle a generar en su post.
+                if (str_starts_with((string)($row['img_error_clase'] ?? ''), 'enc:')) continue;
                 if (function_exists('img_gemini_fallback')) {
                     $cap = (string)($pdo->query("SELECT caption FROM crecer_contenido WHERE id=" . $pid)->fetchColumn() ?: '');
                     $url = img_gemini_fallback($pdo, $marca_id, $pid, $cap);
