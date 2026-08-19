@@ -387,6 +387,39 @@ if ($meta) {
   .plan-barra i{display:block;height:100%;background:linear-gradient(90deg,var(--teal,#00A49F),var(--magenta,#EF4375));border-radius:99px;transition:width .5s}
   .plan-obs{background:color-mix(in srgb,var(--teal,#00A49F) 10%,#fff);border:1px solid color-mix(in srgb,var(--teal,#00A49F) 30%,#fff);color:#0a6a5f;border-radius:13px;padding:12px 14px;font-size:13px;line-height:1.55;margin:0 0 14px}
 
+  /* ── PLAN CONTRA PLAN ──────────────────────────────────────────────────
+     Móvil: una tarjeta por plan, en columna, se lee deslizando el pulgar.
+     Desktop: lado a lado de verdad — que es el único sitio donde comparar
+     dos columnas con la vista funciona. */
+  .cmp{display:flex;flex-direction:column;gap:10px}
+  .cmp-p{background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:14px 15px}
+  .cmp-p.on{border-color:var(--magenta,#EF4375);box-shadow:0 12px 28px -22px rgba(239,67,117,.8)}
+  .cmp-h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .cmp-h b{font-size:16px}
+  .cmp-est{font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+    color:#6b6560;background:#f4f1ec;border-radius:6px;padding:3px 7px}
+  .cmp-p.on .cmp-est{background:linear-gradient(135deg,#FF6B3D,#EF4375);color:#fff}
+  .cmp-d{font-size:12px;color:var(--muted);margin-left:auto}
+  .cmp-corto{margin:0 0 10px;font-size:12px;line-height:1.45;color:#8a6d1f;
+    background:#fff8e6;border:1px solid #f2dfae;border-radius:9px;padding:8px 10px}
+  .cmp-nums{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .cmp-nums>div{background:#faf8f5;border-radius:11px;padding:10px 11px;position:relative}
+  .cmp-nums b{display:block;font-size:19px;line-height:1.15;font-variant-numeric:tabular-nums}
+  .cmp-nums span{display:block;font-size:11.5px;color:var(--muted);margin-top:2px}
+  .cmp-nums i{position:absolute;top:9px;right:10px;font-style:normal;font-size:11px;font-weight:800;
+    padding:2px 6px;border-radius:6px}
+  .cmp-nums i.up{background:#e6f7f0;color:#0a6a4a}
+  .cmp-nums i.dn{background:#fdeeee;color:#b4232b}
+  .cmp-ritmo{margin:10px 0 0;font-size:12.5px;color:var(--tinta);line-height:1.5}
+  .cmp-lec{margin:9px 0 0;font-size:12.5px;line-height:1.5;color:#4A434F;
+    border-left:3px solid var(--teal,#00A49F);padding-left:9px}
+  .cmp-nota{font-size:11.5px;color:var(--muted);line-height:1.5;margin:9px 2px 0}
+  @media (min-width:860px){
+    .cmp{flex-direction:row;align-items:flex-start}
+    .cmp-p{flex:1;min-width:0}
+    .cmp-nums{grid-template-columns:repeat(2,1fr)}
+  }
+
   /* Historial de planes */
   .hplan{background:var(--card,#fff);border:1px solid var(--line);border-radius:14px;margin-bottom:9px;overflow:hidden}
   .hplan[open]{border-color:var(--teal,#00A49F)}
@@ -892,6 +925,61 @@ if ($meta) {
         <p style="margin:0;font-size:14px;color:var(--muted);line-height:1.55">
           La Estratega todavía no dejó las jugadas. Dale a <b>Rehacer el plan</b> y lo arma de nuevo.</p>
       </div>
+    <?php endif; ?>
+
+    <?php /* ── COMPARAR PLANES ────────────────────────────────────────────
+         El historial ya guardaba el récord de cada plan, pero uno debajo del
+         otro. Aquí se ven juntos y con su delta, que es lo que contesta la
+         pregunta de verdad: ¿este plan lo está haciendo mejor que el anterior? */ ?>
+    <?php $comp = $meta ? meta_planes_comparar($pdo, (int)$meta['id']) : []; ?>
+    <?php if (count($comp) >= 2): ?>
+      <h2 style="font-family:var(--font-display,'Oswald',sans-serif);font-size:17px;letter-spacing:.4px;color:var(--tinta);margin:26px 0 4px">
+        Plan contra plan</h2>
+      <p style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 12px">
+        Cada plan medido en SU ventana, y el ritmo por semana para que ventanas
+        distintas se puedan comparar sin trampa.</p>
+
+      <div class="cmp">
+        <?php foreach ($comp as $c): $ps = $c['por_semana']; ?>
+          <div class="cmp-p<?= $c['activo'] ? ' on' : '' ?>">
+            <div class="cmp-h">
+              <b>Plan #<?= $c['version'] ?></b>
+              <span class="cmp-est"><?= $c['activo'] ? 'en curso' : ($c['estado']==='completado'?'cumplido':'reemplazado') ?></span>
+              <span class="cmp-d"><?= $c['dias'] < 1 ? 'menos de un día' : (rtrim(rtrim(number_format($c['dias'],1),'0'),'.') . ($c['dias']==1?' día':' días')) ?></span>
+            </div>
+            <?php if ($c['corto']): ?>
+              <p class="cmp-corto">Ventana muy corta para juzgarla — no se compara.</p>
+            <?php endif; ?>
+            <div class="cmp-nums">
+              <div><b><?= $c['hechas'] ?>/<?= $c['jugadas'] ?></b><span>jugadas</span></div>
+              <div><b><?= $c['publicadas'] ?></b><span>publicadas</span>
+                <?php if (isset($c['delta']['publicadas'])): ?>
+                  <i class="<?= $c['delta']['publicadas'] >= 0 ? 'up':'dn' ?>"><?= ($c['delta']['publicadas']>=0?'+':'') . $c['delta']['publicadas'] ?>%</i>
+                <?php endif; ?>
+              </div>
+              <div><b><?= $c['alcance'] !== null ? number_format((float)$c['alcance']) : '—' ?></b><span>alcance</span>
+                <?php if (isset($c['delta']['alcance'])): ?>
+                  <i class="<?= $c['delta']['alcance'] >= 0 ? 'up':'dn' ?>"><?= ($c['delta']['alcance']>=0?'+':'') . $c['delta']['alcance'] ?>%</i>
+                <?php endif; ?>
+              </div>
+              <div><b><?= $c['movio'] !== null ? $h(meta_fmt((float)$c['movio'], (string)$c['objetivo'])) : '—' ?></b><span>movió la meta</span>
+                <?php if (isset($c['delta']['movio'])): ?>
+                  <i class="<?= $c['delta']['movio'] >= 0 ? 'up':'dn' ?>"><?= ($c['delta']['movio']>=0?'+':'') . $c['delta']['movio'] ?>%</i>
+                <?php endif; ?>
+              </div>
+            </div>
+            <?php if ($ps && !$c['corto']): ?>
+              <p class="cmp-ritmo">Ritmo: <b><?= $ps['publicadas'] ?></b> publicadas por semana<?php
+                if ($ps['movio'] !== null): ?> · <b><?= $h(meta_fmt((float)$ps['movio'], (string)$c['objetivo'])) ?></b> por semana<?php endif; ?></p>
+            <?php endif; ?>
+            <?php if ($c['leccion'] !== ''): ?>
+              <p class="cmp-lec"><?= $h($c['leccion']) ?></p>
+            <?php endif; ?>
+          </div>
+        <?php endforeach; ?>
+      </div>
+      <p class="cmp-nota">Una raya (—) quiere decir <b>sin dato todavía</b>, no cero: Instagram y Facebook
+        reportan con retraso. Los porcentajes comparan contra el plan anterior, por semana.</p>
     <?php endif; ?>
 
     <?php if ($historial): ?>

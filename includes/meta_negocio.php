@@ -802,6 +802,71 @@ function meta_plan_resultados(PDO $pdo, array $plan): array {
 }
 
 /**
+ * COMPARAR LOS PLANES DE UNA META — plan a plan, con su delta.
+ *
+ * Reglas de honestidad (son las que hacen que la comparación signifique algo):
+ *  · NULL no es cero. Si Instagram no reportó, no hay número ni hay delta.
+ *  · Se compara CONTRA EL PLAN ANTERIOR, no contra el total histórico.
+ *  · Una ventana de menos de 3 días no se compara: se marca `corto`. Un plan
+ *    que vivió un día no perdió contra uno de dos semanas, es que no le dio
+ *    tiempo. Decirlo vale más que pintar una flecha roja.
+ *  · El ritmo (`por_semana`) permite comparar ventanas distintas sin mentir.
+ *
+ * @return array<int,array> ordenado del más viejo al más nuevo
+ */
+function meta_planes_comparar(PDO $pdo, int $meta_id): array {
+    $filas = [];
+    $ant = null;
+    $planes = array_reverse(meta_planes($pdo, $meta_id));   // del #1 en adelante
+    foreach ($planes as $p) {
+        $res  = meta_plan_resultados($pdo, $p);
+        $prog = meta_plan_progreso($pdo, (int)$p['id']);
+        $ini  = strtotime((string)$p['inicio_at']);
+        $fin  = !empty($p['cierre_at']) ? strtotime((string)$p['cierre_at']) : time();
+        $dias = max(0.0, round(($fin - $ini) / 86400, 1));
+        $sem  = $dias > 0 ? $dias / 7 : 0;
+
+        $f = [
+            'id'        => (int)$p['id'],
+            'version'   => (int)$p['version'],
+            'estado'    => (string)$p['estado'],
+            'activo'    => ((string)$p['estado'] === 'activo'),
+            'dias'      => $dias,
+            'corto'     => ($dias < 3),
+            'hechas'    => (int)($prog['hechas'] ?? 0),
+            'jugadas'   => (int)($prog['total'] ?? 0),
+            'piezas'    => (int)$res['piezas'],
+            'publicadas'=> (int)$res['publicadas'],
+            'alcance'   => $res['alcance'],
+            'interacciones' => $res['interacciones'],
+            'movio'     => $res['movio'],
+            'objetivo'  => $res['objetivo'] ?? '',
+            'funciono'  => $p['funciono'] === null ? null : ((int)$p['funciono'] === 1),
+            'leccion'   => (string)($p['leccion'] ?? ''),
+            'delta'     => [],
+        ];
+        // Ritmo por semana: la única forma decente de comparar ventanas desiguales.
+        $f['por_semana'] = $sem > 0.3 ? [
+            'publicadas' => round($f['publicadas'] / $sem, 1),
+            'alcance'    => $f['alcance'] !== null ? round((float)$f['alcance'] / $sem) : null,
+            'movio'      => $f['movio']   !== null ? round((float)$f['movio'] / $sem, 1) : null,
+        ] : null;
+
+        // El delta solo existe si AMBOS planes tienen ventana suficiente y dato.
+        if ($ant && !$f['corto'] && !$ant['corto'] && $ant['por_semana'] && $f['por_semana']) {
+            foreach (['publicadas','alcance','movio'] as $k) {
+                $a = $ant['por_semana'][$k]; $b = $f['por_semana'][$k];
+                if ($a === null || $b === null || (float)$a == 0.0) continue;
+                $f['delta'][$k] = round((((float)$b - (float)$a) / (float)$a) * 100);
+            }
+        }
+        $filas[] = $f;
+        $ant = $f;
+    }
+    return $filas;
+}
+
+/**
  * CIERRA un plan y le CONGELA sus resultados medidos. Se llama cuando se
  * cumplieron todas las jugadas ('completado') o cuando nace uno nuevo que lo
  * sustituye ('reemplazado'). Los números quedan grabados: son su récord.
