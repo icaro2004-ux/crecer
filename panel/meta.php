@@ -703,10 +703,16 @@ if ($meta) {
           <b style="color:var(--tinta)">Lo que me contaste:</b><br><?= $h($meta['contexto']) ?></p>
       <?php endif; ?>
 
+      <?php /* "Rehacer el plan" no decía qué hacía: el dueño no sabía si perdía
+               lo trabajado. Ahora dice lo que es —empezar un plan nuevo— y antes
+               de arrancar explica exactamente qué pasa con lo viejo. */ ?>
       <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
-        <button type="button" class="btn-s" id="replan" style="flex:1">Rehacer el plan</button>
+        <button type="button" class="btn-s" id="replan" style="flex:1"><?= ico('refresh') ?> Empezar un plan nuevo</button>
         <button type="button" class="btn-s" id="cerrar" style="flex:1">Cambiar de meta</button>
       </div>
+      <p style="margin:9px 2px 0;font-size:12px;line-height:1.5;color:var(--muted)">
+        Un plan nuevo son jugadas nuevas para esta misma meta. El plan de ahora pasa a
+        historial y lo que el corillo ya te hizo se queda en Tus Posts.</p>
     </div>
   </div>
 
@@ -1076,11 +1082,13 @@ if ($meta) {
   });
 
   document.getElementById('replan').addEventListener('click', function(){
-    var b=this; b.disabled=true; b.textContent='La Estratega está pensando…';
+    if(!confirm('¿Empezar un plan nuevo?\n\nLa Estratega arma jugadas nuevas para esta misma meta.\n\n· El plan de ahora pasa a historial.\n· Lo que el corillo ya te hizo se queda en Tus Posts.\n· Tu meta, tu marca y tu Genoma no se tocan.')) return;
+    var b=this, orig=b.innerHTML;
+    b.disabled=true; b.textContent='La Estratega está pensando…';
     post({accion:'replan'}).then(function(d){
       if(d.ok) location.reload();
-      else { b.disabled=false; b.textContent='Rehacer el plan'; alert(d.err||'No pude rehacer el plan.'); }
-    }).catch(function(){ b.disabled=false; b.textContent='Rehacer el plan'; });
+      else { b.disabled=false; b.innerHTML=orig; alert(d.err||'No pude armar el plan nuevo.'); }
+    }).catch(function(){ b.disabled=false; b.innerHTML=orig; });
   });
 
   document.getElementById('cerrar').addEventListener('click', function(){
