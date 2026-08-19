@@ -206,14 +206,17 @@ $mt_volver = '&volver=meta';
  * que tenemos no cubre lo que el dueño llamaría un resultado. Esto no es copy,
  * es la salvaguarda del compositor aplicada a la pantalla.
  */
-$mt_unidad = function (string $objetivo): string {
+//  DOS palabras distintas, y no es un detalle: una nombra el OBJETIVO y la otra
+//  lo YA CONSEGUIDO. Mezclarlas ("25 pedidos registrados" arriba y "0 hasta hoy"
+//  debajo) presenta la meta como si ya estuviera cumplida.
+$mt_unidad = function (string $objetivo): array {
     switch ($objetivo) {
-        case 'pedidos':        return 'pedidos registrados';
-        case 'ventas':         return 'ventas registradas';
-        case 'conversaciones': return 'mensajes recibidos';
-        case 'alcance':        return 'personas alcanzadas';
-        case 'comunidad':      return 'interacciones';
-        default:               return 'resultados';
+        case 'pedidos':        return ['pedidos',      'registrados'];
+        case 'ventas':         return ['en ventas',    'registradas'];
+        case 'conversaciones': return ['mensajes',     'recibidos'];
+        case 'alcance':        return ['personas',     'alcanzadas'];
+        case 'comunidad':      return ['interacciones','contadas'];
+        default:               return ['resultados',   'registrados'];
     }
 };
 ?>
@@ -456,6 +459,17 @@ $mt_unidad = function (string $objetivo): string {
     font-size:16px;color:#fff;background:linear-gradient(135deg,#FF6B3D,#EF4375);
     box-shadow:0 12px 26px -14px rgba(239,67,117,.7)}
   .ah-btn:disabled{opacity:.55;cursor:default}
+  .ah-como{margin:0}
+  .ah-como > summary{list-style:none;display:block}
+  .ah-como > summary::-webkit-details-marker{display:none}
+  .ah-pasos{margin-top:14px;border-top:1px solid var(--line);padding-top:13px}
+  .ah-monto{font-size:15px;margin:0 0 10px;color:var(--tinta)}
+  .ah-pasos ol{margin:0 0 12px;padding-left:20px}
+  .ah-pasos li{font-size:15px;line-height:1.5;color:var(--ink,#4A434F);margin-bottom:7px}
+  .ah-aviso{font-size:14px;line-height:1.45;color:var(--muted);margin:0 0 14px}
+  .ah-btn2{display:block;width:100%;min-height:48px;border:1.5px solid var(--tinta);border-radius:14px;
+    cursor:pointer;background:#fff;color:var(--tinta);font-family:inherit;font-weight:800;font-size:16px}
+  .ah-btn2:disabled{opacity:.55;cursor:default}
   .ah-cons{font-size:14px;line-height:1.45;color:var(--muted);margin:10px 0 0}
   .ah-guion{margin-top:14px;border-top:1px solid var(--line);padding-top:11px}
   .ah-guion summary{font-size:14px;font-weight:700;color:var(--teal,#00A49F);cursor:pointer;
@@ -1088,7 +1102,7 @@ $mt_unidad = function (string $objetivo): string {
     <?php endif; ?>
 
     <?php if ($historial): ?>
-      <h2 style="font-family:var(--font-display,'Oswald',sans-serif);font-size:17px;letter-spacing:.4px;color:var(--tinta);margin:26px 0 4px">
+      <h2 id="aprendizaje" style="font-family:var(--font-display,'Oswald',sans-serif);font-size:17px;letter-spacing:.4px;color:var(--tinta);margin:26px 0 4px;scroll-margin-top:16px">
         Planes anteriores</h2>
       <p style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 12px">
         Cada plan guarda su propio récord: qué se hizo, qué se publicó y qué dejó. Ábrelos para ver los resultados.</p>
@@ -1314,24 +1328,25 @@ $mt_unidad = function (string $objetivo): string {
 
   <?php /* ── ZONA META · compacta, y honesta con lo que puede afirmar ── */ ?>
   <?php if ($mt_snap['meta']): ?>
+    <?php
+      [$sust, $part] = $uni;
+      $num = fn($v) => rtrim(rtrim(number_format((float)$v, 2), '0'), '.');
+      $trozos = [];
+      if ($mt_snap['progreso']['actual'] !== null) {
+          $trozos[] = $num($mt_snap['progreso']['actual']) . ' ' . $part . ' hasta hoy';
+      } else {
+          $trozos[] = 'sin señal todavía';
+      }
+      if ($mt_snap['progreso']['dias_rest'] !== null) {
+          $d = (int)$mt_snap['progreso']['dias_rest'];
+          $trozos[] = $d <= 0 ? 'sin días por delante' : ($d === 1 ? 'queda 1 día' : "quedan {$d} días");
+      }
+    ?>
     <section class="ah-meta">
       <b><?= $mt_snap['meta']['cantidad'] !== null
-            ? $h(rtrim(rtrim(number_format((float)$mt_snap['meta']['cantidad'], 2), '0'), '.')) . ' ' . $h($uni)
-            : $h(ucfirst($uni)) ?></b>
-      <span>
-        <?php
-          $trozos = [];
-          if ($mt_snap['progreso']['dias_rest'] !== null) {
-              $d = (int)$mt_snap['progreso']['dias_rest'];
-              $trozos[] = $d <= 0 ? 'sin días por delante' : ($d === 1 ? 'queda 1 día' : "quedan {$d} días");
-          }
-          if ($mt_snap['progreso']['actual'] !== null) {
-              $a = (float)$mt_snap['progreso']['actual'];
-              $trozos[] = rtrim(rtrim(number_format($a, 2), '0'), '.') . ' hasta hoy';
-          }
-          echo $h(implode(' · ', $trozos) ?: 'sin señal todavía');
-        ?>
-      </span>
+            ? 'Meta: ' . $h($num($mt_snap['meta']['cantidad'])) . ' ' . $h($sust)
+            : 'Meta: ' . $h($sust) ?></b>
+      <span><?= $h(implode(' · ', $trozos)) ?></span>
       <?php if ($E->puedeAfirmarProgreso() && $mt_snap['progreso']['pct'] !== null): ?>
         <i class="ah-barra"><b style="width:<?= max(0, min(100, (int)$mt_snap['progreso']['pct'])) ?>%"></b></i>
       <?php else: ?>
@@ -1374,10 +1389,36 @@ $mt_unidad = function (string $objetivo): string {
       <p class="ah-ins"><?= $h($E->instruccion) ?></p>
     <?php endif; ?>
 
-    <?php if ($act): ?>
-      <?php if (($act['tipo'] ?? '') === 'fisica' || ($act['tipo'] ?? '') === 'inversion'): ?>
-        <?php /* Lo que se confirma aquí mismo: se marca la jugada y se recarga. */ ?>
+    <?php if ($act): $tipo = (string)($act['tipo'] ?? ''); ?>
+      <?php if ($tipo === 'inversion'): ?>
+        <?php /* NO decimos "Autorizar $15": Crecer no entra a tu gestor de
+                 anuncios ni puede comprobar que el dinero salió. La acción
+                 primaria ENSEÑA cómo hacerlo; confirmarlo es un paso aparte, y
+                 solo esa confirmación cierra la jugada. */ ?>
+        <details class="ah-como" id="ahComo">
+          <summary class="ah-btn"><?= $h($act['etiqueta']) ?></summary>
+          <div class="ah-pasos">
+            <p class="ah-monto">Presupuesto de esta jugada: <b><?= $h('$' . rtrim(rtrim(number_format((float)($E->evidencia['inversion'] ?? 0), 2), '0'), '.')) ?></b></p>
+            <ol>
+              <li>Abre la publicación en Instagram o Facebook desde tu teléfono.</li>
+              <li>Toca <b>Promocionar</b> (o <b>Impulsar publicación</b>).</li>
+              <li>Escoge el público de tu zona y pon el presupuesto de arriba.</li>
+              <li>Confirma el pago en la app de Meta — eso lo haces tú, no yo.</li>
+            </ol>
+            <p class="ah-aviso">Yo no puedo promocionarlo por ti ni ver si el pago salió.
+              Cuando lo hayas hecho, dímelo aquí y lo doy por hecho.</p>
+            <button type="button" class="ah-btn2" id="ahConfirmar"
+                    data-jugada="<?= (int)($E->evidencia['tactica_id'] ?? 0) ?>">Confirmar que ya lo promocioné</button>
+          </div>
+        </details>
+      <?php elseif ($tipo === 'fisica'): ?>
         <button type="button" class="ah-btn" id="ahConfirmar"
+                data-jugada="<?= (int)($E->evidencia['tactica_id'] ?? 0) ?>"><?= $h($act['etiqueta']) ?></button>
+      <?php elseif ($tipo === 'reintento_job'): ?>
+        <?php /* Reencola la jugada de verdad con la acción `ejecutar` que ya
+                 existe. Un enlace aquí recargaría la pantalla dejando el fallo
+                 igual de trabado. */ ?>
+        <button type="button" class="ah-btn" id="ahReintentar"
                 data-jugada="<?= (int)($E->evidencia['tactica_id'] ?? 0) ?>"><?= $h($act['etiqueta']) ?></button>
       <?php else: ?>
         <a class="ah-btn" href="<?= $h($destino) ?>"><?= $h($act['etiqueta']) ?></a>
@@ -1425,21 +1466,38 @@ $mt_unidad = function (string $objetivo): string {
 
   // Confirmar lo que ocurre FUERA de Crecer (gasto o recado). Se marca la
   // jugada y se recompone el estado: la pantalla no se queda mintiendo.
-  var b = document.getElementById('ahConfirmar');
-  if (b) b.addEventListener('click', function(){
-    var id = b.dataset.jugada;
-    if (!id) return;
-    b.disabled = true; var antes = b.textContent; b.textContent = 'Un momento…';
+  function enviar(btn, campos, cargando, alFallar) {
+    var antes = btn.textContent;
+    btn.disabled = true; btn.textContent = cargando;
     var fd = new FormData();
     fd.append('csrf', CSRF); fd.append('ajax', '1');
-    fd.append('accion', 'tactica'); fd.append('id', id); fd.append('estado', 'hecha');
-    fetch(location.pathname + '?marca=' + MARCA, { method: 'POST', body: fd })
+    Object.keys(campos).forEach(function(k){ fd.append(k, campos[k]); });
+    return fetch(location.pathname + '?marca=' + MARCA, { method: 'POST', body: fd })
       .then(function(r){ return r.json(); })
       .then(function(d){
-        if (d && d.ok) { location.href = location.pathname + '?marca=' + MARCA; return; }
-        b.disabled = false; b.textContent = antes; say((d && d.err) || 'No se pudo marcar.');
+        // Se recarga para que el ESTADO se recomponga: la pantalla no puede
+        // quedarse enseñando lo que ya dejó de ser verdad.
+        if (d && d.ok) { location.href = location.pathname + '?marca=' + MARCA; return true; }
+        btn.disabled = false; btn.textContent = antes; say((d && d.err) || alFallar);
+        return false;
       })
-      .catch(function(){ b.disabled = false; b.textContent = antes; say('Error de conexión.'); });
+      .catch(function(){ btn.disabled = false; btn.textContent = antes; say('Error de conexión.'); return false; });
+  }
+
+  // Confirmar lo que ocurrió FUERA de Crecer. Solo esto cierra la jugada.
+  var b = document.getElementById('ahConfirmar');
+  if (b) b.addEventListener('click', function(){
+    if (!b.dataset.jugada) return;
+    enviar(b, {accion:'tactica', id:b.dataset.jugada, estado:'hecha'},
+           'Un momento…', 'No se pudo marcar.');
+  });
+
+  // Reencolar la jugada que se trabó.
+  var r = document.getElementById('ahReintentar');
+  if (r) r.addEventListener('click', function(){
+    if (!r.dataset.jugada) return;
+    enviar(r, {accion:'ejecutar', id:r.dataset.jugada},
+           'Reintentando…', 'No se pudo reintentar.');
   });
 })();
 </script>

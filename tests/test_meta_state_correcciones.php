@@ -172,10 +172,11 @@ $e = MetaStateComposer::componer(sn([
 ok('I usa que_hacer como instrucción',
    $e->instruccion === 'Contacta a la cafetería de la esquina y propón un combo cruzado.',
    $e->instruccion);
-ok('la confirmación NO es «Ya lo hice» a secas',
-   $e->accion['etiqueta'] !== 'Ya lo hice', $e->accion['etiqueta']);
-ok('la confirmación nombra la acción',
-   strpos($e->accion['etiqueta'], 'Alianza con negocio local') !== false, $e->accion['etiqueta']);
+ok('el título es la tarea concreta', $e->titulo === 'Alianza con negocio local', $e->titulo);
+ok('la confirmación dice lo que el botón hace, en español',
+   $e->accion['etiqueta'] === 'Confirmar que lo hice', $e->accion['etiqueta']);
+ok('y NO intenta conjugar el título («Ya Alianza con…» no es español)',
+   strpos($e->accion['etiqueta'], 'Ya ') !== 0, $e->accion['etiqueta']);
 ok('que_hacer viaja en la evidencia', !empty($e->evidencia['que_hacer']));
 
 $e = MetaStateComposer::componer(sn([
@@ -185,9 +186,13 @@ $e = MetaStateComposer::componer(sn([
 ]));
 ok('H usa que_hacer como instrucción',
    $e->instruccion === 'Invierte $10 en promocionar el post del combo familiar.');
-ok('H nombra monto Y acción en el botón',
-   strpos($e->accion['etiqueta'], '$10') !== false
-   && strpos($e->accion['etiqueta'], 'Boost al post') !== false, $e->accion['etiqueta']);
+ok('H NO dice «Autorizar»: Crecer no ejecuta el anuncio',
+   stripos($e->accion['etiqueta'], 'autorizar') === false, $e->accion['etiqueta']);
+ok('H enseña cómo hacerlo', $e->accion['etiqueta'] === 'Ver cómo promocionarlo', $e->accion['etiqueta']);
+ok('H no afirma que el dinero salió',
+   stripos($e->accion['consecuencia'], 'gast') === false
+   && stripos($e->accion['consecuencia'], 'autoriz') === false, $e->accion['consecuencia']);
+ok('H deja el monto en la evidencia, no en una promesa', (float)$e->evidencia['inversion'] === 10.0);
 
 $e = MetaStateComposer::componer(sn([
     'jugadas' => [jg(['id' => 40, 'clase' => 'accion_dueno', 'semana' => 1,

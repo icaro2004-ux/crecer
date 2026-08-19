@@ -70,10 +70,11 @@ $e = MetaStateComposer::componer(s126([
     'jugadas' => [jug(['id' => 33, 'clase' => 'accion_dueno', 'inversion' => 10.0,
                        'semana' => 1, 'titulo' => 'Boost al post del combo'])],
 ]));
-ok('H · el monto sale en la etiqueta', strpos($e->accion['etiqueta'], '$10') !== false, $e->accion['etiqueta']);
+ok('H · la etiqueta no promete un gasto que no podemos ver',
+   stripos($e->accion['etiqueta'], 'autorizar') === false, $e->accion['etiqueta']);
 ok('H · destino lleva la jugada', strpos($e->accion['destino'], 'jugada=33') !== false, $e->accion['destino']);
 ok('H · evidencia trae el monto', (float)$e->evidencia['inversion'] === 10.0);
-ok('H · el título de la jugada es la instrucción', $e->instruccion === 'Boost al post del combo');
+ok('H · el título es la jugada concreta', $e->titulo === 'Boost al post del combo', $e->titulo);
 
 // ── Toda URL es del panel y lleva la marca ─────────────────
 echo "\n  — todas las URLs —\n";

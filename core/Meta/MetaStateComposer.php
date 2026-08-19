@@ -105,9 +105,11 @@ class MetaStateComposer
                     MetaState::D_ERROR,
                     'Se me trabó una tarea',
                     'No se completó, pero no se perdió nada. Lo intento otra vez.',
+                    // Reencola la jugada de verdad (accion `ejecutar`): un enlace
+                    // que recargara esta misma pantalla dejaria el fallo intacto.
                     ['etiqueta' => 'Intentar de nuevo',
-                     'destino' => self::url($s, 'meta.php'),
-                     'consecuencia' => 'Retomo desde donde se quedó.', 'tipo' => 'reintento'],
+                     'destino' => self::url($s, 'meta.php', ['jugada' => (int)($j['tactica_id'] ?? 0)]),
+                     'consecuencia' => 'Retomo desde donde se quedó.', 'tipo' => 'reintento_job'],
                     ['job_id' => (int)($j['id'] ?? 0), 'tactica_id' => (int)($j['tactica_id'] ?? 0)],
                     self::camino($s), self::cobertura($s), 'job_fallido');
             }
@@ -249,14 +251,19 @@ class MetaStateComposer
     {
         foreach (self::jugadasDelDueno($s) as $t) {
             if ((float)($t['inversion'] ?? 0) <= 0) continue;
-            $monto = self::dinero((float)$t['inversion']);
             return new MetaState(
                 MetaState::H_INVERSION,
-                'Para seguir, necesito tu OK para gastar ' . $monto,
+                (string)$t['titulo'],
                 self::queHacer($t),
-                ['etiqueta' => 'Autorizar ' . $monto . ' · ' . self::corto($t['titulo']),
+                // Crecer NO promociona por ti: no tiene acceso al gestor de
+                // anuncios ni forma de comprobar que el dinero salió. Así que la
+                // acción no "autoriza" nada — enseña cómo hacerlo. Confirmar que
+                // ocurrió es un paso aparte, y solo esa confirmación cierra la
+                // jugada. Decir "autorizado" sin evidencia sería inventarlo.
+                ['etiqueta' => 'Ver cómo promocionarlo',
                  'destino' => self::url($s, 'meta.php', ['jugada' => (int)$t['id']]),
-                 'consecuencia' => 'Sin tu OK no se gasta nada.', 'tipo' => 'inversion'],
+                 'consecuencia' => 'Cuando lo hagas, me lo confirmas y sigo con lo próximo.',
+                 'tipo' => 'inversion'],
                 ['tactica_id' => (int)$t['id'], 'inversion' => (float)$t['inversion'],
                  'que_hacer' => self::queHacer($t)],
                 self::camino($s, (int)$t['id']), self::cobertura($s), 'jugada_requiere_inversion');
@@ -274,9 +281,12 @@ class MetaStateComposer
             if ((float)($t['inversion'] ?? 0) > 0) continue;   // esa la cubre H
             return new MetaState(
                 MetaState::I_ACCION_FISICA,
-                'Para seguir, necesito que hagas esto',
+                // El título es la tarea concreta y la instrucción dice cómo. La
+                // confirmación NO intenta conjugar el título ("Ya Alianza con
+                // negocio local" no es español): dice lo único que el botón hace.
+                (string)$t['titulo'],
                 self::queHacer($t),
-                ['etiqueta' => 'Ya ' . self::corto($t['titulo']),
+                ['etiqueta' => 'Confirmar que lo hice',
                  'destino' => self::url($s, 'meta.php', ['jugada' => (int)$t['id']]),
                  'consecuencia' => 'Lo doy por hecho y sigo con lo próximo.', 'tipo' => 'fisica'],
                 ['tactica_id' => (int)$t['id'], 'que_hacer' => self::queHacer($t)],
@@ -409,7 +419,8 @@ class MetaStateComposer
             MetaState::L_APRENDIZAJE,
             'Aprendí algo de tu plan anterior',
             (string)$pc['leccion'],
-            ['etiqueta' => 'Ver el ajuste', 'destino' => self::url($s, 'meta.php'),
+            ['etiqueta' => 'Ver el ajuste',
+             'destino' => self::url($s, 'meta.php', ['vista' => 'plan'], 'aprendizaje'),
              'consecuencia' => 'Ya lo estoy aplicando en el plan de ahora.', 'tipo' => 'informativa'],
             ['plan_id' => (int)($pc['id'] ?? 0), 'funciono' => $pc['funciono'] ?? null],
             self::camino($s), self::cobertura($s), 'leccion_reciente');
@@ -425,7 +436,8 @@ class MetaStateComposer
             MetaState::FALLBACK,
             'Tu plan está en marcha',
             'No tengo nada que pedirte ahora mismo.',
-            ['etiqueta' => 'Ver el plan', 'destino' => self::url($s, 'meta.php'),
+            ['etiqueta' => 'Ver el plan completo',
+             'destino' => self::url($s, 'meta.php', ['vista' => 'plan']),
              'consecuencia' => '', 'tipo' => 'informativa'],
             ['jugadas' => count($s['jugadas'] ?? []), 'piezas' => count($s['piezas'] ?? []),
              'plan_id' => (int)($s['plan']['id'] ?? 0)],
@@ -565,9 +577,10 @@ class MetaStateComposer
         return null;
     }
 
-    private static function url(array $s, string $pagina, array $extra = []): string
+    private static function url(array $s, string $pagina, array $extra = [], string $ancla = ''): string
     {
         $q = ['marca' => (int)($s['marca_id'] ?? 0)] + $extra;
-        return '/crecer/panel/' . $pagina . '?' . http_build_query($q);
+        return '/crecer/panel/' . $pagina . '?' . http_build_query($q)
+             . ($ancla !== '' ? '#' . $ancla : '');
     }
 }

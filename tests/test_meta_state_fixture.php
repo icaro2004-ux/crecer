@@ -79,8 +79,11 @@ foreach ($aprobado['piezas'] as $i => $p) {
 $e3 = MetaStateComposer::componer($aprobado);
 ok('con todo aprobado pasa a H (ahora sí toca el dinero)', $e3->estado === MetaState::H_INVERSION,
    "obtenido: {$e3->estado}/{$e3->razon}");
-ok('y nombra la acción concreta en el botón',
-   strpos($e3->accion['etiqueta'], 'Boost al post') !== false, $e3->accion['etiqueta']);
+ok('la acción enseña cómo promocionar, no afirma que se gastó',
+   $e3->accion['etiqueta'] === 'Ver cómo promocionarlo', $e3->accion['etiqueta']);
+ok('y la acción concreta está en el título y la instrucción',
+   strpos($e3->titulo, 'Boost al post') !== false && trim($e3->instruccion) !== '',
+   $e3->titulo . ' · ' . $e3->instruccion);
 
 echo "\n" . str_repeat('=', 52) . "\n";
 echo $fallos === 0 ? "  TODO OK · {$n} pruebas\n\n" : "  {$fallos} FALLAS de {$n}\n\n";
