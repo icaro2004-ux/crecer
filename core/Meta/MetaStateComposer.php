@@ -178,7 +178,7 @@ class MetaStateComposer
                     $t ? 'Preparando: ' . $t['titulo'] : 'Preparando lo próximo de tu plan.',
                     null,
                     ['job_id' => (int)($j['id'] ?? 0), 'tactica_id' => (int)($j['tactica_id'] ?? 0)],
-                    self::camino($s), self::cobertura($s), 'job_' . $j['estado']);
+                    self::camino($s, (int)($j['tactica_id'] ?? 0)), self::cobertura($s), 'job_' . $j['estado']);
             }
         }
         return null;
@@ -192,6 +192,7 @@ class MetaStateComposer
         foreach (self::piezasOrdenadas($s) as $p) {
             if (empty($p['necesita_material'])) continue;
             if (($p['estado'] ?? '') === 'publicado') continue;
+            if (!self::jugadaVivaDe($s, $p)) continue;   // su jugada ya cerró
 
             $es_video = (string)$p['necesita_material'] === 'video';
             $destino  = $es_video
@@ -210,7 +211,7 @@ class MetaStateComposer
                  'tipo' => 'material'],
                 ['contenido_id' => (int)$p['id'], 'tactica_id' => (int)($p['tactica_id'] ?? 0),
                  'guion' => (string)($p['guion'] ?? '')],
-                self::camino($s), self::cobertura($s), 'pieza_necesita_material');
+                self::camino($s, (int)($p['tactica_id'] ?? 0)), self::cobertura($s), 'pieza_necesita_material');
         }
         return null;
     }
@@ -221,6 +222,7 @@ class MetaStateComposer
         foreach (self::piezasOrdenadas($s) as $p) {
             if (($p['estado'] ?? '') !== 'borrador') continue;
             if (!empty($p['necesita_material'])) continue;   // esa la cubre G
+            if (!self::jugadaVivaDe($s, $p)) continue;       // su jugada ya cerró
 
             $tipo = (string)($p['tipo'] ?? 'post');
             $destino = $tipo === 'carrusel'
@@ -235,44 +237,50 @@ class MetaStateComposer
                  'consecuencia' => 'Al aprobarlo, sale a la hora que mejor te funciona.',
                  'tipo' => 'aprobacion'],
                 ['contenido_id' => (int)$p['id'], 'tactica_id' => (int)($p['tactica_id'] ?? 0)],
-                self::camino($s), self::cobertura($s), 'pieza_espera_aprobacion');
+                self::camino($s, (int)($p['tactica_id'] ?? 0)), self::cobertura($s), 'pieza_espera_aprobacion');
         }
         return null;
     }
 
     // ── 9 · H · Requiere inversión ──────────────────────────────────────────
+    //  La instrucción es el `que_hacer` de la jugada, que dice exactamente en
+    //  qué se gasta. El título solo pone el monto por delante.
     private static function reglaRequiereInversion(array $s): ?MetaState
     {
         foreach (self::jugadasDelDueno($s) as $t) {
             if ((float)($t['inversion'] ?? 0) <= 0) continue;
-            $monto = (float)$t['inversion'];
+            $monto = self::dinero((float)$t['inversion']);
             return new MetaState(
                 MetaState::H_INVERSION,
-                'Para seguir, necesito tu OK para gastar $' . rtrim(rtrim(number_format($monto, 2), '0'), '.'),
-                (string)$t['titulo'],
-                ['etiqueta' => 'Autorizar $' . rtrim(rtrim(number_format($monto, 2), '0'), '.'),
+                'Para seguir, necesito tu OK para gastar ' . $monto,
+                self::queHacer($t),
+                ['etiqueta' => 'Autorizar ' . $monto . ' · ' . self::corto($t['titulo']),
                  'destino' => self::url($s, 'meta.php', ['jugada' => (int)$t['id']]),
                  'consecuencia' => 'Sin tu OK no se gasta nada.', 'tipo' => 'inversion'],
-                ['tactica_id' => (int)$t['id'], 'inversion' => $monto],
-                self::camino($s), self::cobertura($s), 'jugada_requiere_inversion');
+                ['tactica_id' => (int)$t['id'], 'inversion' => (float)$t['inversion'],
+                 'que_hacer' => self::queHacer($t)],
+                self::camino($s, (int)$t['id']), self::cobertura($s), 'jugada_requiere_inversion');
         }
         return null;
     }
 
     // ── 10 · I · Acción física del dueño ────────────────────────────────────
+    //  NADA DE «Ya lo hice» a secas. Ese botón genérico obligaba al dueño a
+    //  recordar de qué estaba hablando la pantalla. La instrucción es el
+    //  `que_hacer` completo y la confirmación NOMBRA la acción.
     private static function reglaAccionFisica(array $s): ?MetaState
     {
         foreach (self::jugadasDelDueno($s) as $t) {
             if ((float)($t['inversion'] ?? 0) > 0) continue;   // esa la cubre H
             return new MetaState(
                 MetaState::I_ACCION_FISICA,
-                'Para seguir, necesito algo tuyo',
-                (string)$t['titulo'],
-                ['etiqueta' => 'Ya lo hice',
+                'Para seguir, necesito que hagas esto',
+                self::queHacer($t),
+                ['etiqueta' => 'Ya ' . self::corto($t['titulo']),
                  'destino' => self::url($s, 'meta.php', ['jugada' => (int)$t['id']]),
-                 'consecuencia' => 'Lo marco hecho y sigo con lo próximo.', 'tipo' => 'fisica'],
-                ['tactica_id' => (int)$t['id']],
-                self::camino($s), self::cobertura($s), 'jugada_accion_dueno');
+                 'consecuencia' => 'Lo doy por hecho y sigo con lo próximo.', 'tipo' => 'fisica'],
+                ['tactica_id' => (int)$t['id'], 'que_hacer' => self::queHacer($t)],
+                self::camino($s, (int)$t['id']), self::cobertura($s), 'jugada_accion_dueno');
         }
         return null;
     }
@@ -302,7 +310,7 @@ class MetaStateComposer
                 : 'Tengo ' . $pendientes . ' cosas del plan por preparar.',
             null,
             ['tactica_id' => (int)($primera['id'] ?? 0), 'pendientes' => $pendientes],
-            self::camino($s), self::cobertura($s), 'produccion_pendiente_sin_piezas');
+            self::camino($s, (int)($primera['id'] ?? 0)), self::cobertura($s), 'produccion_pendiente_sin_piezas');
     }
 
     // ── 12 · J · Todo programado ────────────────────────────────────────────
@@ -329,22 +337,41 @@ class MetaStateComposer
     }
 
     // ── 13 · K · Midiendo ───────────────────────────────────────────────────
+    //  Tres condiciones, no una:
+    //   · hay piezas publicadas;
+    //   · al menos una todavía SIN métricas (si ya están todas, K no tiene nada
+    //     que decir y debe dejar pasar a L, que sí trae aprendizaje);
+    //   · no queda trabajo publicable pendiente en el plan — si algo sigue en
+    //     borrador o programado, decir "ya salió todo" sería mentira.
     private static function reglaMidiendo(array $s): ?MetaState
     {
-        $publicadas = 0; $sin_metricas = 0;
+        $publicadas = 0; $sin_metricas = 0; $pendiente_publicable = 0;
         foreach (($s['piezas'] ?? []) as $p) {
-            if (($p['estado'] ?? '') !== 'publicado') continue;
-            $publicadas++;
-            if (empty($p['tiene_metricas'])) $sin_metricas++;
+            $estado = (string)($p['estado'] ?? '');
+            if ($estado === 'publicado') {
+                $publicadas++;
+                if (empty($p['tiene_metricas'])) $sin_metricas++;
+                continue;
+            }
+            if (in_array($estado, ['borrador', 'aprobado', 'programado', 'publicando'], true)) {
+                $pendiente_publicable++;
+            }
         }
-        if ($publicadas === 0) return null;
+        // Jugadas de producción sin resolver también son trabajo publicable vivo.
+        foreach (($s['jugadas'] ?? []) as $t) {
+            if ((string)($t['clase'] ?? 'produccion') !== 'produccion') continue;
+            if (in_array((string)($t['estado'] ?? ''), ['hecha', 'descartada'], true)) continue;
+            $pendiente_publicable++;
+        }
+
+        if ($publicadas === 0)         return null;
+        if ($sin_metricas === 0)       return null;   // ya se midió: paso a L
+        if ($pendiente_publicable > 0) return null;   // aún queda por salir
 
         return new MetaState(
             MetaState::K_MIDIENDO,
-            'Ya salió todo; ahora toca medir',
-            $sin_metricas > 0
-                ? 'Instagram y Facebook reportan con retraso. Vuelve en un día.'
-                : 'Estoy leyendo cómo se movieron tus piezas.',
+            'Ya salió todo lo del plan; ahora toca medir',
+            'Instagram y Facebook reportan con retraso. Vuelve en un día.',
             null,
             ['publicadas' => $publicadas, 'sin_metricas' => $sin_metricas],
             self::camino($s), self::cobertura($s), 'publicado_sin_metricas');
@@ -420,17 +447,40 @@ class MetaStateComposer
         }
     }
 
-    /** Hecho · ahora · después, contando jugadas del plan vigente. */
-    private static function camino(array $s): array
+    /**
+     * Hecho · ahora · después, sobre las jugadas del plan vigente.
+     *
+     * `ahora` NO es "la primera pendiente": es la jugada del estado dominante.
+     * Si el estado señala la jugada 32 (un reel sin material) mientras la 31
+     * sigue abierta, el camino tiene que decir 32 — si no, la pantalla apunta
+     * a un sitio y el resumen a otro. Cuando el estado no cuelga de ninguna
+     * jugada (A, M, J, K, L) se cae a la primera abierta, que es lo honesto.
+     */
+    private static function camino(array $s, ?int $tactica_dominante = null): array
     {
-        $hecho = 0; $despues = 0; $ahora = null;
+        $hecho = 0; $abiertas = []; $ahora = null;
         foreach (($s['jugadas'] ?? []) as $t) {
-            if ((string)($t['estado'] ?? '') === 'hecha') { $hecho++; continue; }
-            if ((string)($t['estado'] ?? '') === 'descartada') continue;
-            if ($ahora === null) { $ahora = (string)$t['titulo']; continue; }
-            $despues++;
+            $estado = (string)($t['estado'] ?? '');
+            if ($estado === 'hecha')       { $hecho++; continue; }
+            if ($estado === 'descartada')  continue;
+            $abiertas[] = $t;
+            if ($tactica_dominante !== null && (int)$t['id'] === $tactica_dominante) {
+                $ahora = (string)$t['titulo'];
+            }
         }
+        if ($ahora === null && $abiertas) $ahora = (string)$abiertas[0]['titulo'];
+        $despues = max(0, count($abiertas) - ($ahora === null ? 0 : 1));
         return ['hecho' => $hecho, 'ahora' => $ahora, 'despues' => $despues];
+    }
+
+    /** ¿La jugada de esta pieza sigue viva? Lo hecho y lo descartado no pide nada. */
+    private static function jugadaVivaDe(array $s, array $pieza): bool
+    {
+        $tid = (int)($pieza['tactica_id'] ?? 0);
+        if ($tid === 0) return true;                 // pieza suelta del plan: cuenta
+        $t = self::jugada($s, $tid);
+        if ($t === null) return true;                // sin jugada conocida: no la escondemos
+        return !in_array((string)($t['estado'] ?? ''), ['hecha', 'descartada'], true);
     }
 
     /** Jugadas del dueño cuya semana ya llegó, en orden. */
@@ -467,6 +517,29 @@ class MetaStateComposer
             if ((int)($p['tactica_id'] ?? 0) === $tactica_id) $n++;
         }
         return $n;
+    }
+
+    /** Lo que la jugada manda hacer, en sus palabras. Si falta, su título. */
+    private static function queHacer(array $t): string
+    {
+        $q = trim((string)($t['que_hacer'] ?? ''));
+        return $q !== '' ? $q : trim((string)($t['titulo'] ?? ''));
+    }
+
+    /** Para meter el nombre de la acción dentro de un botón sin romperlo. */
+    private static function corto(string $texto, int $max = 34): string
+    {
+        $texto = trim($texto);
+        if (function_exists('mb_strlen') && mb_strlen($texto) > $max) {
+            return rtrim(mb_substr($texto, 0, $max - 1)) . '…';
+        }
+        if (strlen($texto) > $max) return rtrim(substr($texto, 0, $max - 1)) . '…';
+        return $texto;
+    }
+
+    private static function dinero(float $n): string
+    {
+        return '$' . rtrim(rtrim(number_format($n, 2), '0'), '.');
     }
 
     private static function jugada(array $s, int $id): ?array

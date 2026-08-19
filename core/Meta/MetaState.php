@@ -3,8 +3,14 @@
 //  CRECER — EL ESTADO DE LA META (valor)
 //  core/Meta/MetaState.php
 //
-//  Un valor inmutable: qué está pasando con la meta, qué necesita Crecer del
-//  dueño (si algo) y con qué evidencia se decidió. No sabe pintar ni consultar.
+//  INMUTABLE DE VERDAD, y sin depender de `readonly`: el repositorio solo usa
+//  rasgos de PHP 8.0 (match, str_contains) y no hay confirmación de que
+//  producción corra 8.1+, que es donde `readonly` existe. Así que la garantía
+//  se implementa a mano: propiedades privadas, lectura por __get y ESCRITURA
+//  QUE LANZA. Funciona igual en 8.0 y en 8.3, y no es una promesa escrita en
+//  un comentario: tests/test_meta_state_inmutable.php la ejerce.
+//
+//  Se lee igual que antes ($estado->titulo): quien lo consuma no nota nada.
 //
 //  `razon` es la parte que hace esto auditable: cada estado dice POR QUÉ ganó,
 //  y las pruebas se afirman contra esa razón, no contra el texto visible.
@@ -28,36 +34,60 @@ class MetaState
     public const M_CERRADA         = 'M';
     public const FALLBACK          = 'Z';   // nunca debería salir; si sale, se ve
 
-    public string $estado;
-    public string $titulo;
-    public string $instruccion;
-    /** @var array{etiqueta:string,destino:string,consecuencia:string,tipo:string}|null */
-    public ?array $accion;
-    public array  $evidencia;
-    /** @var array{hecho:int,ahora:?string,despues:int} */
-    public array  $camino;
-    public string $cobertura;   // completa | parcial | sin_senal
-    public string $razon;
+    /** @var array<string,mixed> Todo el valor vive aquí, fuera del alcance de nadie. */
+    private array $v;
 
     public function __construct(string $estado, string $titulo, string $instruccion,
                                 ?array $accion, array $evidencia, array $camino,
                                 string $cobertura, string $razon)
     {
-        $this->estado      = $estado;
-        $this->titulo      = $titulo;
-        $this->instruccion = $instruccion;
-        $this->accion      = $accion;
-        $this->evidencia   = $evidencia;
-        $this->camino      = $camino;
-        $this->cobertura   = $cobertura;
-        $this->razon       = $razon;
+        $this->v = [
+            'estado'      => $estado,
+            'titulo'      => $titulo,
+            'instruccion' => $instruccion,
+            'accion'      => $accion,
+            'evidencia'   => $evidencia,
+            'camino'      => $camino,
+            'cobertura'   => $cobertura,
+            'razon'       => $razon,
+        ];
+    }
+
+    public function __get(string $campo)
+    {
+        if (!array_key_exists($campo, $this->v)) {
+            throw new InvalidArgumentException("MetaState no tiene el campo «{$campo}».");
+        }
+        // Los arreglos salen por copia (PHP los pasa por valor): quien reciba
+        // `evidencia` puede trastearla sin tocar el estado.
+        return $this->v[$campo];
+    }
+
+    public function __isset(string $campo): bool
+    {
+        return isset($this->v[$campo]);
+    }
+
+    /** Escribir en un estado ya compuesto es un error de programación, no un caso. */
+    public function __set(string $campo, $valor): void
+    {
+        throw new LogicException(
+            "MetaState es inmutable: no se puede escribir «{$campo}». " .
+            'Si hace falta otro estado, se compone otro.'
+        );
+    }
+
+    public function __unset(string $campo): void
+    {
+        throw new LogicException("MetaState es inmutable: no se puede borrar «{$campo}».");
     }
 
     /** ¿Hay algo que solo el dueño puede hacer? */
     public function pideAlgoAlDueno(): bool
     {
-        return $this->accion !== null
-            && in_array($this->accion['tipo'], ['material', 'aprobacion', 'inversion', 'fisica'], true);
+        $a = $this->v['accion'];
+        return $a !== null
+            && in_array($a['tipo'], ['material', 'aprobacion', 'inversion', 'fisica'], true);
     }
 
     /**
@@ -68,31 +98,22 @@ class MetaState
      */
     public function puedeAfirmarProgreso(): bool
     {
-        return $this->cobertura === 'completa';
+        return $this->v['cobertura'] === 'completa';
     }
 
     public function toArray(): array
     {
-        return [
-            'estado'      => $this->estado,
-            'titulo'      => $this->titulo,
-            'instruccion' => $this->instruccion,
-            'accion'      => $this->accion,
-            'evidencia'   => $this->evidencia,
-            'camino'      => $this->camino,
-            'cobertura'   => $this->cobertura,
-            'razon'       => $this->razon,
-        ];
+        return $this->v;
     }
 
     /** Lo único que ve Home. El Kernel lo mezcla con sus reglas ajenas a la meta. */
     public function resumen(): array
     {
         return [
-            'estado' => $this->estado,
-            'titulo' => $this->titulo,
-            'accion' => $this->accion,
-            'razon'  => $this->razon,
+            'estado' => $this->v['estado'],
+            'titulo' => $this->v['titulo'],
+            'accion' => $this->v['accion'],
+            'razon'  => $this->v['razon'],
         ];
     }
 }

@@ -111,7 +111,7 @@ class MetaSnapshotReader
     {
         $out = [];
         try {
-            $sql = "SELECT id, orden, semana, clase, formato, piezas_meta, estado, inversion, titulo
+            $sql = "SELECT id, orden, semana, clase, formato, piezas_meta, estado, inversion, titulo, que_hacer
                       FROM crecer_meta_tactica
                      WHERE meta_id = ?" . ($plan_id ? " AND plan_id = " . (int)$plan_id : '') . "
                      ORDER BY orden ASC, id ASC";
@@ -128,6 +128,7 @@ class MetaSnapshotReader
                     'estado'      => (string)$t['estado'],
                     'inversion'   => $t['inversion'] !== null ? (float)$t['inversion'] : null,
                     'titulo'      => (string)$t['titulo'],
+                    'que_hacer'   => (string)($t['que_hacer'] ?? ''),
                 ];
             }
         } catch (Throwable $e) { error_log('MetaSnapshotReader jugadas: ' . $e->getMessage()); }
@@ -168,19 +169,34 @@ class MetaSnapshotReader
         return $out;
     }
 
+    /**
+     * SOLO EL JOB VIGENTE DE CADA JUGADA.
+     *
+     * Antes esto traía todos los jobs no terminados y un `failed` viejo ganaba
+     * aunque después hubiera corrido un `done`: la pantalla enseñaba un error
+     * ya resuelto. Ahora se toma el ÚLTIMO job de cada jugada, sea cual sea su
+     * estado, y solo se devuelve si ese último sigue vivo o falló. Un `done`
+     * posterior tapa cualquier fallo anterior, que es lo que ocurrió de verdad.
+     */
     private static function jobs(PDO $pdo, int $marca_id, array $tactica_ids): array
     {
         if (!$tactica_ids) return [];
         $out = [];
         try {
-            $q = $pdo->prepare("SELECT id, tactica_id, estado FROM crecer_meta_jobs
-                                 WHERE marca_id = ? AND estado IN ('queued','working','failed')
-                                   AND tactica_id IN (" . implode(',', array_map('intval', $tactica_ids)) . ")
-                                 ORDER BY id DESC LIMIT 20");
+            $in = implode(',', array_map('intval', $tactica_ids));
+            $q = $pdo->prepare(
+                "SELECT j.id, j.tactica_id, j.estado
+                   FROM crecer_meta_jobs j
+                  WHERE j.marca_id = ? AND j.tactica_id IN ({$in})
+                    AND j.id = (SELECT MAX(j2.id) FROM crecer_meta_jobs j2
+                                 WHERE j2.tactica_id = j.tactica_id AND j2.marca_id = j.marca_id)
+                  ORDER BY j.id DESC");
             $q->execute([$marca_id]);
             foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $j) {
+                $estado = (string)$j['estado'];
+                if (!in_array($estado, ['queued', 'working', 'failed'], true)) continue;  // 'done': nada que decir
                 $out[] = ['id' => (int)$j['id'], 'tactica_id' => (int)$j['tactica_id'],
-                          'estado' => (string)$j['estado']];
+                          'estado' => $estado];
             }
         } catch (Throwable $e) { /* sin la tabla: sin jobs, no es un error */ }
         return $out;
