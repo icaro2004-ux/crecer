@@ -108,6 +108,69 @@ function jugadas_sincronizar_marca(PDO $pdo, int $marca_id): int {
 }
 
 /**
+ * LA FECHA QUE PROPONE LA IA — una sola fuente, para todo el producto.
+ *
+ * La usan la jugada al producir y el wizard al calendarizar, para que no se
+ * contradigan: si el negocio va atrasado, la pieza sale HOY (o mañana temprano
+ * si la hora buena ya pasó), no el sábado. Nunca después de la fecha límite.
+ *
+ * @return array{fecha:string, porque:string, apura:bool}
+ */
+function meta_fecha_sugerida(PDO $pdo, int $marca_id, int $orden = 1, int $semana = 1): array {
+    $hora = 10;
+    try {
+        require_once __DIR__ . '/optimizador.php';
+        $mom = optimizador_mejor_momento($pdo, $marca_id);
+        if (($mom['hora'] ?? null) !== null) $hora = (int)$mom['hora'];
+    } catch (Throwable $e) {}
+
+    $meta = meta_activa($pdo, $marca_id);
+    $prog = null;
+    if ($meta) { try { $prog = meta_progreso($pdo, $meta); } catch (Throwable $e) {} }
+    $apura = $prog && ($prog['al_dia'] === false
+                       || ($prog['dias_rest'] !== null && $prog['dias_rest'] <= 7));
+
+    $sem      = max(1, $semana);
+    $arranque = $apura ? min(($sem - 1) * 2, 3) : ($sem - 1) * 7;
+    $paso     = $apura ? 1 : 2;
+    $hoy_cabe = ((int)date('G') + 1) <= $hora;
+    $limite   = !empty($meta['fecha_limite']) ? (string)$meta['fecha_limite'] : '';
+
+    // Si hoy ya se hizo tarde, TODO se corre un dia: si solo se moviera la
+    // primera pieza, se pegaria con la segunda y se perderia la separacion.
+    $tarde = ($arranque === 0 && !$hoy_cabe);
+    $d = $arranque + (max(1, $orden) - 1) * $paso + ($tarde ? 1 : 0);
+    $fecha = date('Y-m-d', strtotime('+' . $d . ' day')) . ' ' . sprintf('%02d', $hora) . ':00:00';
+    $topado = false;
+    if ($limite !== '' && substr($fecha, 0, 10) > $limite) {
+        $fecha = $limite . ' ' . sprintf('%02d', $hora) . ':00:00';
+        $topado = true;
+    }
+
+    if ($topado)      $porque = 'Es lo más tarde que puede salir sin pasarse de tu fecha límite.';
+    elseif ($apura && $d === 0 && !$tarde) $porque = 'Vas atrasado para tu meta: esto sale HOY, a la hora que mejor te funciona.';
+    elseif ($apura && $tarde)   $porque = 'Vas atrasado, pero hoy ya se hizo tarde: sale mañana a primera hora buena.';
+    elseif ($apura)   $porque = 'Vas atrasado para tu meta: las piezas salen un día tras otro.';
+    else              $porque = 'Vas en ritmo: esta es la hora que mejor te ha funcionado.';
+
+    return ['fecha' => $fecha, 'porque' => $porque, 'apura' => (bool)$apura, 'hora' => $hora];
+}
+
+/** "hoy 10:00 AM" · "mañana 10:00 AM" · "el sábado 10:00 AM" — como lo diría una persona. */
+function fecha_humana_es(string $fecha): string {
+    $ts = strtotime($fecha);
+    if (!$ts) return $fecha;
+    $dias = ['Sun'=>'domingo','Mon'=>'lunes','Tue'=>'martes','Wed'=>'miércoles',
+             'Thu'=>'jueves','Fri'=>'viernes','Sat'=>'sábado'];
+    $dia = date('Y-m-d', $ts);
+    if ($dia === date('Y-m-d'))                        $cual = 'hoy';
+    elseif ($dia === date('Y-m-d', strtotime('+1 day'))) $cual = 'mañana';
+    elseif ($ts < strtotime('+7 days'))                $cual = 'el ' . ($dias[date('D', $ts)] ?? '');
+    else                                               $cual = 'el ' . date('j/n', $ts);
+    return trim($cual . ' a las ' . date('g:i A', $ts));
+}
+
+/**
  * LAS PUERTAS DE UNA JUGADA — una cosa a la vez, y cada una abre DONDE se hace.
  *
  * Antes la jugada solo ofrecía "Ver las N piezas", que soltaba al dueño en una
@@ -430,42 +493,19 @@ function jugada_ejecutar(PDO $pdo, int $marca_id, int $tactica_id): array {
         if (($mom['hora'] ?? null) !== null) $hora = (int)$mom['hora'];
     } catch (Throwable $e) {}
 
-    // ── LA FECHA LA DECIDE LA META, NO UN CONTADOR ──────────────────────────
-    //  Antes esto era $dia=1 y $dia++: mañana, pasado, pasado-pasado, pasara lo
-    //  que pasara. Calendarizaba para el sábado aunque la meta estuviera
-    //  atrasada y venciera el martes. Ahora la fecha sale del estado real:
-    //  cuánto falta, cuántos días quedan y si vas en ritmo.
-    $mprog = null;
-    if ($meta) { try { $mprog = meta_progreso($pdo, $meta); } catch (Throwable $e) {} }
-    $apura = $mprog && ($mprog['al_dia'] === false
-                        || ($mprog['dias_rest'] !== null && $mprog['dias_rest'] <= 7));
-    $sem   = max(1, (int)($t['semana'] ?? 1));
-    // Al día: la jugada respeta su semana y las piezas se separan 2 días.
-    // Atrasado: la semana se comprime y las piezas salen un día tras otro.
-    $arranque = $apura ? min(($sem - 1) * 2, 3) : ($sem - 1) * 7;
-    $paso     = $apura ? 1 : 2;
-    // ¿Cabe hoy? Solo si la hora buena aún no pasó (con una hora de margen).
-    $hoy_cabe = ((int)date('G') + 1) <= $hora;
-    $limite   = !empty($meta['fecha_limite']) ? (string)$meta['fecha_limite'] : '';
-    $fecha_de = function (int $orden) use ($hora, $arranque, $paso, $hoy_cabe, $limite): string {
-        $d = $arranque + ($orden - 1) * $paso;
-        if ($d === 0 && !$hoy_cabe) $d = 1;              // hoy ya se hizo tarde
-        $f = date('Y-m-d', strtotime('+' . $d . ' day')) . ' ' . sprintf('%02d', $hora) . ':00:00';
-        // Nunca después de la fecha límite de la meta: publicar tarde no cuenta.
-        if ($limite !== '' && substr($f, 0, 10) > $limite) {
-            $f = $limite . ' ' . sprintf('%02d', $hora) . ':00:00';
-        }
-        return $f;
+    // La fecha sale de meta_fecha_sugerida(): una sola fuente para el motor y
+    // para el wizard, para que no se contradigan.
+    $__sem = max(1, (int)($t["semana"] ?? 1));
+    $fecha_de = function (int $orden) use ($pdo, $marca_id, $__sem): string {
+        return meta_fecha_sugerida($pdo, $marca_id, $orden, $__sem)["fecha"];
     };
+    $__f1   = meta_fecha_sugerida($pdo, $marca_id, 1, $__sem);
+    $apura  = (bool)$__f1["apura"];
 
     // ── 1. INVENTARIO: qué hay ya ──
     $inv = jugada_inventario($pdo, $marca_id, $t, $faltan);
     $ids = []; $recicladas = 0; $notas = []; $pide_video = 0;
-    if ($apura) {
-        $notas[] = $hoy_cabe
-            ? 'Vas atrasado para tu meta: la primera pieza sale HOY y las demás un día tras otro.'
-            : 'Vas atrasado para tu meta: hoy ya se hizo tarde, así que arranca mañana temprano y sigue día a día.';
-    }
+    if ($apura) { $notas[] = $__f1["porque"]; }
 
     // ── 2. LA GAVETA: piezas listas que nadie publicó, puestas a trabajar ──
     //  No se les toca el texto (pueden ser del dueño): se amarran a la jugada

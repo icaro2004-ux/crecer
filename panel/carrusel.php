@@ -221,6 +221,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $jout(['ok' => true, 'url' => $url]);
     }
 
+    // ── LA BIBLIOTECA, POR SLIDE ────────────────────────────────────────────
+    //  Lo real gana siempre: antes de pintar nada, se le enseña al dueño lo que
+    //  YA tiene. No gasta cuota de imágenes y es su negocio de verdad.
+    if ($accion === 'biblioteca') {
+        $out = [];
+        try {
+            $q = $pdo->prepare("SELECT id, archivo, nombre, nota FROM crecer_activos
+                                 WHERE marca_id=? AND tipo='foto' AND estado='activo'
+                                 ORDER BY id DESC LIMIT 60");
+            $q->execute([$marca_id]);
+            foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $f) {
+                $out[] = ['id' => (int)$f['id'], 'url' => (string)$f['archivo'],
+                          'nombre' => (string)($f['nombre'] ?? ''), 'nota' => (string)($f['nota'] ?? '')];
+            }
+        } catch (Throwable $e) {}
+        $jout(['ok' => true, 'fotos' => $out]);
+    }
+
+    // Usar una foto de la Biblioteca en un slide (sin copiarla: es la misma).
+    if ($accion === 'usar_foto' && $cid) {
+        $sid = (int)($_POST['slide'] ?? 0);
+        $fid = (int)($_POST['foto'] ?? 0);
+        $own = $pdo->prepare("SELECT id FROM crecer_carrusel WHERE id=? AND contenido_id=? AND marca_id=?");
+        $own->execute([$sid, $cid, $marca_id]);
+        if (!$own->fetchColumn()) $jout(['ok' => false, 'err' => 'Slide no encontrado.']);
+        $qf = $pdo->prepare("SELECT archivo FROM crecer_activos WHERE id=? AND marca_id=? AND tipo='foto' AND estado='activo'");
+        $qf->execute([$fid, $marca_id]);
+        $url = (string)$qf->fetchColumn();
+        if ($url === '') $jout(['ok' => false, 'err' => 'Esa foto ya no está en tu biblioteca.']);
+        $pdo->prepare("UPDATE crecer_carrusel SET grafica_path=?, img_estado='ok', updated_at=NOW() WHERE id=? AND contenido_id=?")
+            ->execute([$url, $sid, $cid]);
+        // Queda anotado que esta foto se usó: el corillo no la repite enseguida.
+        try {
+            $pdo->prepare("INSERT INTO crecer_visual_huella (marca_id, contenido_id, lente, sujeto, composicion, escenario, resumen)
+                           VALUES (?,?,?,'','','','foto de la biblioteca en un carrusel')")
+                ->execute([$marca_id, $cid, 'foto:' . $fid]);
+        } catch (Throwable $e) {}
+        $jout(['ok' => true, 'url' => $url]);
+    }
+
+    // ── APROBAR Y CALENDARIZAR ──────────────────────────────────────────────
+    //  El final del wizard. La fecha la propone la IA según la meta (misma
+    //  fuente que usa el motor), y el dueño la puede cambiar.
+    if ($accion === 'programar' && $cid) {
+        require_once __DIR__ . '/../includes/meta_ejecutar.php';
+        $est = carrusel_estado($pdo, $cid);
+        if (($est['total'] ?? 0) < 2)  $jout(['ok' => false, 'err' => 'Un carrusel necesita al menos 2 slides.']);
+        if (($est['listos'] ?? 0) < 2) $jout(['ok' => false, 'err' => 'Faltan imágenes: escoge de tu biblioteca, sube las tuyas o deja que la IA las pinte.']);
+        $cuando = trim((string)($_POST['cuando'] ?? ''));
+        if ($cuando === '' || !strtotime($cuando)) {
+            $cuando = meta_fecha_sugerida($pdo, $marca_id, 1)['fecha'];
+        }
+        $cuando = date('Y-m-d H:i:00', strtotime($cuando));
+        // Portada: el primer slide con imagen.
+        $cover = '';
+        foreach (carrusel_slides($pdo, $cid) as $s) { if (trim((string)$s['grafica_path']) !== '') { $cover = (string)$s['grafica_path']; break; } }
+        $pdo->prepare("UPDATE crecer_contenido SET estado='programado', fecha_programada=?, grafica_path=COALESCE(NULLIF(grafica_path,''),?), updated_at=NOW()
+                        WHERE id=? AND marca_id=?")
+            ->execute([$cuando, $cover, $cid, $marca_id]);
+        // Si la pieza pertenece a una jugada, la jugada se entera sola.
+        try {
+            $qt = $pdo->prepare("SELECT tactica_id FROM crecer_contenido WHERE id=? AND marca_id=?");
+            $qt->execute([$cid, $marca_id]);
+            $tid = (int)$qt->fetchColumn();
+            if ($tid) { $t = jugada_por_id($pdo, $tid, $marca_id); if ($t) jugada_sincronizar($pdo, $t); }
+        } catch (Throwable $e) {}
+        $jout(['ok' => true, 'cuando' => $cuando,
+               'texto' => 'Calendarizado para el ' . fecha_humana_es($cuando)]);
+    }
+
     // Publicar → cover thumbnail + aprobado + publicar en BACKGROUND (IG swipe / FB álbum).
     if ($accion === 'publicar' && $cid) {
         require_once __DIR__ . '/../includes/meta.php';
@@ -270,6 +340,91 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
   .cr-h{font-family:'Poppins',sans-serif;font-weight:800;font-size:clamp(20px,4.4vw,26px);color:var(--tinta);margin:2px 0 4px}
   .cr-sub{color:var(--muted);font-size:14px;margin:0 0 20px;max-width:56ch}
   /* Crear */
+  /* ── EL WIZARD ─────────────────────────────────────────────────────────
+     Móvil: una pantalla a la vez, la acción SIEMPRE a la mano (barra pegada
+     abajo, pulgar). Desktop: la misma secuencia con los 4 pasos a la vista y
+     la acción al final del bloque, que ahí sí hay espacio para leer entero. */
+  .wz{max-width:760px;margin:0 auto}
+  .wz-bar{height:4px;background:var(--line);border-radius:99px;overflow:hidden;margin-bottom:10px}
+  .wz-bar i{display:block;height:100%;width:25%;border-radius:99px;
+    background:linear-gradient(90deg,#FF6B3D,#EF4375);transition:width .35s cubic-bezier(.22,1,.36,1)}
+  .wz-pasos{display:flex;gap:6px;list-style:none;margin:0 0 18px;padding:0;counter-reset:p}
+  .wz-pasos li{flex:1;font-size:11px;font-weight:800;letter-spacing:.02em;color:#b3aca4;
+    text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .wz-pasos li.on{color:var(--magenta,#EF4375)}
+  .wz-pasos li.ya{color:#0a6a4a}
+  .wz-p{display:none;animation:wzIn .3s cubic-bezier(.22,1,.36,1)}
+  .wz-p.on{display:block}
+  @keyframes wzIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  /* La historia en texto, numerada: se lee de corrido antes de ver imágenes. */
+  .wz-hist{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+  .wz-hist li{display:flex;gap:11px;align-items:flex-start;background:var(--card);
+    border:1px solid var(--line);border-radius:13px;padding:12px 13px}
+  .wz-hist .n{flex:none;width:24px;height:24px;border-radius:7px;background:#f4f1ec;color:#6b6560;
+    font-size:12px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
+  .wz-hist b{display:block;font-size:14.5px;line-height:1.3}
+  .wz-hist small{display:block;color:var(--muted);font-size:12.5px;line-height:1.45;margin-top:3px}
+
+  /* Las tres fuentes de imagen, por slide. */
+  .cr-fuentes{display:flex;gap:8px;margin-top:10px}
+  .cr-fu{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;cursor:pointer;
+    background:#fff;border:1.5px solid var(--line);border-radius:11px;padding:10px 8px;
+    font-family:inherit;font-weight:800;font-size:12.5px;color:var(--tinta);white-space:nowrap}
+  .cr-fu svg{width:14px;height:14px;flex:none}
+  .cr-fu input{display:none}
+  .cr-fu:active{transform:scale(.97)}
+  .cr-fu.bib{border-color:#cfe9e6;color:#00827e}
+
+  /* Preview: el carrusel como se desliza de verdad. */
+  .wz-prev{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;
+    -webkit-overflow-scrolling:touch;padding:4px 0 10px}
+  .wz-prev img{scroll-snap-align:center;flex:none;width:min(78vw,300px);aspect-ratio:1/1;
+    object-fit:cover;border-radius:16px;border:1px solid var(--line);background:#f3f1f4}
+  .wz-prevcap{white-space:pre-wrap;font-size:14px;line-height:1.55;color:var(--tinta);
+    background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:16px}
+
+  /* Cuándo sale. */
+  .wz-cuando{display:flex;flex-direction:column;gap:12px;margin:14px 0 18px}
+  .wz-prop{background:#fff6f8;border:1.5px solid #f7cdd9;border-radius:14px;padding:14px 15px}
+  .wz-prop .lbl{display:block;font-size:11px;font-weight:800;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--magenta,#EF4375);margin-bottom:4px}
+  .wz-prop b{display:block;font-size:19px;line-height:1.25}
+  .wz-prop small{display:block;color:#6b6560;font-size:12.5px;line-height:1.5;margin-top:5px}
+  .wz-fecha{display:block;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+  .wz-fecha span{display:block;font-size:12px;font-weight:800;color:var(--muted);margin-bottom:7px}
+  .wz-fecha input{width:100%;font-family:inherit;font-size:15px;padding:10px;border:1.5px solid var(--line);
+    border-radius:10px;background:#fff;color:var(--tinta)}
+
+  /* Navegación. */
+  .wz-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:18px}
+  .wz-nav .wz-go{display:inline-flex;align-items:center;gap:8px;border:0;cursor:pointer;text-decoration:none;
+    font-family:inherit;font-weight:800;font-size:15px;color:#fff;padding:14px 22px;border-radius:99px;
+    background:linear-gradient(135deg,#FF6B3D,#EF4375);box-shadow:0 12px 26px -14px rgba(239,67,117,.7)}
+  .wz-nav .wz-go[disabled]{opacity:.45;box-shadow:none;cursor:not-allowed}
+  .wz-nav .wz-back{background:none;border:0;cursor:pointer;font-family:inherit;font-weight:800;
+    font-size:14px;color:var(--muted);padding:12px 6px}
+  .wz-nav.fin{justify-content:center}
+  .wz-fin{text-align:center;padding:22px 0}
+  .wz-fin .fin-ok{width:64px;height:64px;margin:0 auto 14px;border-radius:50%;background:#e6f7f0;
+    color:#0a6a4a;display:flex;align-items:center;justify-content:center}
+  .wz-fin .fin-ok svg{width:32px;height:32px}
+
+  @media (max-width:719px){
+    /* La acción vive pegada al pulgar, no al final del scroll. */
+    .wz-nav{position:sticky;bottom:calc(env(safe-area-inset-bottom,0px) + 74px);z-index:5;
+      background:linear-gradient(180deg,rgba(253,252,250,0),var(--crema,#FDFCFA) 34%);
+      padding:12px 0 8px;margin-top:14px}
+    .wz-nav .wz-go{flex:1;justify-content:center}
+    .wz-pasos li{font-size:10px}
+    .cr-fuentes{flex-direction:column}
+  }
+  @media (min-width:720px){
+    .wz-cuando{flex-direction:row;align-items:stretch}
+    .wz-cuando>*{flex:1}
+    .wz-prev img{width:280px}
+  }
+
   .cr-new{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:var(--shadow-sm)}
   .cr-lbl{font-weight:700;font-size:13.5px;color:var(--tinta);margin:0 0 8px;display:block}
   .cr-ta{width:100%;box-sizing:border-box;font-family:var(--font-body,'Plus Jakarta Sans');font-size:15px;line-height:1.5;color:var(--tinta);border:1.5px solid var(--line);border-radius:13px;padding:13px;resize:vertical;min-height:80px;background:#fff}
@@ -310,7 +465,7 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
   .cr-track.no-txt .cr-txon{opacity:.6}
   .cr-up{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:var(--teal);cursor:pointer}
   .cr-up svg{width:15px;height:15px}
-  .cr-up input{display:none}
+  .cr-fu input{display:none}
   .cr-dots{display:flex;gap:6px;justify-content:center;margin:2px 0 18px}
   .cr-dots i{width:7px;height:7px;border-radius:50%;background:var(--line);transition:background .2s,width .2s}
   .cr-dots i.on{background:var(--magenta);width:20px;border-radius:99px}
@@ -380,14 +535,62 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
   </div>
   <?php endif; ?>
 <?php else: ?>
-  <!-- ══ EDITAR / PREVIEW ══ -->
-  <h1 class="cr-h"><?= ico('list') ?> Tu carrusel <span style="font-size:11px;color:#c0392b;font-weight:800">· BUILD C5</span></h1>
-  <p class="cr-sub">Desliza para ver los slides. La IA puede crear el arte de todos, o sube tus propias fotos. Al aprobar, entra a Tus Posts para publicar.</p>
+  <?php /* ══ EL WIZARD ═══════════════════════════════════════════════════════
+       Una pantalla a la vez: la historia → las imágenes → cómo se ve → cuándo
+       sale. Antes era una sola pantalla larga con todo encima (caption, slides,
+       feedback, botones) y el dueño no sabía por dónde empezar. */ ?>
+  <?php
+    require_once __DIR__ . '/../includes/meta_ejecutar.php';
+    $sug = meta_fecha_sugerida($pdo, $marca_id, 1);
+    $jugada_id = 0;
+    try {
+        $qj = $pdo->prepare("SELECT tactica_id FROM crecer_contenido WHERE id=? AND marca_id=?");
+        $qj->execute([$cid, $marca_id]); $jugada_id = (int)$qj->fetchColumn();
+    } catch (Throwable $e) {}
+  ?>
+  <div class="wz" id="wz" data-cid="<?= $cid ?>" data-jugada="<?= $jugada_id ?>">
+    <div class="wz-bar"><i id="wzBar"></i></div>
+    <ol class="wz-pasos" id="wzPasos">
+      <li class="on">La historia</li><li>Las imágenes</li><li>Cómo se ve</li><li>Cuándo sale</li>
+    </ol>
+
+  <!-- ── PASO 1 · LA HISTORIA ── -->
+  <section class="wz-p on" data-paso="1">
+  <h1 class="cr-h"><?= ico('list') ?> La historia que va a contar</h1>
+  <p class="cr-sub">Esto es lo que el Guionista escribió para tu carrusel. Léelo, cámbiale lo que quieras, y seguimos.</p>
 
   <div class="cr-cap">
     <div class="cc-h">Pie de foto</div>
     <textarea id="crCap" data-cid="<?= $cid ?>" placeholder="El texto que acompaña el carrusel…"><?= $h($caption) ?></textarea>
   </div>
+
+  <ol class="wz-hist">
+    <?php foreach ($slides as $s): $v = carrusel_slide_visual((string)$s['idea']); ?>
+      <li>
+        <span class="n"><?= (int)$s['orden'] ?></span>
+        <div>
+          <?php if ($v['visual'] !== ''): ?><b><?= $h($v['visual']) ?></b><?php endif; ?>
+          <?php if ($v['copy'] !== ''): ?><small>«<?= $h($v['copy']) ?>»</small><?php endif; ?>
+        </div>
+      </li>
+    <?php endforeach; ?>
+  </ol>
+
+  <div class="cr-fb">
+    <div class="cc-h">¿Qué le cambiarías? — dile al Guionista</div>
+    <textarea id="crFb" placeholder="Ej: hazlo más corto · empieza con una pregunta · menciona que hacemos delivery · más atrevido…"></textarea>
+    <button type="button" class="cr-fbgo" id="crFbGo"><?= ico('sparkles') ?> Ajustar con el Guionista</button>
+  </div>
+
+  <div class="wz-nav"><span></span>
+    <button type="button" class="wz-go" data-ir="2">Vamos con esta historia <?= ico('send') ?></button>
+  </div>
+  </section>
+
+  <!-- ── PASO 2 · LAS IMÁGENES ── -->
+  <section class="wz-p" data-paso="2">
+  <h1 class="cr-h"><?= ico('image') ?> Las imágenes</h1>
+  <p class="cr-sub">Una por slide, contando esa parte de la historia. <b>Lo tuyo siempre gana:</b> escoge de tu biblioteca o sube una foto. Lo que dejes vacío, lo pinta el corillo.</p>
 
   <div class="cr-track<?= $edit_con_texto ? '' : ' no-txt' ?>" id="crTrack">
     <?php foreach ($slides as $s):
@@ -409,30 +612,84 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
       <div class="cr-body">
         <?php if ($v['visual'] !== ''): ?><div class="cr-tit"><?= $h($v['visual']) ?></div><?php endif; ?>
         <p class="cr-txon" data-txon><span class="lbl"><?= ico('pen') ?> Texto en la imagen:</span> <?php if ($v['copy'] !== ''): ?>«<span data-txcopy><?= $h($v['copy']) ?></span>»<?php else: ?><span data-txcopy style="color:var(--muted)">(el Guionista no puso texto en este slide)</span><?php endif; ?></p>
-        <label class="cr-up"><?= ico('image') ?> Subir mi foto
-          <input type="file" accept="image/png,image/jpeg,image/webp" data-slide="<?= (int)$s['id'] ?>">
-        </label>
+        <div class="cr-fuentes">
+          <button type="button" class="cr-fu bib" data-slide="<?= (int)$s['id'] ?>"><?= ico('image') ?> De mi biblioteca</button>
+          <label class="cr-fu"><?= ico('upload') ?> Subir foto
+            <input type="file" accept="image/png,image/jpeg,image/webp" data-slide="<?= (int)$s['id'] ?>">
+          </label>
+        </div>
       </div>
     </div>
     <?php endforeach; ?>
   </div>
   <div class="cr-dots" id="crDots"></div>
 
-  <div class="cr-fb">
-    <div class="cc-h">¿Qué le cambiarías? — dile al Guionista</div>
-    <textarea id="crFb" placeholder="Ej: hazlo más corto · empieza con una pregunta · menciona que hacemos delivery · más atrevido…"></textarea>
-    <button type="button" class="cr-fbgo" id="crFbGo"><?= ico('sparkles') ?> Ajustar con el Guionista</button>
-  </div>
-
   <label class="cr-txt-toggle" style="margin:0 0 14px"><input type="checkbox" id="crTxt2" <?= $edit_con_texto ? 'checked' : '' ?>> <span>Texto en las imágenes <small>(cada slide muestra su titular — aplica al crear el arte)</small></span></label>
 
   <div class="cr-acts">
-    <button type="button" class="cr-b ia" id="crIA"><?= ico('sparkles') ?> Que la IA cree el arte</button>
-    <button type="button" class="cr-b ok" id="crOK"><?= ico('send') ?> Publicar carrusel</button>
+    <button type="button" class="cr-b ia" id="crIA"><?= ico('sparkles') ?> Que el corillo pinte las que faltan</button>
   </div>
   <div style="text-align:center"><button type="button" class="cr-rehacer" id="crRehacer"><?= ico('refresh') ?> Rehacer el arte desde cero</button></div>
+  <p class="cr-note">Cuando la IA pinta, puede tardar — te avisamos por la <b>campanita</b>. Tus fotos quedan al instante y <b>no gastan</b> de tu cuota.</p>
+
+  <div class="wz-nav">
+    <button type="button" class="wz-back" data-ir="1">Atrás</button>
+    <button type="button" class="wz-go" data-ir="3" id="wzA3">Siguiente <?= ico('send') ?></button>
+  </div>
+  </section>
+
+  <!-- ── PASO 3 · CÓMO SE VE ── -->
+  <section class="wz-p" data-paso="3">
+  <h1 class="cr-h"><?= ico('eye') ?> Así se ve</h1>
+  <p class="cr-sub">Como lo va a ver la gente en Instagram: desliza. En Facebook sale como álbum.</p>
+  <div class="wz-prev" id="wzPrev"></div>
+  <div class="wz-prevcap" id="wzPrevCap"></div>
+  <div class="wz-nav">
+    <button type="button" class="wz-back" data-ir="2">Atrás</button>
+    <button type="button" class="wz-go" data-ir="4">Se ve bien <?= ico('send') ?></button>
+  </div>
+  </section>
+
+  <!-- ── PASO 4 · CUÁNDO SALE ── -->
+  <section class="wz-p" data-paso="4">
+  <h1 class="cr-h"><?= ico('calendar') ?> ¿Cuándo sale?</h1>
+  <p class="cr-sub">La fecha la propone tu corillo mirando tu meta. Si te sirve otra, cámbiala.</p>
+
+  <div class="wz-cuando">
+    <div class="wz-prop">
+      <span class="lbl">Te propongo</span>
+      <b id="wzCuandoTxt"><?= $h(fecha_humana_es($sug['fecha'])) ?></b>
+      <small><?= $h($sug['porque']) ?></small>
+    </div>
+    <label class="wz-fecha">
+      <span>O escoge tú</span>
+      <input type="datetime-local" id="crCuando" value="<?= $h(date('Y-m-d\TH:i', strtotime($sug['fecha']))) ?>">
+    </label>
+  </div>
+
+  <div class="cr-acts">
+    <button type="button" class="cr-b ok" id="crProg"><?= ico('calendar') ?> Aprobar y calendarizar</button>
+  </div>
+  <div style="text-align:center"><button type="button" class="cr-rehacer" id="crOK"><?= ico('send') ?> O publicarlo ahora mismo</button></div>
   <div class="cr-fbnote"><b>Nota:</b> en Instagram sale como carrusel deslizable; en Facebook, como álbum de fotos (FB no tiene el swipe de IG).</div>
-  <p class="cr-note">Cuando la IA crea el arte, puede tardar — te avisamos por la <b>campanita</b> cuando esté listo. Si subes tus fotos, quedan al instante.</p>
+
+  <div class="wz-nav"><button type="button" class="wz-back" data-ir="3">Atrás</button><span></span></div>
+  </section>
+
+  <!-- ── EL CIERRE ── -->
+  <section class="wz-p wz-fin" data-paso="5">
+    <div class="fin-ok"><?= ico('check-circle') ?></div>
+    <h1 class="cr-h" id="wzFinH">Listo</h1>
+    <p class="cr-sub" id="wzFinP"></p>
+    <div class="wz-nav fin">
+      <?php if ($jugada_id): ?>
+        <a class="wz-go" href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>">Volver a tu meta <?= ico('send') ?></a>
+      <?php else: ?>
+        <a class="wz-go" href="<?= $BASE ?>/aprobar2.php?marca=<?= $marca_id ?>&tab=programados">Ver tus posts <?= ico('send') ?></a>
+      <?php endif; ?>
+    </div>
+  </section>
+  </div>
 <?php endif; ?>
 </div>
 
@@ -533,7 +790,7 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
     });
 
     // Subir foto por slide
-    track.querySelectorAll('.cr-up input').forEach(function(inp){
+    track.querySelectorAll('.cr-fu input').forEach(function(inp){
       inp.addEventListener('change',function(){
         if(!inp.files||!inp.files[0]) return;
         var sid=inp.dataset.slide, cell=track.querySelector('.cr-slide[data-slide="'+sid+'"] .cr-img');
@@ -561,7 +818,7 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
             var sl=track.querySelector('.cr-slide[data-slide="'+s.id+'"]'); if(!sl) return;
             var t=sl.querySelector('.cr-tit'); if(t) t.textContent=s.titulo||('Slide '+s.orden);
             var x=sl.querySelector('.cr-txt');
-            if(s.visual){ if(x) x.textContent=s.visual; else { var p=document.createElement('p'); p.className='cr-txt'; p.textContent=s.visual; sl.querySelector('.cr-body').insertBefore(p, sl.querySelector('.cr-up')); } }
+            if(s.visual){ if(x) x.textContent=s.visual; else { var p=document.createElement('p'); p.className='cr-txt'; p.textContent=s.visual; sl.querySelector('.cr-body').insertBefore(p, sl.querySelector('.cr-fuentes')); } }
           });
           fbTa.value=''; say('Listo — el Guionista lo ajustó. Si cambió mucho, regenera el arte.');
         } else say((d&&d.err)||'No se pudo ajustar.');
@@ -655,6 +912,118 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
         }
       }).catch(function(){ /* siguiente intento del poll */ });
     }, 4000);
+  }
+  // ══ EL WIZARD ═══════════════════════════════════════════════════════════
+  //  Una pantalla a la vez. No deja pasar del paso de imágenes hasta que haya
+  //  con qué publicar: un carrusel sin imágenes no es un carrusel.
+  var wz = document.getElementById('wz');
+  if (wz) {
+    var pasos = wz.querySelectorAll('.wz-p'),
+        rotulos = document.querySelectorAll('#wzPasos li'),
+        barra = document.getElementById('wzBar');
+
+    function irA(n) {
+      pasos.forEach(function (s) { s.classList.toggle('on', +s.dataset.paso === n); });
+      rotulos.forEach(function (li, i) {
+        li.classList.toggle('on', i === n - 1);
+        li.classList.toggle('ya', i < n - 1);
+      });
+      barra.style.width = Math.min(100, n * 25) + '%';
+      if (n === 3) pintarPreview();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    wz.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-ir]'); if (!b || b.disabled) return;
+      irA(+b.dataset.ir);
+    });
+
+    // Cuántos slides tienen imagen: es lo que habilita seguir.
+    function conImagen() { return wz.querySelectorAll('#crTrack .cr-img img').length; }
+    var a3 = document.getElementById('wzA3');
+    function revisar() {
+      if (!a3) return;
+      var n = conImagen();
+      a3.disabled = n < 2;
+      a3.title = n < 2 ? 'Necesitas al menos 2 slides con imagen' : '';
+    }
+    revisar();
+    new MutationObserver(revisar).observe(document.getElementById('crTrack'), { childList: true, subtree: true });
+
+    // Paso 3: el carrusel como se desliza, con su pie de foto.
+    function pintarPreview() {
+      var cont = document.getElementById('wzPrev'); cont.innerHTML = '';
+      wz.querySelectorAll('#crTrack .cr-slide').forEach(function (sl) {
+        var im = sl.querySelector('.cr-img img'); if (!im) return;
+        var c = document.createElement('img'); c.src = im.src; c.alt = ''; cont.appendChild(c);
+      });
+      if (!cont.children.length) cont.innerHTML = '<p style="color:var(--muted);font-size:14px">Todavía no hay imágenes.</p>';
+      document.getElementById('wzPrevCap').textContent = document.getElementById('crCap').value || '';
+    }
+
+    // ── La biblioteca, por slide ──
+    var bibOv = document.createElement('div');
+    bibOv.className = 'cr-ov'; bibOv.id = 'bibOv';
+    bibOv.innerHTML = '<div class="bx" style="max-width:560px;width:92vw;text-align:left">' +
+      '<h3 style="margin:0 0 4px">Tus fotos</h3>' +
+      '<p style="margin:0 0 12px;color:#6b6560;font-size:13px">Lo real gana siempre — y no gasta de tu cuota.</p>' +
+      '<div id="bibGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;max-height:52vh;overflow:auto"></div>' +
+      '<button type="button" id="bibX" style="margin-top:14px;width:100%;border:0;background:#f4f1ec;color:#231F20;' +
+      'font-family:inherit;font-weight:800;font-size:14px;padding:12px;border-radius:11px;cursor:pointer">Cerrar</button></div>';
+    document.body.appendChild(bibOv);
+    var bibSlide = 0;
+    bibOv.addEventListener('click', function (e) { if (e.target === bibOv || e.target.id === 'bibX') bibOv.classList.remove('on'); });
+
+    wz.addEventListener('click', function (e) {
+      var b = e.target.closest('.cr-fu.bib'); if (!b) return;
+      bibSlide = +b.dataset.slide;
+      var grid = document.getElementById('bibGrid');
+      grid.innerHTML = '<p style="color:#6b6560;font-size:13px">Buscando en tu biblioteca…</p>';
+      bibOv.classList.add('on');
+      var fd = new FormData(); fd.append('csrf', CSRF); fd.append('accion', 'biblioteca'); fd.append('ajax', '1');
+      post(fd).then(function (d) {
+        if (!d || !d.ok || !(d.fotos || []).length) {
+          grid.innerHTML = '<p style="color:#6b6560;font-size:13px;grid-column:1/-1">Todavía no tienes fotos en tu biblioteca. ' +
+            'Sube una desde este mismo slide, o deja que el corillo pinte esta imagen.</p>';
+          return;
+        }
+        grid.innerHTML = '';
+        d.fotos.forEach(function (f) {
+          var im = document.createElement('img');
+          im.src = f.url; im.alt = f.nombre || ''; im.title = f.nota || f.nombre || '';
+          im.style.cssText = 'width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:10px;cursor:pointer;border:2px solid transparent';
+          im.addEventListener('click', function () {
+            var fd2 = new FormData(); fd2.append('csrf', CSRF); fd2.append('accion', 'usar_foto');
+            fd2.append('ajax', '1'); fd2.append('slide', bibSlide); fd2.append('foto', f.id);
+            im.style.borderColor = '#EF4375';
+            post(fd2).then(function (r) {
+              if (!r || !r.ok) { say((r && r.err) || 'No se pudo usar esa foto.'); return; }
+              var cell = document.querySelector('#crTrack .cr-slide[data-slide="' + bibSlide + '"] .cr-img');
+              if (cell) { var num = cell.querySelector('.cr-num');
+                cell.innerHTML = (num ? num.outerHTML : '') + '<img src="' + r.url + '" alt="">'; }
+              bibOv.classList.remove('on'); say('Foto puesta en el slide.'); revisar();
+            });
+          });
+          grid.appendChild(im);
+        });
+      });
+    });
+
+    // ── Aprobar y calendarizar ──
+    var prog = document.getElementById('crProg');
+    if (prog) prog.addEventListener('click', function () {
+      prog.disabled = true;
+      ovShow('Calendarizando…', 'Lo dejo listo para que salga solo.');
+      var fd = new FormData(); fd.append('csrf', CSRF); fd.append('accion', 'programar'); fd.append('ajax', '1');
+      fd.append('cuando', (document.getElementById('crCuando') || {}).value || '');
+      post(fd).then(function (d) {
+        ovHide(); prog.disabled = false;
+        if (!d || !d.ok) { say((d && d.err) || 'No se pudo calendarizar.'); return; }
+        document.getElementById('wzFinH').textContent = '¡Carrusel calendarizado!';
+        document.getElementById('wzFinP').textContent = d.texto +
+          (wz.dataset.jugada !== '0' ? '. Tu jugada quedó al día — vuelve a la meta para lo que sigue.' : '.');
+        irA(5);
+      }).catch(function () { ovHide(); prog.disabled = false; say('Error de conexión.'); });
+    });
   }
 })();
 </script>
