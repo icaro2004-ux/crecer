@@ -80,11 +80,94 @@ const despejar = async () => {
 //  Dos pasadas con espera: al cerrar el modal aparece el Recibimiento detras, y
 //  una sola ronda documentaba el tour en vez de la pantalla.
 const despejarBien = async () => { await despejar(); await dormir(700); await despejar(); };
-const captura = async (nombre) => {
+//  DOS capturas por pantalla. La de pagina completa sirve para leer el
+//  contenido, pero MIENTE sobre lo que se ve: en ella nada queda cortado ni
+//  tapado por lo fijo, porque el lienzo crece. Lo que hay que revisar es el
+//  viewport de 360x800 tal cual, con la barra y el boton de Ayuda encima.
+//  La captura se encuadra DONDE ESTA LA ACCION. Disparada con la pagina
+//  arriba documentaba lo de abajo tapado por la barra, que es normal en
+//  cualquier pagina larga y no dice nada de si se puede pulsar.
+const captura = async (nombre, foco) => {
   await despejarBien();
-  const r = await cmd('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
-  fs.writeFileSync(path.join(shots, nombre + '.png'), Buffer.from(r.data, 'base64'));
+  if (foco) {
+    await evaluar("(function(){var e=document.querySelector('" + foco + "');"
+                + "if(e) e.scrollIntoView({block:'center'});})()");
+    await dormir(450);
+  }
+  const larga = await cmd('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+  fs.writeFileSync(path.join(shots, nombre + '_completa.png'), Buffer.from(larga.data, 'base64'));
+  // Sin clip: sus coordenadas son de PAGINA, no de viewport, asi que tras
+  // hacer scroll capturaba una franja vacia. Sin el, sale el viewport tal cual.
+  const vp = await cmd('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+  fs.writeFileSync(path.join(shots, nombre + '.png'), Buffer.from(vp.data, 'base64'));
 };
+
+//  LA MEDIDA, no un contador. Devuelve numeros comprobables: cuanto desborda,
+//  que controles quedan bajo las capas fijas y cuales se salen del viewport.
+//  El detector anterior solo comparaba .btn entre si — por eso daba verde
+//  mientras Ayuda y la barra tapaban botones de verdad.
+const medir = async () => JSON.parse(await evaluar(`JSON.stringify((function(){
+  var W = window.innerWidth, H = window.innerHeight;
+  var sel = 'a[href],button,input,select,textarea,[role="button"],[onclick]';
+  var vis = [].slice.call(document.querySelectorAll(sel)).filter(function(e){
+    if (e.offsetParent === null && getComputedStyle(e).position !== 'fixed') return false;
+    var r = e.getBoundingClientRect();
+    return r.width > 8 && r.height > 8 && getComputedStyle(e).visibility !== 'hidden';
+  });
+  function flotante(e){
+    for (var p = e; p && p !== document.body; p = p.parentElement) {
+      var po = getComputedStyle(p).position;
+      if (po === 'fixed' || po === 'sticky') return p;
+    }
+    return null;
+  }
+  var capas = vis.filter(function(e){ return flotante(e); });
+  var normales = vis.filter(function(e){ return !flotante(e); });
+  var tapados = [], fuera = [];
+
+  //  UNA BARRA FIJA SIEMPRE TAPA LO QUE HAYA A SU ALTURA: medir en una sola
+  //  posicion de scroll acusaria a media pantalla. Lo que de verdad importa es
+  //  si el control se puede ALCANZAR — asi que cada uno se lleva al centro de
+  //  la ventana y ahi se comprueba. Lo que sigue tapado en el centro, con el
+  //  FAB abajo a la derecha y la barra abajo del todo, no hay forma de pulsarlo.
+  normales.forEach(function(e){
+    e.scrollIntoView({ block: 'center', inline: 'nearest' });
+    var a = e.getBoundingClientRect();
+    if (a.right > W + 1 || a.left < -1) {
+      fuera.push({ t:(e.textContent||'').trim().slice(0,24),
+                   l:Math.round(a.left), r:Math.round(a.right) });
+    }
+    capas.forEach(function(c){
+      if (c === e || c.contains(e) || e.contains(c)) return;
+      var b = c.getBoundingClientRect();
+      if (a.left < b.right-1 && b.left < a.right-1 && a.top < b.bottom-1 && b.top < a.bottom-1) {
+        tapados.push({ t:(e.textContent||'').trim().slice(0,24),
+                       por:(c.className||c.tagName).toString().trim().slice(0,20),
+                       y:Math.round(a.top) });
+      }
+    });
+  });
+
+  //  Y EL FINAL DE LA PAGINA: con el scroll al tope, lo ultimo tiene que quedar
+  //  POR ENCIMA de la barra. Es lo que comprueba que el hueco inferior existe.
+  window.scrollTo(0, document.documentElement.scrollHeight);
+  var barra = capas.map(function(c){ return c.getBoundingClientRect().top; })
+                   .filter(function(t){ return t > H * 0.5; });
+  var techoFijo = barra.length ? Math.min.apply(null, barra) : H;
+  var ultimo = normales.length
+    ? Math.max.apply(null, normales.map(function(e){ return e.getBoundingClientRect().bottom; }))
+    : 0;
+
+  return {
+    ancho_doc: document.documentElement.scrollWidth,
+    ancho_vp: W,
+    desborde: Math.max(0, document.documentElement.scrollWidth - W),
+    controles: vis.length,
+    hueco_final: Math.round(techoFijo - ultimo),   // >=0 = lo ultimo queda libre
+    tapados: tapados,
+    fuera: fuera
+  };
+})())`));
 
 try {
   let ws = null;
@@ -133,7 +216,12 @@ try {
   di('PIEZA_ID_EN_FORM', await evaluar(
     `(function(){var b=document.querySelector('form button[value="aprobar"]');
        return b? (b.form.querySelector('input[name="id"]')||{}).value : ''; })()`));
-  await captura('aprobacion');
+  await captura('aprobacion', 'form button[value=\"aprobar\"]');
+  var mAp = await medir();
+  di('APROB_DESBORDE', mAp.desborde);
+  di('APROB_TAPADOS', mAp.tapados.length);
+  di('APROB_TAPADOS_DET', JSON.stringify(mAp.tapados));
+  di('APROB_FUERA', mAp.fuera.length);
   di('PRIMARIAS_APROBAR', await evaluar(`document.querySelectorAll('.btn-ok').length`));
 
   // ── 3 · Aprobar de verdad ─────────────────────────────────────────────
@@ -170,23 +258,37 @@ try {
   await ir(BASE + '/panel/reels.php?marca=' + marca + '&volver=meta');
   await evaluar("(function(){try{showDone({video_url:'',hook:'Relleno',resumen:'Relleno',duracion:12,guardado:true,copy:'Texto de relleno'});}catch(e){}})()");
   await dormir(600);
-  await captura('reel_terminado');
+  await captura('reel_terminado', '#rVolverMeta');
   di('REEL_VUELTA_PRIMARIA', await evaluar(
     "/btn-go/.test((document.getElementById('rVolverMeta')||{}).className||'')"));
   di('REEL_PUB_SECUNDARIA', await evaluar(
     "/btn-ghost/.test((document.getElementById('rpub')||{}).className||'')"));
   di('REEL_PRIMARIAS', await evaluar(
     "[].slice.call(document.querySelectorAll('.btn-go')).filter(function(x){return x.offsetParent!==null;}).length"));
+  var mReel = await medir();
+  di('REEL_DESBORDE', mReel.desborde);
+  di('REEL_ANCHO', mReel.ancho_doc + '/' + mReel.ancho_vp);
+  di('REEL_CONTROLES', mReel.controles);
+  di('REEL_HUECO_FINAL', mReel.hueco_final);
+  di('REEL_TAPADOS', mReel.tapados.length);
+  di('REEL_TAPADOS_DET', JSON.stringify(mReel.tapados));
+  di('REEL_FUERA', mReel.fuera.length);
+  di('REEL_FUERA_DET', JSON.stringify(mReel.fuera));
   di('REEL_SOLAPES', await evaluar(
     "(function(){var b=[].slice.call(document.querySelectorAll('.btn')).filter(function(x){return x.offsetParent!==null;});var s=0;for(var i=0;i<b.length;i++){for(var j=i+1;j<b.length;j++){var A=b[i].getBoundingClientRect(),B=b[j].getBoundingClientRect();if(A.left<B.right-1&&B.left<A.right-1&&A.top<B.bottom-1&&B.top<A.bottom-1)s++;}}return s;})()"));
 
   await ir(BASE + '/panel/carrusel.php?marca=' + marca + '&id=' + carr + '&volver=meta');
   await evaluar("(function(){var w=document.getElementById('wz');if(!w)return;[].forEach.call(w.querySelectorAll('.wz-p'),function(p){p.classList.remove('on');p.style.display='none';});var f=w.querySelector('.wz-fin');if(f){f.classList.add('on');f.style.display='';}})()");
   await dormir(500);
-  await captura('carrusel_programado');
+  await captura('carrusel_programado', '.wz-fin .wz-go');
   di('CARR_PRIMARIAS', await evaluar(
     "[].slice.call(document.querySelectorAll('.wz-fin .wz-go')).filter(function(x){return x.offsetParent!==null;}).length"));
   di('CARR_VUELTA', await evaluar("(document.querySelector('.wz-fin .wz-go')||{}).href || ''"));
+  var mCarr = await medir();
+  di('CARR_DESBORDE', mCarr.desborde);
+  di('CARR_TAPADOS', mCarr.tapados.length);
+  di('CARR_TAPADOS_DET', JSON.stringify(mCarr.tapados));
+  di('CARR_FUERA', mCarr.fuera.length);
   di('CARR_SOLAPES', await evaluar(
     "(function(){var b=[].slice.call(document.querySelectorAll('.wz-fin .wz-go, .wz-fin .btn')).filter(function(x){return x.offsetParent!==null;});var s=0;for(var i=0;i<b.length;i++){for(var j=i+1;j<b.length;j++){var A=b[i].getBoundingClientRect(),B=b[j].getBoundingClientRect();if(A.left<B.right-1&&B.left<A.right-1&&A.top<B.bottom-1&&B.top<A.bottom-1)s++;}}return s;})()"));
 

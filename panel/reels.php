@@ -414,6 +414,20 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
 
 /* Botones */
 .row{display:flex;gap:10px;align-items:center;margin-top:20px}
+/* A 360px tres botones en una fila desbordan: el ultimo se sale del
+   viewport y aparece scroll horizontal. Rejilla que se acomoda sola. */
+.row.rejilla{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:10px;align-items:stretch}
+.row.rejilla .btn{width:100%}
+/* HUECO PARA LAS DOS CAPAS FLOTANTES: la barra inferior fija y el boton de
+   Ayuda, que va por encima de ella. Sin esto los ultimos botones quedaban
+   debajo y no se podian pulsar. .wrap no hereda el padding de .content. */
+@media (max-width:860px){
+  /* La clase es .screen, no .wz-p — ese selector no existia en reels y el
+     hueco no se aplicaba a nada. Medido a 360x800: hacian falta 240px para que lo ultimo
+     quede por encima de la barra y del boton de Ayuda. */
+  .screen{padding-bottom:calc(240px + env(safe-area-inset-bottom))}
+}
 .btn{border:none;border-radius:14px;padding:15px 22px;font-family:'Poppins';font-weight:700;font-size:15.5px;transition:.16s}
 .btn-primary{background:var(--tinta);color:#fff;flex:1}
 .btn-primary:hover{transform:translateY(-1px)}
@@ -636,7 +650,7 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
           <textarea class="copyta" id="copytext" readonly></textarea>
           <button class="btn btn-ghost" id="ccopy" style="width:100%">Copiar texto</button>
         </div>
-        <div class="row" id="rdoneNav">
+        <div class="row rejilla" id="rdoneNav">
           <a class="btn btn-ghost" id="rdl" download style="text-decoration:none;text-align:center;flex:1">Descargar</a>
           <button class="btn btn-ghost" id="redit" style="flex:1">Ajustar</button>
           <button class="btn btn-ghost" id="ragain" style="flex:1">Hacer otro</button>

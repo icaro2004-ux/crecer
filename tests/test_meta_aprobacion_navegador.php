@@ -50,7 +50,7 @@ try {
     // aprobar (es «aprobar inteligente», no un fallo). Y va en la jugada que
     // toca para que sea ella la que domine Tu Meta.
     $pdo->prepare("UPDATE crecer_contenido
-                      SET grafica_path='/crecer/uploads/prueba/arte.png', estado='borrador'
+                      SET grafica_path='/crecer/assets/brand/crecer-icon.png', estado='borrador'
                     WHERE id=?")->execute([$PIEZA]);
 
     // La segunda pieza pasa a ser un carrusel con sus dos slides: sin eso,
@@ -58,8 +58,8 @@ try {
     $pdo->prepare("UPDATE crecer_contenido SET tipo='carrusel' WHERE id=?")->execute([$CARR]);
     $sl = $pdo->prepare("INSERT INTO crecer_carrusel (contenido_id,marca_id,orden,idea,grafica_path,img_estado)
                           VALUES (?,?,?,?,?, 'ok')");
-    $sl->execute([$CARR, $M, 1, 'Idea de relleno 1', '/crecer/uploads/prueba/s1.png']);
-    $sl->execute([$CARR, $M, 2, 'Idea de relleno 2', '/crecer/uploads/prueba/s2.png']);
+    $sl->execute([$CARR, $M, 1, 'Idea de relleno 1', '/crecer/assets/brand/crecer-icon.png']);
+    $sl->execute([$CARR, $M, 2, 'Idea de relleno 2', '/crecer/assets/brand/crecer-icon.png']);
 
     // Sesión de Apache, escrita a mano. Sin teclear contraseñas.
     $sid = 'nav' . bin2hex(random_bytes(8));
@@ -136,20 +136,40 @@ try {
            'sigue ahí y a un toque, pero deja de competir');
         ok('el reel no muestra dos primarias', (int)($r['REEL_PRIMARIAS'] ?? 9) === 1,
            'primarias visibles=' . ($r['REEL_PRIMARIAS'] ?? '?'));
-        ok('ni botones solapados en el reel', (int)($r['REEL_SOLAPES'] ?? 9) === 0,
-           'solapes=' . ($r['REEL_SOLAPES'] ?? '?'));
+        // MEDIDAS, no contadores. El detector viejo solo comparaba .btn entre
+        // si: daba verde mientras Ayuda y la barra fija tapaban botones.
+        ok('el reel no desborda a lo ancho', (int)($r['REEL_DESBORDE'] ?? 1) === 0,
+           'documento/viewport = ' . ($r['REEL_ANCHO'] ?? '?') . ' · desborde=' . ($r['REEL_DESBORDE'] ?? '?') . 'px');
+        ok('ningún control del reel queda bajo Ayuda ni la barra',
+           (int)($r['REEL_TAPADOS'] ?? 9) === 0,
+           (string)($r['REEL_TAPADOS_DET'] ?? ''));
+        ok('ni se sale ninguno del viewport', (int)($r['REEL_FUERA'] ?? 9) === 0,
+           (string)($r['REEL_FUERA_DET'] ?? ''));
+        ok('al final del reel queda hueco sobre la barra fija',
+           (int)($r['REEL_HUECO_FINAL'] ?? -1) >= 0,
+           'hueco=' . ($r['REEL_HUECO_FINAL'] ?? '?') . 'px · negativo = el último botón queda debajo');
+        echo "         (reel: " . ($r['REEL_CONTROLES'] ?? '?') . " controles medidos)
+";
 
         ok('el carrusel programado muestra UNA salida', (int)($r['CARR_PRIMARIAS'] ?? 9) === 1,
            'primarias=' . ($r['CARR_PRIMARIAS'] ?? '?'));
         ok('y vuelve como programado, no como aprobado',
            strpos((string)($r['CARR_VUELTA'] ?? ''), 'hecho=programado') !== false,
            (string)($r['CARR_VUELTA'] ?? '—'));
-        ok('ni botones solapados en el carrusel', (int)($r['CARR_SOLAPES'] ?? 9) === 0,
-           'solapes=' . ($r['CARR_SOLAPES'] ?? '?'));
+        ok('el carrusel no desborda', (int)($r['CARR_DESBORDE'] ?? 1) === 0,
+           'desborde=' . ($r['CARR_DESBORDE'] ?? '?') . 'px');
+        ok('ningún control del carrusel queda tapado', (int)($r['CARR_TAPADOS'] ?? 9) === 0,
+           (string)($r['CARR_TAPADOS_DET'] ?? ''));
+        ok('ni fuera del viewport', (int)($r['CARR_FUERA'] ?? 9) === 0);
+        ok('la aprobación no desborda', (int)($r['APROB_DESBORDE'] ?? 1) === 0,
+           'desborde=' . ($r['APROB_DESBORDE'] ?? '?') . 'px');
+        ok('ningún control de la aprobación queda tapado', (int)($r['APROB_TAPADOS'] ?? 9) === 0,
+           (string)($r['APROB_TAPADOS_DET'] ?? ''));
 
         echo "\n  — las capturas a 360x800 —\n";
         foreach (['aprobacion', 'reel_terminado', 'carrusel_programado'] as $c) {
-            ok("captura {$c}", is_file($SHOTS . '/' . $c . '.png'));
+            ok("captura {$c} · viewport 360x800", is_file($SHOTS . '/' . $c . '.png'));
+            ok("captura {$c} · página completa", is_file($SHOTS . '/' . $c . '_completa.png'));
         }
     }
 } finally {

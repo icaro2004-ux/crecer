@@ -839,7 +839,7 @@ require __DIR__ . '/_shell.php';
 <?php
 ?>
 <style>
-  .feedwrap{max-width:600px}
+  .feedwrap{padding-bottom:calc(190px + env(safe-area-inset-bottom));max-width:600px}
   .feedwrap .post{margin-top:14px}
   .viewtoggle{display:flex;gap:6px;margin:6px 0 10px}
   .vt{font-weight:700;font-size:13.5px;text-decoration:none;color:var(--muted);padding:8px 16px;border-radius:99px;border:1.5px solid var(--line)}
