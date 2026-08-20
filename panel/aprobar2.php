@@ -1406,7 +1406,7 @@ $cf = [
 <!-- MODAL: PEDIR UN POST A LA IA (brief del dueño) -->
 <div class="art-ov" id="briefov">
   <form class="art-box" method="post" id="briefform" onsubmit="var b=this.querySelector('.art-go');b.textContent='✨ Redactando… (~10s)';b.disabled=true;">
-    <button type="button" class="x" onclick="document.getElementById('briefov').classList.remove('show')">✕</button>
+    <button type="button" class="x" onclick="cerrarBrief()">✕</button>
     <h3><?= ico('sparkles') ?> Pedir un post a la IA</h3>
     <div class="sub">Sugiere el tema, o escribe un borrador y la IA lo pule respetando tu intención. Déjalo todo en blanco y la IA inventa.</div>
     <input type="hidden" name="accion" value="pedir_post">
@@ -1847,8 +1847,19 @@ $cf = [
   });
 
   // ===== Pedir un post a la IA (brief) =====
-  function abrirBrief(){ document.getElementById('briefov').classList.add('show'); }
-  document.getElementById('briefov').addEventListener('click', function(e){ if(e.target===this) cerrarPrev(); });
+  //  El brief es OTRO modal, con su propia pareja abrir/cerrar. Un reemplazo
+  //  demasiado ancho le habia puesto cerrarPrev() en el fondo: al pinchar fuera
+  //  del brief se cerraba la vista previa —que ni estaba abierta— y el brief se
+  //  quedaba puesto.
+  function abrirBrief(){
+    document.getElementById('briefov').classList.add('show');
+    document.body.classList.add('modal-abierto');   // Ayuda tambien tapaba este
+  }
+  function cerrarBrief(){
+    document.getElementById('briefov').classList.remove('show');
+    document.body.classList.remove('modal-abierto');
+  }
+  document.getElementById('briefov').addEventListener('click', function(e){ if(e.target===this) cerrarBrief(); });
 
   // Sugiéreme temas: la IA propone ideas de post basadas en el negocio.
   (function(){
@@ -2119,7 +2130,7 @@ $cf = [
     var esAmbas = plataformas.indexOf(',')>=0;
     var label = esAmbas ? 'ambas redes' : (plataformas==='instagram' ? 'Instagram' : 'Facebook');
     if(!confirm('¿Publicar este post en '+label+'?')) return;
-    document.getElementById('prevov').classList.remove('show');   // cierra el preview
+    cerrarPrev();                                                 // y devuelve el boton de Ayuda
     pubLoading();                                                 // muestra "Publicando…"
     var fd=new FormData(); fd.append('accion','publicar_api'); fd.append('id',prevId); fd.append('plataformas',plataformas); fd.append('ajax','1'); fd.append('csrf',CSRF);
     fetch(location.pathname+location.search,{method:'POST',body:fd})

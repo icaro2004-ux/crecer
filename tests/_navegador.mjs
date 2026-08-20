@@ -227,6 +227,40 @@ try {
   di('URL_SIN_VER', await evaluar("!/[?&]ver=/.test(location.search)"));
   di('AYUDA_TRAS_CERRAR', await evaluar("(function(){var f=document.querySelector('.ay-fab');"
      + "return f? getComputedStyle(f).display : 'sin-fab';})()"));
+  //  LOS DOS CAMINOS QUE UN REEMPLAZO DEMASIADO ANCHO ME ROMPIO.
+  //  a) El fondo del brief cerraba la VISTA PREVIA en vez del brief.
+  await evaluar("(function(){ if(typeof abrirBrief==='function') abrirBrief(); })()");
+  await dormir(400);
+  di('BRIEF_ABIERTO', await evaluar("document.querySelector('#briefov.show')!==null"));
+  di('BRIEF_AYUDA_OCULTA', await evaluar(
+    "(function(){var f=document.querySelector('.ay-fab');return f?getComputedStyle(f).display:'sin-fab';})()"));
+  await evaluar("(function(){var o=document.getElementById('briefov');"
+              + "if(o) o.dispatchEvent(new MouseEvent('click',{bubbles:true}));})()");
+  await dormir(500);
+  di('BRIEF_CERRADO', await evaluar("document.querySelector('#briefov.show')===null"));
+  di('BRIEF_NO_TOCO_PREV', await evaluar("document.querySelector('#prevov.show')===null"));
+  di('BRIEF_AYUDA_VUELVE', await evaluar(
+    "(function(){var f=document.querySelector('.ay-fab');return f?getComputedStyle(f).display:'sin-fab';})()"));
+
+  //  b) Publicar desde la vista previa cerraba a mano y dejaba body.modal-abierto
+  //     puesto: Ayuda se quedaba escondida para siempre. Aqui se abre la vista
+  //     previa, se publica y se mira el ESTADO — con confirm y fetch neutralizados,
+  //     que ni se pregunta ni se publica nada de verdad.
+  await evaluar("(function(){ window.confirm=function(){return true;};"
+              + "window.fetch=function(){return new Promise(function(){});}; })()");
+  await evaluar("(function(){var a=document.querySelector('.prevlink');"
+              + "if(a){var c=a.closest('.post');openPrev(a.dataset.img,a.dataset.copy,c?c.dataset.id:null);}})()");
+  await dormir(400);
+  di('PUB_PREV_ABIERTO', await evaluar("document.querySelector('#prevov.show')!==null"));
+  await evaluar("(function(){ if(typeof publicarPrev==='function') publicarPrev('instagram'); })()");
+  await dormir(600);
+  di('PUB_PREV_CERRADO', await evaluar("document.querySelector('#prevov.show')===null"));
+  di('PUB_BODY_LIMPIO', await evaluar("!document.body.classList.contains('modal-abierto')"));
+  di('PUB_AYUDA_VUELVE', await evaluar(
+    "(function(){var f=document.querySelector('.ay-fab');return f?getComputedStyle(f).display:'sin-fab';})()"));
+
+  //  Recargar deja la pagina limpia para la captura (se toco fetch y confirm).
+  await ir(BASE + '/panel/aprobar2.php?marca=' + marca + '&tab=revisar&volver=meta');
   await captura('aprobacion', 'form button[value=\"aprobar\"]');
   var mAp = await medir();
   di('APROB_DESBORDE', mAp.desborde);

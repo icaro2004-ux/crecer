@@ -92,6 +92,25 @@ try {
            ($r['AYUDA_TRAS_CERRAR'] ?? '') !== 'none',
            'display=' . ($r['AYUDA_TRAS_CERRAR'] ?? '?'));
 
+        echo "\n  — cada modal se cierra a sí mismo —\n";
+        ok('el brief se abre', ($r['BRIEF_ABIERTO'] ?? '') === 'true');
+        ok('y con él abierto, Ayuda se aparta',
+           in_array($r['BRIEF_AYUDA_OCULTA'] ?? '', ['none', 'sin-fab'], true),
+           'display=' . ($r['BRIEF_AYUDA_OCULTA'] ?? '?'));
+        ok('pinchar el fondo cierra EL BRIEF', ($r['BRIEF_CERRADO'] ?? '') === 'true',
+           'un reemplazo demasiado ancho le puso cerrarPrev() al fondo del brief');
+        ok('y no toca la vista previa', ($r['BRIEF_NO_TOCO_PREV'] ?? '') === 'true');
+        ok('Ayuda vuelve tras cerrar el brief',
+           ($r['BRIEF_AYUDA_VUELVE'] ?? '') !== 'none');
+
+        echo "\n  — publicar desde la vista previa deja el estado limpio —\n";
+        ok('la vista previa se abrió para publicar', ($r['PUB_PREV_ABIERTO'] ?? '') === 'true');
+        ok('publicar cierra la vista previa', ($r['PUB_PREV_CERRADO'] ?? '') === 'true');
+        ok('y quita body.modal-abierto', ($r['PUB_BODY_LIMPIO'] ?? '') === 'true',
+           'cerraba a mano: Ayuda se quedaba escondida para siempre');
+        ok('así que Ayuda vuelve', ($r['PUB_AYUDA_VUELVE'] ?? '') !== 'none',
+           'display=' . ($r['PUB_AYUDA_VUELVE'] ?? '?'));
+
         echo "\n  — abre la pieza exacta —\n";
         ok('Tu Meta ofrece UNA sola acción primaria', (int)($r['PRIMARIAS_META'] ?? 9) === 1,
            'primarias=' . ($r['PRIMARIAS_META'] ?? '?'));
