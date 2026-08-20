@@ -1679,35 +1679,43 @@ $mt_unidad = function (string $objetivo): array {
     alCargar(ajustar); window.addEventListener('resize', ajustar);
   })();
 
-  //  Y AYUDA SE APARTA CUANDO LA COLA DE LA PANTALLA ENTRA EN SU FRANJA.
-  //  Se observa SOLO la banda de abajo -la raiz se recorta con un margen
-  //  negativo hasta el techo del propio boton-, de modo que en una pagina
-  //  corta, donde la cola se ve desde el principio, Ayuda no desaparece sin
-  //  motivo: se quita nada mas cuando de verdad se le echa encima.
+  //  AYUDA SE APARTA DE CUALQUIER CONTROL PRINCIPAL, no solo de la cola.
+  //
+  //  La primera version solo vigilaba los enlaces del final. Con eso, el boton
+  //  primario del bloque Ahora podia quedar debajo de Ayuda y la regla no se
+  //  enteraba — y decir «se alcanza haciendo scroll» no vale para el boton mas
+  //  importante de la pantalla: es el que la duena va a tocar sin pensar.
+  //
+  //  Ahora se observan TODOS los controles principales (el primario, el
+  //  secundario, el desplegable del como y la cola). Si CUALQUIERA cae en la
+  //  franja del boton, Ayuda se aparta. Vuelve sola en cuanto deja de coincidir.
+  //
+  //  La banda es la franja del propio boton con 16px de aviso a cada lado: se
+  //  quita ANTES de rozar, no cuando ya tapa.
   (function(){
-    var cola = document.querySelector('.ah-mas');
-    if (!cola || !('IntersectionObserver' in window)) return;
-    var ob = null;
+    var SEL = '.ah-btn, .ah-btn2, .ah-como > summary, .cq-btn, .ah-mas';
+    if (!('IntersectionObserver' in window)) return;
+    var ob = null, dentro = null;
     var montar = function(){
-      var fab = document.querySelector('.ay-fab');
-      if (!fab) return;
       if (ob) { ob.disconnect(); ob = null; }
-      document.body.classList.remove('ah-cola');        // medir sin el efecto puesto
-      //  LA BANDA ES LA DEL BOTON, ni un pixel mas.
-      //
-      //  La primera version observaba «de aqui abajo hasta el borde», y en una
-      //  pantalla corta la cola nunca sale de ahi: Ayuda se apartaba y no
-      //  volvia jamas. La franja correcta es la que ocupa el boton, con 16px de
-      //  aviso a cada lado para apartarse antes de rozar y no cuando ya tapa
-      //  -entre el ultimo enlace y el boton habia 3px-.
+      dentro = new Set();
+      document.body.classList.remove('ah-cola');         // medir sin el efecto puesto
+      var fab = document.querySelector('.ay-fab');
+      var objetivos = document.querySelectorAll(SEL);
+      if (!fab || !objetivos.length) return;
+
       var AVISO = 16, H = window.innerHeight;
       var r = fab.getBoundingClientRect();
       var arriba = Math.round(r.top - AVISO), abajo = Math.round(H - r.bottom - AVISO);
-      if (!(arriba > 0 && arriba < H)) return;          // sin FAB a la vista
+      if (!(arriba > 0 && arriba < H)) return;           // sin FAB a la vista
+
       ob = new IntersectionObserver(function(es){
-        document.body.classList.toggle('ah-cola', es[0].isIntersecting);
+        es.forEach(function(e){
+          if (e.isIntersecting) dentro.add(e.target); else dentro.delete(e.target);
+        });
+        document.body.classList.toggle('ah-cola', dentro.size > 0);
       }, { rootMargin: '-' + arriba + 'px 0px ' + (-abajo) + 'px 0px', threshold: 0 });
-      ob.observe(cola);
+      [].forEach.call(objetivos, function(o){ ob.observe(o); });
     };
     alCargar(montar);
     window.addEventListener('resize', montar);

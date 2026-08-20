@@ -291,6 +291,27 @@ try {
   await evaluar("window.scrollTo(0, document.documentElement.scrollHeight)");
   await dormir(600);
   di('C_AYUDA_VUELTA', await evaluar(donde));
+  di('AY_CHOQUES_C', await evaluar(`(async function(){
+    var SEL = '.ah-btn, .ah-btn2, .ah-como > summary, .cq-btn';
+    var H = window.innerHeight, alto = document.documentElement.scrollHeight, choques = [];
+    var esperar = function(ms){ return new Promise(function(r){ setTimeout(r, ms); }); };
+    for (var y = 0; y <= alto; y += 80) {
+      window.scrollTo(0, y); await esperar(90);
+      var f = document.querySelector('.ay-fab'); if (!f) continue;
+      var cs = getComputedStyle(f);
+      if (cs.display === 'none' || parseFloat(cs.opacity) < 0.05) continue;
+      var b = f.getBoundingClientRect();
+      if (b.bottom <= 0 || b.top >= H) continue;
+      [].forEach.call(document.querySelectorAll(SEL), function(e){
+        var a = e.getBoundingClientRect();
+        if (a.width < 8 || a.height < 8 || a.bottom <= 0 || a.top >= H) return;
+        if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom)
+          choques.push(Math.round(y) + ':' + (e.className || e.tagName).toString().slice(0,18));
+      });
+    }
+    window.scrollTo(0,0); return JSON.stringify(choques);
+  })()`));
+
   const mC = await medir();
   di('C_ANCHO', mC.ancho_doc + '/' + mC.ancho_vp);
   di('C_DESBORDE', mC.desborde);
@@ -363,6 +384,41 @@ try {
   })()`));
   //  Ni rojo ni icono de alarma: el color es lo primero que dice si algo se rompio.
   di('CQ_FONDO', await evaluar("getComputedStyle(document.querySelector('.cq')).backgroundColor"));
+  //  AYUDA CONTRA EL PRIMARIO, EN CADA POSICION DE SCROLL.
+  //
+  //  «Se alcanza haciendo scroll» NO vale para el boton mas importante de la
+  //  pantalla: es el que la dueña toca sin pensar, y si a veces esta debajo de
+  //  Ayuda, a veces le toca a Ayuda. Asi que se recorre la pagina de arriba
+  //  abajo y en CADA parada se comprueba si algun control principal se solapa
+  //  con el boton flotante. Un solo solape en un solo scroll ya es un defecto.
+  di('AY_CHOQUES', await evaluar(`(async function(){
+    var SEL = '.ah-btn, .ah-btn2, .ah-como > summary, .cq-btn';
+    var H = window.innerHeight;
+    var alto = document.documentElement.scrollHeight;
+    var choques = [];
+    var esperar = function(ms){ return new Promise(function(r){ setTimeout(r, ms); }); };
+    for (var y = 0; y <= alto; y += 80) {
+      window.scrollTo(0, y);
+      await esperar(90);                       // que el observador reaccione
+      var f = document.querySelector('.ay-fab');
+      if (!f) continue;
+      var cs = getComputedStyle(f);
+      if (cs.display === 'none' || parseFloat(cs.opacity) < 0.05) continue;   // apartada
+      var b = f.getBoundingClientRect();
+      if (b.bottom <= 0 || b.top >= H) continue;                              // fuera de pantalla
+      [].forEach.call(document.querySelectorAll(SEL), function(e){
+        var a = e.getBoundingClientRect();
+        if (a.width < 8 || a.height < 8) return;
+        if (a.bottom <= 0 || a.top >= H) return;
+        if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) {
+          choques.push(Math.round(y) + ':' + (e.className || e.tagName).toString().slice(0,18));
+        }
+      });
+    }
+    window.scrollTo(0, 0);
+    return JSON.stringify(choques);
+  })()`));
+
   const mQ = await medir();
   di('CQ_DESBORDE', mQ.desborde);
   di('CQ_TAPADOS', mQ.tapados.length);

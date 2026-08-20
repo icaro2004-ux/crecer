@@ -174,7 +174,71 @@ try {
     }
 
     // ══════════════════════════════════════════════════════════
-    //  4 · LO QUE SE LE DICE AL DUEÑO
+    //  4 · SIN LIBRO NO SE GASTA
+    //      La ventana entre el deploy y el SQL. Los cuatro puntos
+    //      prometen fallar cerrado: esa promesa no admite una
+    //      excepcion «mientras tanto», porque durante esa ventana
+    //      se estaria llamando al proveedor sin reserva ninguna.
+    // ══════════════════════════════════════════════════════════
+    echo "
+  — falta la migración de la cuota —
+";
+    require_once __DIR__ . '/_esquema_desechable.php';
+    $sinlibro = EsquemaDesechable::crear($pdo);
+    if ($sinlibro === null) {
+        echo "  (saltada: este usuario de base de datos no puede crear bases)
+";
+    } else {
+        try {
+            $spdo = $sinlibro->pdo();
+            $sinlibro->ejecutar('DROP TABLE crecer_img_cuota_cubo');
+            $sinlibro->ejecutar('DROP TABLE crecer_img_cuota_asiento');
+            ok('la copia no tiene el libro', CuotaImg::disponible($spdo, true) === false);
+
+            $rr = CuotaImg::reservar($spdo, CuotaCtx::de($spdo, 1, 'arte_post', 'ventana', ['origen_id' => 1]));
+            ok('reservar NO deja pasar', $rr['ok'] === false,
+               'dejar pasar aqui es llamar al proveedor sin reserva — justo lo que los cuatro puntos prometen no hacer');
+            ok('y dice por qué', $rr['motivo'] === 'sin_libro');
+
+            //  Y LA GARANTIA LANZA, que es lo que de verdad para la llamada.
+            $lanzo = false; $tipo = '';
+            try {
+                CuotaImg::garantizar(CuotaCtx::de($spdo, 1, 'arte_post', 'ventana', ['origen_id' => 2]),
+                                     'P4 openai_responses_crear_bg');
+            } catch (CuotaSinLibro $e) { $lanzo = true; $tipo = 'sin_libro'; }
+              catch (Throwable $e)     { $lanzo = true; $tipo = get_class($e); }
+            ok('garantizar() lanza sin libro', $lanzo);
+            ok('con su tipo propio', $tipo === 'sin_libro',
+               "salió {$tipo} · confundirlo con «se acabaron tus 40» le diría eso a quien no gastó ninguna");
+
+            $est = CuotaImg::estado($spdo, 1);
+            ok('el estado lo declara', !empty($est['sin_libro']));
+            ok('y no inventa un consumo', (int)$est['usadas'] === 0,
+               'sin libro no se puede afirmar nada sobre lo que gastó');
+        } finally {
+            $sinlibro->soltar($pdo);
+            CuotaImg::disponible($pdo, true);
+        }
+    }
+    ok('la base compartida sigue con su libro', CuotaImg::disponible($pdo, true) === true);
+
+    echo "
+  — y los cuatro puntos lo dicen en el fuente —
+";
+    $ia_src = (string)file_get_contents(dirname(__DIR__) . '/includes/ia.php');
+    foreach (['gemini_imagen', 'openai_imagen', 'openai_responses_imagen', 'openai_responses_crear_bg'] as $p) {
+        $ini = strpos($ia_src, "function {$p}(");
+        $cuerpo = $ini === false ? '' : substr($ia_src, $ini, 500);
+        ok("{$p}() pasa por la garantía", strpos($cuerpo, 'CuotaImg::garantizar(') !== false);
+    }
+    $cu_src = (string)file_get_contents(dirname(__DIR__) . '/includes/cuota_imagenes.php');
+    ok('y la garantía no tiene puerta trasera',
+       strpos($cu_src, "'ok' => true, 'asiento_id' => 0, 'reusado' => false,
+                    'motivo' => 'sin_libro'") === false,
+       'la version anterior devolvia ok=true sin libro: una garantía con una excepción es una costumbre');
+
+    // ══════════════════════════════════════════════════════════
+    //  5 · LO QUE SE LE DICE AL DUEÑO
     // ══════════════════════════════════════════════════════════
     echo "\n  — sin cuota no se presenta como avería —\n";
     require_once __DIR__ . '/../includes/cuota_aviso.php';

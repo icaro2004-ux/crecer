@@ -25,8 +25,11 @@
 //       se puede recoger — pero solo hasta 3 intentos, porque reintentar sin
 //       fin algo que falla siempre es gastar dinero en bucle.
 //
-//   5 · EL CODIGO NUEVO SIN LA TABLA. Entre el deploy y el SQL hay minutos: el
-//       relevo tiene que seguir corriendo, sin candado, como antes.
+//   5 · EL CODIGO NUEVO SIN LA TABLA. Entre el deploy y el SQL hay minutos, y
+//       en esos minutos la automatizacion NO corre: un proceso automatico que
+//       no puede garantizar unicidad se omite entero -sin IA, sin generacion,
+//       sin cuota y sin escribir-. La ruta manual si sigue, porque ahi hay una
+//       persona pulsando a proposito.
 // ============================================================
 
 require_once __DIR__ . '/../includes/db.php';
@@ -289,6 +292,19 @@ try {
         ok("y se identifica como '{$origen}'", strpos($src, "'{$origen}'") !== false);
     }
     $conf = (string)file_get_contents(dirname(__DIR__) . '/panel/configuracion.php');
+    $rc2 = (string)file_get_contents(dirname(__DIR__) . '/core/Meta/MetaAutoRunner.php');
+    ok('solo la ruta manual puede pasar sin libro',
+       substr_count($rc2, '$sin_libro_ok') >= 2
+       && strpos($rc2, 'if (!$sin_libro_ok) {') !== false,
+       'la excepcion tiene que ser explicita en la llamada, no un comportamiento por defecto');
+    $cron_src = (string)file_get_contents(dirname(__DIR__) . '/includes/agentes.php');
+    ok('el cron NO la pide', strpos($cron_src, "'cron',") !== false
+       && strpos($cron_src, 'rondaManual(), true') === false);
+    ok('el worker tampoco',
+       strpos((string)file_get_contents(dirname(__DIR__) . '/panel/relevo_worker.php'), ', true)') === false);
+    $conf_src = (string)file_get_contents(dirname(__DIR__) . '/panel/configuracion.php');
+    ok('y la manual sí, a la vista', strpos($conf_src, 'rondaManual(), true') !== false);
+
     ok('la ejecución a mano sigue disponible',
        strpos($conf, "accion === 'corre_ahora'") !== false,
        'el contrato pide mantenerla durante la transición');
@@ -311,13 +327,48 @@ try {
             ok('la copia no tiene el libro',
                MetaAutoRunner::disponible($vpdo, true) === false);
 
+            //  SIN LIBRO, LA AUTOMATIZACION SE OMITE ENTERA.
+            //
+            //  La primera version dejaba correr «sin candado», razonando que
+            //  perder un relevo era peor que arriesgar un duplicado. Estaba mal:
+            //  correr sin candado no arriesga UN duplicado, arriesga tantos como
+            //  disparadores coincidan, y cada uno cuesta un equipo de agentes.
+            //  Un proceso automatico que no puede garantizar unicidad no se
+            //  ejecuta — ni IA, ni generacion, ni cuota, ni una escritura.
             $corrio = 0;
-            $ev = MetaAutoRunner::envolver($vpdo, 7, 7, 'cron',
-                function (callable $latir) use (&$corrio) { $corrio++; $latir(); return ['creadas' => 1]; });
-            ok('el relevo corre igual, sin candado', $ev['corrio'] === true && $corrio === 1,
-               'perder un relevo sería peor que arriesgar un duplicado en esa ventana');
-            ok('y lo dice sin disimulo', $ev['motivo'] === 'sin_libro');
-            ok('el latido no revienta sin tabla', true);
+            $trabajo = function (callable $latir) use (&$corrio) {
+                $corrio++; $latir(); return ['creadas' => 1];
+            };
+            $ev = MetaAutoRunner::envolver($vpdo, 7, 7, 'cron', $trabajo);
+            ok('el cron NO corre sin libro', $ev['corrio'] === false,
+               'un candado opcional cuando falta una tabla no es un candado');
+            ok('y no toca el trabajo ni una vez', $corrio === 0,
+               'aqui es donde se evitan la IA, la generacion y el gasto');
+            ok('lo dice como omision, no como fallo', $ev['motivo'] === 'sin_libro');
+            ok('sin piezas creadas', $ev['creadas'] === 0);
+
+            $ew = MetaAutoRunner::envolver($vpdo, 7, 7, 'worker', $trabajo);
+            ok('el worker tampoco', $ew['corrio'] === false && $corrio === 0);
+
+            //  Y NO ESCRIBE NADA. Se comprueba mirando la base, no confiando en
+            //  que la funcion se porte bien: sin tabla no puede haber rastro.
+            $antes_piezas = (int)$vpdo->query('SELECT COUNT(*) FROM crecer_contenido')->fetchColumn();
+            MetaAutoRunner::envolver($vpdo, 7, 7, 'cron', $trabajo);
+            ok('ni una fila nueva en contenido',
+               (int)$vpdo->query('SELECT COUNT(*) FROM crecer_contenido')->fetchColumn() === $antes_piezas);
+            ok('ni una llamada a la IA registrada',
+               (int)$vpdo->query('SELECT COUNT(*) FROM crecer_ia_log')->fetchColumn() === 0);
+
+            echo "
+  — pero la ruta MANUAL sigue disponible —
+";
+            //  Ahi hay una persona pulsando a proposito y asumiendo el
+            //  resultado. Es la excepcion que el contrato permite, y va
+            //  explicita en la llamada: ningun disparador automatico la pasa.
+            $em = MetaAutoRunner::envolver($vpdo, 7, 7, 'manual', $trabajo, null, true);
+            ok('la manual sí corre', $em['corrio'] === true && $corrio === 1);
+            ok('y se distingue en el motivo', $em['motivo'] === 'sin_libro_manual',
+               'para que el log no confunda una omision con una corrida');
         } finally {
             $vieja->soltar($pdo);
             MetaAutoRunner::disponible($pdo, true);

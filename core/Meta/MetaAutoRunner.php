@@ -252,14 +252,31 @@ class MetaAutoRunner
      */
     public static function envolver(PDO $pdo, int $marca_id, int $plan_id,
                                     string $origen, callable $trabajo,
-                                    ?string $ronda = null): array
+                                    ?string $ronda = null, bool $sin_libro_ok = false): array
     {
-        //  Sin la tabla, el codigo nuevo se comporta como el de antes: corre
-        //  sin candado. Es lo correcto entre el deploy y el SQL — perder un
-        //  relevo seria peor que arriesgar un duplicado en esa ventana.
+        //  SIN LIBRO, LA AUTOMATIZACION SE OMITE. No corre «sin candado».
+        //
+        //  La primera version dejaba correr igual, razonando que perder un
+        //  relevo era peor que arriesgar un duplicado. Estaba mal por dos
+        //  motivos. Uno: correr sin candado no arriesga UN duplicado, arriesga
+        //  tantos como disparadores coincidan —cron, worker y boton— y cada uno
+        //  cuesta un equipo entero de agentes. Dos: contradice la garantia. Si
+        //  el candado es opcional cuando falta una tabla, no es un candado.
+        //
+        //  Un proceso automatico que no puede garantizar unicidad NO SE EJECUTA:
+        //  ni IA, ni generacion, ni cuota, ni una sola escritura. Omitido y
+        //  dicho, que es un estado perfectamente respetable.
+        //
+        //  $sin_libro_ok es SOLO para la ruta manual: ahi hay una persona
+        //  delante pulsando a proposito y asumiendo el resultado. Ningun
+        //  disparador automatico lo pasa.
         if (!self::disponible($pdo)) {
+            if (!$sin_libro_ok) {
+                return ['corrio' => false, 'motivo' => 'sin_libro', 'creadas' => 0, 'run' => null];
+            }
             $r = $trabajo(function () {});
-            return ['corrio' => true, 'motivo' => 'sin_libro', 'creadas' => (int)($r['creadas'] ?? 0), 'run' => null];
+            return ['corrio' => true, 'motivo' => 'sin_libro_manual',
+                    'creadas' => (int)($r['creadas'] ?? 0), 'run' => null];
         }
 
         $run = self::reclamar($pdo, $marca_id, $plan_id, $origen, null, $ronda);

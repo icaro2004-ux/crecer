@@ -128,6 +128,10 @@ try {
            . ($r['C_TECHO'] ?? '?'));
 
         echo "\n  — Ayuda: sin estorbar, pero sin desaparecer —\n";
+        $chC = json_decode((string)($r['AY_CHOQUES_C'] ?? '[]'), true);
+        ok('en el recorrido normal tampoco se solapa con un primario',
+           is_array($chC) && count($chC) === 0,
+           'choques (scrollY:control): ' . implode(' · ', (array)$chC));
         //  cada lectura viene como  apartada / y_del_boton / y_de_la_cola / zona
         $leer = function (?string $v): array {
             $p = array_pad(explode('/', (string)$v), 4, '');
@@ -242,6 +246,14 @@ try {
         ok('no desborda a lo ancho', (int)($c['CQ_DESBORDE'] ?? 1) === 0);
         ok('y no tapa ningún control', (int)($c['CQ_TAPADOS'] ?? 1) === 0,
            $c['CQ_TAPADOS_DET'] ?? '');
+        //  LA PRUEBA DURA DE AYUDA: recorriendo la página entera, en ninguna
+        //  posición de scroll puede coincidir con un control principal. Que se
+        //  alcance «haciendo scroll» no basta para el botón que la dueña toca
+        //  sin pensar — si a veces está debajo de Ayuda, a veces le toca a Ayuda.
+        $ch = json_decode((string)($c['AY_CHOQUES'] ?? '[]'), true);
+        ok('Ayuda no se solapa con ningún primario, en ningún scroll',
+           is_array($ch) && count($ch) === 0,
+           'choques (scrollY:control): ' . implode(' · ', (array)$ch));
         $vp_cq = $SHOTS . DIRECTORY_SEPARATOR . 'meta_sin_cuota.png';
         ok('con su captura de viewport', is_file($vp_cq) && filesize($vp_cq) > 5000);
 

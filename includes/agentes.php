@@ -2891,8 +2891,13 @@ function correr_corillo(PDO $pdo): array {
             fn(callable $latir) => relevo_del_corillo($pdo, $mid, $latir));
 
         if (!$env['corrio']) {
-            //  NO es un fallo: esta ronda ya la hizo otro disparo.
-            $detalle[] = ['marca_id' => $mid, 'creadas' => 0, 'razon' => 'esta ronda ya se corrió'];
+            //  Dos motivos distintos y hay que poder distinguirlos en el log:
+            //  «ya la hizo otro» es lo normal; «sin_libro» es que falta la
+            //  migracion y la automatizacion se OMITIO entera, sin gastar nada.
+            $detalle[] = ['marca_id' => $mid, 'creadas' => 0,
+                'razon' => $env['motivo'] === 'sin_libro'
+                    ? 'omitida: falta la migración del libro de corridas'
+                    : 'esta ronda ya se corrió'];
             continue;
         }
         $res = ['creadas' => $env['creadas'], 'razon' => $env['motivo']];

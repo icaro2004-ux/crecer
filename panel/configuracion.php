@@ -194,9 +194,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($mt) $plan_vig = (int)(meta_plan_activo($pdo, (int)$mt['id'])['id'] ?? 0);
             } catch (Throwable $e2) {}
 
+            //  El ultimo true: la ruta MANUAL puede seguir aunque falte la
+            //  tabla del libro. Aqui hay una persona pulsando a proposito y
+            //  asumiendo el resultado; el cron y el worker, no — esos se omiten.
             $env = MetaAutoRunner::envolver($pdo, $marca_id, $plan_vig, 'manual',
                 fn(callable $latir) => relevo_del_corillo($pdo, $marca_id, $latir),
-                MetaAutoRunner::rondaManual());
+                MetaAutoRunner::rondaManual(), true);
 
             $nn = (int)$env['creadas'];
             if (!$env['corrio']) {

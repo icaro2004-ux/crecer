@@ -122,10 +122,20 @@ class CuotaImg
     private static function reservarUnaVez(PDO $pdo, CuotaCtx $ctx): array
     {
         if (!self::disponible($pdo)) {
-            //  Sin las tablas, el codigo nuevo se comporta como el de antes.
-            //  Es lo correcto entre el deploy y el SQL.
-            return ['ok' => true, 'asiento_id' => 0, 'reusado' => false,
-                    'motivo' => 'sin_libro', 'restantes' => self::TOPE_MES, 'exencion' => ''];
+            //  SIN LIBRO NO SE GASTA. Punto.
+            //
+            //  La primera version dejaba pasar aqui «para no romper nada entre
+            //  el deploy y el SQL». Eso contradecia la promesa entera: los
+            //  cuatro puntos dicen que fallan cerrado, y esta puerta les dejaba
+            //  llamar al proveedor sin reserva ninguna. Una garantia con una
+            //  excepcion no es una garantia — es una costumbre.
+            //
+            //  La consecuencia se asume a proposito: entre el codigo y la
+            //  migracion NO se pintan imagenes. Por eso el despliegue va en
+            //  ventana controlada (codigo + las tres migraciones seguidas), y
+            //  no a ratos. Ver la nota de despliegue.
+            return ['ok' => false, 'asiento_id' => 0, 'reusado' => false,
+                    'motivo' => 'sin_libro', 'restantes' => 0, 'exencion' => ''];
         }
         if ($ctx->exencion !== '' && !in_array($ctx->exencion, self::EXENCIONES, true)) {
             throw new InvalidArgumentException("Exencion desconocida: «{$ctx->exencion}». "
@@ -243,6 +253,14 @@ class CuotaImg
         }
         $r = self::reservar($ctx->pdo, $ctx);
         if (!$r['ok']) {
+            if ($r['motivo'] === 'sin_libro') {
+                //  Tipo propio: esto NO es que al dueño se le acabaran las
+                //  imagenes, es que el libro todavia no existe. Confundirlos le
+                //  diria «gastaste tus 40» a alguien que no gasto ninguna.
+                throw new CuotaSinLibro(
+                    "{$punto}: falta la migracion de la cuota (crecer_img_cuota_cubo). "
+                    . 'No se llama al proveedor sin poder reservar.');
+            }
             throw new CuotaAgotada($r['motivo'] === 'sin_logos'
                 ? 'Esta marca ya usó sus ' . self::TOPE_LOGOS_VIDA . ' logos de IA.'
                 : 'Este mes ya se usaron las ' . self::TOPE_MES . ' imágenes del plan.',
@@ -471,6 +489,14 @@ class CuotaImg
      */
     public static function estado(PDO $pdo, int $marca_id, bool $exento = false): array
     {
+        if (!self::disponible($pdo)) {
+            //  Sin libro no se puede afirmar nada sobre su consumo, asi que no
+            //  se inventa un numero: se dice que no hay imagenes disponibles,
+            //  que es la verdad operativa mientras dure la ventana.
+            return ['usadas' => 0, 'limite' => self::TOPE_MES, 'restantes' => 0,
+                    'lleno' => !$exento, 'exento' => $exento, 'sin_libro' => true,
+                    'reset' => '', 'logos' => 0, 'logos_tope' => self::TOPE_LOGOS_VIDA];
+        }
         $cubo = self::cuboMes();
         $rest = self::restantes($pdo, $marca_id, $cubo);
         $tz   = new DateTimeZone(defined('APP_TZ') ? APP_TZ : 'America/Puerto_Rico');
@@ -601,4 +627,14 @@ function logo_intentos(PDO $pdo, int $marca_id): int
         $q->execute([$marca_id]);
         return (int)$q->fetchColumn();
     } catch (Throwable $e) { return 0; }
+}
+
+/**
+ * Falta la migracion de la cuota. NO es que el dueño se quedara sin imagenes:
+ * es que no hay libro donde apuntarlas, y sin libro no se gasta. Tipo aparte
+ * para que la pantalla no le diga «gastaste tus 40» a quien no gasto ninguna.
+ */
+class CuotaSinLibro extends CuotaAgotada
+{
+    public function __construct(string $mensaje) { parent::__construct($mensaje, 'sin_libro'); }
 }
