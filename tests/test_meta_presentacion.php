@@ -12,8 +12,10 @@
 //
 //   1 · CODIGO NUEVO · ESQUEMA VIEJO   El deploy y el SQL no ocurren a la vez.
 //       Entre uno y otro hay minutos en que este codigo corre sin la columna.
-//       Aqui la columna se QUITA de verdad y se vuelve a poner: comprobarlo con
-//       un snapshot inventado seria comprobar el mock, no el esquema.
+//       Se prueba contra un esquema viejo DE VERDAD —no un mock— pero en una
+//       BASE DESECHABLE que nace y muere con la prueba. Nunca sobre la base
+//       compartida: un DROP COLUMN no se deshace, y el DDL ademas hace COMMIT
+//       implicito de lo que hubiera en vuelo.
 //
 //   2 · ESQUEMA NUEVO · CODIGO ANTERIOR  Si la migracion entra primero, el
 //       codigo que ya corre no puede enterarse. Un INSERT posicional —sin lista
@@ -34,6 +36,7 @@
 
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/_fixture.php';
+require_once __DIR__ . '/_esquema_desechable.php';
 require_once __DIR__ . '/../includes/meta_negocio.php';
 require_once __DIR__ . '/../core/Meta/MetaState.php';
 require_once __DIR__ . '/../core/Meta/MetaSnapshotReader.php';
@@ -243,42 +246,67 @@ try {
 
     // ══════════════════════════════════════════════════════════
     //  1 · CODIGO NUEVO · ESQUEMA VIEJO
-    //      Se quita la columna de verdad. Es la unica forma de saber
-    //      que este codigo aguanta los minutos entre deploy y SQL.
+    //      En una BASE DESECHABLE, no en la compartida.
+    //
+    //      La primera version de esta prueba quitaba la columna de la base
+    //      local y la reponia en un finally. Eso esta prohibido y con razon:
+    //      un DROP COLUMN no se deshace —el finally repone la COLUMNA, jamas
+    //      los VALORES— y ademas el DDL hace COMMIT implicito, de modo que
+    //      cualquier prueba en transaccion se veria confirmada a medias.
+    //
+    //      Aqui se clona la estructura en una base propia que nace y muere con
+    //      la prueba, y es a ESA copia a la que se le quita la columna. El
+    //      esquema viejo sigue siendo de verdad; lo que ya no se arriesga es
+    //      nada de nadie.
     // ══════════════════════════════════════════════════════════
-    echo "\n  — el codigo nuevo, sin la columna —\n";
-    $quitada = false;
-    try {
-        $pdo->exec("DROP INDEX idx_plan_presentado ON crecer_meta_plan");
-        $pdo->exec("ALTER TABLE crecer_meta_plan DROP COLUMN presentado_at");
-        $quitada = true;
+    echo "\n  — el codigo nuevo, sin la columna (base desechable) —\n";
+    $vieja = EsquemaDesechable::crear($pdo);
+    if ($vieja === null) {
+        echo "  (saltada: este usuario de base de datos no puede crear bases)\n";
+        echo "  NO se toca el esquema compartido para no saltarsela.\n";
+    } else {
+        try {
+            $vpdo = $vieja->pdo();
+            $vieja->ejecutar("ALTER TABLE crecer_meta_plan DROP COLUMN presentado_at");
+            ok('la copia quedo con la forma de ANTES de la migracion',
+               $vpdo->query("SHOW COLUMNS FROM crecer_meta_plan LIKE 'presentado_at'")->fetch() === false,
+               'sin esto, lo de abajo probaria el esquema nuevo creyendo probar el viejo');
 
-        ok('la guarda se entera de que no esta',
-           meta_plan_col_presentado($pdo, true) === false);
-        ok('presentar no revienta, solo dice que no',
-           meta_plan_presentar($pdo, $PLAN_B, $B) === false);
+            //  Una marca completa sembrada DENTRO de la copia. La fixture solo
+            //  inserta —no lee tablas semilla— asi que funciona igual aqui.
+            $fv = Fixture::crear($vpdo, 'esquema-viejo');
+            $MV = (int)$fv['marca_id']; $PV = (int)$fv['plan_id'];
 
-        $snap = MetaSnapshotReader::leer($pdo, $B);
-        ok('el snapshot no inventa la clave',
-           !array_key_exists('presentado_at', (array)($snap['plan'] ?? [])),
-           'si la pusiera en null, el estado C se dispararia sin columna que sellar');
-        $ev = MetaStateComposer::componer($snap);
-        ok('y el estado C se queda inerte', $ev->estado !== MetaState::C_PLAN_POR_VER,
-           "salio {$ev->estado} · {$ev->razon}");
-        ok('la pantalla sigue teniendo algo que decir',
-           trim($ev->titulo) !== '' && $ev->estado !== '',
-           'sin columna la pantalla no puede quedarse en blanco');
-    } finally {
-        if ($quitada) {
-            $pdo->exec("ALTER TABLE crecer_meta_plan ADD COLUMN presentado_at DATETIME NULL DEFAULT NULL
-                        COMMENT 'cuando se le enseño el plan al dueño; NULL = todavia no'");
-            $pdo->exec("CREATE INDEX idx_plan_presentado ON crecer_meta_plan (marca_id, estado, presentado_at)");
-            meta_plan_col_presentado($pdo, true);
+            //  La guarda cachea por proceso: hay que refrescarla al cambiar de
+            //  conexion o respondera por la base equivocada.
+            ok('la guarda se entera de que no esta',
+               meta_plan_col_presentado($vpdo, true) === false);
+            ok('presentar no revienta, solo dice que no',
+               meta_plan_presentar($vpdo, $PV, $MV) === false);
+
+            $snap = MetaSnapshotReader::leer($vpdo, $MV);
+            ok('el lector encuentra el plan igual',
+               (int)($snap['plan']['id'] ?? 0) === $PV,
+               'si no lo encontrara, lo de abajo pasaria por vacio y no por inerte');
+            ok('el snapshot no inventa la clave',
+               !array_key_exists('presentado_at', (array)($snap['plan'] ?? [])),
+               'si la pusiera en null, el estado C se dispararia sin columna que sellar');
+            $ev = MetaStateComposer::componer($snap);
+            ok('y el estado C se queda inerte', $ev->estado !== MetaState::C_PLAN_POR_VER,
+               "salio {$ev->estado} · {$ev->razon}");
+            ok('la pantalla sigue teniendo algo que decir',
+               trim($ev->titulo) !== '' && $ev->estado !== '',
+               'sin columna la pantalla no puede quedarse en blanco');
+        } finally {
+            $vieja->soltar($pdo);
+            meta_plan_col_presentado($pdo, true);   // la guarda vuelve a la base de verdad
         }
+        ok('la base desechable ya no existe',
+           $pdo->query("SHOW DATABASES LIKE '" . EsquemaDesechable::PREFIJO . "%'")->fetch() === false);
     }
-    ok('y al volver la columna, la guarda tambien vuelve',
+    ok('el esquema COMPARTIDO sigue intacto',
        meta_plan_col_presentado($pdo, true) === true,
-       'si esto falla, corre migrations/2026-08-20_crecer_plan_presentado.sql a mano');
+       'ninguna prueba puede dejar la base local peor de como la encontro');
 
     // ══════════════════════════════════════════════════════════
     //  LA PANTALLA · pedida como la pediria un navegador

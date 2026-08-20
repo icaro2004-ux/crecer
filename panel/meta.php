@@ -445,12 +445,26 @@ $mt_unidad = function (string $objetivo): array {
      Móvil 360 primero: las tres zonas caben antes del primer scroll. Nada de
      texto por debajo de 14px, controles de 48px, y UNA sola acción primaria.
      Desktop no añade decisiones: añade aire. */
-  /*  El respiro de abajo NO es estetica: en movil la barra fija ocupa ~78px y
-      el boton de Ayuda flota justo encima. Sin este hueco, el ultimo enlace de
-      «Ver mas» quedaba DEBAJO de Ayuda y no habia forma de pulsarlo -medido a
-      360x800: 269px por debajo del techo de lo fijo-. En pantalla ancha lo fijo
-      no estorba y el hueco se recorta. */
-  .ah{max-width:560px;margin:0 auto;padding-bottom:calc(300px + env(safe-area-inset-bottom))}
+  /*  ZONA SEGURA, no relleno. La barra de abajo YA tiene su hueco reservado
+      (.content{padding-bottom:104px} en encuentralo-ui.css): volver a pedirlo
+      aqui era contarlo dos veces. Lo que de verdad tapaba el ultimo renglon no
+      era la barra sino Ayuda, que flota POR ENCIMA de ese hueco -y para eso
+      esta la regla de abajo, no 300px de nada-.
+      Lo que se reserva aqui es EL FALTANTE, que el guion del final calcula y
+      escribe en --ah-zona: cuanto le falta a la cola de la pantalla para
+      quedar por encima de lo fijo, contando lo que el contenedor ya reserva.
+      Casi siempre sale 0. Sin guion, 20px de margen y nada roto. */
+  .ah{max-width:560px;margin:0 auto;padding-bottom:var(--ah-zona, 20px)}
+
+  /*  AYUDA SE APARTA CUANDO ASOMA LA COLA.
+      El boton flota en la franja de 78-121px sobre el borde inferior, que es
+      justo donde cae la ultima fila de enlaces cuando la pagina termina. A
+      360x800 los tapaba y ya no quedaba scroll para moverlos: no habia forma
+      de pulsarlos. Se aparta quien esta de mas, y vuelve solo al subir. */
+  body .ay-fab{transition:transform .2s ease, opacity .2s ease}
+  /*  Tiene que salir DE LA PANTALLA, no posarse sobre la barra: con un 150%
+      se movia 64px y aterrizaba encima de la botnav, igual de presente. */
+  body.ah-cola .ay-fab{transform:translateY(calc(100% + 96px));opacity:0;pointer-events:none}
   .mt-volver{display:inline-block;font-size:14px;font-weight:700;color:var(--muted);
     text-decoration:none;padding:10px 0;margin-bottom:6px;min-height:44px;line-height:24px}
 
@@ -541,7 +555,7 @@ $mt_unidad = function (string $objetivo): array {
   .ah-toast.on{opacity:1;transform:translate(-50%,0)}
 
   @media (min-width:720px){
-    .ah{max-width:620px;padding-bottom:120px}
+    .ah{max-width:620px}
     .ah-now{padding:24px 24px}
     .ah-tit{font-size:27px}
     .ah-ins{font-size:17px}
@@ -1579,6 +1593,94 @@ $mt_unidad = function (string $objetivo): array {
     enviar(b, {accion:'tactica', id:b.dataset.jugada, estado:'hecha'},
            'Un momento…', 'No se pudo marcar.');
   });
+
+  //  OJO AL MOMENTO. La barra de abajo y el boton de Ayuda los pinta
+  //  _shell_foot.php, DESPUES de este bloque: preguntarlos ahora devuelve null
+  //  y las dos rutinas de abajo salen en vacio sin quejarse -que es justo lo
+  //  que pasaba: se apartaba Ayuda en el papel y nunca en la pantalla-.
+  var alCargar = function(fn){
+    if (document.readyState === 'complete') { fn(); return; }
+    window.addEventListener('load', fn);
+  };
+
+  //  LA ZONA SEGURA ES EL FALTANTE, Y SE MIDE.
+  //
+  //  Antes aqui habia 300px fijos. El numero salio de leer mal una medicion y
+  //  creo una pantalla de vacio en TODAS las vistas de Tu Meta. La cuenta de
+  //  verdad es corta: con la pagina al final del scroll, el ultimo control
+  //  tiene que quedar por encima de la barra fija.
+  //
+  //      doc >= ultimo_en_pagina + alto_de_lo_fijo + margen
+  //
+  //  Lo que falte para eso —y solo eso— es la zona segura. Como .content ya
+  //  reserva 104px para la barra, casi siempre sale 0: reservarlo otra vez
+  //  aqui seria contarlo dos veces, que es justo el error anterior.
+  (function(){
+    var ah = document.querySelector('.ah'); if (!ah) return;
+    var MARGEN = 20;
+    var ajustar = function(){
+      ah.style.setProperty('--ah-zona', '0px');          // medir sin lo puesto
+      var vp  = window.innerHeight;
+      var doc = document.documentElement.scrollHeight;
+
+      //  EL TECHO son las DOS capas de abajo, no solo la barra: Ayuda flota
+      //  POR ENCIMA del hueco que reserva .content, y es la que de verdad
+      //  tapaba el ultimo renglon. Se toma la mas alta de las dos, medida.
+      var techo = vp;
+      [].forEach.call(document.querySelectorAll('.botnav, .ay-fab'), function(c){
+        if (getComputedStyle(c).display === 'none') return;
+        var t = c.getBoundingClientRect().top;
+        if (t > vp * 0.5 && t < techo) techo = t;
+      });
+      var fijo = Math.round(vp - techo);
+
+      var ultimo = 0;
+      [].forEach.call(ah.querySelectorAll('a[href],button,summary'), function(e){
+        var r = e.getBoundingClientRect();
+        if (r.height < 4) return;
+        ultimo = Math.max(ultimo, Math.round(r.bottom + window.scrollY));
+      });
+      //  Con la pagina al final del scroll, lo ultimo tiene que caer por encima
+      //  del techo:  doc >= ultimo + fijo + margen.  Lo que falte, y solo eso.
+      var falta = Math.max(0, ultimo + fijo + MARGEN - doc);
+      ah.style.setProperty('--ah-zona', (falta || MARGEN) + 'px');
+    };
+    alCargar(ajustar); window.addEventListener('resize', ajustar);
+  })();
+
+  //  Y AYUDA SE APARTA CUANDO LA COLA DE LA PANTALLA ENTRA EN SU FRANJA.
+  //  Se observa SOLO la banda de abajo -la raiz se recorta con un margen
+  //  negativo hasta el techo del propio boton-, de modo que en una pagina
+  //  corta, donde la cola se ve desde el principio, Ayuda no desaparece sin
+  //  motivo: se quita nada mas cuando de verdad se le echa encima.
+  (function(){
+    var cola = document.querySelector('.ah-mas');
+    if (!cola || !('IntersectionObserver' in window)) return;
+    var ob = null;
+    var montar = function(){
+      var fab = document.querySelector('.ay-fab');
+      if (!fab) return;
+      if (ob) { ob.disconnect(); ob = null; }
+      document.body.classList.remove('ah-cola');        // medir sin el efecto puesto
+      //  LA BANDA ES LA DEL BOTON, ni un pixel mas.
+      //
+      //  La primera version observaba «de aqui abajo hasta el borde», y en una
+      //  pantalla corta la cola nunca sale de ahi: Ayuda se apartaba y no
+      //  volvia jamas. La franja correcta es la que ocupa el boton, con 16px de
+      //  aviso a cada lado para apartarse antes de rozar y no cuando ya tapa
+      //  -entre el ultimo enlace y el boton habia 3px-.
+      var AVISO = 16, H = window.innerHeight;
+      var r = fab.getBoundingClientRect();
+      var arriba = Math.round(r.top - AVISO), abajo = Math.round(H - r.bottom - AVISO);
+      if (!(arriba > 0 && arriba < H)) return;          // sin FAB a la vista
+      ob = new IntersectionObserver(function(es){
+        document.body.classList.toggle('ah-cola', es[0].isIntersecting);
+      }, { rootMargin: '-' + arriba + 'px 0px ' + (-abajo) + 'px 0px', threshold: 0 });
+      ob.observe(cola);
+    };
+    alCargar(montar);
+    window.addEventListener('resize', montar);
+  })();
 
   // Aceptar el plan. Se sella una vez y la pantalla se recompone sola: al
   // recargar, el estado dominante ya es la primera tarea de verdad.

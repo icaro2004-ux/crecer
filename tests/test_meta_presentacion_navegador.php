@@ -97,6 +97,9 @@ try {
         echo "\n  — nada tapado, nada desbordado —\n";
         printf("  ·    ancho %s · controles %s · hueco final %spx\n",
                $r['C_ANCHO'] ?? '?', $r['C_CONTROLES'] ?? '?', $r['C_HUECO_FINAL'] ?? '?');
+        echo "  ·    geometría " . ($r['C_GEOMETRIA'] ?? '?') . "\n";
+        echo "  ·    el último de abajo: " . ($r['C_ULTIMO'] ?? '?') . "\n";
+        echo "  ·    el techo de lo fijo: " . ($r['C_TECHO'] ?? '?') . "\n";
         ok('la página no se va de ancho', (int)($r['C_DESBORDE'] ?? 1) === 0,
            'documentElement/ventana = ' . ($r['C_ANCHO'] ?? '?'));
         ok('ningún control queda bajo Ayuda ni bajo la barra',
@@ -106,6 +109,48 @@ try {
         ok('lo último de la página queda por encima de la barra',
            (int)($r['C_HUECO_FINAL'] ?? -1) >= 0,
            'hueco = ' . ($r['C_HUECO_FINAL'] ?? '?') . 'px');
+        //  Y EL OTRO LADO DE LA MISMA MONEDA. Un hueco enorme tambien es un
+        //  defecto: la primera correccion metio 300px de vacio y paso este
+        //  criterio en verde. Que quede por encima de la barra Y que no haya
+        //  una pantalla de nada debajo.
+        ok('y sin una pantalla de espacio muerto debajo',
+           (int)($r['C_HUECO_FINAL'] ?? 999) <= 160,
+           'sobran ' . ($r['C_HUECO_FINAL'] ?? '?') . 'px de vacío · el suelo lo pone '
+           . ($r['C_TECHO'] ?? '?'));
+
+        echo "\n  — Ayuda: sin estorbar, pero sin desaparecer —\n";
+        //  cada lectura viene como  apartada / y_del_boton / y_de_la_cola / zona
+        $leer = function (?string $v): array {
+            $p = array_pad(explode('/', (string)$v), 4, '');
+            return ['apartada' => $p[0], 'fab' => $p[1], 'cola' => $p[2], 'zona' => $p[3]];
+        };
+        $normal  = $leer($r['C_AYUDA_NORMAL']  ?? null);
+        $forzada = $leer($r['C_AYUDA_FORZADA'] ?? null);
+        $vuelta  = $leer($r['C_AYUDA_VUELTA']  ?? null);
+        printf("  ·    normal: zona %s · cola @%s · Ayuda @%s\n",
+               $normal['zona'], $normal['cola'], $normal['fab']);
+
+        ok('con la zona bien medida no hay colisión', $normal['apartada'] === 'false',
+           'esconder Ayuda «por si acaso» seria perder una capacidad del producto');
+        ok('la cola queda por encima del botón',
+           $normal['cola'] !== '' && $normal['fab'] !== ''
+           && (int)$normal['cola'] <= (int)$normal['fab'],
+           "cola @{$normal['cola']} · Ayuda @{$normal['fab']}");
+        ok('y la zona segura es un margen, no una pantalla',
+           (int)$normal['zona'] > 0 && (int)$normal['zona'] <= 120,
+           'salió ' . $normal['zona'] . ' · antes eran 300px de nada');
+
+        echo "\n  — y si algo la empuja, Ayuda se aparta —\n";
+        ok('sin zona, la cola se le echa encima y Ayuda se quita',
+           $forzada['apartada'] === 'true',
+           'la regla tiene que existir aunque hoy no haga falta');
+        ok('y se va de la pantalla, no encima de la barra',
+           $forzada['fab'] !== '' && (int)$forzada['fab'] >= 780,
+           "el botón quedó en y={$forzada['fab']}; la ventana mide 800");
+        ok('devuelta la zona, Ayuda vuelve sola', $vuelta['apartada'] === 'false');
+        ok('y vuelve a donde se alcanza',
+           $vuelta['fab'] !== '' && (int)$vuelta['fab'] < 780,
+           "quedó en y={$vuelta['fab']}: apartarse y no volver deja la ayuda muerta");
         ok('y se midió sobre controles de verdad',
            (int)($r['C_CONTROLES'] ?? 0) >= 3,
            'medir 1 control y decir «nada tapado» sería un verde falso');

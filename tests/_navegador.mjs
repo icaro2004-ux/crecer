@@ -148,22 +148,49 @@ const medir = async () => JSON.parse(await evaluar(`JSON.stringify((function(){
     });
   });
 
-  //  Y EL FINAL DE LA PAGINA: con el scroll al tope, lo ultimo tiene que quedar
-  //  POR ENCIMA de la barra. Es lo que comprueba que el hueco inferior existe.
-  window.scrollTo(0, document.documentElement.scrollHeight);
-  var barra = capas.map(function(c){ return c.getBoundingClientRect().top; })
-                   .filter(function(t){ return t > H * 0.5; });
-  var techoFijo = barra.length ? Math.min.apply(null, barra) : H;
-  var ultimo = normales.length
-    ? Math.max.apply(null, normales.map(function(e){ return e.getBoundingClientRect().bottom; }))
-    : 0;
+  //  EL SUELO: la barra de abajo, definida con precision y no "lo primero fijo
+  //  que este en la mitad de abajo".
+  //
+  //  Esa definicion vaga fue un error caro: elegia un enlace del CAJON LATERAL
+  //  (fijo, y a media altura) como si fuera una barra inferior, y devolvia
+  //  -269px de deficit inventado. Ese numero se creyo, y se "arreglo" metiendo
+  //  300px de vacio en la pantalla de todos. Un numero sin nombre no se puede
+  //  discutir: solo obedecer.
+  //
+  //  Una barra de abajo es: contenedor fijo, PEGADO al borde inferior, ancho de
+  //  media pantalla para arriba, y que no sea una capa a pantalla completa.
+  var suelo = H, suelo_que = null;
+  vis.forEach(function(e){
+    var c = flotante(e); if (!c) return;
+    var b = c.getBoundingClientRect();
+    if (b.bottom < H - 4)     return;   // no toca el borde de abajo
+    if (b.right <= 0 || b.left >= W) return;   // fuera de pantalla (cajon cerrado)
+    if (b.width  < W * 0.5)   return;   // no es una barra, es un boton
+    if (b.height > H * 0.4)   return;   // es una capa entera, no una barra
+    if (b.top >= suelo) return;
+    suelo = Math.round(b.top);
+    suelo_que = (c.className || c.tagName).toString().trim().slice(0,20) + ' @' + suelo;
+  });
 
+  //  Y EL FINAL DE LA PAGINA: con el scroll al tope, lo ultimo del CONTENIDO
+  //  tiene que quedar por encima de esa barra.
+  window.scrollTo(0, document.documentElement.scrollHeight);
+  var ultimo = 0, ultimo_que = null;
+  normales.forEach(function(e){
+    var b = Math.round(e.getBoundingClientRect().bottom);
+    if (b <= ultimo) return;
+    ultimo = b;
+    ultimo_que = ((e.className || e.tagName) + ' · ' + (e.textContent||'').trim().slice(0,20)) + ' @' + b;
+  });
   return {
     ancho_doc: document.documentElement.scrollWidth,
     ancho_vp: W,
     desborde: Math.max(0, document.documentElement.scrollWidth - W),
     controles: vis.length,
-    hueco_final: Math.round(techoFijo - ultimo),   // >=0 = lo ultimo queda libre
+    suelo: suelo,
+    suelo_que: suelo_que,
+    hueco_final: suelo - ultimo,
+    ultimo_que: ultimo_que,
     tapados: tapados,
     fuera: fuera
   };

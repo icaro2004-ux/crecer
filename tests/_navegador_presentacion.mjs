@@ -125,18 +125,49 @@ const medir = async () => JSON.parse(await evaluar(`JSON.stringify((function(){
     });
   });
   window.scrollTo(0, document.documentElement.scrollHeight);
-  var barra = capas.map(function(c){ return c.getBoundingClientRect().top; })
-                   .filter(function(t){ return t > H * 0.5; });
-  var techoFijo = barra.length ? Math.min.apply(null, barra) : H;
-  var ultimo = normales.length
-    ? Math.max.apply(null, normales.map(function(e){ return e.getBoundingClientRect().bottom; }))
-    : 0;
+  //  EL SUELO: la barra de abajo, definida con precision y no "lo primero fijo
+  //  que este en la mitad de abajo".
+  //
+  //  Esa definicion vaga fue un error caro: elegia un enlace del CAJON LATERAL
+  //  (fijo, y a media altura) como si fuera una barra inferior, y devolvia
+  //  -269px de deficit inventado. Ese numero se creyo, y se "arreglo" metiendo
+  //  300px de vacio en la pantalla de todos. Un numero sin nombre no se puede
+  //  discutir: solo obedecer.
+  //
+  //  Una barra de abajo es: contenedor fijo, PEGADO al borde inferior, ancho de
+  //  media pantalla para arriba, y que no sea una capa a pantalla completa.
+  var suelo = H, suelo_que = null;
+  vis.forEach(function(e){
+    var c = flotante(e); if (!c) return;
+    var b = c.getBoundingClientRect();
+    if (b.bottom < H - 4)     return;   // no toca el borde de abajo
+    if (b.right <= 0 || b.left >= W) return;   // fuera de pantalla (cajon cerrado)
+    if (b.width  < W * 0.5)   return;   // no es una barra, es un boton
+    if (b.height > H * 0.4)   return;   // es una capa entera, no una barra
+    if (b.top >= suelo) return;
+    suelo = Math.round(b.top);
+    suelo_que = (c.className || c.tagName).toString().trim().slice(0,20) + ' @' + suelo;
+  });
+
+  //  Y EL FINAL DE LA PAGINA: con el scroll al tope, lo ultimo del CONTENIDO
+  //  tiene que quedar por encima de esa barra.
+  window.scrollTo(0, document.documentElement.scrollHeight);
+  var ultimo = 0, ultimo_que = null;
+  normales.forEach(function(e){
+    var b = Math.round(e.getBoundingClientRect().bottom);
+    if (b <= ultimo) return;
+    ultimo = b;
+    ultimo_que = ((e.className || e.tagName) + ' · ' + (e.textContent||'').trim().slice(0,20)) + ' @' + b;
+  });
   return {
     ancho_doc: document.documentElement.scrollWidth,
     ancho_vp: W,
     desborde: Math.max(0, document.documentElement.scrollWidth - W),
     controles: vis.length,
-    hueco_final: Math.round(techoFijo - ultimo),
+    suelo: suelo,
+    suelo_que: suelo_que,
+    hueco_final: suelo - ultimo,
+    ultimo_que: ultimo_que,
     tapados: tapados,
     fuera: fuera
   };
@@ -207,11 +238,61 @@ try {
     b.focus(); return document.activeElement === b;
   })()`));
 
+  //  LA GEOMETRIA DE LO FIJO, en numeros. Sin esto, el hueco de abajo se
+  //  dimensiona a ojo — y a ojo se puso una vez 300px de vacio.
+  di('C_GEOMETRIA', await evaluar(`JSON.stringify((function(){
+    var r = function(s){ var e=document.querySelector(s); if(!e) return null;
+      var b=e.getBoundingClientRect(); return {alto:Math.round(b.height), top:Math.round(b.top)}; };
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    var ult = document.querySelector('.ah-mas a:last-child');
+    return {
+      doc: document.documentElement.scrollHeight,
+      vp: window.innerHeight,
+      scroll_max: document.documentElement.scrollHeight - window.innerHeight,
+      botnav: r('.botnav'),
+      fab: r('.ay-fab'),
+      ultimo_enlace: ult ? Math.round(ult.getBoundingClientRect().bottom) : null,
+      zona: getComputedStyle(document.querySelector('.ah')).paddingBottom
+    };
+  })())`));
+
+  //  AYUDA, EN LOS DOS ESTADOS QUE IMPORTAN.
+  //
+  //  1) El NORMAL: con la zona segura bien medida, la cola de la pantalla cae
+  //     por encima del boton y no hay colision — asi que Ayuda sigue ahi. Un
+  //     Ayuda escondido "por si acaso" seria perder una capacidad del producto.
+  //  2) El FORZADO: se le quita la zona a mano para que la cola se le eche
+  //     encima. Solo asi se puede demostrar que la regla existe y funciona; si
+  //     no, se estaria afirmando sobre algo que nunca llega a dispararse.
+  await evaluar("window.scrollTo(0, document.documentElement.scrollHeight)");
+  await dormir(500);
+  const donde = `(function(){
+    var f = document.querySelector('.ay-fab'), c = document.querySelector('.ah-mas');
+    return [document.body.classList.contains('ah-cola'),
+            f ? Math.round(f.getBoundingClientRect().top) : '?',
+            c ? Math.round(c.getBoundingClientRect().bottom) : '?',
+            getComputedStyle(document.querySelector('.ah')).paddingBottom].join('/');
+  })()`;
+  di('C_AYUDA_NORMAL', await evaluar(donde));
+
+  //  Se le quita la zona: la cola baja hasta la franja del boton.
+  await evaluar(`document.querySelector('.ah').style.setProperty('--ah-zona','0px')`);
+  await evaluar("window.scrollTo(0, document.documentElement.scrollHeight)");
+  await dormir(600);
+  di('C_AYUDA_FORZADA', await evaluar(donde));
+
+  //  Y se le devuelve: Ayuda tiene que volver sola.
+  await evaluar(`window.dispatchEvent(new Event('resize'))`);
+  await evaluar("window.scrollTo(0, document.documentElement.scrollHeight)");
+  await dormir(600);
+  di('C_AYUDA_VUELTA', await evaluar(donde));
   const mC = await medir();
   di('C_ANCHO', mC.ancho_doc + '/' + mC.ancho_vp);
   di('C_DESBORDE', mC.desborde);
   di('C_CONTROLES', mC.controles);
   di('C_HUECO_FINAL', mC.hueco_final);
+  di('C_ULTIMO', mC.ultimo_que);
+  di('C_TECHO', mC.suelo_que);
   di('C_TAPADOS', mC.tapados.length);
   di('C_TAPADOS_DET', JSON.stringify(mC.tapados));
   di('C_FUERA', mC.fuera.length);

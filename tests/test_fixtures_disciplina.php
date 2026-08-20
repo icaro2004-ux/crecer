@@ -117,7 +117,87 @@ ok('ni sus tacticas', $cuenta('crecer_meta_tactica', 'marca_id', $fx['marca_id']
 ok('ni sus piezas',   $cuenta('crecer_contenido', 'marca_id', $fx['marca_id']) === 0);
 
 // ══════════════════════════════════════════════════════════════
-//  6 · EL SMOKE DEL MODELO VIVO NO ES REGRESION
+//  6 · NINGUNA PRUEBA LE CAMBIA LA FORMA A LA BASE COMPARTIDA
+//
+//      El 20 de agosto una prueba quito presentado_at de la base local para
+//      comprobar que el codigo nuevo aguantaba el esquema viejo, y la repuso
+//      en un finally. Eso NO es reversible: el finally devuelve la COLUMNA,
+//      nunca los VALORES, que se fueron con el DROP. Y hay un segundo dano
+//      menos visible: el DDL hace COMMIT implicito en MySQL, asi que cualquier
+//      prueba que estuviera dentro de una transaccion se ve confirmada a media
+//      faena, justo lo contrario de lo que se busca al usar una.
+//
+//      La regla: si una prueba necesita otra forma de tabla, se la fabrica en
+//      una BASE DESECHABLE (tests/_esquema_desechable.php). Ese archivo es el
+//      unico sitio del arnes donde el DDL es legitimo, y solo porque se le
+//      exige por escrito que trabaje sobre un nombre con su prefijo.
+// ══════════════════════════════════════════════════════════════
+echo "\n  — nadie le cambia la forma a la base de todos —\n";
+$prohibido = [
+    'DROP TABLE'    => '/\bDROP\s+TABLE\b/i',
+    'DROP DATABASE' => '/\bDROP\s+DATABASE\b/i',
+    'DROP COLUMN'   => '/\bDROP\s+COLUMN\b/i',
+    'DROP INDEX'    => '/\bDROP\s+INDEX\b/i',
+    'TRUNCATE'      => '/\bTRUNCATE\b/i',
+    'ALTER ... DROP'=> '/\bALTER\s+TABLE\b[^;\'"]{0,200}?\bDROP\b/i',
+    'RENAME TABLE'  => '/\bRENAME\s+TABLE\b/i',
+];
+//  La excepcion, nombrada una por una y no por comodin: quien la use tiene que
+//  aparecer aqui, y esta lista se lee en la revision.
+$con_permiso = ['_esquema_desechable.php'];
+//  Lo que NO se prohibe es cambiar la forma de una COPIA. Eso viaja siempre por
+//  EsquemaDesechable::ejecutar(), asi que esas lineas se apartan antes de mirar
+//  —y solo en archivos que de verdad cargan el ayudante, para que ningun
+//  ->ejecutar() de otra clase sirva de coartada.
+$solo_compartida = function (string $s): string {
+    $usa_desechable = strpos($s, '_esquema_desechable.php') !== false;
+    $vivas = [];
+    foreach (explode("\n", $s) as $l) {
+        if (preg_match('/^\s*(\/\/|\*|\/\*|#)/', $l)) continue;      // comentario
+        if ($usa_desechable && strpos($l, '->ejecutar(') !== false) continue;  // va a la copia
+        $vivas[] = $l;
+    }
+    return implode("\n", $vivas);
+};
+foreach ($archivos as $f => $s) {
+    $codigo = $solo_compartida($s);
+    foreach ($prohibido as $etq => $re) {
+        if (!preg_match($re, $codigo)) continue;
+        ok("{$f} no ejecuta {$etq} contra la base compartida", in_array($f, $con_permiso, true),
+           'para cambiar la forma de una tabla, clona en una base desechable '
+           . '(tests/_esquema_desechable.php): el DROP no se deshace y hace COMMIT implicito');
+    }
+}
+//  Y la comprobacion directa de la suite que causo el incidente: que su DDL
+//  vaya SIEMPRE por la copia y nunca por $pdo, que es la conexion de todos.
+$tp = $archivos['test_meta_presentacion.php'] ?? '';
+ok('la suite de la presentacion carga la base desechable',
+   strpos($tp, '_esquema_desechable.php') !== false);
+//  Se cuenta sobre el CODIGO, no sobre el archivo: la cabecera explica el
+//  incidente y nombra el DROP tres veces sin ejecutarlo ni una.
+$tp_codigo = implode("\n", array_filter(explode("\n", $tp),
+    fn($l) => !preg_match('/^\s*(\/\/|\*|\/\*|#)/', $l)));
+ok('y su unico DROP viaja por la copia',
+   substr_count($tp_codigo, 'DROP COLUMN') === 1
+   && preg_match('/->ejecutar\("ALTER TABLE[^"]*DROP COLUMN/', $tp_codigo) === 1,
+   'era la que quitaba la columna de la base local; si vuelve, vuelve el mismo dano');
+ok('no le manda DDL a $pdo',
+   preg_match('/\$pdo->(exec|query)\(\s*"(ALTER|DROP|TRUNCATE|RENAME)/i', $tp) === 0,
+   '$pdo es la conexion a la base compartida');
+
+$ed = $archivos['_esquema_desechable.php'] ?? '';
+ok('la base desechable existe', $ed !== '');
+ok('y solo suelta lo que lleva su prefijo',
+   strpos($ed, "strpos(\$this->nombre, self::PREFIJO) !== 0") !== false,
+   'sin esa guarda, un nombre equivocado tumbaria una base de verdad');
+ok('el prefijo no se parece a ninguna base real',
+   strpos($ed, "PREFIJO = 'crecer_prueba_'") !== false);
+ok('si no puede crear bases, se salta en vez de improvisar',
+   strpos($ed, 'return null;') !== false,
+   'saltarse una prueba es honesto; tocar la base compartida para no saltarsela, no');
+
+// ══════════════════════════════════════════════════════════════
+//  7 · EL SMOKE DEL MODELO VIVO NO ES REGRESION
 // ══════════════════════════════════════════════════════════════
 echo "\n  — lo que cuesta dinero se corre a proposito —\n";
 $sp = $archivos['smoke_pipeline_tesis_funcional.php'] ?? '';
