@@ -9,6 +9,7 @@
 //  (IG = swipe real; FB = álbum).
 // ============================================================
 require __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../core/Meta/MetaRetorno.php';
 require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/iconos.php';
 require __DIR__ . '/../includes/carrusel.php';
@@ -688,7 +689,7 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
     <p class="cr-sub" id="wzFinP"></p>
     <div class="wz-nav fin">
       <?php if ($jugada_id): ?>
-        <a class="wz-go" href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>">Volver a tu meta <?= ico('send') ?></a>
+        <a class="wz-go" href="<?= htmlspecialchars(MetaRetorno::url((int)$marca_id, 'aprobado'), ENT_QUOTES) ?>">Volver a tu meta <?= ico('send') ?></a>
       <?php else: ?>
         <a class="wz-go" href="<?= $BASE ?>/aprobar2.php?marca=<?= $marca_id ?>&tab=programados">Ver tus posts <?= ico('send') ?></a>
       <?php endif; ?>

@@ -10,6 +10,7 @@
 //  el reel vertical. Interacción mínima.
 // ============================================================
 require __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../core/Meta/MetaRetorno.php';
 require __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/reels.php';
 require_once __DIR__ . '/../includes/iconos.php';
@@ -311,8 +312,8 @@ require __DIR__ . '/_shell.php';
 ?>
 <?php /* Regreso predecible: si se llegó desde Tu Meta, hay una salida clara de
          vuelta. Sin esto la acción del estado dominante era un viaje de ida. */ ?>
-<?php if (($_GET["volver"] ?? "") === "meta"): ?>
-<a href="/crecer/panel/meta.php?marca=<?= (int)$marca_id ?>"
+<?php if (MetaRetorno::vieneDeMeta($_GET)): ?>
+<a href="<?= htmlspecialchars(MetaRetorno::url((int)$marca_id, 'cancelado'), ENT_QUOTES) ?>"
    style="display:inline-flex;align-items:center;gap:7px;min-height:44px;line-height:44px;
           font-size:14px;font-weight:700;color:var(--muted);text-decoration:none">&larr; Volver a tu meta</a>
 <?php endif; ?>

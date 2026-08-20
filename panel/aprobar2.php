@@ -6,6 +6,7 @@
 // DEBUG temporal: añade &debug=1 a la URL para ver errores en pantalla.
 if (isset($_GET['debug'])) { ini_set('display_errors','1'); error_reporting(E_ALL); }
 require __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../core/Meta/MetaRetorno.php';
 require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/agentes.php';
 require __DIR__ . '/../includes/suscripcion.php';
@@ -819,8 +820,8 @@ require __DIR__ . '/_shell.php';
 ?>
 <?php /* Regreso predecible: si se llegó desde Tu Meta, hay una salida clara de
          vuelta. Sin esto la acción del estado dominante era un viaje de ida. */ ?>
-<?php if (($_GET["volver"] ?? "") === "meta"): ?>
-<a href="/crecer/panel/meta.php?marca=<?= (int)$marca_id ?>"
+<?php if (MetaRetorno::vieneDeMeta($_GET)): ?>
+<a href="<?= htmlspecialchars(MetaRetorno::url((int)$marca_id, 'cancelado'), ENT_QUOTES) ?>"
    style="display:inline-flex;align-items:center;gap:7px;min-height:44px;line-height:44px;
           font-size:14px;font-weight:700;color:var(--muted);text-decoration:none">&larr; Volver a tu meta</a>
 <?php endif; ?>
@@ -1642,6 +1643,23 @@ $cf = [
     var item = card.querySelector('.checklist .ck-item[data-k="'+k+'"]');
     if(item) item.classList.toggle('on', !!on);
   }
+  // ── LA VUELTA A TU META ──────────────────────────────────────────────
+  //  Si el dueño llegó aquí porque Tu Meta le pidió aprobar una pieza, al
+  //  aprobarla se ha terminado lo que vino a hacer: se vuelve solo. Antes se
+  //  quedaba en la bandeja sin saber que su meta ya avanzó, y el enlace de
+  //  regreso era una salida manual que casi nadie ve.
+  //  Va en enviarAccion y no en cada botón porque hay cuatro caminos que
+  //  aprueban (botón, gesto de La Baraja y dos «crear y aprobar»), y uno
+  //  suelto se habría quedado sin volver.
+  var META_VUELTA = <?= MetaRetorno::vieneDeMeta($_GET)
+        ? json_encode(MetaRetorno::url((int)$marca_id, 'aprobado'), JSON_UNESCAPED_SLASHES)
+        : 'null' ?>;
+  function volverATuMeta(){
+    if (!META_VUELTA) return false;
+    location.href = META_VUELTA;
+    return true;
+  }
+
   function enviarAccion(card, accion, razon){
     var fd = new FormData(); fd.append('ajax','1'); fd.append('id', card.dataset.id); fd.append('accion', accion);
     if(razon) fd.append('razon', razon);
@@ -1652,6 +1670,8 @@ $cf = [
         // Devuelve SIEMPRE la respuesta: La Baraja necesita saber si salió bien
         // (la card ya voló con el gesto y tiene que poder devolverla si no).
         if(!d.ok) return d;
+        // Lo que vino a hacer ya está hecho: de vuelta a Tu Meta con el acuse.
+        if(accion === 'aprobar' && volverATuMeta()) return d;
         var cp=document.getElementById('cnt-pend'), ca=document.getElementById('cnt-aprob'), cb=document.getElementById('cnt-bib');
         if(cp) cp.textContent=d.revisar; if(ca) ca.textContent=d.listos; if(cb) cb.textContent=d.biblioteca;
         var TAB='<?= $tab ?>';

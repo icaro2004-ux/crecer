@@ -186,6 +186,7 @@ if ($meta) {
 //  es puro: leer no cambia nada.
 require_once __DIR__ . '/../core/Meta/MetaStateComposer.php';
 require_once __DIR__ . '/../core/Meta/MetaSnapshotReader.php';
+require_once __DIR__ . '/../core/Meta/MetaRetorno.php';
 $mt_snap   = MetaSnapshotReader::leer($pdo, $marca_id);
 $mt_estado = MetaStateComposer::componer($mt_snap);
 
@@ -198,7 +199,7 @@ if (!in_array($vista, ['plan', 'wizard'], true)) $vista = 'ahora';
 if (!$meta && $vista === 'ahora' && !empty($_GET['nueva'])) $vista = 'wizard';
 
 /** Volver aquí desde donde sea que mande la acción dominante. */
-$mt_volver = '&volver=meta';
+$mt_volver = MetaRetorno::marcador();
 
 /**
  * El número de la meta, dicho como se puede defender.
@@ -454,6 +455,14 @@ $mt_unidad = function (string $objetivo): array {
   .ah-tit{font-family:var(--font-display,'Oswald',sans-serif);font-weight:700;font-size:23px;
     line-height:1.22;letter-spacing:.2px;margin:0 0 9px;color:var(--tinta)}
   .ah-ins{font-size:16px;line-height:1.5;color:var(--ink,#4A434F);margin:0 0 15px}
+  /* La vuelta: acuse de recibo, no una alarma. Va arriba del todo porque es lo
+     primero que el dueño busca al regresar, y en 16px porque es texto de uso
+     normal (criterio 7 del contrato). */
+  .ah-hecho{display:flex;gap:10px;align-items:flex-start;margin:0 0 16px;padding:13px 15px;
+    border-radius:12px;background:#EAF7F5;color:#0A5B57;font-size:16px;line-height:1.45}
+  .ah-hecho b{font-weight:800}
+  .ah-hecho-ico{flex:none;display:inline-flex;width:22px;height:22px;margin-top:1px}
+  .ah-hecho-ico svg{width:22px;height:22px;stroke:#00827E;stroke-width:2.6}
   .ah-btn{display:block;width:100%;min-height:48px;border:0;border-radius:14px;cursor:pointer;
     text-decoration:none;text-align:center;line-height:48px;font-family:inherit;font-weight:800;
     font-size:16px;color:#fff;background:linear-gradient(135deg,#FF6B3D,#EF4375);
@@ -1325,6 +1334,20 @@ $mt_unidad = function (string $objetivo): array {
 ?>
 
 <div class="ah">
+
+  <?php /* ── LA VUELTA · lo que acaba de pasar, en un renglón ──────────
+           El estado ya viene recalculado: MetaSnapshotReader lee en cada carga,
+           así que al volver de aprobar una pieza el bloque Ahora YA muestra lo
+           siguiente. Falta solo decir qué pasó, porque si no el dueño vuelve a
+           una pantalla distinta sin saber si su acción sirvió.
+           El texto NO sale de la URL: la URL trae una llave y el texto vive en
+           MetaRetorno. Llave que no reconozca, no pinta nada. */ ?>
+  <?php if ($mt_confirma = MetaRetorno::confirmacion($_GET['hecho'] ?? null)): ?>
+    <div class="ah-hecho" role="status">
+      <span class="ah-hecho-ico" aria-hidden="true"><?= ico('check') ?></span>
+      <span><b><?= $h($mt_confirma[0]) ?></b> <?= $h($mt_confirma[1]) ?></span>
+    </div>
+  <?php endif; ?>
 
   <?php /* ── ZONA META · compacta, y honesta con lo que puede afirmar ── */ ?>
   <?php if ($mt_snap['meta']): ?>
