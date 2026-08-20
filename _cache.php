@@ -909,6 +909,121 @@ try {
         } catch (Throwable $e) { echo "  (error: " . $e->getMessage() . ")\n"; }
     }
 
+    // ¿QUEDÓ ASENTADO EL HOTFIX DE SONDEO?   &test=sondeo
+    //   Contesta de un tiro las cuatro preguntas del despliegue, sin gastar un
+    //   centavo y sin generar nada: qué código corre de verdad, si la migración
+    //   está puesta, si las recargas siguen amplificando el log, y si los
+    //   trabajos pendientes conservan su job y respetan el backoff.
+    //
+    //   La versión NO se lee de una constante que alguien pudo olvidar subir:
+    //   se mira el fuente desplegado. Un marcador de versión miente si el
+    //   deploy quedó a medias; el archivo, no.
+    if ($__test === 'sondeo') {    // solo lectura · ya estás dentro como admin
+        echo "\n--- HOTFIX DE SONDEO: ¿ASENTADO EN PRODUCCIÓN? ---\n";
+        $ok_todo = true;
+        $chk = function (string $que, bool $cond, string $detalle = '') use (&$ok_todo) {
+            if (!$cond) $ok_todo = false;
+            // El detalle explica POR QUÉ importa: solo estorba cuando pasa.
+            printf("  [%s] %s%s\n", $cond ? 'OK' : '!!', $que,
+                   (!$cond && $detalle !== '') ? "\n         {$detalle}" : '');
+        };
+
+        // 1 · EL CÓDIGO QUE DE VERDAD ESTÁ EN EL DISCO
+        echo "\n  1) Código desplegado\n";
+        $leer = function (string $rel): string {
+            $p = __DIR__ . '/' . $rel;
+            return is_file($p) ? (string)file_get_contents($p) : '';
+        };
+        $ir = $leer('includes/img_responses.php');
+        $chk('img_resp_encolar_res() existe (veredicto tipado)', strpos($ir, 'function img_resp_encolar_res') !== false);
+        $chk('la firma insegura img_resp_encolar() ya NO existe',
+             !preg_match('/function\s+img_resp_encolar\s*\(/', $ir),
+             'si aparece, el deploy trae código viejo');
+        $chk('el barrido salta las piezas marcadas enc:', strpos($ir, "'enc:'") !== false);
+        $chk('arte_worker no llama al respaldo al agotar sondeos',
+             strpos($leer('panel/arte_worker.php'), 'sin respaldo') !== false);
+        $chk('agentes.php usa el veredicto', strpos($leer('includes/agentes.php'), 'img_resp_encolar_res') !== false);
+        $chk('gateway_post.php usa el veredicto', strpos($leer('panel/gateway_post.php'), 'img_resp_encolar_res') !== false);
+
+        // 2 · LA MIGRACIÓN
+        echo "\n  2) Migración\n";
+        try {
+            $cols = [];
+            foreach ($pdo->query("SHOW COLUMNS FROM crecer_contenido") as $c) $cols[] = $c['Field'];
+            foreach (['img_intentos','img_next_poll_at','img_error_clase','img_job_at'] as $c)
+                $chk("columna {$c}", in_array($c, $cols, true));
+            $idx = false;
+            foreach ($pdo->query("SHOW INDEX FROM crecer_contenido") as $i)
+                if ($i['Key_name'] === 'idx_cont_poll') $idx = true;
+            $chk('índice idx_cont_poll', $idx);
+            require_once __DIR__ . '/includes/img_responses.php';
+            $chk('el código LA VE (img_poll_columnas)', img_poll_columnas($pdo),
+                 'si falla, el backoff y la marca enc: quedan inertes');
+        } catch (Throwable $e) { echo "  (error: " . $e->getMessage() . ")\n"; $ok_todo = false; }
+
+        // 3 · LA AMPLIFICACIÓN, QUE ES EL DEFECTO ORIGINAL
+        //     852 filas eran 4 trabajos preguntados 113 veces. Se mide filas
+        //     por trabajo distinto: sano es ~1, el defecto daba 113.
+        echo "\n  3) Amplificación del log (filas por trabajo, 7 días)\n";
+        try {
+            $q = $pdo->query("SELECT DATE(created_at) dia, COUNT(*) filas,
+                                     COUNT(DISTINCT prompt) trabajos
+                                FROM crecer_ia_log
+                               WHERE agente='director_imagen' AND modelo='responses'
+                                 AND estado='error'
+                                 AND created_at > (NOW() - INTERVAL 7 DAY)
+                            GROUP BY DATE(created_at) ORDER BY dia DESC");
+            $filas = $q->fetchAll(PDO::FETCH_ASSOC);
+            if (!$filas) echo "    (sin incidentes de sondeo en 7 días — nada que amplificar)\n";
+            foreach ($filas as $f) {
+                $r = $f['trabajos'] > 0 ? $f['filas'] / $f['trabajos'] : 0;
+                printf("    %s  filas %-5d trabajos %-4d  →  %.1f por trabajo%s\n",
+                       $f['dia'], $f['filas'], $f['trabajos'], $r, $r > 3 ? '   <-- AMPLIFICANDO' : '');
+            }
+            echo "    (recarga Propuestas 10 veces y vuelve a correr esto: la fila de HOY\n";
+            echo "     no debe subir 10 — con el arreglo sube 1 como mucho.)\n";
+        } catch (Throwable $e) { echo "  (error: " . $e->getMessage() . ")\n"; }
+
+        // 4 · LOS TRABAJOS PENDIENTES
+        echo "\n  4) Trabajos pendientes ahora mismo\n";
+        try {
+            $p = $pdo->query("SELECT id, marca_id, img_job, img_intentos, img_error_clase,
+                                     img_job_at, img_next_poll_at,
+                                     TIMESTAMPDIFF(MINUTE, NOW(), img_next_poll_at) faltan
+                                FROM crecer_contenido
+                               WHERE img_estado='queued'
+                            ORDER BY id DESC LIMIT 15")->fetchAll(PDO::FETCH_ASSOC);
+            if (!$p) echo "    (no hay piezas en cola — nada pendiente que comprobar)\n";
+            $sin_job = 0;
+            foreach ($p as $f) {
+                $tiene = trim((string)$f['img_job']) !== '';
+                if (!$tiene && strpos((string)$f['img_error_clase'], 'enc:') !== 0) $sin_job++;
+                printf("    #%-6d job:%-3s intentos:%-3d prox:%-8s %s\n",
+                    $f['id'], $tiene ? 'sí' : 'NO', (int)$f['img_intentos'],
+                    $f['img_next_poll_at'] ? ((int)$f['faltan'] . 'min') : '-',
+                    (string)$f['img_error_clase']);
+            }
+            $chk('ninguna pieza en cola perdió su img_job sin quedar marcada', $sin_job === 0,
+                 $sin_job > 0 ? "{$sin_job} pieza(s) sin job y sin marca enc: — el barrido las regeneraría" : '');
+            $futuro = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido
+                                         WHERE img_estado='queued' AND img_next_poll_at > NOW()")->fetchColumn();
+            echo "    respetando el backoff (no toca sondearlas todavía): {$futuro}\n";
+        } catch (Throwable $e) { echo "  (error: " . $e->getMessage() . ")\n"; }
+
+        // 5 · ¿SE DISPARÓ ALGÚN RESPALDO?
+        echo "\n  5) Respaldos disparados (24 h)\n";
+        try {
+            $n = (int)$pdo->query("SELECT COUNT(*) FROM crecer_ia_log
+                                    WHERE accion LIKE 'Respaldo Gemini%'
+                                      AND created_at > (NOW() - INTERVAL 24 HOUR)")->fetchColumn();
+            printf("    %d\n", $n);
+            echo "    (>0 no es malo por si solo: es legitimo cuando el proveedor CONFIRMO\n";
+            echo "     el fallo. Malo seria verlo junto a piezas marcadas enc:.)\n";
+        } catch (Throwable $e) { echo "  (error: " . $e->getMessage() . ")\n"; }
+
+        echo "\n  " . ($ok_todo ? '>> TODO EN ORDEN' : '>> HAY ALGO FUERA DE SITIO (mira las lineas con !!)') . "\n";
+    }
+
     // EL GASTO CONTRA EL TECHO: para que el tope no sea un número que hay que
     //   creerse, sino uno que se comprueba.   &test=gasto
     if ($__test === 'gasto') {     // solo lectura · ya estás dentro como admin
