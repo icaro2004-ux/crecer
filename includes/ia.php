@@ -216,6 +216,12 @@ function ia_http_post(string $url, array $headers, string $body, int $timeout = 
  * que sugiere Google si viene; si no, usa backoff exponencial.
  * Así el sistema agéntico tolera el límite de velocidad por sí solo.
  */
+//  ENVUELTO EN function_exists PARA PODER PROBAR EL BORDE DE RED, y solo el
+//  borde. El caso «Responses acepto y no dio identificador» no se puede provocar
+//  de otra forma: sustituir la funcion entera seria probar el sustituto, no el
+//  camino de verdad. Lo mismo se hizo con openai_responses_crear_bg en el
+//  hotfix de sondeo del 19 de agosto.
+if (!function_exists('ia_http_post_retry')) {
 function ia_http_post_retry(string $url, array $headers, string $body, int $max_reintentos = 4, int $timeout = 60): string {
     $intento = 0;
     while (true) {
@@ -241,6 +247,8 @@ function ia_http_post_retry(string $url, array $headers, string $body, int $max_
         }
     }
 }
+}   // fin del envoltorio function_exists · ver la nota de arriba
+
 
 /**
  * Genera un OAuth access token para Vertex AI desde el service
@@ -703,6 +711,21 @@ function openai_imagen(string $prompt, array $opts = []): array {
 function openai_responses_imagen(string $brief, array $opts = []): array {
     require_once __DIR__ . '/cuota_imagenes.php';
     $__cuota = CuotaImg::garantizar($opts['cuota'] ?? null, 'P3 openai_responses_imagen');
+    try {
+        return _openai_responses_imagen($brief, $opts);
+    } catch (Throwable $e) {
+        //  Mismo motivo que en P4: un fallo nuestro no se cobra de su plan.
+        //  P1 y P2 no lo necesitan aqui porque motor_imagen() ya los cubre —y
+        //  ademas tiene que dejar la reserva VIVA entre el motor que falla y el
+        //  de respaldo, que es justo lo que evita el cobro doble.
+        CuotaImg::liberar($__cuota->pdo, $__cuota->asiento_id,
+            'falló el proveedor: ' . mb_substr($e->getMessage(), 0, 180));
+        throw $e;
+    }
+}
+
+/** El cuerpo de P3. Separado para que el envoltorio pueda devolver la unidad. */
+function _openai_responses_imagen(string $brief, array $opts = []): array {
     if (!openai_configurado()) throw new IaSinCredenciales('Falta OPENAI_API_KEY.');
     $modelo = trim((string)($opts['modelo'] ?? ''));
     if ($modelo === '') {
@@ -780,6 +803,26 @@ if (!function_exists('openai_responses_crear_bg')) {
 function openai_responses_crear_bg(string $brief, array $opts = []): array {
     require_once __DIR__ . '/cuota_imagenes.php';
     $__cuota = CuotaImg::garantizar($opts['cuota'] ?? null, 'P4 openai_responses_crear_bg');
+    try {
+        return _openai_responses_crear_bg($brief, $opts, $__cuota);
+    } catch (IaIncierto $e) {
+        //  El camino incierto ya decidio que hacer con la unidad (devolverla) y
+        //  con el riesgo (anotarlo como nuestro). Volver a tocarla aqui la
+        //  reembolsaria dos veces.
+        throw $e;
+    } catch (Throwable $e) {
+        //  UN FALLO LIMPIO DEVUELVE LA UNIDAD AL MOMENTO. Sin esto, el dueño se
+        //  quedaba sin una de sus 40 durante los 45 minutos del barrido cada vez
+        //  que faltaba una credencial o el proveedor devolvia un 400 — un error
+        //  nuestro cobrandose de su plan.
+        CuotaImg::liberar($__cuota->pdo, $__cuota->asiento_id,
+            'no se pudo encolar: ' . mb_substr($e->getMessage(), 0, 180));
+        throw $e;
+    }
+}
+
+/** El cuerpo de P4. Separado para que el envoltorio pueda devolver la unidad. */
+function _openai_responses_crear_bg(string $brief, array $opts, CuotaCtx $__cuota): array {
     if (!openai_configurado()) throw new IaSinCredenciales('Falta OPENAI_API_KEY.');
     $modelo = _openai_responses_modelo($opts);
     $aspect = $opts['aspect'] ?? '1:1';

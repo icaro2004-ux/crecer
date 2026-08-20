@@ -208,7 +208,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $msg = $nn > 0
                 ? "El corillo te dejó {$nn} post" . ($nn === 1 ? '' : 's') . " en Propuestas → Revisar."
                 : ($env['motivo'] === 'sin_cuota'
-                    ? 'El corillo llegó a tu tope de imágenes del mes. Tus fotos propias siguen corriendo libres.'
+                    ? 'El corillo llegó a tu tope de imágenes del mes. Sigue con lo que no necesita pintar: textos, calendario y publicar.'
                     : 'El corillo revisó — ya tienes suficientes borradores por ahora.');
             header('Location: ' . $volver . 'negocio&corillo=' . urlencode($msg)); exit;
         } catch (Throwable $e) {

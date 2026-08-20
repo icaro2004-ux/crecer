@@ -23,7 +23,11 @@ import os from 'node:os';
 import path from 'node:path';
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const [sid, marca, shots] = process.argv.slice(2);
+//  etapa: '' = el recorrido de la presentacion · 'cuota' = solo el limite.
+//  Son dos corridas distintas a proposito: para ver el aviso hay que agotar el
+//  mes, y hacerlo antes del recorrido normal cambiaria lo que ese recorrido
+//  mide. Mezclarlas daria numeros que no corresponden a ninguna pantalla real.
+const [sid, marca, shots, etapa] = process.argv.slice(2);
 const BASE = 'http://localhost/crecer';
 const perfil = fs.mkdtempSync(path.join(os.tmpdir(), 'navp-'));
 const puerto = 9800 + (process.pid % 150);
@@ -204,6 +208,7 @@ try {
   await cmd('Network.setCookie',
             { name: 'PHPSESSID', value: sid, domain: 'localhost', path: '/' });
 
+  if (etapa !== 'cuota') {
   // ── 1 · EL TRATO, tal como lo ve un Android de 360 ────────────────────
   await ir(`${BASE}/panel/meta.php?marca=${marca}`);
   await despejarBien();
@@ -327,6 +332,43 @@ try {
   await despejarBien();
   di('RECARGA_SIGUE_C', await evaluar(`document.querySelector('#ahEmpezar') !== null`));
   di('RECARGA_TITULO', await evaluar(`(document.querySelector('.ah-tit')||{}).textContent || ''`));
+  }
+
+  if (etapa === 'cuota') {
+  // ── 4 · SIN CUOTA · el limite, visto a 360x800 ────────────────────────
+  //  Se agota el mes a proposito -llenando el cubo, no gastando- y se mira lo
+  //  que ve la dueña: que no parezca una averia, que se lea sin scroll y que no
+  //  haya dos primarios peleandose.
+  await ir(`${BASE}/panel/meta.php?marca=${marca}`);
+  await despejarBien();
+  di('CQ_HAY', await evaluar("document.querySelector('.cq') !== null"));
+  di('CQ_TITULO', await evaluar("(document.querySelector('.cq-tit')||{}).textContent || ''"));
+  di('CQ_SIGUE', await evaluar("(document.querySelector('.cq-sigue')||{}).textContent || ''"));
+  di('CQ_PRIMARIOS', await evaluar(
+    "document.querySelectorAll('.cq-btn, .ah-btn').length"));
+  di('CQ_SIN_SCROLL', await evaluar(`(function(){
+    var c = document.querySelector('.cq'); if (!c) return 'sin-aviso';
+    window.scrollTo(0,0);
+    var r = c.getBoundingClientRect();
+    return (r.top >= 0 && r.bottom <= window.innerHeight) ? 'si' : Math.round(r.bottom) + '/' + window.innerHeight;
+  })()`));
+  di('CQ_MIN_PX', await evaluar(`(function(){
+    var min = 99;
+    [].forEach.call(document.querySelectorAll('.cq p, .cq a'), function(e){
+      if (!e.textContent.trim()) return;
+      var s = parseFloat(getComputedStyle(e).fontSize);
+      if (s && s < min) min = s;
+    });
+    return min;
+  })()`));
+  //  Ni rojo ni icono de alarma: el color es lo primero que dice si algo se rompio.
+  di('CQ_FONDO', await evaluar("getComputedStyle(document.querySelector('.cq')).backgroundColor"));
+  const mQ = await medir();
+  di('CQ_DESBORDE', mQ.desborde);
+  di('CQ_TAPADOS', mQ.tapados.length);
+  di('CQ_TAPADOS_DET', JSON.stringify(mQ.tapados));
+  await captura('meta_sin_cuota', '.cq');
+  }
 
   di('OK', 1);
 } catch (e) {

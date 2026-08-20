@@ -512,6 +512,8 @@ $mt_unidad = function (string $objetivo): array {
     cursor:pointer;background:#fff;color:var(--tinta);font-family:inherit;font-weight:800;font-size:16px}
   .ah-btn2:disabled{opacity:.55;cursor:default}
   .ah-cons{font-size:14px;line-height:1.45;color:var(--muted);margin:10px 0 0}
+  /*  El aviso de cuota trae su propio CSS (includes/cuota_aviso.php) para que
+      sea el mismo en todas las pantallas y no se diverja copiandolo. */
 
   /* — el trato: lo que se enseña ANTES de que el dueño diga que sí —
      Dos números y una frase. El plan entero vive en su vista; aquí lo que
@@ -1369,6 +1371,23 @@ $mt_unidad = function (string $objetivo): array {
   $obj = (string)($mt_snap['meta']['objetivo'] ?? '');
   $uni = $mt_unidad($obj);
   $act = $E->accion;
+
+  //  ¿SE ACABARON LAS IMAGENES DEL MES? Se pregunta AQUI, junto al estado, para
+  //  poder decidir una sola cosa: quien se queda con el boton primario.
+  //
+  //  Si lo que toca hoy NECESITA pintar (produccion o material), el aviso se
+  //  lleva el primario, porque la accion normal no va a poder completarse. Si
+  //  lo que toca es aprobar, publicar o confirmar algo, el aviso va SIN boton y
+  //  la accion normal se queda con el suyo: dos primarios compitiendo es el
+  //  criterio 3 del contrato, y en esa pantalla el dueño ya no sabe que tocar.
+  require_once __DIR__ . '/../includes/cuota_aviso.php';
+  $mt_cuota = null; $mt_cuota_manda = false;
+  try {
+      $mt_cuota = img_cuota_estado($pdo, $marca_id, ($usuario['rol'] ?? '') === 'admin');
+      if (!empty($mt_cuota['lleno'])) {
+          $mt_cuota_manda = in_array($E->estado, [MetaState::E_CRECER_TRABAJA, MetaState::G_MATERIAL], true);
+      }
+  } catch (Throwable $e) { $mt_cuota = null; }
   // El destino de la acción vuelve aquí cuando termine.
   // El destino sale del compositor; aquí solo se le añade el regreso y, para
   // el estado A, la capa del wizard: sin eso su acción recargaba esta misma
@@ -1396,6 +1415,14 @@ $mt_unidad = function (string $objetivo): array {
       <span class="ah-hecho-ico" aria-hidden="true"><?= ico('check') ?></span>
       <span><b><?= $h($mt_confirma[0]) ?></b> <?= $h($mt_confirma[1]) ?></span>
     </div>
+  <?php endif; ?>
+
+  <?php /* ── SIN IMAGENES ESTE MES · un limite, no una averia ──────────
+           Va arriba porque explica lo que el dueño esta a punto de ver: una
+           pantalla que no le va a dejar pedir arte nuevo. Enterarse despues de
+           intentarlo es lo que manda gente a soporte. */ ?>
+  <?php if ($mt_cuota && !empty($mt_cuota['lleno'])): ?>
+    <?= cuota_aviso_html($mt_cuota, $marca_id, $mt_cuota_manda, $BASE) ?>
   <?php endif; ?>
 
   <?php /* ── ZONA META · compacta, y honesta con lo que puede afirmar ── */ ?>
@@ -1523,7 +1550,10 @@ $mt_unidad = function (string $objetivo): array {
         <button type="button" class="ah-btn" id="ahReintentar"
                 data-jugada="<?= (int)($E->evidencia['tactica_id'] ?? 0) ?>"><?= $h($act['etiqueta']) ?></button>
       <?php else: ?>
-        <a class="ah-btn" href="<?= $h($destino) ?>"><?= $h($act['etiqueta']) ?></a>
+        <?php /* Cuando el aviso de cuota se llevo el primario, esta accion baja
+                 a secundaria en vez de desaparecer: sigue siendo verdad que hay
+                 algo que hacer, solo que hoy no se puede completar pintando. */ ?>
+        <a class="<?= $mt_cuota_manda ? 'ah-btn2' : 'ah-btn' ?>" href="<?= $h($destino) ?>"><?= $h($act['etiqueta']) ?></a>
       <?php endif; ?>
       <?php if (trim((string)$act['consecuencia']) !== ''): ?>
         <p class="ah-cons"><?= $h($act['consecuencia']) ?></p>
@@ -1557,6 +1587,7 @@ $mt_unidad = function (string $objetivo): array {
   </nav>
 </div>
 
+<?= cuota_aviso_css() ?>
 <div class="ah-toast" id="ahToast"></div>
 
 <script>

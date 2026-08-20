@@ -213,7 +213,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $imgq = img_cuota_estado($pdo, $marca_id, $cupo_exento);
         if ($imgq['lleno']) {
             header('Content-Type: application/json');
-            echo json_encode(['ok'=>false,'err'=>"Este mes la IA ya pintó tus {$imgq['limite']} imágenes — se renuevan el {$imgq['reset']}. Tus fotos propias siguen corriendo libres.", 'cuota_img'=>$imgq]); exit;
+            //  NI 'error' NI ROJO: es el limite del plan, no una averia. Y NO se
+            //  promete que la foto propia sea gratis hasta que esa ruta este
+            //  desplegada y probada contra el libro nuevo — subirla no llama a
+            //  ningun proveedor, pero realzarla con IA si cuenta 1.
+            require_once __DIR__ . '/../includes/cuota_aviso.php';
+            echo json_encode(['ok'=>false, 'limite'=>true, 'err'=>cuota_aviso_texto($imgq),
+                              'cuota_img'=>$imgq]); exit;
         }
         $dir_fotos = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/fotos";
         // Tope por post: 3 generaciones IA — SIEMPRE.

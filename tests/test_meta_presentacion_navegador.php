@@ -59,14 +59,23 @@ try {
     file_put_contents($ruta . DIRECTORY_SEPARATOR . 'sess_' . $sid,
         'usuario_id|i:' . (int)$fx['usuario_id'] . ';');
 
-    $cmd = 'node ' . escapeshellarg(__DIR__ . DIRECTORY_SEPARATOR . '_navegador_presentacion.mjs')
-         . ' ' . escapeshellarg($sid) . ' ' . $M . ' ' . escapeshellarg($SHOTS) . ' 2>&1';
-    $sal = []; exec($cmd, $sal);
-    $r = [];
-    foreach ($sal as $l) { if (strpos($l, '=') !== false) { [$k, $v] = explode('=', trim($l), 2); $r[$k] = $v; } }
+    //  Dos corridas distintas del mismo guión, a propósito. Para ver el aviso
+    //  del límite hay que agotar el mes, y agotarlo antes del recorrido normal
+    //  cambiaría lo que ese recorrido mide: saldrían números que no
+    //  corresponden a ninguna pantalla real.
+    $correr = function (string $etapa = '') use ($sid, $M, $SHOTS): array {
+        $cmd = 'node ' . escapeshellarg(__DIR__ . DIRECTORY_SEPARATOR . '_navegador_presentacion.mjs')
+             . ' ' . escapeshellarg($sid) . ' ' . $M . ' ' . escapeshellarg($SHOTS)
+             . ' ' . escapeshellarg($etapa) . ' 2>&1';
+        $sal = []; exec($cmd, $sal);
+        $out = ['_sal' => $sal];
+        foreach ($sal as $l) { if (strpos($l, '=') !== false) { [$k, $v] = explode('=', trim($l), 2); $out[$k] = $v; } }
+        return $out;
+    };
+    $r = $correr();
 
     ok('el navegador completó el recorrido', ($r['OK'] ?? '0') === '1',
-       ($r['ERROR'] ?? '') ?: implode(' | ', array_slice($sal, -3)));
+       ($r['ERROR'] ?? '') ?: implode(' | ', array_slice($r['_sal'] ?? [], -3)));
 
     if (($r['OK'] ?? '0') === '1') {
         echo "\n  — el trato, en un Android de 360 —\n";
@@ -177,6 +186,64 @@ try {
         $q->execute([$PLAN, $M]);
         ok('y quedó escrito de verdad', $q->fetchColumn() !== null,
            'la pantalla cambió sin haber escrito nada');
+
+        // ══════════════════════════════════════════════════════
+        //  EL LÍMITE DEL MES, VISTO A 360x800
+        //  Se agota LLENANDO EL CUBO, no gastando: la prueba no puede
+        //  pedirle 40 imágenes a OpenAI para comprobar un aviso.
+        // ══════════════════════════════════════════════════════
+        echo "\n  — sin imágenes este mes, en el teléfono —\n";
+        require_once __DIR__ . '/../includes/cuota_imagenes.php';
+        $pdo->prepare("INSERT INTO crecer_img_cuota_cubo (marca_id, cubo, limite, usadas)
+                       VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE usadas=VALUES(usadas)")
+            ->execute([$M, CuotaImg::cuboMes(), CuotaImg::TOPE_MES, CuotaImg::TOPE_MES]);
+
+        //  Y AQUI LA DUEÑA TIENE QUE SER UNA CLIENTA DE VERDAD, no la admin.
+        //  El resto del recorrido usa admin para cruzar el candado del paywall,
+        //  pero admin va EXENTA de la cuota: con ese rol el aviso no sale nunca
+        //  y la prueba estaria mirando una pantalla que ninguna clienta ve.
+        //  Asi que por esta etapa se le da una suscripcion de verdad y se le
+        //  quita el rol — que es exactamente la situacion del negocio que paga.
+        $pdo->prepare("UPDATE usuarios SET rol='proveedor' WHERE id=?")->execute([(int)$fx['usuario_id']]);
+        $pdo->prepare("INSERT INTO crecer_suscripciones (marca_id, usuario_id, plan_id, estado,
+                                                        periodo_inicio, periodo_fin, created_at)
+                       VALUES (?,?,1,'activa', CURDATE(), DATE_ADD(CURDATE(), INTERVAL 30 DAY), NOW())
+                       ON DUPLICATE KEY UPDATE estado='activa'")
+            ->execute([$M, (int)$fx['usuario_id']]);
+
+        $c = $correr('cuota');
+
+        //  Se devuelve el rol para no dejar la fixture a medias si algo falla
+        //  antes de la limpieza.
+        $pdo->prepare("UPDATE usuarios SET rol='admin' WHERE id=?")->execute([(int)$fx['usuario_id']]);
+
+        ok('el navegador completó la etapa', ($c['OK'] ?? '0') === '1',
+           ($c['ERROR'] ?? '') ?: implode(' | ', array_slice($c['_sal'] ?? [], -3)));
+        ok('el aviso aparece', ($c['CQ_HAY'] ?? '') === 'true');
+        ok('dice que se acabaron las del mes',
+           strpos($c['CQ_TITULO'] ?? '', 'imágenes de este mes') !== false,
+           'salió: ' . ($c['CQ_TITULO'] ?? '—'));
+        ok('y que el corillo sigue trabajando',
+           strpos($c['CQ_SIGUE'] ?? '', 'sigue trabajando') !== false,
+           'sin esa frase el dueño entiende «se acabó mi mes» en vez de «se acabó una parte»');
+        ok('se lee sin hacer scroll', ($c['CQ_SIN_SCROLL'] ?? '') === 'si',
+           'bottom/alto = ' . ($c['CQ_SIN_SCROLL'] ?? '?'));
+        ok('un solo botón primario en toda la pantalla',
+           (int)($c['CQ_PRIMARIOS'] ?? 9) === 1,
+           'hay ' . ($c['CQ_PRIMARIOS'] ?? '?') . ' · el criterio 3 del contrato');
+        ok('ningún texto por debajo de 14px', (float)($c['CQ_MIN_PX'] ?? 0) >= 14,
+           'el más pequeño mide ' . ($c['CQ_MIN_PX'] ?? '?') . 'px');
+        //  El color es lo primero que dice si algo se rompió. Rojo = avería.
+        $fondo = (string)($c['CQ_FONDO'] ?? '');
+        preg_match_all('/\d+/', $fondo, $rgb);
+        $rojo = isset($rgb[0][0]) && (int)$rgb[0][0] > 200
+                && (int)($rgb[0][1] ?? 255) < 150 && (int)($rgb[0][2] ?? 255) < 150;
+        ok('el fondo no es de alarma', !$rojo, "fondo={$fondo} · es un límite del plan, no una avería");
+        ok('no desborda a lo ancho', (int)($c['CQ_DESBORDE'] ?? 1) === 0);
+        ok('y no tapa ningún control', (int)($c['CQ_TAPADOS'] ?? 1) === 0,
+           $c['CQ_TAPADOS_DET'] ?? '');
+        $vp_cq = $SHOTS . DIRECTORY_SEPARATOR . 'meta_sin_cuota.png';
+        ok('con su captura de viewport', is_file($vp_cq) && filesize($vp_cq) > 5000);
 
         echo "\n  — capturas —\n";
         foreach (['meta_plan_por_presentar', 'meta_plan_presentado'] as $c) {

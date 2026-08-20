@@ -406,8 +406,15 @@ function img_resp_encolar_res(PDO $pdo, int $marca_id, int $post_id, string $cop
         } catch (Throwable $e) { /* log best-effort */ }
         return ['res' => 'encolado', 'job' => (string)$bg['id'], 'clase' => ''];
     } catch (Throwable $e) {
-        $clase = img_poll_clase_error($e->getMessage());
-        $ver   = img_encolar_veredicto($clase);
+        //  POR TIPO, NO POR TEXTO. IaIncierto significa «aceptaron y no hay con
+        //  que recogerlo»: eso NUNCA es un rechazo confirmado y por tanto nunca
+        //  puede disparar el respaldo a Gemini. Deducirlo del mensaje funcionaba
+        //  hasta que alguien cambiara una palabra.
+        if ($e instanceof IaIncierto) { $clase = 'aceptado_sin_id'; $ver = 'incierto'; }
+        else {
+            $clase = img_poll_clase_error($e->getMessage());
+            $ver   = img_encolar_veredicto($clase);
+        }
         error_log("img_resp_encolar: {$ver} ({$clase}) — " . $e->getMessage());
         // Deja el error EXACTO en el log (para ver por qué gpt-image-2 cae a Gemini: 429/key/modelo/tool).
         try { $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,estado,error_msg)

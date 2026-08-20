@@ -191,7 +191,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pend = 0;
         foreach (carrusel_slides($pdo, $cid) as $s) { if (trim((string)$s['grafica_path']) === '') $pend++; }
         if (!$imgq['exento'] && $pend > $imgq['restantes']) {
-            $jout(['ok' => false, 'err' => "Pintar este carrusel usa {$pend} imágenes y este mes te quedan {$imgq['restantes']} de {$imgq['limite']} (se renuevan el {$imgq['reset']}). Sube tus fotos a los slides — esas no gastan."]);
+            //  Se dice el numero y el camino, sin prometerle precio a la foto
+            //  propia: esa ruta todavia no esta probada contra el libro nuevo.
+            $jout(['ok' => false, 'limite' => true,
+                   'err' => "Pintar este carrusel usa {$pend} imágenes y este mes te quedan {$imgq['restantes']} de {$imgq['limite']} (se renuevan el {$imgq['reset']}). También puedes ponerle tus propias fotos a los slides."]);
         }
         $n = carrusel_encolar_arte($pdo, $marca_id, $cid);
         if ($n < 0) {   // motor Responses apagado → worker sync (Gemini) como respaldo
@@ -526,7 +529,7 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
       } catch (Throwable $e) { $imgq_c = null; }
     ?>
     <?php if ($imgq_c && !$imgq_c['exento']): ?>
-    <p class="cr-note" style="margin-top:6px">Si la IA pinta los slides, <b>cada slide consume 1 imagen</b> de tu plan — vas <b><?= (int)$imgq_c['usadas'] ?> de <?= (int)$imgq_c['limite'] ?></b> este mes (renuevan el <?= $imgq_c['reset'] ?>). Con tus fotos, no gastas.</p>
+    <p class="cr-note" style="margin-top:6px">Si la IA pinta los slides, <b>cada slide consume 1 imagen</b> de tu plan — vas <b><?= (int)$imgq_c['usadas'] ?> de <?= (int)$imgq_c['limite'] ?></b> este mes (renuevan el <?= $imgq_c['reset'] ?>). También puedes ponerle tus propias fotos.</p>
     <?php endif; ?>
   </div>
 
@@ -636,7 +639,7 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
     <button type="button" class="cr-b ia" id="crIA"><?= ico('sparkles') ?> Que el corillo pinte las que faltan</button>
   </div>
   <div style="text-align:center"><button type="button" class="cr-rehacer" id="crRehacer"><?= ico('refresh') ?> Rehacer el arte desde cero</button></div>
-  <p class="cr-note">Cuando la IA pinta, puede tardar — te avisamos por la <b>campanita</b>. Tus fotos quedan al instante y <b>no gastan</b> de tu cuota.</p>
+  <p class="cr-note">Cuando la IA pinta, puede tardar — te avisamos por la <b>campanita</b>. Tus fotos quedan al instante.</p>
 
   <div class="wz-nav">
     <button type="button" class="wz-back" data-ir="1">Atrás</button>
