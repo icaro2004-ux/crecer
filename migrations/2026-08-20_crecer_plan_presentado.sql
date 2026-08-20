@@ -24,7 +24,7 @@
 
 ALTER TABLE crecer_meta_plan
   ADD COLUMN presentado_at DATETIME NULL DEFAULT NULL
-       COMMENT 'cuando se le enseño el plan al dueño; NULL = todavia no';
+       COMMENT 'cuando se le enseno el plan al dueno · NULL = todavia no';
 
 -- El compositor pregunta por el plan ACTIVO de una marca y mira este campo en
 -- cada carga de Tu Meta. Que no tenga que recorrer la tabla para responderlo.

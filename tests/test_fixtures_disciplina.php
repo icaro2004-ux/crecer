@@ -149,12 +149,33 @@ $con_permiso = ['_esquema_desechable.php'];
 //  EsquemaDesechable::ejecutar(), asi que esas lineas se apartan antes de mirar
 //  —y solo en archivos que de verdad cargan el ayudante, para que ningun
 //  ->ejecutar() de otra clase sirva de coartada.
+//  Y lo que se mira es SOLO lo que puede ejecutarse: la línea tiene que llevar
+//  una llamada de ejecución (o venir justo debajo de una, porque estas cadenas
+//  son multilínea a propósito). Sin ese filtro, la palabra DROP dentro de un
+//  patrón regex —o de un array de verbos SQL— acusaba a una prueba que no
+//  ejecuta nada. Una regla que se pone roja por algo inofensivo enseña a
+//  ignorar el rojo, que es peor que no tenerla.
 $solo_compartida = function (string $s): string {
     $usa_desechable = strpos($s, '_esquema_desechable.php') !== false;
-    $vivas = [];
-    foreach (explode("\n", $s) as $l) {
+    $lineas = explode("\n", $s);
+    $vivas  = [];
+    foreach ($lineas as $i => $l) {
         if (preg_match('/^\s*(\/\/|\*|\/\*|#)/', $l)) continue;      // comentario
         if ($usa_desechable && strpos($l, '->ejecutar(') !== false) continue;  // va a la copia
+        //  ¿Esta línea, o alguna de las 3 de arriba, abre una ejecución?
+        $ejecuta = false;
+        for ($k = max(0, $i - 3); $k <= $i; $k++) {
+            if (preg_match('/->(exec|query|prepare)\s*\(/', $lineas[$k])) { $ejecuta = true; break; }
+        }
+        if (!$ejecuta) continue;
+        //  Si la ejecución de arriba iba a la copia, esta línea también.
+        if ($usa_desechable) {
+            $a_la_copia = false;
+            for ($k = max(0, $i - 3); $k <= $i; $k++) {
+                if (strpos($lineas[$k], '->ejecutar(') !== false) { $a_la_copia = true; break; }
+            }
+            if ($a_la_copia) continue;
+        }
         $vivas[] = $l;
     }
     return implode("\n", $vivas);
