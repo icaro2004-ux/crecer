@@ -280,6 +280,34 @@ try {
     echo "\n  — con cuota, el aviso no existe —\n";
     ok('no se pinta nada', cuota_aviso_html(['lleno' => false], $M) === '');
 
+    echo "\n  — el migrador corre exactamente lo pendiente —\n";
+    //  admin_migrar.php tenía el archivo FIJO en _META-SIMPLE.sql: no habría
+    //  corrido ninguna de las tres, y la ventana de despliegue habría acabado
+    //  hecha a mano en phpMyAdmin — que es justo donde los errores se entierran
+    //  y por lo que esa página existe.
+    $mig_src = (string)file_get_contents(dirname(__DIR__) . '/panel/admin_migrar.php');
+    preg_match('/\$MIGRACIONES = \[(.*?)\];/s', $mig_src, $mm);
+    preg_match_all("/'([^']+\.sql)'/", $mm[1] ?? '', $lista);
+    $decl = $lista[1] ?? [];
+    $esperadas = [
+        '2026-08-20_crecer_plan_presentado.sql',
+        '2026-08-21_crecer_meta_autorun.sql',
+        '2026-08-21_crecer_img_cuota.sql',
+    ];
+    ok('declara exactamente las tres pendientes', $decl === $esperadas,
+       'declaradas: ' . implode(' · ', $decl));
+    foreach ($esperadas as $e) {
+        ok("{$e} existe en migrations/", is_file(dirname(__DIR__) . '/migrations/' . $e));
+    }
+    ok('y ya no hay un archivo fijo',
+       strpos($mig_src, "/migrations/_META-SIMPLE.sql'") === false,
+       'con el archivo fijo, las tres se habrían quedado sin correr');
+    ok('la verificación mira lo nuevo',
+       strpos($mig_src, 'crecer_meta_autorun') !== false
+       && strpos($mig_src, 'crecer_img_cuota_cubo') !== false
+       && strpos($mig_src, 'presentado_at') !== false,
+       'si no las verifica, diría «todo bien» sin haberlas mirado');
+
     echo "\n  — «Que lo haga el corillo» se queda —\n";
     $mt = (string)file_get_contents(dirname(__DIR__) . '/panel/meta.php');
     ok('el botón sigue en Tu Meta', strpos($mt, 'Que lo haga el corillo') !== false,

@@ -21,7 +21,25 @@ requiere_login();
 $usuario = usuario_actual($pdo);
 if (($usuario['rol'] ?? '') !== 'admin') { http_response_code(403); exit('Acceso solo para administradores.'); }
 
-$ARCHIVO = dirname(__DIR__) . '/migrations/_META-SIMPLE.sql';
+//  LA LISTA, DECLARADA Y EN ORDEN. Antes esto era UN archivo fijo
+//  (_META-SIMPLE.sql), asi que cualquier migracion posterior habia que correrla
+//  a mano en phpMyAdmin — que es justo donde los errores se entierran y por lo
+//  que existe esta pagina. Se declaran por nombre, no se descubre la carpeta:
+//  correr por descubrimiento significa ejecutar lo que alguien deje ahi.
+//  SOLO LAS PENDIENTES, y en este orden. Las anteriores (_META-SIMPLE,
+//  poll_backoff) ya estan aplicadas en produccion: volver a pasarlas no romperia
+//  nada -los codigos 1050/1060/1061 se reportan como «ya estaba»- pero alargaria
+//  la ventana de despliegue sin motivo, y durante esa ventana no se generan
+//  imagenes. Cuando estas tres entren, se vacia la lista.
+$MIGRACIONES = [
+    '2026-08-20_crecer_plan_presentado.sql',   // Fase 3B · el plan se presenta una vez
+    '2026-08-21_crecer_meta_autorun.sql',      // Fase 3C · el libro de corridas
+    '2026-08-21_crecer_img_cuota.sql',         // Fase 3C · el libro de la cuota
+];
+$DIR = dirname(__DIR__) . '/migrations/';
+$PRESENTES = array_values(array_filter($MIGRACIONES, fn($m) => is_file($DIR . $m)));
+$AUSENTES  = array_values(array_filter($MIGRACIONES, fn($m) => !is_file($DIR . $m)));
+$ARCHIVO   = $DIR . ($PRESENTES[0] ?? '');   // solo para el aviso de «¿hiciste redeploy?»
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
 // Errores que significan "esto ya estaba" — no son fallos.
@@ -30,11 +48,13 @@ const YA_ESTABA = [1050 /*tabla existe*/, 1060 /*columna existe*/, 1061 /*índic
 $correr = ($_SERVER['REQUEST_METHOD'] === 'POST' && csrf_ok());
 $res = []; $n_ok = 0; $n_ya = 0; $n_err = 0;
 
-if ($correr && is_file($ARCHIVO)) {
-    $sql = (string)file_get_contents($ARCHIVO);
+if ($correr) foreach ($PRESENTES as $__mig) {
+    $sql = (string)file_get_contents($DIR . $__mig);
     $sql = preg_replace('/^\s*--.*$/m', '', $sql);          // fuera los comentarios
     foreach (array_filter(array_map('trim', explode(';', $sql))) as $stmt) {
-        $etiqueta = preg_replace('/\s+/', ' ', mb_substr($stmt, 0, 78));
+        //  El nombre del archivo va en la etiqueta: con cinco migraciones
+        //  seguidas, un error sin decir DE CUAL es no sirve de nada.
+        $etiqueta = $__mig . ' · ' . preg_replace('/\s+/', ' ', mb_substr($stmt, 0, 60));
         // Los SELECT informativos del archivo (el "Listo…" del final) NO se
         // ejecutan: con exec() dejan un resultado sin consumir y la siguiente
         // consulta revienta con "unbuffered queries are active" — que fue lo que
@@ -70,6 +90,12 @@ $piezas = [
     ['crecer_meta_tactica',    'col',    'formato'],
     ['crecer_meta_tactica',    'col',    'ejecutado_at'],
     ['crecer_reels',           'col',    'contenido_id'],
+    // ── Fase 3B ──
+    ['crecer_meta_plan',       'col',    'presentado_at'],
+    // ── Fase 3C ──
+    ['crecer_meta_autorun',    'tabla',  null],
+    ['crecer_img_cuota_cubo',  'tabla',  null],
+    ['crecer_img_cuota_asiento','tabla', null],
 ];
 $estado = [];
 foreach ($piezas as [$tabla, $tipo, $col]) {
@@ -121,8 +147,19 @@ try { $base = (string)$pdo->query('SELECT DATABASE()')->fetchColumn(); } catch (
     y el error exacto si algo falla. No borra ni modifica datos: solo crea tablas y añade columnas.</p>
  <div class="base">Base de datos: <b><?= $h($base ?: '(desconocida)') ?></b></div>
 
- <?php if (!is_file($ARCHIVO)): ?>
-   <div class="final mal">No encuentro <code>migrations/_META-SIMPLE.sql</code> en el servidor.
+ <div class="caja">
+   <p style="margin:0 0 10px;font-size:13.5px;font-weight:700">Migraciones que se van a correr, en este orden:</p>
+   <?php foreach ($PRESENTES as $m): ?>
+     <div class="fila"><span class="tag ok">está</span><code><?= $h($m) ?></code></div>
+   <?php endforeach; ?>
+   <?php foreach ($AUSENTES as $m): ?>
+     <div class="fila"><span class="tag err">falta</span><code><?= $h($m) ?></code>
+       <span class="err-msg">no está en el servidor · ¿hiciste el Redeploy?</span></div>
+   <?php endforeach; ?>
+ </div>
+
+ <?php if (!$PRESENTES): ?>
+   <div class="final mal">No encuentro ninguna migración en <code>migrations/</code>.
      ¿Hiciste el Redeploy después del último push?</div>
  <?php elseif (!$correr): ?>
    <form method="post" class="caja">
