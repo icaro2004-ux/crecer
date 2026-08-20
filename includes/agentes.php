@@ -1708,8 +1708,16 @@ function crear_post_muestra(PDO $pdo, int $marca_id): int {
     // MOTOR RESPONSES (background): encola el anuncio y devuelve YA; la imagen llega por
     // polling en el gateway (sin colgar la página ~50s). Fallback al motor viejo si falla.
     require_once __DIR__ . '/img_responses.php';
-    if (img_resp_activo() && img_resp_encolar($pdo, $marca_id, $cid, $cap) !== '') {
-        return $cid;
+    if (img_resp_activo()) {
+        $enc = img_resp_encolar_res($pdo, $marca_id, $cid, $cap);
+        // Encolado: la imagen llega por polling, no hay nada más que hacer aquí.
+        if ($enc['res'] === 'encolado') return $cid;
+        // INCIERTO: la petición se fue sin respuesta, así que OpenAI pudo haber
+        // aceptado el trabajo. Caer al motor viejo aquí es pedir —y pagar— la
+        // segunda imagen. La pieza ya quedó marcada 'enc:' y se queda esperando;
+        // solo el dueño puede pedirla otra vez.
+        if ($enc['res'] === 'incierto') return $cid;
+        // rechazado_confirmado: no quedó nada creado. El motor viejo puede correr.
     }
     try {
         $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => false]);

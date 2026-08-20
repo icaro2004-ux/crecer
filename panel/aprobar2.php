@@ -254,6 +254,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // NO contar el intento aquí: se cuenta cuando la imagen SE PRODUCE (img_responses).
             // Antes se contaba al encolar → si el worker fallaba, quemaba el intento sin dar imagen.
             $pdo->prepare("UPDATE crecer_contenido SET img_estado='queued', img_job=NULL, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$id, $marca_id]);
+            // Reintento explicito del dueno = operacion NUEVA, no la continuacion
+            // de la que se aparco: los contadores de sondeo vuelven a cero.
+            if (function_exists('img_poll_reiniciar')) img_poll_reiniciar($pdo, $marca_id, $id);
             arte_disparar($marca_id, $id, $con_txt, $extra !== '' ? $extra : null, false, $est_arte);
             header('Content-Type: application/json');
             echo json_encode(['ok'=>true, 'async'=>true, 'id'=>$id,
@@ -813,6 +816,15 @@ $guia = ['key'=>'contenido','agente'=>'pen','titulo'=>'Tu fábrica de posts',
     ['check','Cuando te guste, dale "Aprobar". Editar un post le enseña tu voz a la IA.'],
   ]];
 require __DIR__ . '/_shell.php';
+?>
+<?php /* Regreso predecible: si se llegó desde Tu Meta, hay una salida clara de
+         vuelta. Sin esto la acción del estado dominante era un viaje de ida. */ ?>
+<?php if (($_GET["volver"] ?? "") === "meta"): ?>
+<a href="/crecer/panel/meta.php?marca=<?= (int)$marca_id ?>"
+   style="display:inline-flex;align-items:center;gap:7px;min-height:44px;line-height:44px;
+          font-size:14px;font-weight:700;color:var(--muted);text-decoration:none">&larr; Volver a tu meta</a>
+<?php endif; ?>
+<?php
 ?>
 <style>
   .feedwrap{max-width:600px}

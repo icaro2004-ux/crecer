@@ -480,6 +480,8 @@ function ayudante_arreglar(PDO $pdo, int $marca_id, string $accion, ?int $ref_id
                 //    propio respaldo por Gemini si el motor principal no puede).
                 $pdo->prepare("UPDATE crecer_contenido SET img_estado='queued', img_job=NULL, updated_at=NOW()
                                WHERE id=? AND marca_id=?")->execute([(int)$p['id'], $marca_id]);
+                // Reintento = operacion NUEVA, con su propio presupuesto de sondeos.
+                if (function_exists('img_poll_reiniciar')) img_poll_reiniciar($pdo, $marca_id, (int)$p['id']);
                 if (function_exists('arte_disparar')) arte_disparar($marca_id, (int)$p['id']);
                 $r = ['ok' => true,
                       'msg' => 'Puse la imagen a hacerse otra vez. Te llega una notificación cuando esté (normalmente un minuto).',

@@ -177,6 +177,26 @@ $pubs->execute([$marca_id]); $publicaciones = $pubs->fetchAll();
 // Aggregate de TODO el sistema (escala, sin exponer datos de otras marcas)
 $sis = $pdo->query("SELECT COUNT(*) n, COUNT(DISTINCT marca_id) marcas, COALESCE(SUM(costo_usd),0) costo FROM crecer_ia_log WHERE estado='ok'")->fetch();
 
+// ── AMPLIFICACION DE SONDEO (hasta 2026-08-19) ───────────────
+// Los errores de 'No pude consultar el job de imagen' NO son fallos distintos:
+// el barrido corria en CADA carga de pantalla y cada consulta fallida insertaba
+// una fila. Un pu~ado de trabajos trancados produjo cientos de registros.
+// Aqui se ense~a la relacion entre EVENTOS y OPERACIONES UNICAS, porque
+// esconder las filas seria peor: la cifra cruda, sin esta explicacion, describe
+// un sistema mucho mas roto de lo que estuvo.
+$amp = ['eventos' => 0, 'ops' => 0, 'ratio' => 0.0];
+try {
+    $qa = $pdo->prepare("SELECT COUNT(*) eventos, COUNT(DISTINCT prompt) ops
+                           FROM crecer_ia_log
+                          WHERE marca_id=? AND estado='error'
+                            AND accion LIKE '%consultar el job%'");
+    $qa->execute([$marca_id]);
+    $ra = $qa->fetch(PDO::FETCH_ASSOC) ?: [];
+    $amp['eventos'] = (int)($ra['eventos'] ?? 0);
+    $amp['ops']     = (int)($ra['ops'] ?? 0);
+    $amp['ratio']   = $amp['ops'] > 0 ? round($amp['eventos'] / $amp['ops'], 1) : 0.0;
+} catch (Throwable $e) { /* si algo falla, la tarjeta simplemente no sale */ }
+
 $active = 'evidencia';
 $page_title = 'Evidencia del Corillo';
 require __DIR__ . '/_shell.php';
@@ -328,6 +348,32 @@ require __DIR__ . '/_shell.php';
       </div>
     <?php endforeach; endif; ?>
   </div>
+
+  <?php if ($amp['eventos'] > 0 && $amp['ratio'] > 2): ?>
+  <div class="ev-card" style="border-color:color-mix(in srgb,var(--terracota) 30%,#fff)">
+    <h2><?= ico('eye') ?> Sobre los errores de sondeo que verás abajo</h2>
+    <p class="ev-lede" style="margin-top:-6px">
+      En la bitácora aparecen <b><?= number_format($amp['eventos']) ?></b> errores de
+      «No pude consultar el job de imagen». <b>No son <?= number_format($amp['eventos']) ?>
+      fallos distintos.</b> Corresponden a solo
+      <b><?= number_format($amp['ops']) ?></b> <?= $amp['ops'] === 1 ? 'operación' : 'operaciones' ?>
+      — un promedio de <b><?= $amp['ratio'] ?></b> registros por operación.
+    </p>
+    <p class="ev-lede" style="margin-top:0">
+      El barrido de imágenes corría en cada carga de pantalla, y cada consulta fallida
+      sobre el mismo trabajo trancado escribía una fila nueva. Ninguno de esos registros
+      representa una imagen que se intentara generar ni un centavo gastado: son
+      reconsultas del mismo trabajo. Corregido el 19 de agosto de 2026 con espera
+      progresiva; desde entonces se registra <b>una vez por transición</b>, no una por
+      consulta. Los registros anteriores <b>se conservan intactos</b>.
+    </p>
+    <div class="ev-grid" style="margin-bottom:0">
+      <div class="ev-kpi"><div class="v"><?= number_format($amp['eventos']) ?></div><div class="l">Registros</div></div>
+      <div class="ev-kpi"><div class="v"><?= number_format($amp['ops']) ?></div><div class="l">Operaciones reales</div></div>
+      <div class="ev-kpi"><div class="v"><?= $amp['ratio'] ?>×</div><div class="l">Amplificación</div></div>
+    </div>
+  </div>
+  <?php endif; ?>
 
   <div class="ev-card">
     <h2><?= ico('bolt') ?> Lo que el corillo ejecutó (en vivo)</h2>
