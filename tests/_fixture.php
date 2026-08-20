@@ -84,14 +84,27 @@ final class Fixture
             ->execute([$meta_id, $mid]);
         $plan_id = (int)$pdo->lastInsertId();
 
-        // Seis pasos, uno de cada clase que la maquina de estados sabe distinguir.
+        // EL PLAN NACE YA PRESENTADO. Sin esto, toda fixture caeria en el estado C
+        // -«tu camino esta listo»- y ninguna suite podria ejercitar lo que viene
+        // despues: el estado C se come la pantalla hasta que alguien pulsa
+        // Empezar. El caso sin presentar se pide a proposito con sinPresentar().
+        try { $pdo->prepare("UPDATE crecer_meta_plan SET presentado_at=NOW() WHERE id=?")->execute([$plan_id]); }
+        catch (Throwable $e) {}   // sin la migracion no hay nada que marcar
+
+        // Seis pasos con el vocabulario REAL del plan. Solo existen tres clases
+        // -produccion, accion_dueno, regla- y las escribe meta_plan_generar().
+        // Antes esta fixture usaba 'inversion', 'fisica' y 'medicion', que no
+        // existen en ningun sitio: la maquina de estados mira clase=accion_dueno
+        // (y si lleva inversion, la separa en H), asi que con las clases
+        // inventadas los estados H e I no se ejercitaban nunca aunque la fixture
+        // pareciera cubrirlos.
         $pasos = [
-            [1, 1, 'produccion', 'Paso de relleno 1', 'hecha',     null],
-            [2, 1, 'produccion', 'Paso de relleno 2', 'pendiente', null],
-            [3, 2, 'inversion',  'Paso de relleno 3', 'pendiente', 15.00],
-            [4, 2, 'fisica',     'Paso de relleno 4', 'pendiente', null],
-            [5, 3, 'produccion', 'Paso de relleno 5', 'pendiente', null],
-            [6, 3, 'medicion',   'Paso de relleno 6', 'pendiente', null],
+            [1, 1, 'produccion',   'Paso de relleno 1', 'hecha',     null],
+            [2, 1, 'produccion',   'Paso de relleno 2', 'pendiente', null],
+            [3, 2, 'accion_dueno', 'Paso de relleno 3', 'pendiente', 15.00],  // -> H, lleva dinero
+            [4, 2, 'accion_dueno', 'Paso de relleno 4', 'pendiente', null],   // -> I, solo sus manos
+            [5, 3, 'produccion',   'Paso de relleno 5', 'pendiente', null],
+            [6, 3, 'regla',        'Paso de relleno 6', 'pendiente', null],
         ];
         $ins = $pdo->prepare("INSERT INTO crecer_meta_tactica
                  (meta_id,plan_id,marca_id,orden,semana,clase,titulo,que_hacer,estado,inversion)
@@ -144,6 +157,18 @@ final class Fixture
                 . 'siembra la suya con Fixture::crear().'
             );
         }
+    }
+
+    /**
+     * Devuelve el plan de una fixture al estado «todavia no se le ha ensenado»,
+     * que es como nacen los planes de verdad. Solo sobre marcas propias: el sello
+     * se exige antes de tocar nada.
+     */
+    public static function sinPresentar(PDO $pdo, int $marca_id, int $plan_id): void
+    {
+        self::exigirPropia($pdo, $marca_id);
+        $pdo->prepare("UPDATE crecer_meta_plan SET presentado_at=NULL WHERE id=? AND marca_id=?")
+            ->execute([$plan_id, $marca_id]);
     }
 
     /** Borra una fixture entera. Solo suya, y solo si el sello lo confirma. */

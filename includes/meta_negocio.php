@@ -701,6 +701,60 @@ function meta_tacticas(PDO $pdo, int $meta_id, ?string $estado = null, ?int $pla
 //  cada plan se guarda entero, se mide con señales reales cuando cierra, y
 //  su lección entra al plan siguiente.
 
+/**
+ * ¿Está aplicada la migración de la presentación del plan?
+ * Se consulta UNA vez por proceso, como img_poll_columnas(): así el código
+ * puede desplegarse ANTES que el SQL sin tumbar Tu Meta. Sin la columna, el
+ * estado C sigue inerte y todo lo demás funciona igual que hoy.
+ *
+ * $refrescar existe para UNA cosa: la prueba que quita la columna y la vuelve
+ * a poner en el mismo proceso, para comprobar de verdad —no de mentira— que el
+ * código nuevo aguanta el esquema viejo. En producción nadie lo pasa.
+ */
+function meta_plan_col_presentado(PDO $pdo, bool $refrescar = false): bool {
+    static $hay = null;
+    if ($hay !== null && !$refrescar) return $hay;
+    try { $hay = (bool)$pdo->query("SHOW COLUMNS FROM crecer_meta_plan LIKE 'presentado_at'")->fetch(); }
+    catch (Throwable $e) { $hay = false; }
+    return $hay;
+}
+
+/**
+ * Marca que al dueño YA se le enseñó su camino. Devuelve true solo si ESTA
+ * llamada fue la que lo marcó.
+ *
+ * LAS TRES CONDICIONES VAN EN EL MISMO UPDATE, y no es estilo:
+ *
+ *   · pertenencia   AND marca_id = ?          otra marca no puede presentar
+ *                                             el plan de esta
+ *   · vigencia      AND estado = 'activo'     un plan histórico ya no se
+ *                                             presenta: su momento pasó
+ *   · idempotencia  AND presentado_at IS NULL el segundo clic afecta 0 filas
+ *
+ * Comprobarlas antes con un SELECT y actualizar después deja una ventana entre
+ * medias: dos peticiones simultáneas —el doble clic de un móvil lento— leen
+ * las dos que está sin presentar y las dos escriben. Con las condiciones en el
+ * WHERE, gana una y la otra afecta 0 filas. Es la base la que arbitra.
+ *
+ * Devolver false NO es un error: casi siempre significa «ya estaba presentado».
+ * Quien llame no debe tratarlo como fallo, solo no repetir el efecto.
+ */
+function meta_plan_presentar(PDO $pdo, int $plan_id, int $marca_id): bool {
+    if ($plan_id <= 0 || $marca_id <= 0) return false;
+    if (!meta_plan_col_presentado($pdo)) return false;   // sin migración, nada que marcar
+    try {
+        $u = $pdo->prepare(
+            "UPDATE crecer_meta_plan
+                SET presentado_at = NOW(), updated_at = NOW()
+              WHERE id = ? AND marca_id = ? AND estado = 'activo' AND presentado_at IS NULL");
+        $u->execute([$plan_id, $marca_id]);
+        return $u->rowCount() === 1;
+    } catch (Throwable $e) {
+        error_log('meta_plan_presentar: ' . $e->getMessage());
+        return false;
+    }
+}
+
 /** El plan vigente de una meta (null si no hay o si falta la migración). */
 function meta_plan_activo(PDO $pdo, int $meta_id): ?array {
     try {

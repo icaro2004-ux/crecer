@@ -142,6 +142,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
+        // (g) EMPEZAR: el dueño vio el trato y dijo que sí. El sello va en un
+        //     solo UPDATE que ya comprueba dueño, vigencia y que no estuviera
+        //     puesto — ver meta_plan_presentar(). Aquí no se vuelve a mirar.
+        if ($accion === 'presentar') {
+            $cambio = meta_plan_presentar($pdo, (int)($_POST['plan'] ?? 0), $marca_id);
+            //  false NO es un fallo: es "ya estaba presentado" (doble clic),
+            //  "ese plan no es tuyo" o "ya no es el vigente". En los tres casos
+            //  la respuesta correcta es la misma —recargar y dejar que el estado
+            //  se recomponga— y en ninguno hay nada que contarle al de afuera.
+            echo json_encode(['ok'=>true, 'cambio'=>$cambio]);
+            exit;
+        }
+
         echo json_encode(['ok'=>false,'err'=>'Acción desconocida.']);
     } catch (Throwable $e) {
         echo json_encode(['ok'=>false,'err'=>substr($e->getMessage(), 0, 180)], JSON_UNESCAPED_UNICODE);
@@ -432,7 +445,12 @@ $mt_unidad = function (string $objetivo): array {
      Móvil 360 primero: las tres zonas caben antes del primer scroll. Nada de
      texto por debajo de 14px, controles de 48px, y UNA sola acción primaria.
      Desktop no añade decisiones: añade aire. */
-  .ah{max-width:560px;margin:0 auto}
+  /*  El respiro de abajo NO es estetica: en movil la barra fija ocupa ~78px y
+      el boton de Ayuda flota justo encima. Sin este hueco, el ultimo enlace de
+      «Ver mas» quedaba DEBAJO de Ayuda y no habia forma de pulsarlo -medido a
+      360x800: 269px por debajo del techo de lo fijo-. En pantalla ancha lo fijo
+      no estorba y el hueco se recorta. */
+  .ah{max-width:560px;margin:0 auto;padding-bottom:calc(300px + env(safe-area-inset-bottom))}
   .mt-volver{display:inline-block;font-size:14px;font-weight:700;color:var(--muted);
     text-decoration:none;padding:10px 0;margin-bottom:6px;min-height:44px;line-height:24px}
 
@@ -480,6 +498,23 @@ $mt_unidad = function (string $objetivo): array {
     cursor:pointer;background:#fff;color:var(--tinta);font-family:inherit;font-weight:800;font-size:16px}
   .ah-btn2:disabled{opacity:.55;cursor:default}
   .ah-cons{font-size:14px;line-height:1.45;color:var(--muted);margin:10px 0 0}
+
+  /* — el trato: lo que se enseña ANTES de que el dueño diga que sí —
+     Dos números y una frase. El plan entero vive en su vista; aquí lo que
+     decide es "de esto me encargo yo, esto te lo voy a pedir a ti". */
+  .ah-trato{margin:0 0 16px;padding:14px 15px;border-radius:14px;background:#FAF7F5;
+    border:1px solid var(--line)}
+  .ah-estr{font-size:16px;line-height:1.5;color:var(--tinta);margin:0 0 12px;font-weight:600}
+  .ah-reparto{display:flex;gap:10px}
+  .ah-reparto div{flex:1;min-width:0;background:#fff;border:1px solid var(--line);
+    border-radius:11px;padding:10px 11px}
+  .ah-reparto b{display:block;font-family:var(--font-display,'Oswald',sans-serif);
+    font-size:24px;line-height:1.1;color:var(--tinta)}
+  .ah-reparto span{display:block;font-size:14px;line-height:1.35;color:var(--muted);margin-top:2px}
+  .ah-reparto .mia b{color:var(--teal,#00A49F)}
+  .ah-reparto .tuya b{color:var(--magenta,#EF4375)}
+  .ah-pide{font-size:14px;line-height:1.5;color:var(--ink,#4A434F);margin:11px 0 0}
+  .ah-pide b{color:var(--tinta)}
   .ah-guion{margin-top:14px;border-top:1px solid var(--line);padding-top:11px}
   .ah-guion summary{font-size:14px;font-weight:700;color:var(--teal,#00A49F);cursor:pointer;
     min-height:44px;line-height:44px;list-style:none}
@@ -506,7 +541,7 @@ $mt_unidad = function (string $objetivo): array {
   .ah-toast.on{opacity:1;transform:translate(-50%,0)}
 
   @media (min-width:720px){
-    .ah{max-width:620px}
+    .ah{max-width:620px;padding-bottom:120px}
     .ah-now{padding:24px 24px}
     .ah-tit{font-size:27px}
     .ah-ins{font-size:17px}
@@ -1437,6 +1472,36 @@ $mt_unidad = function (string $objetivo): array {
       <?php elseif ($tipo === 'fisica'): ?>
         <button type="button" class="ah-btn" id="ahConfirmar"
                 data-jugada="<?= (int)($E->evidencia['tactica_id'] ?? 0) ?>"><?= $h($act['etiqueta']) ?></button>
+      <?php elseif ($tipo === 'presentacion'): ?>
+        <?php /* El contrato pide RESUMEN, no el plan entero (§C): la meta ya
+                 está arriba, aquí va la estrategia en una frase y el reparto
+                 del trabajo. Lo que te van a pedir es lo que de verdad decide:
+                 nadie acepta un plan sin saber qué le toca. */ ?>
+        <?php
+          $ev_est  = trim((string)($E->evidencia['estrategia'] ?? ''));
+          $ev_mio  = (int)($E->evidencia['hago_yo'] ?? 0);
+          $ev_tuyo = (int)($E->evidencia['te_pido'] ?? 0);
+          $ev_pide = (array)($E->evidencia['pide'] ?? []);
+        ?>
+        <div class="ah-trato">
+          <?php if ($ev_est !== ''): ?>
+            <p class="ah-estr"><?= $h($ev_est) ?></p>
+          <?php endif; ?>
+          <div class="ah-reparto">
+            <div class="mia"><b><?= $ev_mio ?></b><span><?= $ev_mio === 1 ? 'cosa la hago yo' : 'cosas las hago yo' ?></span></div>
+            <div class="tuya"><b><?= $ev_tuyo ?></b><span><?= $ev_tuyo === 1 ? 'cosa te toca a ti' : 'cosas te tocan a ti' ?></span></div>
+          </div>
+          <?php if ($ev_pide): ?>
+            <p class="ah-pide"><b>Lo que te voy a pedir:</b>
+              <?= $h(implode(' · ', $ev_pide)) ?><?= $ev_tuyo > count($ev_pide) ? '…' : '' ?></p>
+          <?php elseif ($ev_tuyo === 0): ?>
+            <p class="ah-pide">De este plan me encargo yo entero. Tú apruebas y ya.</p>
+          <?php endif; ?>
+        </div>
+        <?php /* Botón, no enlace: esto ESCRIBE. Un <a> lo repetiría el
+                 prefetch del navegador y lo guardaría el historial. */ ?>
+        <button type="button" class="ah-btn" id="ahEmpezar"
+                data-plan="<?= (int)($E->evidencia['plan_id'] ?? 0) ?>"><?= $h($act['etiqueta']) ?></button>
       <?php elseif ($tipo === 'reintento_job'): ?>
         <?php /* Reencola la jugada de verdad con la acción `ejecutar` que ya
                  existe. Un enlace aquí recargaría la pantalla dejando el fallo
@@ -1513,6 +1578,14 @@ $mt_unidad = function (string $objetivo): array {
     if (!b.dataset.jugada) return;
     enviar(b, {accion:'tactica', id:b.dataset.jugada, estado:'hecha'},
            'Un momento…', 'No se pudo marcar.');
+  });
+
+  // Aceptar el plan. Se sella una vez y la pantalla se recompone sola: al
+  // recargar, el estado dominante ya es la primera tarea de verdad.
+  var e = document.getElementById('ahEmpezar');
+  if (e) e.addEventListener('click', function(){
+    enviar(e, {accion:'presentar', plan:e.dataset.plan || 0},
+           'Vamos…', 'No se pudo empezar.');
   });
 
   // Reencolar la jugada que se trabó.

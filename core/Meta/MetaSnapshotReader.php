@@ -17,7 +17,7 @@
 //   · plan_generandose  → crecer_meta_jobs.tactica_id es NOT NULL: solo hay
 //     trabajos DE JUGADA. La generación del plan corre sincrónica dentro de la
 //     petición y no deja rastro consultable. Siempre false.
-//   · presentado_at     → la columna no existe en crecer_meta_plan. Se omite
+//   · presentado_at     → solo viaja si la columna existe (Fase 3B). Se omite
 //     del snapshot: la regla C queda inerte hasta que exista.
 //   · leccion_leida     → no hay dónde guardar "ya la vio". Se deriva por
 //     ventana de días desde el cierre, que es una aproximación declarada.
@@ -51,7 +51,7 @@ class MetaSnapshotReader
             'plan_generandose' => false,          // no observable · ver cabecera
             'no_observables'  => [
                 'plan_generandose' => 'crecer_meta_jobs.tactica_id es NOT NULL: no existen jobs de plan',
-                'presentado_at'    => 'la columna no existe en crecer_meta_plan',
+                'presentado_at'    => 'solo si crecer_meta_plan la tiene (migracion 3B)',
                 'leccion_leida'    => 'no hay persistencia de "leída"; se deriva por ventana de ' . self::APRENDIZAJE_DIAS . ' días',
                 'meta_cerrada'     => 'se muestra el cierre solo si ocurrió en los últimos ' . self::CIERRE_RECIENTE_DIAS . ' días',
             ],
@@ -90,11 +90,21 @@ class MetaSnapshotReader
         $plan = meta_plan_activo($pdo, (int)$meta['id']);
         if ($plan) {
             $s['plan'] = [
-                'id'        => (int)$plan['id'],
-                'version'   => (int)$plan['version'],
-                'inicio_at' => (string)$plan['inicio_at'],
-                // presentado_at NO se incluye: la columna no existe todavía.
+                'id'          => (int)$plan['id'],
+                'version'     => (int)$plan['version'],
+                'inicio_at'   => (string)$plan['inicio_at'],
+                //  El texto de la Estratega. El compositor le saca UNA frase
+                //  para la presentación del plan; no se pinta entero aquí.
+                'diagnostico' => (string)($plan['diagnostico'] ?? ''),
             ];
+            //  presentado_at SOLO si la columna existe. La regla C del compositor
+            //  pregunta con array_key_exists: si la clave no viene, se queda
+            //  inerte. Así el código nuevo convive con el esquema viejo sin
+            //  enterarse, y el día que corre la migración se enciende sola.
+            if (array_key_exists('presentado_at', $plan)) {
+                $s['plan']['presentado_at'] = $plan['presentado_at'] !== null
+                    ? (string)$plan['presentado_at'] : null;
+            }
             $dias = (strtotime($hoy) - strtotime((string)$plan['inicio_at'])) / 86400;
             $s['semana_actual'] = max(1, (int)floor($dias / 7) + 1);
         }
