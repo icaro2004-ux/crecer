@@ -81,9 +81,12 @@ if ($row && trim((string)($row['img_job'] ?? '')) === '') {
     // rescate: la única regeneración posible es la que pida el dueño.
     if ($enc['res'] === 'incierto') {
         error_log("arte_worker #{$pid}: encolado incierto ({$enc['clase']}); sin respaldo");
-        notif_crear($pdo, $mid, 'arte', 'Tu arte va en camino',
-            'Se está tardando un poco más de lo normal. Seguimos en eso y te avisamos apenas esté.',
-            $link, 'image');
+        // El aviso no puede afirmar que el arte viene en camino: puede que el
+        // trabajo ni se creara. Se dice lo que se sabe, y el reintento queda en
+        // manos del dueño — automático no hay ninguno, justo para no pagar dos.
+        notif_crear($pdo, $mid, 'arte', 'No pude confirmar la creación del arte',
+            'Puede que se esté haciendo. Espera un momento y, si no aparece, entra al post y dale a generar otra vez.',
+            $link, 'bolt');
         exit;
     }
 }

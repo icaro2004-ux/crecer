@@ -321,14 +321,13 @@ function img_encolar_veredicto(string $clase): string {
     return in_array($clase, $confirmado, true) ? 'rechazado_confirmado' : 'incierto';
 }
 
-/**
- * Encola un trabajo Responses para una pieza. Igual que img_resp_encolar_res()
- * pero devolviendo solo el id — para los llamadores a los que les basta con
- * saber si salió o no.
+/*
+ * NO EXISTE un img_resp_encolar() que devuelva solo el id, y es a propósito.
+ * Lo hubo, y de su cadena vacía salió el defecto: los llamadores leían '' como
+ * "no salió, dale al otro motor", metiendo en el mismo saco el rechazo del
+ * proveedor y el timeout sin respuesta. Con un id como única salida no hay
+ * forma de expresar "no sé", así que el llamador tiene que ver el veredicto.
  */
-function img_resp_encolar(PDO $pdo, int $marca_id, int $post_id, string $copy, ?bool $con_texto = null, ?string $extra = null, string $estilo = 'realista'): string {
-    return img_resp_encolar_res($pdo, $marca_id, $post_id, $copy, $con_texto, $extra, $estilo)['job'];
-}
 
 /**
  * Encola un trabajo Responses para una pieza de contenido. Guarda el response_id
@@ -416,6 +415,17 @@ function img_resp_encolar_res(PDO $pdo, int $marca_id, int $post_id, string $cop
                                 WHERE id=? AND marca_id=?")
                     ->execute(['enc:' . $clase, $post_id, $marca_id]);
             } catch (Throwable $e2) { error_log('marcar encolado incierto: ' . $e2->getMessage()); }
+        }
+        // Un rechazo CONFIRMADO resuelve la duda de un intento anterior: ya
+        // sabemos que no hay trabajo. Se quita la marca para que el barrido
+        // vuelva a poder recoger la pieza — si se quedara puesta, la saltaría
+        // para siempre por una incertidumbre que ya no existe.
+        if ($ver === 'rechazado_confirmado' && img_poll_columnas($pdo)) {
+            try {
+                $pdo->prepare("UPDATE crecer_contenido SET img_error_clase=NULL
+                                WHERE id=? AND marca_id=? AND img_error_clase LIKE 'enc:%'")
+                    ->execute([$post_id, $marca_id]);
+            } catch (Throwable $e2) { /* best-effort */ }
         }
         return ['res' => $ver, 'job' => '', 'clase' => $clase];
     }

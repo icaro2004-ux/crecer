@@ -55,6 +55,7 @@ $PHP    = PHP_BINARY;
 $RUNNER = __DIR__ . DIRECTORY_SEPARATOR . '_arte_worker_runner.php';
 $MARCA  = 'prueba worker timeout';
 $creadas = [];
+$sucias  = [];   // [usuario_id, marca_id] sembrados para los otros dos llamadores
 
 /** Siembra una pieza en cola. job=null → todavía no se ha encolado nada.
  *  Se COMETE: el worker corre en otro proceso y no vería una transacción. */
@@ -198,7 +199,9 @@ try {
        'el trabajo pudo quedar creado: pedir otra imagen sería pagarla dos veces');
     ok('NO se dio la pieza por lista', !$aviso('Tu arte ya está listo'));
     ok('el respaldo no dejó huella en el log', $logRespaldo() === 0);
-    ok('el dueño ve que sigue procesando', $aviso('Tu arte va en camino'));
+    ok('el aviso NO afirma que el arte viene en camino', !$aviso('Tu arte va en camino'),
+       'puede que el trabajo ni se creara: decir que viene sería afirmar de más');
+    ok('el aviso dice la verdad y ofrece reintento', $aviso('No pude confirmar la creación del arte'));
     ok('la pieza sigue en cola', (string)($p5['img_estado'] ?? '') === 'queued');
     ok('quedó marcada como encolado incierto',
        (string)($p5['img_error_clase'] ?? '') === 'enc:timeout',
@@ -257,14 +260,111 @@ try {
     $cuenta->execute([$mid]);
     ok('dos corridas dejan UN solo aviso', (int)$cuenta->fetchColumn() === 1);
 
+    // ══════════════════════════════════════════════════════════
+    //  LOS OTROS DOS LLAMADORES
+    //      El worker no era el único que encolaba. agentes.php
+    //      (primer post del negocio) y gateway_post.php (regenerar)
+    //      leían la cadena vacía como permiso para el motor viejo,
+    //      y ese fallback es INMEDIATO: la marca 'enc:' frena al
+    //      barrido, pero no frenaba a estos.
+    //
+    //      El motor viejo deja una huella inconfundible en
+    //      crecer_ia_log: agente 'creador', acción 'Crear arte de
+    //      post'. Se cuenta eso.
+    // ══════════════════════════════════════════════════════════
+    $motorViejo = function () use ($pdo): int {
+        return (int)$pdo->query("SELECT COUNT(*) FROM crecer_ia_log
+                                  WHERE accion='Crear arte de post'
+                                    AND created_at > (NOW() - INTERVAL 3 MINUTE)")->fetchColumn();
+    };
+    $limpiarLog = function () use ($pdo) {
+        $pdo->query("DELETE FROM crecer_ia_log WHERE accion='Crear arte de post'
+                       AND created_at > (NOW() - INTERVAL 3 MINUTE)");
+    };
+    /** Marca virgen: crear_post_muestra es idempotente y devolvería el post que ya hubiera. */
+    $marcaNueva = function () use ($pdo, &$sucias): array {
+        $em = 'prueba.enc.' . bin2hex(random_bytes(4)) . '@prueba.local';
+        $pdo->prepare("INSERT INTO usuarios (nombre,email,password,rol,verificado,activo)
+                       VALUES ('Prueba encolar',?,?, 'admin',1,1)")
+            ->execute([$em, password_hash('x', PASSWORD_DEFAULT)]);
+        $u = (int)$pdo->lastInsertId();
+        $pdo->prepare("INSERT INTO crecer_marca (usuario_id,nombre_negocio) VALUES (?, 'Negocio de prueba')")
+            ->execute([$u]);
+        $m = (int)$pdo->lastInsertId();
+        $sucias[] = [$u, $m];
+        return [$u, $m];
+    };
+
+    echo "\n  — agentes.php: el primer post del negocio —\n";
+    [$u1, $m1] = $marcaNueva();
+    $limpiarLog();
+    exec(escapeshellarg($PHP) . ' ' . escapeshellarg(__DIR__ . DIRECTORY_SEPARATOR . '_agentes_runner.php')
+         . ' ' . $m1 . ' timeout 2>&1', $sal1);
+    $pz1 = $pdo->query("SELECT id,img_estado,img_error_clase,grafica_path FROM crecer_contenido
+                         WHERE marca_id={$m1} ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC) ?: [];
+
+    ok('encolado incierto: NO corre el motor viejo', $motorViejo() === 0,
+       'el fallback aquí es inmediato — la marca enc: no lo frena');
+    ok('la pieza queda en cola', (string)($pz1['img_estado'] ?? '') === 'queued');
+    ok('la pieza queda marcada', (string)($pz1['img_error_clase'] ?? '') === 'enc:timeout',
+       'clase=' . (string)($pz1['img_error_clase'] ?? 'null'));
+    ok('no se guardó ninguna imagen', (string)($pz1['grafica_path'] ?? '') === '');
+
+    [$u2, $m2] = $marcaNueva();
+    $limpiarLog();
+    exec(escapeshellarg($PHP) . ' ' . escapeshellarg(__DIR__ . DIRECTORY_SEPARATOR . '_agentes_runner.php')
+         . ' ' . $m2 . ' rechazo 2>&1', $sal2);
+    ok('rechazo confirmado: el motor viejo SÍ corre', $motorViejo() > 0,
+       'sin trabajo creado no hay riesgo: el fallback es legítimo');
+
+    echo "\n  — gateway_post.php: regenerar la imagen —\n";
+    [$u3, $m3] = $marcaNueva();
+    $pdo->prepare("INSERT INTO crecer_contenido (marca_id,plataforma,tipo,caption,estado)
+                   VALUES (?, 'instagram','post','post de prueba gw','borrador')")->execute([$m3]);
+    $pg = (int)$pdo->lastInsertId();
+    $limpiarLog();
+    $sal3 = [];
+    exec(escapeshellarg($PHP) . ' ' . escapeshellarg(__DIR__ . DIRECTORY_SEPARATOR . '_gateway_runner.php')
+         . " {$u3} {$m3} {$pg} timeout 2>&1", $sal3);
+    $json = json_decode((string)end($sal3), true);
+    $pz3 = $pza($pg);
+
+    ok('el endpoint contestó JSON', is_array($json), 'salida: ' . mb_substr((string)end($sal3), 0, 120));
+    ok('encolado incierto: NO corre el motor viejo', $motorViejo() === 0);
+    ok('lo reporta como incierto, no como fallo', !empty($json['incierto']));
+    ok('el mensaje no afirma que el arte se creó',
+       is_array($json) && strpos((string)($json['err'] ?? ''), 'No pude confirmar') === 0,
+       'err=' . mb_substr((string)($json['err'] ?? ''), 0, 80));
+    ok('la pieza queda marcada', (string)($pz3['img_error_clase'] ?? '') === 'enc:timeout');
+
+    $limpiarLog();
+    $sal4 = [];
+    exec(escapeshellarg($PHP) . ' ' . escapeshellarg(__DIR__ . DIRECTORY_SEPARATOR . '_gateway_runner.php')
+         . " {$u3} {$m3} {$pg} rechazo 2>&1", $sal4);
+    ok('rechazo confirmado: el motor viejo SÍ corre', $motorViejo() > 0);
+    ok('el rechazo confirmado limpia la marca de incierto',
+       (string)($pza($pg)['img_error_clase'] ?? '') === '',
+       'la duda quedó resuelta: la pieza vuelve a ser recogible');
+
+    $limpiarLog();
+
 } finally {
     if ($creadas) {
         $pdo->prepare("DELETE FROM crecer_contenido WHERE id IN ("
             . implode(',', array_map('intval', $creadas)) . ")")->execute();
     }
     $pdo->prepare("DELETE FROM crecer_notificaciones WHERE marca_id=? AND tipo='arte'
-                     AND titulo IN ('Tu arte va en camino','No se pudo crear el arte','Tu arte ya está listo')
+                     AND titulo IN ('Tu arte va en camino','No se pudo crear el arte',
+                                    'No pude confirmar la creación del arte','Tu arte ya está listo')
                      AND created_at > (NOW() - INTERVAL 30 MINUTE)")->execute([$mid]);
+    foreach ($sucias as [$u, $m]) {
+        $pdo->prepare("DELETE FROM crecer_notificaciones WHERE marca_id=?")->execute([$m]);
+        $pdo->prepare("DELETE FROM crecer_contenido WHERE marca_id=?")->execute([$m]);
+        $pdo->prepare("DELETE FROM crecer_calendario WHERE marca_id=?")->execute([$m]);
+        $pdo->prepare("DELETE FROM crecer_ia_log WHERE marca_id=?")->execute([$m]);
+        $pdo->prepare("DELETE FROM crecer_marca WHERE id=?")->execute([$m]);
+        $pdo->prepare("DELETE FROM usuarios WHERE id=?")->execute([$u]);
+    }
     echo "\n  (siembra y avisos de prueba limpiados)\n";
 }
 

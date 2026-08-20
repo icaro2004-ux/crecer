@@ -108,8 +108,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ct_raw = (string)($_POST['con_texto'] ?? '');
         $con_txt = ($ct_raw === '' ? null : ($ct_raw === '1'));
         $cap = (string)$pdo->query("SELECT caption FROM crecer_contenido WHERE id={$post_id}")->fetchColumn();
-        if (img_resp_activo() && img_resp_encolar($pdo, $marca_id, $post_id, $cap, $con_txt) !== '') {
-            echo json_encode(['ok'=>true, 'job'=>1]); exit;   // → el frontend consulta con poll_imagen
+        if (img_resp_activo()) {
+            $enc = img_resp_encolar_res($pdo, $marca_id, $post_id, $cap, $con_txt);
+            if ($enc['res'] === 'encolado') {
+                echo json_encode(['ok'=>true, 'job'=>1]); exit;   // → el frontend consulta con poll_imagen
+            }
+            // INCIERTO: la petición se fue sin respuesta y OpenAI pudo haberla
+            // aceptado. Caer al motor viejo aquí pediría la segunda imagen y la
+            // pagaría. Se le dice la verdad al dueño y se le deja el reintento
+            // en la mano — automático, ninguno.
+            if ($enc['res'] === 'incierto') {
+                echo json_encode([
+                    'ok'       => false,
+                    'incierto' => true,
+                    'err'      => 'No pude confirmar la creación del arte. Puede que se esté haciendo. '
+                                . 'Espera un momento y, si no aparece, dale a generar otra vez.',
+                ]); exit;
+            }
+            // rechazado_confirmado: no quedó nada creado. El motor viejo puede correr.
         }
         try {
             $g = generar_grafica($pdo, $marca_id, null, ['copy'=>$cap, 'con_texto'=>$con_txt, 'con_logo'=>false]);
