@@ -909,15 +909,30 @@ function showDone(j){
   //  NO se redirige solo a propósito: el dueño acaba de hacer un video y lo
   //  primero que quiere es verlo. Se le pone el regreso como acción principal,
   //  con el acuse correcto.
+  //  UNA SOLA ACCIÓN PRIMARIA. Si el dueño vino porque Tu Meta le pidió el
+  //  video, lo que toca al terminarlo es volver — no publicar. «Publicar ahora»
+  //  bajaba a secundaria: sigue ahí y a un toque, pero deja de competir. Dos
+  //  botones principales obligan a elegir sin saber cuál era el camino.
   if (META_VUELTA_MATERIAL) {
-    var nav = document.getElementById('rdoneNav');
-    if (nav && !document.getElementById('rVolverMeta')) {
+    var pub = document.getElementById('rpub');
+    if (pub) { pub.className = 'btn btn-ghost'; pub.style.flex = '1'; }
+    if (pub && pub.parentNode && !document.getElementById('rVolverMeta')) {
+      // FILA PROPIA, no al lado. A 360px dos botones en la misma fila parten el
+      // texto en dos lineas y el ultimo se mete debajo del boton flotante de
+      // Ayuda. La primaria va sola y a lo ancho; publicar se queda debajo.
+      var fila = document.createElement('div');
+      fila.className = 'row';
+      fila.style.marginTop = '14px';
       var a = document.createElement('a');
       a.id = 'rVolverMeta';
-      a.className = 'btn btn-primary';
+      a.className = 'btn btn-go';          // la primaria de esta pantalla
+      a.style.textDecoration = 'none';
+      a.style.textAlign = 'center';
+      a.style.width = '100%';
       a.href = META_VUELTA_MATERIAL;
       a.textContent = 'Volver a tu meta';
-      nav.insertBefore(a, nav.firstChild);
+      fila.appendChild(a);
+      pub.parentNode.parentNode.insertBefore(fila, pub.parentNode);
     }
   }
 }

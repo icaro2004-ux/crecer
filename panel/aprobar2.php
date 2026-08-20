@@ -726,6 +726,17 @@ if ($es_hub) {
         $extra .= '&crear=1';
         if (($_GET['idea'] ?? '') !== '') $extra .= '&idea=' . urlencode((string)$_GET['idea']);
     }
+    // EL REGRESO Y LA PIEZA SOBREVIVEN AL REDIRECT. Este bloque venia
+    // preservando parametros de uno en uno, y asi es como se pierden: cuando
+    // Tu Meta mandaba aqui con ?ver=N&volver=meta, el redirect que solo elige
+    // pestaña se los comia. Resultado: se abria la bandeja en vez de la pieza,
+    // y al aprobar no habia regreso — el defecto no se veia en el codigo, solo
+    // conduciendo el recorrido de verdad.
+    if (isset($_GET['ver']) && ctype_digit((string)$_GET['ver'])) {
+        $extra .= '&ver=' . (int)$_GET['ver'];
+    }
+    require_once __DIR__ . '/../core/Meta/MetaRetorno.php';
+    if (MetaRetorno::vieneDeMeta($_GET)) $extra .= MetaRetorno::marcador();
     header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&tab={$dest}{$extra}"); exit;
     // (el bloque HTML del hub de abajo queda inalcanzable a propósito)
 }

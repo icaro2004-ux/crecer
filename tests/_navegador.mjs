@@ -1,0 +1,201 @@
+// ============================================================
+//  CRECER — EL RECORRIDO DE APROBACION, EN UN NAVEGADOR DE VERDAD
+//  tests/_navegador.mjs
+//
+//  aprobar2 es el camino principal de aprobacion y no habia forma honesta de
+//  probarlo: bajo el arnes de CLI no emite cuerpo, y una busqueda en el fuente
+//  solo demuestra que alguien escribio una linea. Aqui se conduce Chrome
+//  contra el servidor local: se entra a Tu Meta, se pulsa la accion dominante,
+//  se aprueba la pieza y se comprueba a donde se vuelve.
+//
+//  La sesion se inyecta por cookie: la fixture la escribe en C:\xampp\tmp, que
+//  es el mismo save_path que usa Apache. Nada de teclear contraseñas.
+//
+//  Imprime lineas CLAVE=valor; quien asierta es la prueba en PHP.
+//
+//    node tests/_navegador.mjs <sid> <marca> <pieza> <pieza_carrusel> <carpeta>
+// ============================================================
+
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const [sid, marca, pieza, carr, shots] = process.argv.slice(2);
+const BASE = 'http://localhost/crecer';
+const perfil = fs.mkdtempSync(path.join(os.tmpdir(), 'nav-'));
+const puerto = 9500 + (process.pid % 300);
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+const di = (k, v) => console.log(k + '=' + String(v).replace(/\r?\n/g, ' '));
+
+const ch = spawn(CHROME, [
+  '--headless=new', '--disable-gpu', '--hide-scrollbars', '--no-first-run',
+  '--force-device-scale-factor=2', '--window-size=360,800',
+  '--font-render-hinting=none', '--disable-lcd-text',
+  `--user-data-dir=${perfil}`, `--remote-debugging-port=${puerto}`, 'about:blank',
+], { stdio: 'ignore' });
+
+let cdp = null, id = 0;
+const pend = new Map();
+const cmd = (m, p = {}) => {
+  const i = ++id; cdp.send(JSON.stringify({ id: i, method: m, params: p }));
+  return new Promise((r, j) => pend.set(i, { r, j, m }));
+};
+const evaluar = async (expr) => {
+  const r = await cmd('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true });
+  if (r.exceptionDetails) throw new Error('JS: ' + (r.exceptionDetails.exception?.description || ''));
+  return r.result.value;
+};
+const url = () => evaluar('location.href');
+const ir = async (u) => { await cmd('Page.navigate', { url: u }); await listo(); };
+const listo = async () => {
+  for (let i = 0; i < 120; i++) {
+    if (await evaluar('document.readyState === "complete"')) { await dormir(220); return; }
+    await dormir(120);
+  }
+};
+//  Las cuentas de fixture son nuevas, asi que salta el Recibimiento y algun
+//  modal se queda abierto. Sin despedirlos, la captura documenta el tour y no
+//  la jerarquia que se quiere revisar. Se cierran como los cerraria el dueño:
+//  pulsando su propio boton.
+const despejar = async () => {
+  await evaluar(`(function(){
+    var t=['Entendido','¡ENTENDIDO!','Saltar','Cerrar','Listo, ya sé'];
+    for (var k=0;k<3;k++){
+      [].forEach.call(document.querySelectorAll('button,a'),function(b){
+        var s=(b.textContent||'').trim();
+        if(t.some(function(x){return s.toLowerCase()===x.toLowerCase();}) && b.offsetParent!==null) b.click();
+      });
+      // Los modales de vista previa cierran con una × sin texto: hay que
+      // pulsarla por su aria-label o su clase, no por su contenido.
+      [].forEach.call(document.querySelectorAll('[aria-label*="errar"],.cerrar,.close,.pw-x,.x'),
+        function(b){ if(b.offsetParent!==null) b.click(); });
+      [].forEach.call(document.querySelectorAll('.tour,.tour-ov,#crOv,.modal,.ov,[class*="spotlight"],[class*="overlay"],.ayuda-fab,#ayudaFab'),
+        function(e){ e.classList.remove('on'); e.style.display='none'; });
+    }
+  })()`);
+  await dormir(350);
+};
+//  Dos pasadas con espera: al cerrar el modal aparece el Recibimiento detras, y
+//  una sola ronda documentaba el tour en vez de la pantalla.
+const despejarBien = async () => { await despejar(); await dormir(700); await despejar(); };
+const captura = async (nombre) => {
+  await despejarBien();
+  const r = await cmd('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+  fs.writeFileSync(path.join(shots, nombre + '.png'), Buffer.from(r.data, 'base64'));
+};
+
+try {
+  let ws = null;
+  for (let i = 0; i < 100; i++) {
+    try {
+      const r = await fetch(`http://127.0.0.1:${puerto}/json/list`);
+      const l = await r.json();
+      const p = l.find((t) => t.type === 'page' && t.webSocketDebuggerUrl);
+      if (p) { ws = p.webSocketDebuggerUrl; break; }
+    } catch { /* aún no */ }
+    await dormir(250);
+  }
+  if (!ws) throw new Error('Chrome no abrió el puerto');
+  const sock = new WebSocket(ws);
+  await new Promise((r, j) => { sock.addEventListener('open', r); sock.addEventListener('error', j); });
+  cdp = sock;
+  sock.addEventListener('message', (ev) => {
+    const m = JSON.parse(ev.data);
+    if (m.id == null) return;
+    const p = pend.get(m.id); if (!p) return;
+    pend.delete(m.id);
+    m.error ? p.j(new Error(m.error.message + ' @ ' + p.m)) : p.r(m.result);
+  });
+
+  await cmd('Page.enable');
+  await cmd('Runtime.enable');
+  await cmd('Network.enable');
+  await cmd('Emulation.setDeviceMetricsOverride',
+            { width: 360, height: 800, deviceScaleFactor: 2, mobile: true });
+  await cmd('Network.setCookie',
+            { name: 'PHPSESSID', value: sid, domain: 'localhost', path: '/' });
+
+  // ── 1 · TU META: la acción dominante ──────────────────────────────────
+  await ir(`${BASE}/panel/meta.php?marca=${marca}`);
+  di('META_URL', await url());
+  di('AHORA_ANTES', await evaluar(`(document.querySelector('.ah-tit')||{}).textContent || ''`));
+  const destino = await evaluar(`(document.querySelector('.ah-btn[href]')||{}).href || ''`);
+  di('ACCION_HREF', destino);
+  di('PRIMARIAS_META', await evaluar(`document.querySelectorAll('.ah-btn').length`));
+
+  // ── 2 · Abre la pieza EXACTA ──────────────────────────────────────────
+  if (destino) { await ir(destino); }
+  di('APROBAR_URL', await url());
+  di('PIEZA_EN_PANTALLA', await evaluar(
+    `!!document.querySelector('form button[value="aprobar"]')`));
+  di('PIEZA_ID_EN_FORM', await evaluar(
+    `(function(){var b=document.querySelector('form button[value="aprobar"]');
+       return b? (b.form.querySelector('input[name="id"]')||{}).value : ''; })()`));
+  await captura('aprobacion');
+  di('PRIMARIAS_APROBAR', await evaluar(`document.querySelectorAll('.btn-ok').length`));
+
+  // ── 3 · Aprobar de verdad ─────────────────────────────────────────────
+  await evaluar(`(function(){
+    var b=document.querySelector('form button[value="aprobar"]'); if(b) b.click(); })()`);
+  for (let i = 0; i < 60; i++) {          // el retorno lo hace el JS tras el fetch
+    const u = await url();
+    if (u.indexOf('meta.php') !== -1) break;
+    await dormir(300);
+  }
+  await listo();
+  di('VUELTA_URL', await url());
+  di('ACUSE', await evaluar(`(document.querySelector('.ah-hecho')||{}).textContent || ''`));
+  di('AHORA_DESPUES', await evaluar(`(document.querySelector('.ah-tit')||{}).textContent || ''`));
+  // «Se recalculo» no es que cambie el titulo: con dos piezas esperando, el
+  // estado sigue siendo F y apunta a la SIGUIENTE. Lo que prueba el recalculo
+  // es que la accion ya no lleva a la pieza que se acaba de aprobar.
+  di('ACCION_HREF_DESPUES', await evaluar(`(document.querySelector('.ah-btn[href]')||{}).href || ''`));
+
+  // ── 4 · La salida manual, sin afirmar nada ────────────────────────────
+  await ir(`${BASE}/panel/aprobar2.php?marca=${marca}&volver=meta`);
+  const manual = await evaluar(
+    `(function(){var a=[].find.call(document.querySelectorAll('a'),
+       x=>/Volver a tu meta/i.test(x.textContent||'')); return a? a.href : ''; })()`);
+  di('SALIDA_MANUAL_HREF', manual);
+  if (manual) { await ir(manual); di('SALIDA_MANUAL_URL', await url());
+                di('SALIDA_MANUAL_ACUSE', await evaluar(`(document.querySelector('.ah-hecho')||{}).textContent || ''`)); }
+
+  // ── 5 · JERARQUIA: una sola accion primaria por pantalla ──────────────
+  //  El reel y el carrusel no se terminan de verdad aqui — eso es Shotstack y
+  //  las redes del cliente. Lo que se comprueba es LO NUESTRO: que al llegar al
+  //  resultado no compitan dos botones principales. El paso final se fuerza por
+  //  JS con datos de relleno; la interfaz es exactamente la misma.
+  await ir(BASE + '/panel/reels.php?marca=' + marca + '&volver=meta');
+  await evaluar("(function(){try{showDone({video_url:'',hook:'Relleno',resumen:'Relleno',duracion:12,guardado:true,copy:'Texto de relleno'});}catch(e){}})()");
+  await dormir(600);
+  await captura('reel_terminado');
+  di('REEL_VUELTA_PRIMARIA', await evaluar(
+    "/btn-go/.test((document.getElementById('rVolverMeta')||{}).className||'')"));
+  di('REEL_PUB_SECUNDARIA', await evaluar(
+    "/btn-ghost/.test((document.getElementById('rpub')||{}).className||'')"));
+  di('REEL_PRIMARIAS', await evaluar(
+    "[].slice.call(document.querySelectorAll('.btn-go')).filter(function(x){return x.offsetParent!==null;}).length"));
+  di('REEL_SOLAPES', await evaluar(
+    "(function(){var b=[].slice.call(document.querySelectorAll('.btn')).filter(function(x){return x.offsetParent!==null;});var s=0;for(var i=0;i<b.length;i++){for(var j=i+1;j<b.length;j++){var A=b[i].getBoundingClientRect(),B=b[j].getBoundingClientRect();if(A.left<B.right-1&&B.left<A.right-1&&A.top<B.bottom-1&&B.top<A.bottom-1)s++;}}return s;})()"));
+
+  await ir(BASE + '/panel/carrusel.php?marca=' + marca + '&id=' + carr + '&volver=meta');
+  await evaluar("(function(){var w=document.getElementById('wz');if(!w)return;[].forEach.call(w.querySelectorAll('.wz-p'),function(p){p.classList.remove('on');p.style.display='none';});var f=w.querySelector('.wz-fin');if(f){f.classList.add('on');f.style.display='';}})()");
+  await dormir(500);
+  await captura('carrusel_programado');
+  di('CARR_PRIMARIAS', await evaluar(
+    "[].slice.call(document.querySelectorAll('.wz-fin .wz-go')).filter(function(x){return x.offsetParent!==null;}).length"));
+  di('CARR_VUELTA', await evaluar("(document.querySelector('.wz-fin .wz-go')||{}).href || ''"));
+  di('CARR_SOLAPES', await evaluar(
+    "(function(){var b=[].slice.call(document.querySelectorAll('.wz-fin .wz-go, .wz-fin .btn')).filter(function(x){return x.offsetParent!==null;});var s=0;for(var i=0;i<b.length;i++){for(var j=i+1;j<b.length;j++){var A=b[i].getBoundingClientRect(),B=b[j].getBoundingClientRect();if(A.left<B.right-1&&B.left<A.right-1&&A.top<B.bottom-1&&B.top<A.bottom-1)s++;}}return s;})()"));
+
+  di('OK', 1);
+} catch (e) {
+  di('ERROR', e.message);
+  di('OK', 0);
+} finally {
+  ch.kill();
+  await dormir(400);
+  try { fs.rmSync(perfil, { recursive: true, force: true }); } catch { /* Windows */ }
+}

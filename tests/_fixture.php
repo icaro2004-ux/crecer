@@ -104,12 +104,17 @@ final class Fixture
 
         // Dos piezas: una esperando el OK y otra pidiendo material.
         $piezas = [];
+        // meta_id y plan_id NO son adorno: el lector trae las piezas POR PLAN
+        // (WHERE c.plan_id = ?). Sin ellos la pieza existe pero el compositor
+        // no la ve, y la fixture parecia sana enseñando otro estado.
         $pz = $pdo->prepare("INSERT INTO crecer_contenido
-                 (marca_id,plataforma,tipo,caption,estado,tactica_id,fecha_programada)
-               VALUES (?, 'instagram', ?, ?, ?, ?, DATE_ADD(CURDATE(), INTERVAL 2 DAY))");
-        $pz->execute([$mid, 'post', 'Texto de relleno para revisar.', 'borrador', $tacticas[1]]);
+                 (marca_id,plataforma,tipo,caption,estado,meta_id,plan_id,tactica_id,fecha_programada)
+               VALUES (?, 'instagram', ?, ?, ?, ?, ?, ?, DATE_ADD(CURDATE(), INTERVAL 2 DAY))");
+        $pz->execute([$mid, 'post', 'Texto de relleno para revisar.', 'borrador',
+                      $meta_id, $plan_id, $tacticas[1]]);
         $piezas[] = (int)$pdo->lastInsertId();
-        $pz->execute([$mid, 'reel', 'Texto de relleno que espera video.', 'borrador', $tacticas[4]]);
+        $pz->execute([$mid, 'reel', 'Texto de relleno que espera video.', 'borrador',
+                      $meta_id, $plan_id, $tacticas[4]]);
         $piezas[] = (int)$pdo->lastInsertId();
 
         return ['usuario_id' => $uid, 'marca_id' => $mid, 'meta_id' => $meta_id,
