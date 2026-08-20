@@ -35,12 +35,15 @@ try {
 }
 require_once __DIR__ . '/../core/Meta/MetaSnapshotReader.php';
 
-// Dos marcas del usuario de pruebas: una para sembrar, otra para el aislamiento.
-$marcas = $pdo->query("SELECT id FROM crecer_marca WHERE usuario_id = 7 ORDER BY id")
-              ->fetchAll(PDO::FETCH_COLUMN);
-if (count($marcas) < 2) { echo "  SALTADO · hacen falta 2 marcas de pruebas\n\n"; exit(0); }
-$M  = (int)$marcas[0];   // la de siembra (sin meta propia)
-$M2 = (int)$marcas[1];   // la vecina, para comprobar aislamiento
+// DOS MARCAS PROPIAS. Antes se pedían prestadas dos del usuario 7, y el día que
+// dejó de haber dos, la prueba se SALTABA: salía en verde sin comprobar nada,
+// que es peor que salir en rojo. Ahora las siembra y las borra ella.
+require_once __DIR__ . '/_fixture.php';
+// Sin meta propia: esta prueba siembra las suyas y afirma sobre marcas limpias.
+$fx1 = Fixture::crear($pdo, 'reader-a', false);
+$fx2 = Fixture::crear($pdo, 'reader-b', false);
+$M  = (int)$fx1['marca_id'];   // la de siembra
+$M2 = (int)$fx2['marca_id'];   // la vecina, para comprobar aislamiento
 echo "  marca de siembra: {$M} · marca vecina: {$M2}\n\n";
 
 $creados = ['meta' => [], 'plan' => [], 'tactica' => [], 'contenido' => []];
@@ -271,6 +274,16 @@ foreach ([['crecer_meta', $creados['meta']], ['crecer_meta_plan', $creados['plan
     catch (Throwable $e) {}
 }
 ok('no quedó ni una fila de las sembradas', $sobras === 0, "quedaron: {$sobras}");
+
+// Las dos marcas sembradas se van enteras. limpiar() exige el sello, así que
+// no puede llevarse por delante nada que no haya creado esta prueba.
+foreach ([$M, $M2] as $__m) {
+    try { Fixture::limpiar($pdo, $__m); }
+    catch (Throwable $e) { ok('limpieza de la fixture', false, $e->getMessage()); }
+}
+$__q = $pdo->prepare("SELECT COUNT(*) FROM crecer_marca WHERE id IN (?,?)");
+$__q->execute([$M, $M2]);
+ok('las marcas sembradas se limpiaron', (int)$__q->fetchColumn() === 0);
 
 echo "\n" . str_repeat('=', 52) . "\n";
 echo $fallos === 0 ? "  TODO OK · {$n} pruebas\n\n" : "  {$fallos} FALLAS de {$n}\n\n";

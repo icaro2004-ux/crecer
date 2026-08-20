@@ -1,0 +1,179 @@
+<?php
+// ============================================================
+//  CRECER — FIXTURES DE PRUEBA, CON CANDADO
+//  tests/_fixture.php
+//
+//  POR QUE EXISTE ESTE ARCHIVO. Una prueba necesitaba una marca con meta y
+//  plan, y en vez de crearse la suya ADOPTO una que ya estaba: le cambio el
+//  dueño a un usuario temporal. Al borrar ese usuario, la FK
+//  `crecer_marca -> usuarios ON DELETE CASCADE` se llevo la marca entera con su
+//  meta, su plan y sus tacticas. Eran datos de desarrollo irrepetibles.
+//
+//  LAS DOS REGLAS QUE SALEN DE AHI, y que este archivo hace cumplir:
+//
+//    1. Una prueba SIEMBRA lo suyo. Nunca adopta nada que ya exista, y no hay
+//       aqui ninguna funcion que reasigne el dueño de una marca: si no se puede
+//       escribir, no se puede equivocar.
+//    2. Una prueba BORRA solo lo suyo. Y no se fia de su memoria para saber que
+//       es suyo: la propiedad va SELLADA en el nombre del negocio, en la fila.
+//       limpiar() sobre algo sin sello lanza y no toca nada.
+//
+//  El sello vive en el dato y no en una lista en memoria a proposito: si una
+//  corrida se muere a la mitad, la lista se pierde y la fila queda huerfana —
+//  pero el sello sigue ahi, y limpiarHuerfanas() puede barrerla despues.
+//
+//  La fixture reproduce la FORMA del caso auditado (una meta de pedidos, un
+//  plan vigente de seis pasos, piezas en distintos estados). NO reproduce
+//  contenido de nadie: los textos son de relleno y se ven que lo son.
+// ============================================================
+
+final class Fixture
+{
+    /** La unica prueba de propiedad. Va en nombre_negocio, en la fila. */
+    public const SELLO = '[prueba]';
+
+    /**
+     * Siembra un negocio completo y devuelve sus identificadores.
+     * Determinista: mismos textos, mismos estados, y las fechas relativas a
+     * CURDATE() de MySQL — nunca a date() de PHP, que en este proyecto va en
+     * otra zona horaria (ver el hotfix de sondeo del 19 de agosto).
+     *
+     * @param bool $con_meta false = solo el negocio, sin meta ni plan. Lo piden
+     *        las pruebas que siembran SUS propias metas y necesitan una marca
+     *        limpia para afirmar «sin meta, el lector devuelve null».
+     *
+     * @return array{usuario_id:int,marca_id:int,meta_id:int,plan_id:int,tacticas:int[],piezas:int[]}
+     */
+    public static function crear(PDO $pdo, string $etiqueta = 'base', bool $con_meta = true): array
+    {
+        $sufijo = $etiqueta . '-' . bin2hex(random_bytes(4));   // unico por corrida
+        $email  = 'fixture.' . $sufijo . '@prueba.local';
+
+        $pdo->prepare("INSERT INTO usuarios (nombre,email,password,rol,verificado,activo)
+                       VALUES (?,?,?, 'proveedor',1,1)")
+            ->execute([self::SELLO . ' Dueña', $email, password_hash('fixture', PASSWORD_DEFAULT)]);
+        $uid = (int)$pdo->lastInsertId();
+
+        $pdo->prepare("INSERT INTO crecer_marca (usuario_id,nombre_negocio,descripcion)
+                       VALUES (?,?,?)")
+            ->execute([$uid, self::SELLO . ' Repostería ' . $sufijo,
+                       'Negocio de relleno para pruebas. No es un cliente.']);
+        $mid = (int)$pdo->lastInsertId();
+
+        if (!$con_meta) {
+            return ['usuario_id' => $uid, 'marca_id' => $mid, 'meta_id' => 0,
+                    'plan_id' => 0, 'tacticas' => [], 'piezas' => []];
+        }
+
+        // La meta: la forma del caso auditado (pedidos, cantidad, ventana viva).
+        $pdo->prepare("INSERT INTO crecer_meta
+                 (marca_id,objetivo,titulo,cantidad,unidad,base_inicial,
+                  fecha_inicio,fecha_limite,estado,medible,como_medir)
+               VALUES (?, 'pedidos','Más pedidos',25,'pedidos',0,
+                       DATE_SUB(CURDATE(), INTERVAL 7 DAY), DATE_ADD(CURDATE(), INTERVAL 23 DAY),
+                       'activa',1,'pedidos registrados en Crecer')")
+            ->execute([$mid]);
+        $meta_id = (int)$pdo->lastInsertId();
+
+        $pdo->prepare("INSERT INTO crecer_meta_plan (meta_id,marca_id,version,estado,inicio_at,piezas)
+                       VALUES (?,?,1,'activo', DATE_SUB(NOW(), INTERVAL 7 DAY), 6)")
+            ->execute([$meta_id, $mid]);
+        $plan_id = (int)$pdo->lastInsertId();
+
+        // Seis pasos, uno de cada clase que la maquina de estados sabe distinguir.
+        $pasos = [
+            [1, 1, 'produccion', 'Paso de relleno 1', 'hecha',     null],
+            [2, 1, 'produccion', 'Paso de relleno 2', 'pendiente', null],
+            [3, 2, 'inversion',  'Paso de relleno 3', 'pendiente', 15.00],
+            [4, 2, 'fisica',     'Paso de relleno 4', 'pendiente', null],
+            [5, 3, 'produccion', 'Paso de relleno 5', 'pendiente', null],
+            [6, 3, 'medicion',   'Paso de relleno 6', 'pendiente', null],
+        ];
+        $ins = $pdo->prepare("INSERT INTO crecer_meta_tactica
+                 (meta_id,plan_id,marca_id,orden,semana,clase,titulo,que_hacer,estado,inversion)
+               VALUES (?,?,?,?,?,?,?, 'Texto de relleno.', ?, ?)");
+        $tacticas = [];
+        foreach ($pasos as [$orden, $sem, $clase, $tit, $est, $inv]) {
+            $ins->execute([$meta_id, $plan_id, $mid, $orden, $sem, $clase, $tit, $est, $inv]);
+            $tacticas[] = (int)$pdo->lastInsertId();
+        }
+
+        // Dos piezas: una esperando el OK y otra pidiendo material.
+        $piezas = [];
+        $pz = $pdo->prepare("INSERT INTO crecer_contenido
+                 (marca_id,plataforma,tipo,caption,estado,tactica_id,fecha_programada)
+               VALUES (?, 'instagram', ?, ?, ?, ?, DATE_ADD(CURDATE(), INTERVAL 2 DAY))");
+        $pz->execute([$mid, 'post', 'Texto de relleno para revisar.', 'borrador', $tacticas[1]]);
+        $piezas[] = (int)$pdo->lastInsertId();
+        $pz->execute([$mid, 'reel', 'Texto de relleno que espera video.', 'borrador', $tacticas[4]]);
+        $piezas[] = (int)$pdo->lastInsertId();
+
+        return ['usuario_id' => $uid, 'marca_id' => $mid, 'meta_id' => $meta_id,
+                'plan_id' => $plan_id, 'tacticas' => $tacticas, 'piezas' => $piezas];
+    }
+
+    /** ¿Esta marca la sembró una prueba? Lo dice la fila, no la memoria. */
+    public static function esNuestra(PDO $pdo, int $marca_id): bool
+    {
+        $q = $pdo->prepare("SELECT nombre_negocio FROM crecer_marca WHERE id=?");
+        $q->execute([$marca_id]);
+        $n = (string)($q->fetchColumn() ?: '');
+        return $n !== '' && strncmp($n, self::SELLO, strlen(self::SELLO)) === 0;
+    }
+
+    /**
+     * EL CANDADO. Lanza antes de que nadie escriba nada.
+     * Existe porque «la prueba sabe lo que creó» resultó ser falso: basta un
+     * SELECT que devuelva otra fila para que crea suyo lo que no lo es.
+     */
+    public static function exigirPropia(PDO $pdo, int $marca_id): void
+    {
+        if (!self::esNuestra($pdo, $marca_id)) {
+            throw new RuntimeException(
+                "La marca #{$marca_id} NO la sembró una prueba (su nombre no lleva «"
+                . self::SELLO . "»). Una prueba no adopta ni borra marcas ajenas: "
+                . 'siembra la suya con Fixture::crear().'
+            );
+        }
+    }
+
+    /** Borra una fixture entera. Solo suya, y solo si el sello lo confirma. */
+    public static function limpiar(PDO $pdo, int $marca_id): void
+    {
+        self::exigirPropia($pdo, $marca_id);
+        $u = $pdo->prepare("SELECT usuario_id FROM crecer_marca WHERE id=?");
+        $u->execute([$marca_id]);
+        $uid = (int)$u->fetchColumn();
+        // Borrar el usuario arrastra la marca por la FK en cascada, que es justo
+        // lo que rompió los datos aquella vez. Aquí es lo que se quiere: la
+        // marca ES de la fixture, y el sello ya lo confirmó.
+        if ($uid) $pdo->prepare("DELETE FROM usuarios WHERE id=?")->execute([$uid]);
+        else      $pdo->prepare("DELETE FROM crecer_marca WHERE id=?")->execute([$marca_id]);
+    }
+
+    /** Restos de corridas que se murieron a la mitad. Solo lo sellado. */
+    public static function limpiarHuerfanas(PDO $pdo, int $horas = 6): int
+    {
+        $q = $pdo->prepare("SELECT m.id FROM crecer_marca m
+                             WHERE m.nombre_negocio LIKE ?
+                               AND m.created_at < (NOW() - INTERVAL ? HOUR)");
+        $q->execute([self::SELLO . '%', $horas]);
+        $n = 0;
+        foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $mid) { self::limpiar($pdo, (int)$mid); $n++; }
+        return $n;
+    }
+
+    /**
+     * Lo de siempre cuando se puede: sembrar, mirar, deshacer. Sin dejar rastro
+     * ni depender de que la limpieza corra.
+     *
+     * OJO: no sirve si lo que se prueba corre en OTRO proceso — una transacción
+     * no se ve desde fuera. Para eso, crear() + limpiar() con sello.
+     */
+    public static function enTransaccion(PDO $pdo, callable $fn)
+    {
+        $pdo->beginTransaction();
+        try { return $fn(); }
+        finally { if ($pdo->inTransaction()) $pdo->rollBack(); }
+    }
+}
