@@ -131,24 +131,63 @@ class MetaStateComposer
     }
 
     // ── 4 · C · Plan por presentar ──────────────────────────────────────────
-    //  INERTE HOY: crecer_meta_plan no tiene presentado_at. El reader lo deja
-    //  siempre en null, así que esta regla solo puede dispararse desde un
-    //  snapshot sintético en pruebas. Cuando exista la columna, se enciende
-    //  sola sin tocar el compositor.
+    //  Se enciende sola: la regla pregunta por la CLAVE, no por el valor. Si el
+    //  esquema no tiene presentado_at el reader no la pone y esto devuelve null
+    //  sin enterarse. El día que corre la migración empieza a disparar.
+    //
+    //  El contrato pide aquí un RESUMEN, no el plan entero: la meta (ya está
+    //  arriba en la pantalla), la estrategia en una frase, de qué se encarga el
+    //  corillo y qué le va a pedir al dueño. Eso último es lo que de verdad
+    //  decide si acepta: nadie firma un plan sin saber qué le van a pedir.
     private static function reglaPlanPorPresentar(array $s): ?MetaState
     {
         if (empty($s['plan'])) return null;
         if (!array_key_exists('presentado_at', $s['plan'])) return null;
         if ($s['plan']['presentado_at'] !== null) return null;
 
+        //  El reparto del trabajo, contado sobre las jugadas vivas. Lo hecho y
+        //  lo descartado no se promete: un plan reemplazado puede traer jugadas
+        //  cerradas y prometerlas sería mentir en la primera pantalla.
+        $mio = 0; $tuyo = 0; $pide = [];
+        foreach (($s['jugadas'] ?? []) as $t) {
+            if (in_array((string)($t['estado'] ?? ''), ['hecha', 'descartada'], true)) continue;
+            if ((string)($t['clase'] ?? '') === 'accion_dueno') {
+                $tuyo++;
+                $tit = trim((string)($t['titulo'] ?? ''));
+                if ($tit !== '' && count($pide) < 3) $pide[] = $tit;
+            } else {
+                $mio++;
+            }
+        }
+
         return new MetaState(
             MetaState::C_PLAN_POR_VER,
             'Tu camino está listo',
             'Mira de qué me encargo yo y qué te voy a pedir.',
-            ['etiqueta' => 'Ver lo primero', 'destino' => self::url($s, 'meta.php'),
+            ['etiqueta' => 'Empezar', 'destino' => self::url($s, 'meta.php'),
              'consecuencia' => 'Te llevo a la primera tarea real.', 'tipo' => 'presentacion'],
-            ['plan_id' => (int)$s['plan']['id']],
+            ['plan_id'   => (int)$s['plan']['id'],
+             'estrategia' => self::unaFrase((string)($s['plan']['diagnostico'] ?? '')),
+             'hago_yo'   => $mio,
+             'te_pido'   => $tuyo,
+             'pide'      => $pide],
             self::camino($s), self::cobertura($s), 'plan_sin_presentar');
+    }
+
+    /**
+     * La primera frase de un diagnóstico, y solo si es legible.
+     *
+     * El diagnóstico lo escribe la Estratega y puede venir de varios párrafos.
+     * Aquí no se resume con modelo ni se recorta a medias palabras: se toma la
+     * primera oración completa y, si es larga o no existe, se devuelve vacío —
+     * la pantalla sabe callarse mejor de lo que sabe rellenar.
+     */
+    private static function unaFrase(string $texto): string
+    {
+        $texto = trim(preg_replace('/\s+/u', ' ', $texto));
+        if ($texto === '') return '';
+        if (preg_match('/^(.{20,180}?[.!?])(\s|$)/u', $texto, $m)) return trim($m[1]);
+        return mb_strlen($texto) <= 180 ? $texto : '';
     }
 
     // ── 5 · B · Preparando plan ─────────────────────────────────────────────

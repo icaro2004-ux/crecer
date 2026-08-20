@@ -60,6 +60,10 @@ if ($ay_marca_id <= 0 || !function_exists('csrf_token') || empty($_SESSION['usua
     padding:13px 20px 13px 17px;border-radius:99px;background:var(--btn-grad);box-shadow:var(--btn-glow),0 10px 26px rgba(27,22,34,.18);
     transition:transform .18s var(--ease),box-shadow .18s var(--ease)}
   .ay-fab svg{width:19px;height:19px}
+  /* CON UN MODAL ABIERTO, Ayuda se quita de en medio. Vive en z-index 118 y
+     tapaba controles y contenido de la vista previa. Quien abra un modal
+     pone body.modal-abierto y lo quita al cerrar. */
+  body.modal-abierto .ay-fab{display:none !important}
   .ay-fab:hover{transform:translateY(-2px) scale(1.02)}
   .ay-fab:active{transform:translateY(1px) scale(.99)}
   .ay-fab.abierto{transform:scale(.9);opacity:0}

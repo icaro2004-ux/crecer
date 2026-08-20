@@ -10,6 +10,7 @@
 //  el reel vertical. Interacción mínima.
 // ============================================================
 require __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../core/Meta/MetaRetorno.php';
 require __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/reels.php';
 require_once __DIR__ . '/../includes/iconos.php';
@@ -311,8 +312,8 @@ require __DIR__ . '/_shell.php';
 ?>
 <?php /* Regreso predecible: si se llegó desde Tu Meta, hay una salida clara de
          vuelta. Sin esto la acción del estado dominante era un viaje de ida. */ ?>
-<?php if (($_GET["volver"] ?? "") === "meta"): ?>
-<a href="/crecer/panel/meta.php?marca=<?= (int)$marca_id ?>"
+<?php if (MetaRetorno::vieneDeMeta($_GET)): ?>
+<a href="<?= htmlspecialchars(MetaRetorno::url((int)$marca_id, 'pendiente'), ENT_QUOTES) ?>"
    style="display:inline-flex;align-items:center;gap:7px;min-height:44px;line-height:44px;
           font-size:14px;font-weight:700;color:var(--muted);text-decoration:none">&larr; Volver a tu meta</a>
 <?php endif; ?>
@@ -413,6 +414,20 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
 
 /* Botones */
 .row{display:flex;gap:10px;align-items:center;margin-top:20px}
+/* A 360px tres botones en una fila desbordan: el ultimo se sale del
+   viewport y aparece scroll horizontal. Rejilla que se acomoda sola. */
+.row.rejilla{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:10px;align-items:stretch}
+.row.rejilla .btn{width:100%}
+/* HUECO PARA LAS DOS CAPAS FLOTANTES: la barra inferior fija y el boton de
+   Ayuda, que va por encima de ella. Sin esto los ultimos botones quedaban
+   debajo y no se podian pulsar. .wrap no hereda el padding de .content. */
+@media (max-width:860px){
+  /* La clase es .screen, no .wz-p — ese selector no existia en reels y el
+     hueco no se aplicaba a nada. Medido a 360x800: hacian falta 240px para que lo ultimo
+     quede por encima de la barra y del boton de Ayuda. */
+  .screen{padding-bottom:calc(240px + env(safe-area-inset-bottom))}
+}
 .btn{border:none;border-radius:14px;padding:15px 22px;font-family:'Poppins';font-weight:700;font-size:15.5px;transition:.16s}
 .btn-primary{background:var(--tinta);color:#fff;flex:1}
 .btn-primary:hover{transform:translateY(-1px)}
@@ -635,7 +650,7 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
           <textarea class="copyta" id="copytext" readonly></textarea>
           <button class="btn btn-ghost" id="ccopy" style="width:100%">Copiar texto</button>
         </div>
-        <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:10px">
+        <div class="row rejilla" id="rdoneNav">
           <a class="btn btn-ghost" id="rdl" download style="text-decoration:none;text-align:center;flex:1">Descargar</a>
           <button class="btn btn-ghost" id="redit" style="flex:1">Ajustar</button>
           <button class="btn btn-ghost" id="ragain" style="flex:1">Hacer otro</button>
@@ -880,6 +895,10 @@ async function poll(rid){
   }catch(e){ setTimeout(()=>poll(rid), 3500); }
 }
 
+// La vuelta la calcula el servidor: el navegador no arma URLs de Crecer.
+var META_VUELTA_MATERIAL = <?= MetaRetorno::vieneDeMeta($_GET)
+      ? json_encode(MetaRetorno::url((int)$marca_id, 'material'), JSON_UNESCAPED_SLASHES)
+      : 'null' ?>;
 function showDone(j){
   go('done');
   const v=$('#rvid'); v.src=j.video_url||''; if(j.poster) v.poster=j.poster;
@@ -895,6 +914,41 @@ function showDone(j){
   $('#rsaved').style.display = j.guardado ? 'inline-block' : 'none';
   if(j.copy){ $('#copybox').style.display='block'; $('#copytext').value=j.copy; }
   else{ $('#copybox').style.display='block'; $('#copytext').value=''; $('#copytext').placeholder='El corillo está escribiendo el texto…'; setTimeout(()=>refreshCopy(), 3000); }
+
+  // ── LA VUELTA, AHORA QUE SÍ HAY ALGO HECHO ────────────────────────────
+  //  Si el dueño llegó porque Tu Meta le pidió material, al quedar el reel se
+  //  terminó lo que vino a hacer. Antes esta pantalla solo enseñaba el
+  //  resultado: el único regreso era el enlace de arriba, que dice «sigue
+  //  pendiente» — falso cuando el video ya está.
+  //  NO se redirige solo a propósito: el dueño acaba de hacer un video y lo
+  //  primero que quiere es verlo. Se le pone el regreso como acción principal,
+  //  con el acuse correcto.
+  //  UNA SOLA ACCIÓN PRIMARIA. Si el dueño vino porque Tu Meta le pidió el
+  //  video, lo que toca al terminarlo es volver — no publicar. «Publicar ahora»
+  //  bajaba a secundaria: sigue ahí y a un toque, pero deja de competir. Dos
+  //  botones principales obligan a elegir sin saber cuál era el camino.
+  if (META_VUELTA_MATERIAL) {
+    var pub = document.getElementById('rpub');
+    if (pub) { pub.className = 'btn btn-ghost'; pub.style.flex = '1'; }
+    if (pub && pub.parentNode && !document.getElementById('rVolverMeta')) {
+      // FILA PROPIA, no al lado. A 360px dos botones en la misma fila parten el
+      // texto en dos lineas y el ultimo se mete debajo del boton flotante de
+      // Ayuda. La primaria va sola y a lo ancho; publicar se queda debajo.
+      var fila = document.createElement('div');
+      fila.className = 'row';
+      fila.style.marginTop = '14px';
+      var a = document.createElement('a');
+      a.id = 'rVolverMeta';
+      a.className = 'btn btn-go';          // la primaria de esta pantalla
+      a.style.textDecoration = 'none';
+      a.style.textAlign = 'center';
+      a.style.width = '100%';
+      a.href = META_VUELTA_MATERIAL;
+      a.textContent = 'Volver a tu meta';
+      fila.appendChild(a);
+      pub.parentNode.parentNode.insertBefore(fila, pub.parentNode);
+    }
+  }
 }
 async function refreshCopy(){
   if(!curReel) return;

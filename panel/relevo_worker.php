@@ -27,9 +27,23 @@ if (function_exists('fastcgi_finish_request')) { fastcgi_finish_request(); }
 relevo_marcar($pdo, $mid, 'relevo_inicio');
 $creadas = 0;
 try {
-    $res = relevo_del_corillo($pdo, $mid);   // Aprendiz → Estratega → Creador → Analista
-    $creadas = (int)($res['creadas'] ?? 0);
-    relevo_marcar($pdo, $mid, 'relevo_fin', json_encode(['creadas' => $creadas], JSON_UNESCAPED_UNICODE));
+    //  POR EL LIBRO DE CORRIDAS (core/Meta/MetaAutoRunner.php). Este worker se
+    //  dispara desde la pantalla: dos clics o un cron solapado corrian el equipo
+    //  dos veces. El candado es una llave unica, no un «mira si hay otro».
+    require_once __DIR__ . '/../core/Meta/MetaAutoRunner.php';
+    require_once __DIR__ . '/../includes/meta_negocio.php';
+    $plan_vig = 0;
+    try {
+        $mt = meta_activa($pdo, $mid);
+        if ($mt) $plan_vig = (int)(meta_plan_activo($pdo, (int)$mt['id'])['id'] ?? 0);
+    } catch (Throwable $e) {}
+
+    $env = MetaAutoRunner::envolver($pdo, $mid, $plan_vig, 'worker',
+        fn(callable $latir) => relevo_del_corillo($pdo, $mid, $latir));
+    $creadas = (int)$env['creadas'];
+    relevo_marcar($pdo, $mid, 'relevo_fin', json_encode(
+        ['creadas' => $creadas, 'corrio' => $env['corrio'], 'motivo' => $env['motivo']],
+        JSON_UNESCAPED_UNICODE));
 } catch (Throwable $e) {
     error_log('relevo_worker #' . $mid . ': ' . $e->getMessage());
     relevo_marcar($pdo, $mid, 'relevo_fin', json_encode(['creadas' => 0, 'error' => mb_substr($e->getMessage(), 0, 200)], JSON_UNESCAPED_UNICODE));

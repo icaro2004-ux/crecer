@@ -6,6 +6,7 @@
 // DEBUG temporal: añade &debug=1 a la URL para ver errores en pantalla.
 if (isset($_GET['debug'])) { ini_set('display_errors','1'); error_reporting(E_ALL); }
 require __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../core/Meta/MetaRetorno.php';
 require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/agentes.php';
 require __DIR__ . '/../includes/suscripcion.php';
@@ -212,7 +213,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $imgq = img_cuota_estado($pdo, $marca_id, $cupo_exento);
         if ($imgq['lleno']) {
             header('Content-Type: application/json');
-            echo json_encode(['ok'=>false,'err'=>"Este mes la IA ya pintó tus {$imgq['limite']} imágenes — se renuevan el {$imgq['reset']}. Tus fotos propias siguen corriendo libres.", 'cuota_img'=>$imgq]); exit;
+            //  NI 'error' NI ROJO: es el limite del plan, no una averia. Y NO se
+            //  promete que la foto propia sea gratis hasta que esa ruta este
+            //  desplegada y probada contra el libro nuevo — subirla no llama a
+            //  ningun proveedor, pero realzarla con IA si cuenta 1.
+            require_once __DIR__ . '/../includes/cuota_aviso.php';
+            echo json_encode(['ok'=>false, 'limite'=>true, 'err'=>cuota_aviso_texto($imgq),
+                              'cuota_img'=>$imgq]); exit;
         }
         $dir_fotos = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/fotos";
         // Tope por post: 3 generaciones IA — SIEMPRE.
@@ -725,6 +732,17 @@ if ($es_hub) {
         $extra .= '&crear=1';
         if (($_GET['idea'] ?? '') !== '') $extra .= '&idea=' . urlencode((string)$_GET['idea']);
     }
+    // EL REGRESO Y LA PIEZA SOBREVIVEN AL REDIRECT. Este bloque venia
+    // preservando parametros de uno en uno, y asi es como se pierden: cuando
+    // Tu Meta mandaba aqui con ?ver=N&volver=meta, el redirect que solo elige
+    // pestaña se los comia. Resultado: se abria la bandeja en vez de la pieza,
+    // y al aprobar no habia regreso — el defecto no se veia en el codigo, solo
+    // conduciendo el recorrido de verdad.
+    if (isset($_GET['ver']) && ctype_digit((string)$_GET['ver'])) {
+        $extra .= '&ver=' . (int)$_GET['ver'];
+    }
+    require_once __DIR__ . '/../core/Meta/MetaRetorno.php';
+    if (MetaRetorno::vieneDeMeta($_GET)) $extra .= MetaRetorno::marcador();
     header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&tab={$dest}{$extra}"); exit;
     // (el bloque HTML del hub de abajo queda inalcanzable a propósito)
 }
@@ -819,15 +837,15 @@ require __DIR__ . '/_shell.php';
 ?>
 <?php /* Regreso predecible: si se llegó desde Tu Meta, hay una salida clara de
          vuelta. Sin esto la acción del estado dominante era un viaje de ida. */ ?>
-<?php if (($_GET["volver"] ?? "") === "meta"): ?>
-<a href="/crecer/panel/meta.php?marca=<?= (int)$marca_id ?>"
+<?php if (MetaRetorno::vieneDeMeta($_GET)): ?>
+<a href="<?= htmlspecialchars(MetaRetorno::url((int)$marca_id, 'pendiente'), ENT_QUOTES) ?>"
    style="display:inline-flex;align-items:center;gap:7px;min-height:44px;line-height:44px;
           font-size:14px;font-weight:700;color:var(--muted);text-decoration:none">&larr; Volver a tu meta</a>
 <?php endif; ?>
 <?php
 ?>
 <style>
-  .feedwrap{max-width:600px}
+  .feedwrap{padding-bottom:calc(190px + env(safe-area-inset-bottom));max-width:600px}
   .feedwrap .post{margin-top:14px}
   .viewtoggle{display:flex;gap:6px;margin:6px 0 10px}
   .vt{font-weight:700;font-size:13.5px;text-decoration:none;color:var(--muted);padding:8px 16px;border-radius:99px;border:1.5px solid var(--line)}
@@ -1394,7 +1412,7 @@ $cf = [
 <!-- MODAL: PEDIR UN POST A LA IA (brief del dueño) -->
 <div class="art-ov" id="briefov">
   <form class="art-box" method="post" id="briefform" onsubmit="var b=this.querySelector('.art-go');b.textContent='✨ Redactando… (~10s)';b.disabled=true;">
-    <button type="button" class="x" onclick="document.getElementById('briefov').classList.remove('show')">✕</button>
+    <button type="button" class="x" onclick="cerrarBrief()">✕</button>
     <h3><?= ico('sparkles') ?> Pedir un post a la IA</h3>
     <div class="sub">Sugiere el tema, o escribe un borrador y la IA lo pule respetando tu intención. Déjalo todo en blanco y la IA inventa.</div>
     <input type="hidden" name="accion" value="pedir_post">
@@ -1533,7 +1551,7 @@ $cf = [
 <!-- MODAL PREVIEW REDES (cómo se ve en IG/FB) -->
 <div class="prev-ov" id="prevov">
   <div class="prev-box">
-    <button class="prev-x" onclick="document.getElementById('prevov').classList.remove('show')">✕</button>
+    <button class="prev-x" onclick="cerrarPrev()">✕</button>
     <div class="prev-tabs">
       <button class="ptab on" data-net="ig" onclick="setNet('ig')"><?= ico('instagram') ?> Instagram</button>
       <button class="ptab" data-net="fb" onclick="setNet('fb')"><?= ico('facebook') ?> Facebook</button>
@@ -1642,6 +1660,23 @@ $cf = [
     var item = card.querySelector('.checklist .ck-item[data-k="'+k+'"]');
     if(item) item.classList.toggle('on', !!on);
   }
+  // ── LA VUELTA A TU META ──────────────────────────────────────────────
+  //  Si el dueño llegó aquí porque Tu Meta le pidió aprobar una pieza, al
+  //  aprobarla se ha terminado lo que vino a hacer: se vuelve solo. Antes se
+  //  quedaba en la bandeja sin saber que su meta ya avanzó, y el enlace de
+  //  regreso era una salida manual que casi nadie ve.
+  //  Va en enviarAccion y no en cada botón porque hay cuatro caminos que
+  //  aprueban (botón, gesto de La Baraja y dos «crear y aprobar»), y uno
+  //  suelto se habría quedado sin volver.
+  var META_VUELTA = <?= MetaRetorno::vieneDeMeta($_GET)
+        ? json_encode(MetaRetorno::url((int)$marca_id, 'aprobado'), JSON_UNESCAPED_SLASHES)
+        : 'null' ?>;
+  function volverATuMeta(){
+    if (!META_VUELTA) return false;
+    location.href = META_VUELTA;
+    return true;
+  }
+
   function enviarAccion(card, accion, razon){
     var fd = new FormData(); fd.append('ajax','1'); fd.append('id', card.dataset.id); fd.append('accion', accion);
     if(razon) fd.append('razon', razon);
@@ -1652,6 +1687,8 @@ $cf = [
         // Devuelve SIEMPRE la respuesta: La Baraja necesita saber si salió bien
         // (la card ya voló con el gesto y tiene que poder devolverla si no).
         if(!d.ok) return d;
+        // Lo que vino a hacer ya está hecho: de vuelta a Tu Meta con el acuse.
+        if(accion === 'aprobar' && volverATuMeta()) return d;
         var cp=document.getElementById('cnt-pend'), ca=document.getElementById('cnt-aprob'), cb=document.getElementById('cnt-bib');
         if(cp) cp.textContent=d.revisar; if(ca) ca.textContent=d.listos; if(cb) cb.textContent=d.biblioteca;
         var TAB='<?= $tab ?>';
@@ -1816,8 +1853,19 @@ $cf = [
   });
 
   // ===== Pedir un post a la IA (brief) =====
-  function abrirBrief(){ document.getElementById('briefov').classList.add('show'); }
-  document.getElementById('briefov').addEventListener('click', function(e){ if(e.target===this) this.classList.remove('show'); });
+  //  El brief es OTRO modal, con su propia pareja abrir/cerrar. Un reemplazo
+  //  demasiado ancho le habia puesto cerrarPrev() en el fondo: al pinchar fuera
+  //  del brief se cerraba la vista previa —que ni estaba abierta— y el brief se
+  //  quedaba puesto.
+  function abrirBrief(){
+    document.getElementById('briefov').classList.add('show');
+    document.body.classList.add('modal-abierto');   // Ayuda tambien tapaba este
+  }
+  function cerrarBrief(){
+    document.getElementById('briefov').classList.remove('show');
+    document.body.classList.remove('modal-abierto');
+  }
+  document.getElementById('briefov').addEventListener('click', function(e){ if(e.target===this) cerrarBrief(); });
 
   // Sugiéreme temas: la IA propone ideas de post basadas en el negocio.
   (function(){
@@ -2066,6 +2114,21 @@ $cf = [
     document.getElementById('copybuffer').value = copy || '';
     setNet('ig');
     document.getElementById('prevov').classList.add('show');
+    document.body.classList.add('modal-abierto');   // aparta el botón de Ayuda
+  }
+  //  UN SOLO SITIO PARA CERRAR. Si cada camino lo hiciera a su manera, alguno se
+  //  olvidaria de devolver el boton de Ayuda o de limpiar la URL.
+  function cerrarPrev(){
+    document.getElementById('prevov').classList.remove('show');
+    document.body.classList.remove('modal-abierto');
+    //  Fuera ?ver= de la URL. Si se queda, cualquier recarga —o el redirect que
+    //  fija la pestaña— vuelve a abrir la vista previa que el dueño cerro.
+    try {
+      if (/[?&]ver=\d+/.test(location.search) && history.replaceState) {
+        var q = location.search.replace(/([?&])ver=\d+&?/, '$1').replace(/[?&]$/, '');
+        history.replaceState(null, '', location.pathname + q + location.hash);
+      }
+    } catch (e) {}
   }
   // Publicar desde el preview: IG / FB / ambas → Graph API a las redes conectadas.
   function publicarPrev(plataformas, btn){
@@ -2073,7 +2136,7 @@ $cf = [
     var esAmbas = plataformas.indexOf(',')>=0;
     var label = esAmbas ? 'ambas redes' : (plataformas==='instagram' ? 'Instagram' : 'Facebook');
     if(!confirm('¿Publicar este post en '+label+'?')) return;
-    document.getElementById('prevov').classList.remove('show');   // cierra el preview
+    cerrarPrev();                                                 // y devuelve el boton de Ayuda
     pubLoading();                                                 // muestra "Publicando…"
     var fd=new FormData(); fd.append('accion','publicar_api'); fd.append('id',prevId); fd.append('plataformas',plataformas); fd.append('ajax','1'); fd.append('csrf',CSRF);
     fetch(location.pathname+location.search,{method:'POST',body:fd})
@@ -2095,7 +2158,7 @@ $cf = [
     if(navigator.clipboard) navigator.clipboard.writeText(t.value); else { t.select(); document.execCommand('copy'); }
     event.target.textContent='✓ Copiado';
   }
-  document.getElementById('prevov').addEventListener('click', function(e){ if(e.target===this) this.classList.remove('show'); });
+  document.getElementById('prevov').addEventListener('click', function(e){ if(e.target===this) cerrarPrev(); });
   document.querySelectorAll('.prevlink').forEach(function(a){
     a.addEventListener('click', function(e){ e.preventDefault(); var c=a.closest('.post'); openPrev(a.dataset.img, a.dataset.copy, c?c.dataset.id:null); });
   });

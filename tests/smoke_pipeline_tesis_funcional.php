@@ -6,12 +6,30 @@
 //     Genome → (selección/estrategias/observaciones) → Creative Thesis → Creator+Director
 //  No determinista (usa el modelo). Uso:  php tests/smoke_pipeline_tesis_funcional.php [marca_id]
 // ============================================================
+// ── SMOKE OPCIONAL, NO REGRESION ──────────────────────────────────────
+//  Este archivo llama al MODELO VIVO: cuesta dinero y no es determinista,
+//  asi que no puede ser un requisito de la suite. Se corre a proposito:
+//     php tests/smoke_pipeline_tesis_funcional.php <marca_id> --vivo
+//  Sin --vivo se omite y sale en verde, que es lo honesto: no se ha
+//  probado nada, y decirlo es mejor que fingir una regresion que no corrio.
+//  Tampoco hay marca por defecto: la que habia (#126) era un id de UNA
+//  maquina, y el dia que dejo de existir la suite entera se cayo.
+if (!in_array('--vivo', $argv, true)) {
+    echo "OMITIDO · smoke del modelo vivo (cuesta dinero).
+";
+    echo "  Para correrlo:  php " . basename(__FILE__) . " <marca_id> --vivo
+";
+    exit(0);
+}
+
 define('VOICE_DNA_ONBOARDING_ENABLED', true);            // este smoke prueba el flujo ON
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_WARNING);
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/genoma.php';
 
-$mid = (int)($argv[1] ?? 126);
+$mid = (int)($argv[1] ?? 0);
+if (!$mid) { fwrite(STDERR, "Falta el id de la marca: php " . basename(__FILE__) . " <marca_id> --vivo
+"); exit(2); }
 $marca = leer_marca($pdo, $mid);
 echo "Marca #{$mid} — {$marca['nombre_negocio']}\n";
 

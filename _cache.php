@@ -1492,7 +1492,12 @@ try {
     if ($__test === 'img') {
         echo "\n--- Prueba EN VIVO a OpenAI (gpt-image-1) ---\n";
         try {
-            $r = openai_imagen('Un café boricua humeante sobre madera, luz cálida, foto premium', ['aspect' => '1:1']);
+            //  RUTA 9 — diagnostico del admin. Exento y ASENTADO: el gasto de
+            //  probar el motor es nuestro, pero se ve en el libro.
+            require_once __DIR__ . '/includes/cuota_imagenes.php';
+            $r = openai_imagen('Un café boricua humeante sobre madera, luz cálida, foto premium', ['aspect' => '1:1',
+                'cuota' => CuotaCtx::de($pdo, (int)($marca_id ?? 0), 'diagnostico', 'cache_test_img',
+                           ['exencion' => 'admin', 'origen_tipo' => 'banco', 'origen_id' => 1, 'costo' => 0.17])]);
             echo "RESULTADO: ✅ OpenAI generó la imagen (" . strlen($r['data']) . " bytes, modelo " . $r['modelo'] . ").\n";
             echo "→ gpt-image-1 FUNCIONA. Genera un post y saldrá con este motor.\n";
         } catch (Throwable $e) {
@@ -1515,7 +1520,11 @@ try {
             . 'No people, no hands, no text, no watermark, no macro shot, no isolated single donut.';
         echo "LEN prompt: " . mb_strlen($pm) . "\n";
         try {
-            $r = openai_imagen($pm, ['aspect' => '1:1']);
+            //  RUTA 10 — diagnostico con prompt a medida.
+            require_once __DIR__ . '/includes/cuota_imagenes.php';
+            $r = openai_imagen($pm, ['aspect' => '1:1',
+                'cuota' => CuotaCtx::de($pdo, (int)($marca_id ?? 0), 'diagnostico', 'cache_test_prompt',
+                           ['exencion' => 'admin', 'origen_tipo' => 'banco', 'origen_id' => 2, 'costo' => 0.17])]);
             $fn  = 'gpt_manual_' . substr(md5((string)microtime(true)), 0, 8) . '.png';
             $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . $fn;
             @file_put_contents($abs, $r['data']);
@@ -1751,7 +1760,11 @@ try {
                 echo "     Por eso NADA cambia con el prompt: la genera OTRO modelo. gpt-image-1\n";
                 echo "     está fallando y cae al respaldo. Probando el ERROR EXACTO de OpenAI…\n";
                 try {
-                    $rr = openai_imagen('Un cafe boricua humeante sobre madera, luz calida, foto premium', ['aspect'=>'1:1']);
+                    //  RUTA 11 — humo del motor de imagen.
+                    require_once __DIR__ . '/includes/cuota_imagenes.php';
+                    $rr = openai_imagen('Un cafe boricua humeante sobre madera, luz calida, foto premium', ['aspect'=>'1:1',
+                        'cuota' => CuotaCtx::de($pdo, (int)($marca_id ?? 0), 'diagnostico', 'cache_humo_img',
+                                   ['exencion' => 'admin', 'origen_tipo' => 'banco', 'origen_id' => 3, 'costo' => 0.17])]);
                     echo "     OpenAI directo: ✅ funciono (" . strlen($rr['data']) . " bytes). Raro — revisar el ruteo.\n";
                 } catch (Throwable $e2) {
                     echo "     OpenAI ERROR EXACTO: " . $e2->getMessage() . "\n";

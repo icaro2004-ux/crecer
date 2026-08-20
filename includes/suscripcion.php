@@ -217,6 +217,14 @@ function img_cuota_usadas(PDO $pdo, int $marca_id): int {
 }
 
 function img_cuota_estado(PDO $pdo, int $marca_id, bool $exento = false): array {
+    //  EL LIBRO MANDA CUANDO EXISTE. Desde la Fase 3C la cuota se RESERVA en
+    //  crecer_img_cuota_cubo antes de llamar al proveedor; contar a posteriori
+    //  sobre crecer_ia_log era la version vieja y no veia las reservas en vuelo
+    //  ni las liberaciones. Las cinco pantallas que ya llaman aqui pasan a leer
+    //  el libro sin tocar una linea de su codigo.
+    require_once __DIR__ . '/cuota_imagenes.php';
+    if (CuotaImg::disponible($pdo)) return CuotaImg::estado($pdo, $marca_id, $exento);
+
     $lim    = (int)CRECER_IMG_MES;
     $usadas = img_cuota_usadas($pdo, $marca_id);
     return [

@@ -142,6 +142,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
+        // (g) EMPEZAR: el dueño vio el trato y dijo que sí. El sello va en un
+        //     solo UPDATE que ya comprueba dueño, vigencia y que no estuviera
+        //     puesto — ver meta_plan_presentar(). Aquí no se vuelve a mirar.
+        if ($accion === 'presentar') {
+            $cambio = meta_plan_presentar($pdo, (int)($_POST['plan'] ?? 0), $marca_id);
+            //  false NO es un fallo: es "ya estaba presentado" (doble clic),
+            //  "ese plan no es tuyo" o "ya no es el vigente". En los tres casos
+            //  la respuesta correcta es la misma —recargar y dejar que el estado
+            //  se recomponga— y en ninguno hay nada que contarle al de afuera.
+            echo json_encode(['ok'=>true, 'cambio'=>$cambio]);
+            exit;
+        }
+
         echo json_encode(['ok'=>false,'err'=>'Acción desconocida.']);
     } catch (Throwable $e) {
         echo json_encode(['ok'=>false,'err'=>substr($e->getMessage(), 0, 180)], JSON_UNESCAPED_UNICODE);
@@ -186,6 +199,7 @@ if ($meta) {
 //  es puro: leer no cambia nada.
 require_once __DIR__ . '/../core/Meta/MetaStateComposer.php';
 require_once __DIR__ . '/../core/Meta/MetaSnapshotReader.php';
+require_once __DIR__ . '/../core/Meta/MetaRetorno.php';
 $mt_snap   = MetaSnapshotReader::leer($pdo, $marca_id);
 $mt_estado = MetaStateComposer::componer($mt_snap);
 
@@ -198,7 +212,7 @@ if (!in_array($vista, ['plan', 'wizard'], true)) $vista = 'ahora';
 if (!$meta && $vista === 'ahora' && !empty($_GET['nueva'])) $vista = 'wizard';
 
 /** Volver aquí desde donde sea que mande la acción dominante. */
-$mt_volver = '&volver=meta';
+$mt_volver = MetaRetorno::marcador();
 
 /**
  * El número de la meta, dicho como se puede defender.
@@ -431,7 +445,26 @@ $mt_unidad = function (string $objetivo): array {
      Móvil 360 primero: las tres zonas caben antes del primer scroll. Nada de
      texto por debajo de 14px, controles de 48px, y UNA sola acción primaria.
      Desktop no añade decisiones: añade aire. */
-  .ah{max-width:560px;margin:0 auto}
+  /*  ZONA SEGURA, no relleno. La barra de abajo YA tiene su hueco reservado
+      (.content{padding-bottom:104px} en encuentralo-ui.css): volver a pedirlo
+      aqui era contarlo dos veces. Lo que de verdad tapaba el ultimo renglon no
+      era la barra sino Ayuda, que flota POR ENCIMA de ese hueco -y para eso
+      esta la regla de abajo, no 300px de nada-.
+      Lo que se reserva aqui es EL FALTANTE, que el guion del final calcula y
+      escribe en --ah-zona: cuanto le falta a la cola de la pantalla para
+      quedar por encima de lo fijo, contando lo que el contenedor ya reserva.
+      Casi siempre sale 0. Sin guion, 20px de margen y nada roto. */
+  .ah{max-width:560px;margin:0 auto;padding-bottom:var(--ah-zona, 20px)}
+
+  /*  AYUDA SE APARTA CUANDO ASOMA LA COLA.
+      El boton flota en la franja de 78-121px sobre el borde inferior, que es
+      justo donde cae la ultima fila de enlaces cuando la pagina termina. A
+      360x800 los tapaba y ya no quedaba scroll para moverlos: no habia forma
+      de pulsarlos. Se aparta quien esta de mas, y vuelve solo al subir. */
+  body .ay-fab{transition:transform .2s ease, opacity .2s ease}
+  /*  Tiene que salir DE LA PANTALLA, no posarse sobre la barra: con un 150%
+      se movia 64px y aterrizaba encima de la botnav, igual de presente. */
+  body.ah-cola .ay-fab{transform:translateY(calc(100% + 96px));opacity:0;pointer-events:none}
   .mt-volver{display:inline-block;font-size:14px;font-weight:700;color:var(--muted);
     text-decoration:none;padding:10px 0;margin-bottom:6px;min-height:44px;line-height:24px}
 
@@ -454,6 +487,14 @@ $mt_unidad = function (string $objetivo): array {
   .ah-tit{font-family:var(--font-display,'Oswald',sans-serif);font-weight:700;font-size:23px;
     line-height:1.22;letter-spacing:.2px;margin:0 0 9px;color:var(--tinta)}
   .ah-ins{font-size:16px;line-height:1.5;color:var(--ink,#4A434F);margin:0 0 15px}
+  /* La vuelta: acuse de recibo, no una alarma. Va arriba del todo porque es lo
+     primero que el dueño busca al regresar, y en 16px porque es texto de uso
+     normal (criterio 7 del contrato). */
+  .ah-hecho{display:flex;gap:10px;align-items:flex-start;margin:0 0 16px;padding:13px 15px;
+    border-radius:12px;background:#EAF7F5;color:#0A5B57;font-size:16px;line-height:1.45}
+  .ah-hecho b{font-weight:800}
+  .ah-hecho-ico{flex:none;display:inline-flex;width:22px;height:22px;margin-top:1px}
+  .ah-hecho-ico svg{width:22px;height:22px;stroke:#00827E;stroke-width:2.6}
   .ah-btn{display:block;width:100%;min-height:48px;border:0;border-radius:14px;cursor:pointer;
     text-decoration:none;text-align:center;line-height:48px;font-family:inherit;font-weight:800;
     font-size:16px;color:#fff;background:linear-gradient(135deg,#FF6B3D,#EF4375);
@@ -471,6 +512,25 @@ $mt_unidad = function (string $objetivo): array {
     cursor:pointer;background:#fff;color:var(--tinta);font-family:inherit;font-weight:800;font-size:16px}
   .ah-btn2:disabled{opacity:.55;cursor:default}
   .ah-cons{font-size:14px;line-height:1.45;color:var(--muted);margin:10px 0 0}
+  /*  El aviso de cuota trae su propio CSS (includes/cuota_aviso.php) para que
+      sea el mismo en todas las pantallas y no se diverja copiandolo. */
+
+  /* — el trato: lo que se enseña ANTES de que el dueño diga que sí —
+     Dos números y una frase. El plan entero vive en su vista; aquí lo que
+     decide es "de esto me encargo yo, esto te lo voy a pedir a ti". */
+  .ah-trato{margin:0 0 16px;padding:14px 15px;border-radius:14px;background:#FAF7F5;
+    border:1px solid var(--line)}
+  .ah-estr{font-size:16px;line-height:1.5;color:var(--tinta);margin:0 0 12px;font-weight:600}
+  .ah-reparto{display:flex;gap:10px}
+  .ah-reparto div{flex:1;min-width:0;background:#fff;border:1px solid var(--line);
+    border-radius:11px;padding:10px 11px}
+  .ah-reparto b{display:block;font-family:var(--font-display,'Oswald',sans-serif);
+    font-size:24px;line-height:1.1;color:var(--tinta)}
+  .ah-reparto span{display:block;font-size:14px;line-height:1.35;color:var(--muted);margin-top:2px}
+  .ah-reparto .mia b{color:var(--teal,#00A49F)}
+  .ah-reparto .tuya b{color:var(--magenta,#EF4375)}
+  .ah-pide{font-size:14px;line-height:1.5;color:var(--ink,#4A434F);margin:11px 0 0}
+  .ah-pide b{color:var(--tinta)}
   .ah-guion{margin-top:14px;border-top:1px solid var(--line);padding-top:11px}
   .ah-guion summary{font-size:14px;font-weight:700;color:var(--teal,#00A49F);cursor:pointer;
     min-height:44px;line-height:44px;list-style:none}
@@ -1311,6 +1371,23 @@ $mt_unidad = function (string $objetivo): array {
   $obj = (string)($mt_snap['meta']['objetivo'] ?? '');
   $uni = $mt_unidad($obj);
   $act = $E->accion;
+
+  //  ¿SE ACABARON LAS IMAGENES DEL MES? Se pregunta AQUI, junto al estado, para
+  //  poder decidir una sola cosa: quien se queda con el boton primario.
+  //
+  //  Si lo que toca hoy NECESITA pintar (produccion o material), el aviso se
+  //  lleva el primario, porque la accion normal no va a poder completarse. Si
+  //  lo que toca es aprobar, publicar o confirmar algo, el aviso va SIN boton y
+  //  la accion normal se queda con el suyo: dos primarios compitiendo es el
+  //  criterio 3 del contrato, y en esa pantalla el dueño ya no sabe que tocar.
+  require_once __DIR__ . '/../includes/cuota_aviso.php';
+  $mt_cuota = null; $mt_cuota_manda = false;
+  try {
+      $mt_cuota = img_cuota_estado($pdo, $marca_id, ($usuario['rol'] ?? '') === 'admin');
+      if (!empty($mt_cuota['lleno'])) {
+          $mt_cuota_manda = in_array($E->estado, [MetaState::E_CRECER_TRABAJA, MetaState::G_MATERIAL], true);
+      }
+  } catch (Throwable $e) { $mt_cuota = null; }
   // El destino de la acción vuelve aquí cuando termine.
   // El destino sale del compositor; aquí solo se le añade el regreso y, para
   // el estado A, la capa del wizard: sin eso su acción recargaba esta misma
@@ -1325,6 +1402,28 @@ $mt_unidad = function (string $objetivo): array {
 ?>
 
 <div class="ah">
+
+  <?php /* ── LA VUELTA · lo que acaba de pasar, en un renglón ──────────
+           El estado ya viene recalculado: MetaSnapshotReader lee en cada carga,
+           así que al volver de aprobar una pieza el bloque Ahora YA muestra lo
+           siguiente. Falta solo decir qué pasó, porque si no el dueño vuelve a
+           una pantalla distinta sin saber si su acción sirvió.
+           El texto NO sale de la URL: la URL trae una llave y el texto vive en
+           MetaRetorno. Llave que no reconozca, no pinta nada. */ ?>
+  <?php if ($mt_confirma = MetaRetorno::confirmacion($_GET['hecho'] ?? null)): ?>
+    <div class="ah-hecho" role="status">
+      <span class="ah-hecho-ico" aria-hidden="true"><?= ico('check') ?></span>
+      <span><b><?= $h($mt_confirma[0]) ?></b> <?= $h($mt_confirma[1]) ?></span>
+    </div>
+  <?php endif; ?>
+
+  <?php /* ── SIN IMAGENES ESTE MES · un limite, no una averia ──────────
+           Va arriba porque explica lo que el dueño esta a punto de ver: una
+           pantalla que no le va a dejar pedir arte nuevo. Enterarse despues de
+           intentarlo es lo que manda gente a soporte. */ ?>
+  <?php if ($mt_cuota && !empty($mt_cuota['lleno'])): ?>
+    <?= cuota_aviso_html($mt_cuota, $marca_id, $mt_cuota_manda, $BASE) ?>
+  <?php endif; ?>
 
   <?php /* ── ZONA META · compacta, y honesta con lo que puede afirmar ── */ ?>
   <?php if ($mt_snap['meta']): ?>
@@ -1414,6 +1513,36 @@ $mt_unidad = function (string $objetivo): array {
       <?php elseif ($tipo === 'fisica'): ?>
         <button type="button" class="ah-btn" id="ahConfirmar"
                 data-jugada="<?= (int)($E->evidencia['tactica_id'] ?? 0) ?>"><?= $h($act['etiqueta']) ?></button>
+      <?php elseif ($tipo === 'presentacion'): ?>
+        <?php /* El contrato pide RESUMEN, no el plan entero (§C): la meta ya
+                 está arriba, aquí va la estrategia en una frase y el reparto
+                 del trabajo. Lo que te van a pedir es lo que de verdad decide:
+                 nadie acepta un plan sin saber qué le toca. */ ?>
+        <?php
+          $ev_est  = trim((string)($E->evidencia['estrategia'] ?? ''));
+          $ev_mio  = (int)($E->evidencia['hago_yo'] ?? 0);
+          $ev_tuyo = (int)($E->evidencia['te_pido'] ?? 0);
+          $ev_pide = (array)($E->evidencia['pide'] ?? []);
+        ?>
+        <div class="ah-trato">
+          <?php if ($ev_est !== ''): ?>
+            <p class="ah-estr"><?= $h($ev_est) ?></p>
+          <?php endif; ?>
+          <div class="ah-reparto">
+            <div class="mia"><b><?= $ev_mio ?></b><span><?= $ev_mio === 1 ? 'cosa la hago yo' : 'cosas las hago yo' ?></span></div>
+            <div class="tuya"><b><?= $ev_tuyo ?></b><span><?= $ev_tuyo === 1 ? 'cosa te toca a ti' : 'cosas te tocan a ti' ?></span></div>
+          </div>
+          <?php if ($ev_pide): ?>
+            <p class="ah-pide"><b>Lo que te voy a pedir:</b>
+              <?= $h(implode(' · ', $ev_pide)) ?><?= $ev_tuyo > count($ev_pide) ? '…' : '' ?></p>
+          <?php elseif ($ev_tuyo === 0): ?>
+            <p class="ah-pide">De este plan me encargo yo entero. Tú apruebas y ya.</p>
+          <?php endif; ?>
+        </div>
+        <?php /* Botón, no enlace: esto ESCRIBE. Un <a> lo repetiría el
+                 prefetch del navegador y lo guardaría el historial. */ ?>
+        <button type="button" class="ah-btn" id="ahEmpezar"
+                data-plan="<?= (int)($E->evidencia['plan_id'] ?? 0) ?>"><?= $h($act['etiqueta']) ?></button>
       <?php elseif ($tipo === 'reintento_job'): ?>
         <?php /* Reencola la jugada de verdad con la acción `ejecutar` que ya
                  existe. Un enlace aquí recargaría la pantalla dejando el fallo
@@ -1421,7 +1550,10 @@ $mt_unidad = function (string $objetivo): array {
         <button type="button" class="ah-btn" id="ahReintentar"
                 data-jugada="<?= (int)($E->evidencia['tactica_id'] ?? 0) ?>"><?= $h($act['etiqueta']) ?></button>
       <?php else: ?>
-        <a class="ah-btn" href="<?= $h($destino) ?>"><?= $h($act['etiqueta']) ?></a>
+        <?php /* Cuando el aviso de cuota se llevo el primario, esta accion baja
+                 a secundaria en vez de desaparecer: sigue siendo verdad que hay
+                 algo que hacer, solo que hoy no se puede completar pintando. */ ?>
+        <a class="<?= $mt_cuota_manda ? 'ah-btn2' : 'ah-btn' ?>" href="<?= $h($destino) ?>"><?= $h($act['etiqueta']) ?></a>
       <?php endif; ?>
       <?php if (trim((string)$act['consecuencia']) !== ''): ?>
         <p class="ah-cons"><?= $h($act['consecuencia']) ?></p>
@@ -1455,6 +1587,7 @@ $mt_unidad = function (string $objetivo): array {
   </nav>
 </div>
 
+<?= cuota_aviso_css() ?>
 <div class="ah-toast" id="ahToast"></div>
 
 <script>
@@ -1490,6 +1623,110 @@ $mt_unidad = function (string $objetivo): array {
     if (!b.dataset.jugada) return;
     enviar(b, {accion:'tactica', id:b.dataset.jugada, estado:'hecha'},
            'Un momento…', 'No se pudo marcar.');
+  });
+
+  //  OJO AL MOMENTO. La barra de abajo y el boton de Ayuda los pinta
+  //  _shell_foot.php, DESPUES de este bloque: preguntarlos ahora devuelve null
+  //  y las dos rutinas de abajo salen en vacio sin quejarse -que es justo lo
+  //  que pasaba: se apartaba Ayuda en el papel y nunca en la pantalla-.
+  var alCargar = function(fn){
+    if (document.readyState === 'complete') { fn(); return; }
+    window.addEventListener('load', fn);
+  };
+
+  //  LA ZONA SEGURA ES EL FALTANTE, Y SE MIDE.
+  //
+  //  Antes aqui habia 300px fijos. El numero salio de leer mal una medicion y
+  //  creo una pantalla de vacio en TODAS las vistas de Tu Meta. La cuenta de
+  //  verdad es corta: con la pagina al final del scroll, el ultimo control
+  //  tiene que quedar por encima de la barra fija.
+  //
+  //      doc >= ultimo_en_pagina + alto_de_lo_fijo + margen
+  //
+  //  Lo que falte para eso —y solo eso— es la zona segura. Como .content ya
+  //  reserva 104px para la barra, casi siempre sale 0: reservarlo otra vez
+  //  aqui seria contarlo dos veces, que es justo el error anterior.
+  (function(){
+    var ah = document.querySelector('.ah'); if (!ah) return;
+    var MARGEN = 20;
+    var ajustar = function(){
+      ah.style.setProperty('--ah-zona', '0px');          // medir sin lo puesto
+      var vp  = window.innerHeight;
+      var doc = document.documentElement.scrollHeight;
+
+      //  EL TECHO son las DOS capas de abajo, no solo la barra: Ayuda flota
+      //  POR ENCIMA del hueco que reserva .content, y es la que de verdad
+      //  tapaba el ultimo renglon. Se toma la mas alta de las dos, medida.
+      var techo = vp;
+      [].forEach.call(document.querySelectorAll('.botnav, .ay-fab'), function(c){
+        if (getComputedStyle(c).display === 'none') return;
+        var t = c.getBoundingClientRect().top;
+        if (t > vp * 0.5 && t < techo) techo = t;
+      });
+      var fijo = Math.round(vp - techo);
+
+      var ultimo = 0;
+      [].forEach.call(ah.querySelectorAll('a[href],button,summary'), function(e){
+        var r = e.getBoundingClientRect();
+        if (r.height < 4) return;
+        ultimo = Math.max(ultimo, Math.round(r.bottom + window.scrollY));
+      });
+      //  Con la pagina al final del scroll, lo ultimo tiene que caer por encima
+      //  del techo:  doc >= ultimo + fijo + margen.  Lo que falte, y solo eso.
+      var falta = Math.max(0, ultimo + fijo + MARGEN - doc);
+      ah.style.setProperty('--ah-zona', (falta || MARGEN) + 'px');
+    };
+    alCargar(ajustar); window.addEventListener('resize', ajustar);
+  })();
+
+  //  AYUDA SE APARTA DE CUALQUIER CONTROL PRINCIPAL, no solo de la cola.
+  //
+  //  La primera version solo vigilaba los enlaces del final. Con eso, el boton
+  //  primario del bloque Ahora podia quedar debajo de Ayuda y la regla no se
+  //  enteraba — y decir «se alcanza haciendo scroll» no vale para el boton mas
+  //  importante de la pantalla: es el que la duena va a tocar sin pensar.
+  //
+  //  Ahora se observan TODOS los controles principales (el primario, el
+  //  secundario, el desplegable del como y la cola). Si CUALQUIERA cae en la
+  //  franja del boton, Ayuda se aparta. Vuelve sola en cuanto deja de coincidir.
+  //
+  //  La banda es la franja del propio boton con 16px de aviso a cada lado: se
+  //  quita ANTES de rozar, no cuando ya tapa.
+  (function(){
+    var SEL = '.ah-btn, .ah-btn2, .ah-como > summary, .cq-btn, .ah-mas';
+    if (!('IntersectionObserver' in window)) return;
+    var ob = null, dentro = null;
+    var montar = function(){
+      if (ob) { ob.disconnect(); ob = null; }
+      dentro = new Set();
+      document.body.classList.remove('ah-cola');         // medir sin el efecto puesto
+      var fab = document.querySelector('.ay-fab');
+      var objetivos = document.querySelectorAll(SEL);
+      if (!fab || !objetivos.length) return;
+
+      var AVISO = 16, H = window.innerHeight;
+      var r = fab.getBoundingClientRect();
+      var arriba = Math.round(r.top - AVISO), abajo = Math.round(H - r.bottom - AVISO);
+      if (!(arriba > 0 && arriba < H)) return;           // sin FAB a la vista
+
+      ob = new IntersectionObserver(function(es){
+        es.forEach(function(e){
+          if (e.isIntersecting) dentro.add(e.target); else dentro.delete(e.target);
+        });
+        document.body.classList.toggle('ah-cola', dentro.size > 0);
+      }, { rootMargin: '-' + arriba + 'px 0px ' + (-abajo) + 'px 0px', threshold: 0 });
+      [].forEach.call(objetivos, function(o){ ob.observe(o); });
+    };
+    alCargar(montar);
+    window.addEventListener('resize', montar);
+  })();
+
+  // Aceptar el plan. Se sella una vez y la pantalla se recompone sola: al
+  // recargar, el estado dominante ya es la primera tarea de verdad.
+  var e = document.getElementById('ahEmpezar');
+  if (e) e.addEventListener('click', function(){
+    enviar(e, {accion:'presentar', plan:e.dataset.plan || 0},
+           'Vamos…', 'No se pudo empezar.');
   });
 
   // Reencolar la jugada que se trabó.

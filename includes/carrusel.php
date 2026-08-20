@@ -281,7 +281,12 @@ function carrusel_encolar_arte(PDO $pdo, int $marca_id, int $contenido_id): int 
         $v = carrusel_slide_visual((string)$s['idea']);
         try {
             $brief = carrusel_slide_brief($m, $v, (int)$s['orden'], $total);
-            $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1'] + ($logo ? ['logo' => $logo] : []));
+            //  RUTA 4. Cada slide es una unidad distinta: origen = el slide.
+            require_once __DIR__ . '/cuota_imagenes.php';
+            $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1']
+                + ['cuota' => CuotaCtx::de($pdo, $marca_id, 'slide', 'carrusel_encolar_arte',
+                              ['origen_tipo' => 'slide', 'origen_id' => (int)$s['id'], 'costo' => 0.17])]
+                + ($logo ? ['logo' => $logo] : []));
             $pdo->prepare("UPDATE crecer_carrusel SET img_job=?, img_estado='queued', updated_at=NOW() WHERE id=?")->execute([$bg['id'], (int)$s['id']]);
             try { $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,estado) VALUES (?,?,?,?,?,?, 'ok')")
                 ->execute([$marca_id, 'director_imagen', 'Encolar slide de carrusel (Responses)', 'responses', $brief, $bg['id']]); } catch (Throwable $e) {}

@@ -38,6 +38,7 @@ try {
     exit(0);
 }
 require_once __DIR__ . '/../core/Meta/MetaSnapshotReader.php';
+require_once __DIR__ . '/_fixture.php';
 echo "  base: " . $pdo->query('SELECT DATABASE()')->fetchColumn() . "\n";
 
 // Todas las marcas del dueño de pruebas, sin nombrar ids en las afirmaciones.
@@ -95,11 +96,14 @@ ok("los {$revisadas} jobs del snapshot son el último de su jugada y ninguno est
 //  lector sin dejar una fila. Se invoca el método privado por reflexión para
 //  no abrir una puerta pública que solo existiría para las pruebas.
 echo "\n  — la regla del job vigente, contra el SQL real —\n";
-// Se usan marca y jugadas REALES: crecer_meta_jobs tiene llaves foráneas a
-// ambas. Todo ocurre dentro de la transacción que se deshace al final.
-$M = (int)$pdo->query("SELECT id FROM crecer_marca WHERE usuario_id=7 ORDER BY id DESC LIMIT 1")->fetchColumn();
-$tt = $pdo->query("SELECT id FROM crecer_meta_tactica WHERE marca_id={$M} ORDER BY id DESC LIMIT 2")->fetchAll(PDO::FETCH_COLUMN);
-$T_A = (int)($tt[0] ?? 0); $T_B = (int)($tt[1] ?? 0);
+// La siembra va contra una marca PROPIA. Antes se agarraba la última del usuario
+// 7 y sus tácticas prestadas; el día que esa marca desapareció, la prueba se cayó
+// por una llave foránea. Ahora la fixture se crea, se usa y se borra: nadie
+// depende de lo que haya en la base de una máquina concreta.
+$fx  = Fixture::crear($pdo, 'jobs');
+$M   = (int)$fx['marca_id'];
+$T_A = (int)$fx['tacticas'][0];
+$T_B = (int)$fx['tacticas'][1];
 $sembrado = false;
 try {
     $pdo->beginTransaction();
@@ -170,6 +174,17 @@ foreach ($antes as $t => $c) {
     if ($ahora !== $c) { $igual = false; echo "     cambió {$t}: {$c} → {$ahora}\n"; }
 }
 ok('recorrer todas las marcas no cambió ni una fila', $igual);
+
+// La fixture se borra al final, DESPUÉS del conteo: si se borrara antes, el
+// conteo la vería desaparecer y acusaría de mutar a quien solo limpió lo suyo.
+// limpiar() exige el sello, así que no puede llevarse nada ajeno por delante.
+try {
+    Fixture::limpiar($pdo, $M);
+    $q = $pdo->prepare("SELECT COUNT(*) FROM crecer_marca WHERE id=?"); $q->execute([$M]);
+    ok('la fixture se limpió sola', (int)$q->fetchColumn() === 0);
+} catch (Throwable $e) {
+    ok('la fixture se limpió sola', false, $e->getMessage());
+}
 
 echo "\n" . str_repeat('=', 52) . "\n";
 echo $fallos === 0 ? "  TODO OK · {$n} pruebas\n\n" : "  {$fallos} FALLAS de {$n}\n\n";
