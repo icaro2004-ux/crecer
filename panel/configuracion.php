@@ -181,11 +181,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$elegible) { try { $elegible = plan_de_marca($pdo, $marca_id) !== null; } catch (Throwable $e) {} }
         if (!$elegible) { header('Location: ' . $volver . 'negocio&error=' . urlencode('Activa tu plan para que el corillo trabaje solo.')); exit; }
         try {
-            $res = relevo_del_corillo($pdo, $marca_id);   // corre el EQUIPO completo, no solo el creador
-            $nn  = (int)($res['creadas'] ?? 0);
+            //  LA EJECUCION A MANO SIGUE VIVA, pero por el mismo libro de
+            //  corridas que el cron (core/Meta/MetaAutoRunner.php): dos clics
+            //  seguidos corrian el equipo dos veces y facturaban dos veces.
+            //  Usa rondaManual(), con el minuto pegado — asi el candado para el
+            //  doble clic sin matar el boton el resto de la semana.
+            require_once __DIR__ . '/../core/Meta/MetaAutoRunner.php';
+            require_once __DIR__ . '/../includes/meta_negocio.php';
+            $plan_vig = 0;
+            try {
+                $mt = meta_activa($pdo, $marca_id);
+                if ($mt) $plan_vig = (int)(meta_plan_activo($pdo, (int)$mt['id'])['id'] ?? 0);
+            } catch (Throwable $e2) {}
+
+            $env = MetaAutoRunner::envolver($pdo, $marca_id, $plan_vig, 'manual',
+                fn(callable $latir) => relevo_del_corillo($pdo, $marca_id, $latir),
+                MetaAutoRunner::rondaManual());
+
+            $nn = (int)$env['creadas'];
+            if (!$env['corrio']) {
+                //  Ya hay una corrida en marcha. No es un error — se lo decimos
+                //  como lo que es y no como una averia.
+                header('Location: ' . $volver . 'negocio&corillo=' . urlencode(
+                    'El corillo ya está trabajando ahora mismo. Dale un minuto.')); exit;
+            }
             $msg = $nn > 0
                 ? "El corillo te dejó {$nn} post" . ($nn === 1 ? '' : 's') . " en Propuestas → Revisar."
-                : "El corillo revisó — ya tienes suficientes borradores por ahora.";
+                : ($env['motivo'] === 'sin_cuota'
+                    ? 'El corillo llegó a tu tope de imágenes del mes. Tus fotos propias siguen corriendo libres.'
+                    : 'El corillo revisó — ya tienes suficientes borradores por ahora.');
             header('Location: ' . $volver . 'negocio&corillo=' . urlencode($msg)); exit;
         } catch (Throwable $e) {
             header('Location: ' . $volver . 'negocio&error=' . urlencode('El corillo no pudo ahora: ' . substr($e->getMessage(), 0, 90))); exit;

@@ -2458,12 +2458,21 @@ function analitica_del_relevo(PDO $pdo, int $marca_id): void {
  * Cada agente loguea → el home enciende su parte del relevo (evidencia real,
  * criterio XPRIZE). Best-effort: si un agente falla, el relevo sigue.
  * Devuelve lo mismo que trabajo_autonomo (creadas/ids/razon).
+ *
+ * $latir: señal de vida entre fases, para el libro de corridas
+ * (core/Meta/MetaAutoRunner.php). Un relevo completo puede tardar minutos; sin
+ * latir, una corrida SANA pero lenta se ve igual que una muerta y otro tick se
+ * la lleva — corriendo el equipo dos veces, que es justo lo que el candado
+ * viene a evitar. Es opcional: quien no lo pase, se comporta como antes.
  */
-function relevo_del_corillo(PDO $pdo, int $marca_id): array {
+function relevo_del_corillo(PDO $pdo, int $marca_id, ?callable $latir = null): array {
+    $lat = $latir ?: function () {};
     // 1) El Aprendiz: aprende la línea visual de lo que el dueño aprobó (si hay señal).
     try { aprender_estilo_visual($pdo, $marca_id); } catch (Throwable $e) { error_log('relevo aprendiz: ' . $e->getMessage()); }
+    $lat();
     // 2) La Estratega: fija el enfoque de la semana (alimenta al creador).
     $enfoque = estratega_enfoque_semana($pdo, $marca_id);
+    $lat();
 
     // 3) EL PLAN MANDA. Si el negocio tiene una meta con jugadas pendientes, el
     //    corillo EJECUTA ESAS JUGADAS — no inventa contenido suelto. Aquí es
@@ -2490,13 +2499,16 @@ function relevo_del_corillo(PDO $pdo, int $marca_id): array {
         }
     } catch (Throwable $e) { error_log('relevo plan: ' . $e->getMessage()); }
 
+    $lat();
     // 4) Si no había plan que avanzar (o no llenó el cupo), el Creador trabaja
     //    como siempre: borradores alineados al enfoque de la semana.
     if ($del_plan === 0) {
         $res = trabajo_autonomo($pdo, $marca_id, $enfoque);
     }
+    $lat();
     // 5) El Analista: cierra el relevo con los números reales.
     analitica_del_relevo($pdo, $marca_id);
+    $lat();
     // 6) La meta: ¿ya se logró? ¿se venció? Se cierra sola, con progreso MEDIDO
     //    (nunca por corazonada). Si no hay meta, no pasa nada.
     try {
@@ -2833,7 +2845,27 @@ function correr_corillo(PDO $pdo): array {
             $detalle[] = ['marca_id' => $mid, 'creadas' => 0, 'razon' => 'sin plan activo'];
             continue;
         }
-        $res = relevo_del_corillo($pdo, $mid);   // corre el EQUIPO, no solo el creador
+        //  POR EL LIBRO DE CORRIDAS. El cron, el worker en vivo y el boton de
+        //  Configuracion pueden dispararse casi a la vez y ninguno sabe de los
+        //  otros: sin candado, el equipo corre dos veces y la factura tambien.
+        //  Reclamar es lo PRIMERO — antes de cuota, de IA y de generar nada.
+        require_once dirname(__DIR__) . '/core/Meta/MetaAutoRunner.php';
+        $plan_vig = 0;
+        try {
+            require_once __DIR__ . '/meta_negocio.php';
+            $mt = meta_activa($pdo, $mid);
+            if ($mt) $plan_vig = (int)(meta_plan_activo($pdo, (int)$mt['id'])['id'] ?? 0);
+        } catch (Throwable $e) { /* sin meta: plan 0, que es una ronda legitima */ }
+
+        $env = MetaAutoRunner::envolver($pdo, $mid, $plan_vig, 'cron',
+            fn(callable $latir) => relevo_del_corillo($pdo, $mid, $latir));
+
+        if (!$env['corrio']) {
+            //  NO es un fallo: esta ronda ya la hizo otro disparo.
+            $detalle[] = ['marca_id' => $mid, 'creadas' => 0, 'razon' => 'esta ronda ya se corrió'];
+            continue;
+        }
+        $res = ['creadas' => $env['creadas'], 'razon' => $env['motivo']];
         $tot += $res['creadas'];
         $detalle[] = ['marca_id' => $mid, 'creadas' => $res['creadas'], 'razon' => $res['razon']];
 
