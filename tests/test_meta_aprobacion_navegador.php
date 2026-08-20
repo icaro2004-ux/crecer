@@ -77,6 +77,21 @@ try {
        ($r['ERROR'] ?? '') ?: implode(' | ', array_slice($sal, -3)));
 
     if (($r['OK'] ?? '0') === '1') {
+        echo "\n  — la vista previa se abre UNA vez —\n";
+        ok('el modal de ?ver= se abre al llegar',
+           ($r['PREV_ABIERTO_AL_LLEGAR'] ?? '') === 'true');
+        ok('con el modal abierto, Ayuda se aparta',
+           in_array($r['AYUDA_CON_MODAL'] ?? '', ['none', 'sin-fab'], true),
+           'display=' . ($r['AYUDA_CON_MODAL'] ?? '?')
+           . ' · tapaba el botón de WhatsApp y el contenido del modal');
+        ok('al cerrarlo se queda cerrado', ($r['PREV_CERRADO'] ?? '') === 'true',
+           'si vuelve a abrirse es que ?ver= sigue en la URL');
+        ok('y ?ver= desaparece de la URL', ($r['URL_SIN_VER'] ?? '') === 'true',
+           'sin limpiarlo, el redirect de la pestaña lo reabre');
+        ok('Ayuda vuelve cuando ya no hay modal',
+           ($r['AYUDA_TRAS_CERRAR'] ?? '') !== 'none',
+           'display=' . ($r['AYUDA_TRAS_CERRAR'] ?? '?'));
+
         echo "\n  — abre la pieza exacta —\n";
         ok('Tu Meta ofrece UNA sola acción primaria', (int)($r['PRIMARIAS_META'] ?? 9) === 1,
            'primarias=' . ($r['PRIMARIAS_META'] ?? '?'));

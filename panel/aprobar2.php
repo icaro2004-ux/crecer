@@ -1545,7 +1545,7 @@ $cf = [
 <!-- MODAL PREVIEW REDES (cómo se ve en IG/FB) -->
 <div class="prev-ov" id="prevov">
   <div class="prev-box">
-    <button class="prev-x" onclick="document.getElementById('prevov').classList.remove('show')">✕</button>
+    <button class="prev-x" onclick="cerrarPrev()">✕</button>
     <div class="prev-tabs">
       <button class="ptab on" data-net="ig" onclick="setNet('ig')"><?= ico('instagram') ?> Instagram</button>
       <button class="ptab" data-net="fb" onclick="setNet('fb')"><?= ico('facebook') ?> Facebook</button>
@@ -1848,7 +1848,7 @@ $cf = [
 
   // ===== Pedir un post a la IA (brief) =====
   function abrirBrief(){ document.getElementById('briefov').classList.add('show'); }
-  document.getElementById('briefov').addEventListener('click', function(e){ if(e.target===this) this.classList.remove('show'); });
+  document.getElementById('briefov').addEventListener('click', function(e){ if(e.target===this) cerrarPrev(); });
 
   // Sugiéreme temas: la IA propone ideas de post basadas en el negocio.
   (function(){
@@ -2097,6 +2097,21 @@ $cf = [
     document.getElementById('copybuffer').value = copy || '';
     setNet('ig');
     document.getElementById('prevov').classList.add('show');
+    document.body.classList.add('modal-abierto');   // aparta el botón de Ayuda
+  }
+  //  UN SOLO SITIO PARA CERRAR. Si cada camino lo hiciera a su manera, alguno se
+  //  olvidaria de devolver el boton de Ayuda o de limpiar la URL.
+  function cerrarPrev(){
+    document.getElementById('prevov').classList.remove('show');
+    document.body.classList.remove('modal-abierto');
+    //  Fuera ?ver= de la URL. Si se queda, cualquier recarga —o el redirect que
+    //  fija la pestaña— vuelve a abrir la vista previa que el dueño cerro.
+    try {
+      if (/[?&]ver=\d+/.test(location.search) && history.replaceState) {
+        var q = location.search.replace(/([?&])ver=\d+&?/, '$1').replace(/[?&]$/, '');
+        history.replaceState(null, '', location.pathname + q + location.hash);
+      }
+    } catch (e) {}
   }
   // Publicar desde el preview: IG / FB / ambas → Graph API a las redes conectadas.
   function publicarPrev(plataformas, btn){
@@ -2126,7 +2141,7 @@ $cf = [
     if(navigator.clipboard) navigator.clipboard.writeText(t.value); else { t.select(); document.execCommand('copy'); }
     event.target.textContent='✓ Copiado';
   }
-  document.getElementById('prevov').addEventListener('click', function(e){ if(e.target===this) this.classList.remove('show'); });
+  document.getElementById('prevov').addEventListener('click', function(e){ if(e.target===this) cerrarPrev(); });
   document.querySelectorAll('.prevlink').forEach(function(a){
     a.addEventListener('click', function(e){ e.preventDefault(); var c=a.closest('.post'); openPrev(a.dataset.img, a.dataset.copy, c?c.dataset.id:null); });
   });

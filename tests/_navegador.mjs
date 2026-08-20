@@ -69,9 +69,9 @@ const despejar = async () => {
       });
       // Los modales de vista previa cierran con una × sin texto: hay que
       // pulsarla por su aria-label o su clase, no por su contenido.
-      [].forEach.call(document.querySelectorAll('[aria-label*="errar"],.cerrar,.close,.pw-x,.x'),
+      [].forEach.call(document.querySelectorAll('[aria-label*="errar"],.cerrar,.close,.pw-x,.x,.prev-x'),
         function(b){ if(b.offsetParent!==null) b.click(); });
-      [].forEach.call(document.querySelectorAll('.tour,.tour-ov,#crOv,.modal,.ov,[class*="spotlight"],[class*="overlay"],.ayuda-fab,#ayudaFab'),
+      [].forEach.call(document.querySelectorAll('.tour,.tour-ov,#crOv,.modal,.ov,.prev-ov,[class*="spotlight"],[class*="overlay"],.ayuda-fab,#ayudaFab'),
         function(e){ e.classList.remove('on'); e.style.display='none'; });
     }
   })()`);
@@ -216,6 +216,17 @@ try {
   di('PIEZA_ID_EN_FORM', await evaluar(
     `(function(){var b=document.querySelector('form button[value="aprobar"]');
        return b? (b.form.querySelector('input[name="id"]')||{}).value : ''; })()`));
+  //  El modal de ?ver= tiene que abrirse UNA vez. Se cierra como lo cerraria
+  //  el dueño y se espera: si vuelve, es que ?ver= sigue en la URL.
+  di('PREV_ABIERTO_AL_LLEGAR', await evaluar("document.querySelector('.prev-ov.show')!==null"));
+  di('AYUDA_CON_MODAL', await evaluar("(function(){var f=document.querySelector('.ay-fab');"
+     + "return f? getComputedStyle(f).display : 'sin-fab';})()"));
+  await evaluar("(function(){var x=document.querySelector('.prev-x'); if(x) x.click();})()");
+  await dormir(1400);
+  di('PREV_CERRADO', await evaluar("document.querySelector('.prev-ov.show')===null"));
+  di('URL_SIN_VER', await evaluar("!/[?&]ver=/.test(location.search)"));
+  di('AYUDA_TRAS_CERRAR', await evaluar("(function(){var f=document.querySelector('.ay-fab');"
+     + "return f? getComputedStyle(f).display : 'sin-fab';})()"));
   await captura('aprobacion', 'form button[value=\"aprobar\"]');
   var mAp = await medir();
   di('APROB_DESBORDE', mAp.desborde);
