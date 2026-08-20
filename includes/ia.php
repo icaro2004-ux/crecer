@@ -53,6 +53,15 @@ class IaSinCredenciales extends RuntimeException {}
 class IaError extends RuntimeException {}
 
 /**
+ * INCIERTO: el proveedor acepto el encargo y no dio con que recogerlo.
+ * No es lo mismo que un fallo -puede que la imagen exista y nos la facturen-,
+ * y por eso tiene tipo propio: quien lo atrape NO debe caer a otro proveedor.
+ * Se aprendio en el hotfix de sondeo del 19 de agosto: tratar lo incierto como
+ * rechazo confirmado fue lo que disparo la generacion doble.
+ */
+class IaIncierto extends IaError {}
+
+/**
  * Detecta qué transporte usar según las credenciales disponibles.
  * @return string 'gemini_api' | 'vertex' | 'mock'
  */
@@ -400,7 +409,15 @@ function ia_veto_ip(string $prompt): string {
          . "elements instead: colors, balloons, confetti, shapes and your own figures.";
 }
 
+//  LA GARANTIA DE CUOTA. Este es uno de los CUATRO puntos donde el dinero
+//  sale de verdad. Falla CERRADO: sin CuotaCtx en $opts['cuota'], lanza antes
+//  del curl. Hasta la Fase 3C el tope se consultaba en cuatro PANTALLAS, asi
+//  que las rutas automaticas -el relevo del corillo, el plan, los slides del
+//  carrusel, la muestra del gateway- pasaban de largo. La garantia no puede
+//  vivir donde el usuario mira: tiene que vivir donde se gasta.
 function gemini_imagen(string $prompt, array $opts = []): array {
+    require_once __DIR__ . '/cuota_imagenes.php';
+    $__cuota = CuotaImg::garantizar($opts['cuota'] ?? null, 'P1 gemini_imagen');
     $prompt = ia_veto_ip($prompt);
     $modelo = $opts['modelo'] ?? 'gemini-2.5-flash-image';
     if (ia_transporte() !== 'gemini_api') {
@@ -606,7 +623,15 @@ function openai_extraer_img(string $resp, string $modelo): array {
  * dall-e-3 = respaldo sin verificación de organización.
  * Devuelve ['data','mime','modelo'].
  */
+//  LA GARANTIA DE CUOTA. Este es uno de los CUATRO puntos donde el dinero
+//  sale de verdad. Falla CERRADO: sin CuotaCtx en $opts['cuota'], lanza antes
+//  del curl. Hasta la Fase 3C el tope se consultaba en cuatro PANTALLAS, asi
+//  que las rutas automaticas -el relevo del corillo, el plan, los slides del
+//  carrusel, la muestra del gateway- pasaban de largo. La garantia no puede
+//  vivir donde el usuario mira: tiene que vivir donde se gasta.
 function openai_imagen(string $prompt, array $opts = []): array {
+    require_once __DIR__ . '/cuota_imagenes.php';
+    $__cuota = CuotaImg::garantizar($opts['cuota'] ?? null, 'P2 openai_imagen');
     if (!openai_configurado()) throw new IaSinCredenciales('Falta OPENAI_API_KEY.');
     $prompt   = ia_veto_ip($prompt);
     $modelo   = $opts['modelo_openai'] ?? OPENAI_IMG_MODEL;
@@ -669,7 +694,15 @@ function openai_imagen(string $prompt, array $opts = []): array {
  * llamada (el mismo mecanismo que usa ChatGPT). Timeout propio y largo (corre en el worker).
  * Devuelve ['data','mime','modelo','revised'] (revised = el prompt que el modelo escribió).
  */
+//  LA GARANTIA DE CUOTA. Este es uno de los CUATRO puntos donde el dinero
+//  sale de verdad. Falla CERRADO: sin CuotaCtx en $opts['cuota'], lanza antes
+//  del curl. Hasta la Fase 3C el tope se consultaba en cuatro PANTALLAS, asi
+//  que las rutas automaticas -el relevo del corillo, el plan, los slides del
+//  carrusel, la muestra del gateway- pasaban de largo. La garantia no puede
+//  vivir donde el usuario mira: tiene que vivir donde se gasta.
 function openai_responses_imagen(string $brief, array $opts = []): array {
+    require_once __DIR__ . '/cuota_imagenes.php';
+    $__cuota = CuotaImg::garantizar($opts['cuota'] ?? null, 'P3 openai_responses_imagen');
     if (!openai_configurado()) throw new IaSinCredenciales('Falta OPENAI_API_KEY.');
     $modelo = trim((string)($opts['modelo'] ?? ''));
     if ($modelo === '') {
@@ -732,7 +765,21 @@ function _openai_responses_modelo(array $opts): string {
  * fallo, veredicto, estado de la pieza) se prueba de verdad.
  */
 if (!function_exists('openai_responses_crear_bg')) {
+//  LA GARANTIA DE CUOTA. Este es uno de los CUATRO puntos donde el dinero
+//  sale de verdad. Falla CERRADO: sin CuotaCtx en $opts['cuota'], lanza antes
+//  del curl. Hasta la Fase 3C el tope se consultaba en cuatro PANTALLAS, asi
+//  que las rutas automaticas -el relevo del corillo, el plan, los slides del
+//  carrusel, la muestra del gateway- pasaban de largo. La garantia no puede
+//  vivir donde el usuario mira: tiene que vivir donde se gasta.
+//
+//  Y ADEMAS EL CASO DIFICIL: aqui el encargo se acepta ahora y la imagen llega
+//  despues. Si Responses acepta pero NO devuelve identificador, no hay forma de
+//  saber si nos lo facturaran ni de recogerlo luego. Entonces no se cae a otro
+//  proveedor -seria gastar otra vez a ciegas por la misma imagen-, se le
+//  devuelve la unidad al cliente y el riesgo de costo se anota como nuestro.
 function openai_responses_crear_bg(string $brief, array $opts = []): array {
+    require_once __DIR__ . '/cuota_imagenes.php';
+    $__cuota = CuotaImg::garantizar($opts['cuota'] ?? null, 'P4 openai_responses_crear_bg');
     if (!openai_configurado()) throw new IaSinCredenciales('Falta OPENAI_API_KEY.');
     $modelo = _openai_responses_modelo($opts);
     $aspect = $opts['aspect'] ?? '1:1';
@@ -762,8 +809,25 @@ function openai_responses_crear_bg(string $brief, array $opts = []): array {
     if (!is_array($d))      throw new IaError('Responses(bg) no-JSON: ' . substr($resp, 0, 300));
     if (isset($d['error'])) throw new IaError('Responses(bg): ' . ($d['error']['message'] ?? 'error'));
     $id = (string)($d['id'] ?? '');
-    if ($id === '')         throw new IaError('Responses(bg) sin id: ' . substr($resp, 0, 300));
-    return ['id' => $id, 'modelo' => $modelo, 'status' => (string)($d['status'] ?? 'queued')];
+    if ($id === '') {
+        //  ACEPTARON EL ENCARGO Y NO DIERON IDENTIFICADOR.
+        //  Es el peor de los casos: puede que la imagen se este generando y nos
+        //  la facturen, y no tenemos con que recogerla ni con que preguntar.
+        //  Quien paga ese riesgo NO es el dueño — se le devuelve su unidad y el
+        //  costo posible se anota como riesgo de plataforma. Y NO se cae a otro
+        //  proveedor: seria gastar dos veces a ciegas por la misma imagen.
+        //  Si el job aparece luego y correlaciona, CuotaImg::correlacionar() lo
+        //  consume (con overage si el mes ya estaba lleno).
+        CuotaImg::riesgoPlataforma($__cuota->pdo, $__cuota->asiento_id,
+            $__cuota->costo_potencial ?: 0.17,
+            'Responses aceptó el encargo sin devolver job id');
+        throw new IaIncierto('Responses(bg) sin id: ' . substr($resp, 0, 300));
+    }
+    //  Con identificador, la reserva queda atada al job y ya NO caduca por
+    //  reloj: un job remoto identificado puede tardar lo que tarde.
+    CuotaImg::atarJob($__cuota->pdo, $__cuota->asiento_id, $id);
+    return ['id' => $id, 'modelo' => $modelo, 'status' => (string)($d['status'] ?? 'queued'),
+            'asiento_id' => $__cuota->asiento_id];
 }
 }
 
@@ -874,12 +938,31 @@ function motor_imagen(string $prompt, array $opts = []): array {
     $gen = fn($m) => $m === 'openai' ? openai_imagen($prompt, $opts) : gemini_imagen($prompt, $opts);
     try {
         $r = $gen($primero); $r['motor'] = $primero; $r['razon'] = $dec['razon']; return $r;
+    } catch (CuotaAgotada $e) {
+        //  Sin cuota NO se cae al otro motor: el respaldo existe para cuando un
+        //  proveedor falla, no para saltarse el tope del plan por la puerta de
+        //  atras. Sube tal cual, con su tipo, para que la pantalla lo cuente
+        //  como lo que es —un limite— y no como una averia.
+        throw $e;
     } catch (Throwable $e) {
         $alt = $primero === 'openai' ? 'gemini' : 'openai';
         $alt_ok = ($alt === 'openai') ? openai_configurado() : (ia_transporte() === 'gemini_api');
-        if (!$alt_ok) throw $e;
+        if (!$alt_ok) { CuotaImg::liberarPorCtx($opts['cuota'] ?? null, 'falló ' . $primero . ' y no hay respaldo'); throw $e; }
         error_log("motor_imagen: {$primero} falló ({$e->getMessage()}); respaldo a {$alt}");
-        $r = $gen($alt); $r['motor'] = $alt; $r['razon'] = "Respaldo automático: {$primero} falló, se usó {$alt}."; return $r;
+        try {
+            //  EL RESPALDO NO COBRA OTRA UNIDAD. La segunda llamada lleva el
+            //  MISMO $opts['cuota'], asi que su llave idempotente choca con la
+            //  reserva ya abierta para esta imagen: se reusa el asiento y solo
+            //  se suma una llamada de proveedor. Una imagen del cliente, una
+            //  unidad, por muchos motores que haga falta probar.
+            $r = $gen($alt);
+        } catch (Throwable $e2) {
+            //  Fallaron los dos: se le devuelve la unidad al dueño ahora mismo,
+            //  sin esperar a que la barra el reloj.
+            CuotaImg::liberarPorCtx($opts['cuota'] ?? null, 'fallaron los dos motores');
+            throw $e2;
+        }
+        $r['motor'] = $alt; $r['razon'] = "Respaldo automático: {$primero} falló, se usó {$alt}."; return $r;
     }
 }
 

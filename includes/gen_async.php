@@ -87,7 +87,12 @@ function gen_procesar(PDO $pdo, int $id): void {
     // 2) GENERATING — gpt-image-1 DIRECTO (sin motor_imagen ni fallback a Gemini).
     $ti = microtime(true);
     try {
-        $img = openai_imagen($escena, ['aspect'=>'1:1']);
+        //  RUTA 8 — la muestra del gateway. Cuenta 1 como cualquier arte: es
+        //  una imagen que la IA pinta para un negocio concreto.
+        require_once __DIR__ . '/cuota_imagenes.php';
+        $img = openai_imagen($escena, ['aspect'=>'1:1',
+            'cuota' => CuotaCtx::de($pdo, $mid, 'muestra', 'gen_async',
+                       ['origen_tipo' => 'muestra', 'origen_id' => (int)$id, 'costo' => 0.17])]);
     } catch (Throwable $e) {
         $http = null; if (preg_match('/HTTP (\d{3})/', $e->getMessage(), $mm)) $http = (int)$mm[1];
         _gen_set($pdo, $id, ['estado'=>'failed', 'modelo_imagen'=>'gpt-image-1', 'http_status'=>$http,

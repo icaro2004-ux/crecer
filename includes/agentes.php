@@ -370,6 +370,18 @@ SYS;
  * Devuelve ['archivo'=>url, 'costo'].
  */
 function generar_logo(PDO $pdo, int $marca_id, array $opts = []): array {
+    //  EL LOGO OFICIAL MANDA. Si la marca ya eligio uno, Crecer USA ESE ARCHIVO
+    //  y no genera, reinterpreta ni reemplaza nada por su cuenta: la identidad
+    //  de un negocio no se cambia sola. Cambiarlo es una accion explicita del
+    //  dueño, y esa accion pasa $opts['reemplazar'] = true.
+    require_once __DIR__ . '/cuota_imagenes.php';
+    if (empty($opts['reemplazar'])) {
+        $of = logo_oficial($pdo, $marca_id);
+        if ($of !== null) {
+            return ['archivo' => $of, 'costo' => 0.0, 'modelo' => 'ninguno',
+                    'oficial' => true, 'razon' => 'Este negocio ya tiene su logo. Se usa ese.'];
+        }
+    }
     $m = leer_marca($pdo, $marca_id);
     $nombre = $m['nombre_negocio'];
     $desc = trim($opts['descripcion'] ?? '') ?: (string)($m['descripcion'] ?? '');
@@ -414,8 +426,14 @@ function generar_logo(PDO $pdo, int $marca_id, array $opts = []): array {
         return ['job' => 1, 'logo_id' => $lid, 'archivo' => ''];
     }
     $fname = "marca_{$marca_id}/logo_" . uniqid() . ".png";
+    //  RUTA 1. Exento de las 40 del mes, pero NO gratis: gasta de su cubo de
+    //  por vida (5 por marca). Y queda asentado — exento no es invisible.
     $r = ia_imagen($pdo, 'diseñador', 'Generar logo del negocio', $prompt,
-        $fname, ['marca_id' => $marca_id, 'modelo' => 'gemini-3-pro-image']);
+        $fname, ['marca_id' => $marca_id, 'modelo' => 'gemini-3-pro-image',
+                 'cuota' => CuotaCtx::de($pdo, $marca_id, 'logo', 'generar_logo', [
+                     'exencion' => 'logo', 'origen_tipo' => 'logo',
+                     'origen_id' => logo_intentos($pdo, $marca_id) + 1,
+                     'costo' => 0.17])]);
     $pdo->prepare("INSERT INTO crecer_logos (marca_id, archivo) VALUES (?, ?)")
         ->execute([$marca_id, $r['archivo']]);
     return $r;
@@ -983,8 +1001,14 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
 
     // Foto real (realce fiel) o respaldo → Gemini (Nano Banana Pro).
     $modelo = 'gemini-3-pro-image';
+    //  RUTA 2. Cuenta 1: es arte nuevo o un realce con IA de la foto del dueño.
+    //  Subir la foto cuesta 0 —no pasa por proveedor—; transformarla, 1.
+    require_once __DIR__ . '/cuota_imagenes.php';
     $r = ia_imagen($pdo, 'creador', 'Crear arte de post', $prompt, $fname, [
         'marca_id'  => $marca_id,
+        'cuota'     => CuotaCtx::de($pdo, $marca_id, $tiene_foto ? 'realce' : 'arte_post',
+                                    'crear_arte_post', ['origen_tipo' => 'contenido',
+                                    'origen_id' => (int)($opts['contenido_id'] ?? 0), 'costo' => 0.17]),
         'modelo'    => $modelo,
         'imagenes'  => $imagenes,
         'foto_real' => $tiene_foto,               // foto real → Gemini (fiel)
@@ -1022,7 +1046,13 @@ function generar_grafica_responses(PDO $pdo, int $marca_id, array $m, string $co
     $brief = img_resp_brief($m, $copy, $con_texto, $logo !== null, ($extra !== '' ? $extra : null), $estilo, $lente, $evitar);
     $t0 = microtime(true);
     try {
-        $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1'] + ($logo ? ['logo' => $logo] : []));
+        //  RUTA 3.
+        require_once __DIR__ . '/cuota_imagenes.php';
+        $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1']
+            + ['cuota' => CuotaCtx::de($pdo, $marca_id, 'arte_post', 'crear_arte_post_responses',
+                          ['origen_tipo' => 'contenido', 'origen_id' => (int)($opts['contenido_id'] ?? 0),
+                           'costo' => 0.17])]
+            + ($logo ? ['logo' => $logo] : []));
     } catch (Throwable $e) { error_log('generar_grafica_responses crear: ' . $e->getMessage()); return null; }
     $rid = (string)($bg['id'] ?? '');
     if ($rid === '') return null;

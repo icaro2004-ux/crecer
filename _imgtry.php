@@ -25,6 +25,16 @@ if (($usuario['rol'] ?? '') !== 'admin') {
 }
 
 /** Carga un experimento por id (o null). */
+//  EL LABORATORIO TAMBIEN SE ASIENTA. Es exento —el gasto de afinar el motor
+//  es nuestro, no del cliente— pero exento no es invisible: cada prueba deja su
+//  fila con su ruta y su motivo. Un gasto que no se ve no se puede auditar.
+function _lab_cuota(PDO $pdo, string $ruta, int $n): CuotaCtx {
+    require_once __DIR__ . '/includes/cuota_imagenes.php';
+    return CuotaCtx::de($pdo, 0, 'laboratorio', $ruta,
+        ['exencion' => 'laboratorio', 'origen_tipo' => 'banco',
+         'origen_id' => $n * 1000 + (int)(microtime(true) * 10) % 1000, 'costo' => 0.17]);
+}
+
 function lab_exp(PDO $pdo, int $id): ?array {
     try { $s = $pdo->prepare("SELECT * FROM crecer_lab_experimentos WHERE id=?"); $s->execute([$id]);
           $r = $s->fetch(PDO::FETCH_ASSOC); return $r ?: null; } catch (Throwable $e) { return null; }
@@ -80,7 +90,9 @@ if (isset($_GET['work'])) {
             if ($wmotor === 'responses') {
                 lab_log("work={$wid} llamando openai_responses_imagen…");
                 // MODO ChatGPT: el modelo se dirige solo (Responses API). El 'prompt' = el brief.
-                $r = openai_responses_imagen((string)$e['prompt'], ['aspect' => $wa]);
+                //  RUTA 12 — laboratorio. Exento y asentado.
+                $r = openai_responses_imagen((string)$e['prompt'], ['aspect' => $wa,
+                    'cuota' => _lab_cuota($pdo, 'imgtry_resp_lote', 12)]);
                 $seg = round(microtime(true) - $t0, 1);
                 $rel = 'pruebas/lab_' . substr(md5((string)microtime(true)), 0, 8) . '.png';
                 $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
@@ -97,7 +109,8 @@ if (isset($_GET['work'])) {
                 $wrend = trim((string)($_GET['r'] ?? ''));
                 $oimg = ['aspect' => $wa];
                 if ($wrend !== '') $oimg['modelo_openai'] = $wrend;
-                $r  = openai_imagen((string)$e['prompt'], $oimg);
+                //  RUTA 13
+                $r  = openai_imagen((string)$e['prompt'], $oimg + ['cuota' => _lab_cuota($pdo, 'imgtry_openai_lote', 13)]);
                 $seg = round(microtime(true) - $t0, 1);
                 $rel = 'pruebas/lab_' . substr(md5((string)microtime(true)), 0, 8) . '.png';
                 $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
@@ -321,7 +334,9 @@ if (isset($_GET['rtest'])) {
     $brief = "Crea una imagen publicitaria profesional de un frasco de miel puertorriqueña sobre una mesa rústica de madera, con luz cálida de mañana. Fotografía de producto de alta calidad.";
     try {
         $t0 = microtime(true);
-        $r  = openai_responses_imagen($brief, ['aspect' => '1:1']);
+        //  RUTA 14
+        $r  = openai_responses_imagen($brief, ['aspect' => '1:1',
+            'cuota' => _lab_cuota($pdo, 'imgtry_resp', 14)]);
         $seg = round(microtime(true) - $t0, 1);
         $rel = 'pruebas/rtest_' . substr(md5((string)microtime(true)), 0, 8) . '.png';
         $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
@@ -383,7 +398,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $t0 = microtime(true);
                 $_rend = trim((string)($_POST['renderer'] ?? ''));
-                $r  = openai_imagen($prompt, ['aspect' => $aspect] + ($_rend !== '' ? ['modelo_openai' => $_rend] : []));
+                //  RUTA 15
+        $r  = openai_imagen($prompt, ['aspect' => $aspect, 'cuota' => _lab_cuota($pdo, 'imgtry_openai', 15)]
+            + ($_rend !== '' ? ['modelo_openai' => $_rend] : []));
                 $seg = round(microtime(true) - $t0, 1);
                 $rel = 'pruebas/lab_' . substr(md5((string)microtime(true)), 0, 8) . '.png';
                 $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
@@ -403,7 +420,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $nombre = trim((string)($m['nombre_negocio'] ?? ''));
             $brief = lab_brief_natural($m, $copy_in);   // brief natural (como se lo pedirías a ChatGPT)
             // BACKGROUND: OpenAI corre el trabajo; nos devuelve un id al instante (sin 504).
-            $bg = openai_responses_crear_bg($brief, ['aspect' => $aspect]);
+            //  RUTA 16
+            $bg = openai_responses_crear_bg($brief, ['aspect' => $aspect,
+                'cuota' => _lab_cuota($pdo, 'imgtry_bg', 16)]);
             $ins = $pdo->prepare("INSERT INTO crecer_lab_experimentos
                 (marca_id,negocio,hipotesis,copy_txt,escena,prompt,modelo,estado) VALUES (?,?,?,?,?,?,?, 'queued')");
             $ins->execute([$marca_id, $nombre ?: null, $hipotesis ?: null, $copy_in, $brief, $brief, 'pending:' . $bg['id']]);
@@ -439,7 +458,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $metaC = ['modo'=>'responses', 'endpoint'=>'/v1/responses', 'tool'=>'image_generation',
                 'background_api'=>true, 'quality'=>'high', 'size'=>$aspect, 'background'=>'opaque', 'brief'=>$brief];
             $okC = true; $modeloC = null;
-            try { $bg = openai_responses_crear_bg($brief, ['aspect'=>$aspect]);
+            //  RUTA 17
+            try { $bg = openai_responses_crear_bg($brief, ['aspect'=>$aspect,
+                      'cuota' => _lab_cuota($pdo, 'imgtry_bg_ciego', 17)]);
                   $modeloC = 'pending:' . $bg['id']; $metaC['response_id'] = $bg['id']; $metaC['model_orquestador'] = $bg['modelo']; }
             catch (Throwable $ex) { $okC = false; $metaC['error'] = $ex->getMessage(); }
 

@@ -374,7 +374,12 @@ function img_resp_encolar_res(PDO $pdo, int $marca_id, int $post_id, string $cop
         } catch (Throwable $e) { error_log('encolar variedad: ' . $e->getMessage()); }
 
         $brief = img_resp_brief($m, $copy, $con_texto, $logo !== null, $extra, $estilo, $lente, $evitar);
-        $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1'] + ($logo ? ['logo' => $logo] : []));
+        //  RUTA 5 — el encolado central del arte de post.
+        require_once __DIR__ . '/cuota_imagenes.php';
+        $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1']
+            + ['cuota' => CuotaCtx::de($pdo, $marca_id, 'arte_post', 'img_resp_encolar_res',
+                          ['origen_tipo' => 'contenido', 'origen_id' => $post_id, 'costo' => 0.17])]
+            + ($logo ? ['logo' => $logo] : []));
         // img_job_at fecha el nacimiento del job y los contadores arrancan limpios:
         // un job nuevo no hereda el backoff del que se aparco.
         $nuevo = img_poll_columnas($pdo)
@@ -508,7 +513,15 @@ function img_gemini_fallback(PDO $pdo, int $marca_id, int $post_id, string $copy
         } catch (Throwable $e) {}
 
         $brief = img_resp_brief($m, $copy, null, !empty($imgs), null, 'realista', $lente, $evitar);
-        $r = gemini_imagen($brief, ['modelo' => 'gemini-3-pro-image', 'aspect' => '1:1'] + ($imgs ? ['imagenes' => $imgs] : []));
+        //  RUTA 7 — el respaldo. MISMO origen que la ruta 5, a proposito: su
+        //  llave idempotente choca con la reserva ya abierta para esta imagen y
+        //  se reusa. El dueño paga UNA unidad aunque hayan hecho falta dos
+        //  proveedores para entregarle un solo arte.
+        require_once __DIR__ . '/cuota_imagenes.php';
+        $r = gemini_imagen($brief, ['modelo' => 'gemini-3-pro-image', 'aspect' => '1:1',
+                'cuota' => CuotaCtx::de($pdo, $marca_id, 'arte_post', 'img_gemini_fallback',
+                           ['origen_tipo' => 'contenido', 'origen_id' => $post_id, 'costo' => 0.10])]
+            + ($imgs ? ['imagenes' => $imgs] : []));
         $bin = $r['data'] ?? '';
         if ($bin === '') return '';
         $rel = "marca_{$marca_id}/graficas/gem_{$post_id}_" . substr(md5((string)microtime(true)), 0, 6) . '.png';
@@ -736,7 +749,13 @@ function img_poll_incidente(PDO $pdo, int $marca_id, int $post_id, string $rid,
 /** Encola un LOGO (prompt ya armado) por Responses. Inserta un crecer_logos pendiente. Devuelve su id o 0. */
 function logo_resp_encolar(PDO $pdo, int $marca_id, string $prompt): int {
     try {
-        $bg = openai_responses_crear_bg($prompt, ['aspect' => '1:1']);
+        //  RUTA 6 — logo_resp_encolar(). Mismo trato que la ruta 1: exento de
+        //  las 40, con cargo al cubo de por vida.
+        require_once __DIR__ . '/cuota_imagenes.php';
+        $bg = openai_responses_crear_bg($prompt, ['aspect' => '1:1',
+            'cuota' => CuotaCtx::de($pdo, $marca_id, 'logo', 'logo_resp_encolar', [
+                'exencion' => 'logo', 'origen_tipo' => 'logo',
+                'origen_id' => logo_intentos($pdo, $marca_id) + 1, 'costo' => 0.17])]);
         $pdo->prepare("INSERT INTO crecer_logos (marca_id, archivo, job, estado) VALUES (?, NULL, ?, 'queued')")
             ->execute([$marca_id, $bg['id']]);
         return (int)$pdo->lastInsertId();
