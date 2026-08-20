@@ -87,11 +87,11 @@ echo "\n  — el backoff distingue quién sondea —\n";
 $esperado = [1, 2, 4, 8, 16, 32, 60, 60];
 foreach ($esperado as $i => $min) {
     $d = img_poll_decidir(['intentos' => $i, 'job_at' => $AHORA], 'queued', null, $AHORA, false);
-    $mins = (strtotime($d['next_poll_at']) - strtotime($AHORA)) / 60;
+    $mins = $d['espera_seg'] / 60;
     ok("barrido, intento " . ($i + 1) . ": {$min} min", (int)$mins === $min, "dio {$mins}");
 }
 $d = img_poll_decidir(['intentos' => 9, 'job_at' => $AHORA], 'queued', null, $AHORA, true);
-$seg = strtotime($d['next_poll_at']) - strtotime($AHORA);
+$seg = $d['espera_seg'];
 ok('worker dedicado conserva su cadencia de 3s', $seg === 3, "dio {$seg}s");
 
 echo "\n  — el error se guarda como CLASE, no como texto crudo —\n";

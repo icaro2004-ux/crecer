@@ -961,6 +961,32 @@ try {
                  'si falla, el backoff y la marca enc: quedan inertes');
         } catch (Throwable $e) { echo "  (error: " . $e->getMessage() . ")\n"; $ok_todo = false; }
 
+        // 2b · LOS DOS RELOJES
+        //      Aquí se rompió el backoff: PHP escribía el vencimiento en la zona
+        //      de APP_TZ y lo comparaba el NOW() de MySQL. Con el servidor de
+        //      base en UTC, cada vencimiento nacía cuatro horas vencido y la
+        //      pieza se volvía a sondear en cada recarga. Ya no se calcula
+        //      ninguna fecha en PHP, pero el desfase sigue siendo un dato que
+        //      conviene ver: cualquier otra comparación de fechas lo sufre.
+        echo "\n  2b) Relojes de PHP y MySQL\n";
+        try {
+            $php_now = date('Y-m-d H:i:s');
+            $q = $pdo->prepare("SELECT NOW() AS ahora, TIMESTAMPDIFF(SECOND, ?, NOW()) AS d");
+            $q->execute([$php_now]);
+            $r = $q->fetch(PDO::FETCH_ASSOC);
+            $dif = (int)$r['d'];
+            printf("    PHP  : %s  (%s)\n", $php_now, APP_TZ);
+            printf("    MySQL: %s\n", $r['ahora']);
+            printf("    desfase: %+d s (%+.1f h)\n", $dif, $dif / 3600);
+            if (abs($dif) > 60) {
+                echo "    OJO: van en zonas distintas. El sondeo ya es inmune -las fechas\n";
+                echo "         las pone MySQL-, pero cualquier OTRA comparacion entre una\n";
+                echo "         fecha escrita por PHP y NOW() esta corrida por ese desfase.\n";
+            } else {
+                echo "    (van juntos)\n";
+            }
+        } catch (Throwable $e) { echo "  (error: " . $e->getMessage() . ")\n"; }
+
         // 3 · LA AMPLIFICACIÓN, QUE ES EL DEFECTO ORIGINAL
         //     852 filas eran 4 trabajos preguntados 113 veces. Se mide filas
         //     por trabajo distinto: sano es ~1, el defecto daba 113.

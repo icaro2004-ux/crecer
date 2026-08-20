@@ -81,7 +81,7 @@ function img_poll_clase_error(?string $msg): string {
  * @param string  $ahora  'Y-m-d H:i:s'
  * @param bool    $dedicado true = worker con el dueno esperando (cadencia corta)
  * @return array ['accion'=>'guardar'|'fallback'|'esperar'|'aparcar', 'intentos'=>int,
- *                'next_poll_at'=>?string, 'incidente'=>bool, 'clase'=>?string]
+ *                'espera_seg'=>?int, 'incidente'=>bool, 'clase'=>?string]
  *
  * 'incidente' = UNA fila en crecer_ia_log, y solo en una transicion.
  */
@@ -92,14 +92,14 @@ function img_poll_decidir(array $j, ?string $status, ?string $err, string $ahora
 
     // Llego la imagen.
     if ($status === 'completed') {
-        return ['accion'=>'guardar', 'intentos'=>$intentos, 'next_poll_at'=>null,
+        return ['accion'=>'guardar', 'intentos'=>$intentos, 'espera_seg'=>null,
                 'incidente'=>false, 'clase'=>null];
     }
 
     // El PROVEEDOR confirma que ese trabajo no va a salir. Unico caso que
     // habilita el respaldo automatico, porque es el unico donde consta.
     if (in_array((string)$status, ['failed', 'cancelled', 'incomplete'], true)) {
-        return ['accion'=>'fallback', 'intentos'=>$intentos, 'next_poll_at'=>null,
+        return ['accion'=>'fallback', 'intentos'=>$intentos, 'espera_seg'=>null,
                 'incidente'=>true, 'clase'=>'proveedor_' . $status];
     }
 
@@ -108,19 +108,25 @@ function img_poll_decidir(array $j, ?string $status, ?string $err, string $ahora
     // de 3s (el dueno esta mirando); el barrido de pantalla sube 1-2-4...60 min.
     // Sin esta distincion el backoff mataria el camino rapido: un dano mayor que
     // la amplificacion que vino a arreglar.
-    $prox = $dedicado
-        ? date('Y-m-d H:i:s', $t + 3)
-        : date('Y-m-d H:i:s', $t + min(60, (int)pow(2, max(0, $intentos - 1))) * 60);
+    //
+    // SE DEVUELVE UNA ESPERA EN SEGUNDOS, NO UNA FECHA. Antes se devolvia un
+    // 'Y-m-d H:i:s' hecho con date(), o sea en la zona de PHP (APP_TZ), y quien
+    // lo comparaba luego era el NOW() de MySQL. En un servidor donde MySQL corre
+    // en UTC y APP_TZ es America/Puerto_Rico, cada vencimiento nacia CUATRO
+    // HORAS en el pasado: la puerta del backoff lo daba por vencido siempre y la
+    // pieza se volvia a sondear en cada recarga. Con segundos, la fecha la pone
+    // MySQL y las dos relojes son el mismo.
+    $espera = $dedicado ? 3 : min(60, (int)pow(2, max(0, $intentos - 1))) * 60;
 
     if ($status === null) {
         // NO SE PUDO CONSULTAR. Nunca terminal, nunca respaldo. Se aparca por
         // TIEMPO, no por numero de intentos: asi la decision no depende de la
         // cadencia con que se pregunte.
         if ($edad_h >= (float)IMG_POLL_MAX_HORAS) {
-            return ['accion'=>'aparcar', 'intentos'=>$intentos, 'next_poll_at'=>null,
+            return ['accion'=>'aparcar', 'intentos'=>$intentos, 'espera_seg'=>null,
                     'incidente'=>true, 'clase'=>img_poll_clase_error($err)];
         }
-        return ['accion'=>'esperar', 'intentos'=>$intentos, 'next_poll_at'=>$prox,
+        return ['accion'=>'esperar', 'intentos'=>$intentos, 'espera_seg'=>$espera,
                 'incidente'=>false, 'clase'=>img_poll_clase_error($err)];
     }
 
@@ -128,10 +134,10 @@ function img_poll_decidir(array $j, ?string $status, ?string $err, string $ahora
     // no se lanza un segundo proveedor ni se le pone fecha de muerte a las 24h.
     // Solo el tope duro lo aparca, y aparcar tampoco autoriza respaldo.
     if ($edad_h >= (float)IMG_POLL_VIVO_DIAS * 24) {
-        return ['accion'=>'aparcar', 'intentos'=>$intentos, 'next_poll_at'=>null,
+        return ['accion'=>'aparcar', 'intentos'=>$intentos, 'espera_seg'=>null,
                 'incidente'=>true, 'clase'=>'vivo_tope_duro'];
     }
-    return ['accion'=>'esperar', 'intentos'=>$intentos, 'next_poll_at'=>$prox,
+    return ['accion'=>'esperar', 'intentos'=>$intentos, 'espera_seg'=>$espera,
             'incidente'=>false, 'clase'=>null];
 }
 
@@ -594,9 +600,13 @@ function img_sweep_pendientes(PDO $pdo, int $marca_id, bool $solo_recoger = fals
  */
 function img_resp_completar(PDO $pdo, int $marca_id, int $post_id, bool $dedicado = false): array {
     $cols = img_poll_columnas($pdo);
+    // NOW() viene de MySQL, no de PHP. img_job_at lo escribio MySQL, asi que la
+    // edad del job hay que medirla contra SU reloj: con APP_TZ y el servidor de
+    // base en zonas distintas, PHP veia los trabajos cuatro horas mas jovenes de
+    // lo que son y el tope de las 24h se corria solo.
     $sel  = $cols
-        ? "SELECT img_job, img_estado, grafica_path, img_intentos, img_job_at, img_next_poll_at FROM crecer_contenido WHERE id=? AND marca_id=?"
-        : "SELECT img_job, img_estado, grafica_path FROM crecer_contenido WHERE id=? AND marca_id=?";
+        ? "SELECT img_job, img_estado, grafica_path, img_intentos, img_job_at, img_next_poll_at, NOW() AS ahora_sql FROM crecer_contenido WHERE id=? AND marca_id=?"
+        : "SELECT img_job, img_estado, grafica_path, NOW() AS ahora_sql FROM crecer_contenido WHERE id=? AND marca_id=?";
     $q = $pdo->prepare($sel);
     $q->execute([$post_id, $marca_id]);
     $row = $q->fetch(PDO::FETCH_ASSOC);
@@ -611,7 +621,7 @@ function img_resp_completar(PDO $pdo, int $marca_id, int $post_id, bool $dedicad
         return ['estado' => 'queued', 'img' => null, 'diferido' => true];
     }
 
-    $ahora  = date('Y-m-d H:i:s');
+    $ahora  = (string)($row['ahora_sql'] ?? date('Y-m-d H:i:s'));
     $status = null; $err = null; $st = [];
     try {
         $st = openai_responses_estado($rid);
@@ -692,10 +702,16 @@ function img_resp_completar(PDO $pdo, int $marca_id, int $post_id, bool $dedicad
     // ── ESPERAR: se anota el backoff y NO se escribe en el log. El motivo vive
     //    en la pieza (img_error_clase), que es donde sirve para ayudar.
     if ($cols) {
+        // La fecha la pone MySQL, igual que en el lease y en aparcar. Escribirla
+        // desde PHP era lo que dejaba el vencimiento en el pasado y hacia que
+        // cada recarga volviera a sondear la misma pieza.
+        $seg = max(1, (int)($d['espera_seg'] ?? 60));
         $pdo->prepare("UPDATE crecer_contenido
-                          SET img_intentos=?, img_next_poll_at=?, img_error_clase=?
+                          SET img_intentos=?,
+                              img_next_poll_at=DATE_ADD(NOW(), INTERVAL {$seg} SECOND),
+                              img_error_clase=?
                         WHERE id=? AND marca_id=? AND img_job=?")
-            ->execute([$d['intentos'], $d['next_poll_at'], $d['clase'], $post_id, $marca_id, $rid]);
+            ->execute([$d['intentos'], $d['clase'], $post_id, $marca_id, $rid]);
     }
     return ['estado' => 'queued', 'img' => null];
 }

@@ -348,6 +348,40 @@ try {
 
     $limpiarLog();
 
+    // ══════════════════════════════════════════════════════════
+    //  EL BACKOFF CONTRA DOS RELOJES DESFASADOS
+    //      Medido en produccion: la pieza #644 subio de 2 a 14
+    //      intentos con diez recargas y su vencimiento quedaba 182
+    //      minutos EN EL PASADO. La causa: el vencimiento lo
+    //      calculaba PHP (zona APP_TZ) y lo comparaba MySQL (UTC en
+    //      Hostinger), asi que nacia cuatro horas vencido.
+    //
+    //      La pieza #640 no se movia porque estaba aparcada, y
+    //      aparcar SI ponia la fecha con DATE_ADD(NOW()) — del lado
+    //      de MySQL. Ese contraste fue lo que delato el defecto.
+    // ══════════════════════════════════════════════════════════
+    echo "\n  — el backoff aguanta que PHP y MySQL vayan en zonas distintas —\n";
+    $jobTz = 'resp_tz_' . bin2hex(random_bytes(4));
+    $idTz  = $sembrar($jobTz, '10 MINUTE', 2);
+    $pdo->prepare("UPDATE crecer_contenido SET img_next_poll_at = NOW() - INTERVAL 3 HOUR WHERE id=?")
+        ->execute([$idTz]);
+
+    $salTz = [];
+    exec(escapeshellarg($PHP) . ' ' . escapeshellarg(__DIR__ . DIRECTORY_SEPARATOR . '_sweep_tz_runner.php')
+         . " {$mid} {$idTz} 10 2>&1", $salTz);
+    $tz = [];
+    foreach ($salTz as $l) if (strpos($l, '=') !== false) { [$k, $v] = explode('=', trim($l), 2); $tz[$k] = $v; }
+
+    ok('el escenario reprodujo el desfase de relojes',
+       isset($tz['DESFASE_SEG']) && abs((int)$tz['DESFASE_SEG']) > 3600,
+       'desfase=' . ($tz['DESFASE_SEG'] ?? 'n/d') . 's — sin desfase esta prueba no prueba nada');
+    ok('diez barridos suben img_intentos UNA vez como mucho',
+       isset($tz['INTENTOS_DESPUES']) && ((int)$tz['INTENTOS_DESPUES'] - (int)$tz['INTENTOS_ANTES']) <= 1,
+       'de ' . ($tz['INTENTOS_ANTES'] ?? '?') . ' a ' . ($tz['INTENTOS_DESPUES'] ?? '?')
+       . ' — si sube diez, cada recarga volvio a sondear');
+    ok('el vencimiento queda en el FUTURO para MySQL', (int)($tz['FUTURO'] ?? 0) === 1,
+       'faltan ' . ($tz['FALTAN_MIN'] ?? '?') . ' min — negativo significa que nacio vencido');
+
 } finally {
     if ($creadas) {
         $pdo->prepare("DELETE FROM crecer_contenido WHERE id IN ("
