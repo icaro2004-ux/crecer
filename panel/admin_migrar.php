@@ -17,6 +17,7 @@
 // ============================================================
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/auth.php';
+require __DIR__ . '/../includes/migrador.php';
 requiere_login();
 $usuario = usuario_actual($pdo);
 if (($usuario['rol'] ?? '') !== 'admin') { http_response_code(403); exit('Acceso solo para administradores.'); }
@@ -40,6 +41,41 @@ $DIR = dirname(__DIR__) . '/migrations/';
 $PRESENTES = array_values(array_filter($MIGRACIONES, fn($m) => is_file($DIR . $m)));
 $AUSENTES  = array_values(array_filter($MIGRACIONES, fn($m) => !is_file($DIR . $m)));
 $ARCHIVO   = $DIR . ($PRESENTES[0] ?? '');   // solo para el aviso de «¿hiciste redeploy?»
+
+//  QUE CREA CADA UNA. Sin esto la pantalla solo podia decir si el ARCHIVO habia
+//  llegado, y lo etiquetaba «está» — que se lee como «ya aplicada». Con la
+//  comprobacion final diciendo que la columna falta, la pantalla se contradecia
+//  a si misma. Ahora dice lo que de verdad importa: si ya esta EN LA BASE.
+$CREA = [
+    '2026-08-20_crecer_plan_presentado.sql' => [['crecer_meta_plan', 'presentado_at']],
+    '2026-08-21_crecer_meta_autorun.sql'    => [['crecer_meta_autorun', null]],
+    '2026-08-21_crecer_img_cuota.sql'       => [['crecer_img_cuota_cubo', null],
+                                                ['crecer_img_cuota_asiento', null]],
+];
+$hay_pieza = function (string $tabla, ?string $col) use ($pdo): bool {
+    try {
+        if ($col === null) {
+            $q = $pdo->prepare("SELECT COUNT(*) FROM information_schema.TABLES
+                                  WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?");
+            $q->execute([$tabla]);
+        } else {
+            $q = $pdo->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS
+                                  WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?");
+            $q->execute([$tabla, $col]);
+        }
+        return (int)$q->fetchColumn() > 0;
+    } catch (Throwable $e) { return false; }
+};
+/** aplicada | parcial | pendiente — mirando la BASE, no el disco. */
+$estado_mig = function (string $mig) use ($CREA, $hay_pieza): string {
+    $piezas = $CREA[$mig] ?? [];
+    if (!$piezas) return 'pendiente';
+    $si = 0;
+    foreach ($piezas as [$t, $c]) if ($hay_pieza($t, $c)) $si++;
+    if ($si === 0)               return 'pendiente';
+    if ($si === count($piezas))  return 'aplicada';
+    return 'parcial';
+};
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 
 // Errores que significan "esto ya estaba" — no son fallos.
@@ -49,9 +85,13 @@ $correr = ($_SERVER['REQUEST_METHOD'] === 'POST' && csrf_ok());
 $res = []; $n_ok = 0; $n_ya = 0; $n_err = 0;
 
 if ($correr) foreach ($PRESENTES as $__mig) {
-    $sql = (string)file_get_contents($DIR . $__mig);
-    $sql = preg_replace('/^\s*--.*$/m', '', $sql);          // fuera los comentarios
-    foreach (array_filter(array_map('trim', explode(';', $sql))) as $stmt) {
+    //  EL SEPARADOR SABE LEER (includes/migrador.php). Antes se partia por `;`
+    //  a secas: el 21 de agosto un COMMENT que llevaba un punto y coma dentro
+    //  del texto partio un ALTER por la mitad en produccion, y la mitad de atras
+    //  entro como sentencia suelta. Un `;` dentro de comillas o de un comentario
+    //  es TEXTO, y quien parte tiene que saberlo — pedirle a quien escriba SQL
+    //  que lo recuerde es pedirle que recuerde una regla que no existe.
+    foreach (migracion_sentencias((string)file_get_contents($DIR . $__mig)) as $stmt) {
         //  El nombre del archivo va en la etiqueta: con cinco migraciones
         //  seguidas, un error sin decir DE CUAL es no sirve de nada.
         $etiqueta = $__mig . ' · ' . preg_replace('/\s+/', ' ', mb_substr($stmt, 0, 60));
@@ -148,14 +188,24 @@ try { $base = (string)$pdo->query('SELECT DATABASE()')->fetchColumn(); } catch (
  <div class="base">Base de datos: <b><?= $h($base ?: '(desconocida)') ?></b></div>
 
  <div class="caja">
-   <p style="margin:0 0 10px;font-size:13.5px;font-weight:700">Migraciones que se van a correr, en este orden:</p>
-   <?php foreach ($PRESENTES as $m): ?>
-     <div class="fila"><span class="tag ok">está</span><code><?= $h($m) ?></code></div>
+   <p style="margin:0 0 10px;font-size:13.5px;font-weight:700">Migraciones, en el orden en que se corren:</p>
+   <?php foreach ($PRESENTES as $m): $em = $estado_mig($m); ?>
+     <div class="fila">
+       <span class="tag <?= $em === 'aplicada' ? 'ya' : ($em === 'parcial' ? 'err' : 'ok') ?>">
+         <?= $em === 'aplicada' ? 'ya está' : ($em === 'parcial' ? 'a medias' : 'pendiente') ?></span>
+       <code><?= $h($m) ?></code>
+       <?php if ($em === 'parcial'): ?>
+         <span class="err-msg">entró solo una parte · vuelve a correrla</span>
+       <?php endif; ?>
+     </div>
    <?php endforeach; ?>
    <?php foreach ($AUSENTES as $m): ?>
-     <div class="fila"><span class="tag err">falta</span><code><?= $h($m) ?></code>
-       <span class="err-msg">no está en el servidor · ¿hiciste el Redeploy?</span></div>
+     <div class="fila"><span class="tag err">no llegó</span><code><?= $h($m) ?></code>
+       <span class="err-msg">el archivo no está en el servidor · ¿hiciste el Redeploy?</span></div>
    <?php endforeach; ?>
+   <p style="margin:10px 0 0;font-size:12px;color:#6b6560;line-height:1.5">El estado sale de la
+     BASE DE DATOS, no de si el archivo llegó. «ya está» significa que sus tablas y columnas
+     existen — correrla otra vez no hace daño.</p>
  </div>
 
  <?php if (!$PRESENTES): ?>
