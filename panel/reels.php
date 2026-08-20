@@ -313,7 +313,7 @@ require __DIR__ . '/_shell.php';
 <?php /* Regreso predecible: si se llegó desde Tu Meta, hay una salida clara de
          vuelta. Sin esto la acción del estado dominante era un viaje de ida. */ ?>
 <?php if (MetaRetorno::vieneDeMeta($_GET)): ?>
-<a href="<?= htmlspecialchars(MetaRetorno::url((int)$marca_id, 'cancelado'), ENT_QUOTES) ?>"
+<a href="<?= htmlspecialchars(MetaRetorno::url((int)$marca_id, 'pendiente'), ENT_QUOTES) ?>"
    style="display:inline-flex;align-items:center;gap:7px;min-height:44px;line-height:44px;
           font-size:14px;font-weight:700;color:var(--muted);text-decoration:none">&larr; Volver a tu meta</a>
 <?php endif; ?>
@@ -636,7 +636,7 @@ svg.ic{width:1.05em;height:1.05em;flex-shrink:0;vertical-align:-2px}
           <textarea class="copyta" id="copytext" readonly></textarea>
           <button class="btn btn-ghost" id="ccopy" style="width:100%">Copiar texto</button>
         </div>
-        <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:10px">
+        <div class="row" id="rdoneNav">
           <a class="btn btn-ghost" id="rdl" download style="text-decoration:none;text-align:center;flex:1">Descargar</a>
           <button class="btn btn-ghost" id="redit" style="flex:1">Ajustar</button>
           <button class="btn btn-ghost" id="ragain" style="flex:1">Hacer otro</button>
@@ -881,6 +881,10 @@ async function poll(rid){
   }catch(e){ setTimeout(()=>poll(rid), 3500); }
 }
 
+// La vuelta la calcula el servidor: el navegador no arma URLs de Crecer.
+var META_VUELTA_MATERIAL = <?= MetaRetorno::vieneDeMeta($_GET)
+      ? json_encode(MetaRetorno::url((int)$marca_id, 'material'), JSON_UNESCAPED_SLASHES)
+      : 'null' ?>;
 function showDone(j){
   go('done');
   const v=$('#rvid'); v.src=j.video_url||''; if(j.poster) v.poster=j.poster;
@@ -896,6 +900,26 @@ function showDone(j){
   $('#rsaved').style.display = j.guardado ? 'inline-block' : 'none';
   if(j.copy){ $('#copybox').style.display='block'; $('#copytext').value=j.copy; }
   else{ $('#copybox').style.display='block'; $('#copytext').value=''; $('#copytext').placeholder='El corillo está escribiendo el texto…'; setTimeout(()=>refreshCopy(), 3000); }
+
+  // ── LA VUELTA, AHORA QUE SÍ HAY ALGO HECHO ────────────────────────────
+  //  Si el dueño llegó porque Tu Meta le pidió material, al quedar el reel se
+  //  terminó lo que vino a hacer. Antes esta pantalla solo enseñaba el
+  //  resultado: el único regreso era el enlace de arriba, que dice «sigue
+  //  pendiente» — falso cuando el video ya está.
+  //  NO se redirige solo a propósito: el dueño acaba de hacer un video y lo
+  //  primero que quiere es verlo. Se le pone el regreso como acción principal,
+  //  con el acuse correcto.
+  if (META_VUELTA_MATERIAL) {
+    var nav = document.getElementById('rdoneNav');
+    if (nav && !document.getElementById('rVolverMeta')) {
+      var a = document.createElement('a');
+      a.id = 'rVolverMeta';
+      a.className = 'btn btn-primary';
+      a.href = META_VUELTA_MATERIAL;
+      a.textContent = 'Volver a tu meta';
+      nav.insertBefore(a, nav.firstChild);
+    }
+  }
 }
 async function refreshCopy(){
   if(!curReel) return;

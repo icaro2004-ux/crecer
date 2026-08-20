@@ -115,9 +115,9 @@ ok('el regreso vive en enviarAccion, que es por donde pasan los cuatro caminos',
 ok('y solo se arma si de verdad se vino de Tu Meta',
    strpos($ap, 'MetaRetorno::vieneDeMeta($_GET)') !== false);
 ok('la vuelta por completar dice «aprobado»', strpos($ap, "'aprobado'") !== false);
-ok('la salida manual dice «cancelado», que no es lo mismo',
-   strpos($ap, "'cancelado'") !== false,
-   'confirmar algo que el dueño no hizo es peor que no confirmar nada');
+ok('la salida manual dice «pendiente», que no afirma nada',
+   strpos($ap, "'pendiente'") !== false,
+   '«no cambie nada» era falso si el dueño edito algo antes de irse');
 
 // ══════════════════════════════════════════════════════════════
 //  5 · TU META PINTA LA CONFIRMACION, Y SOLO DESDE EL CONTRATO

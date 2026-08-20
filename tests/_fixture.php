@@ -38,20 +38,24 @@ final class Fixture
      * CURDATE() de MySQL — nunca a date() de PHP, que en este proyecto va en
      * otra zona horaria (ver el hotfix de sondeo del 19 de agosto).
      *
+     * @param string $rol 'admin' para las pruebas que RENDERIZAN pantallas del
+     *        panel: el candado de suscripcion las manda a la venta y no se
+     *        estaria probando el recorrido sino el paywall.
      * @param bool $con_meta false = solo el negocio, sin meta ni plan. Lo piden
      *        las pruebas que siembran SUS propias metas y necesitan una marca
      *        limpia para afirmar «sin meta, el lector devuelve null».
      *
      * @return array{usuario_id:int,marca_id:int,meta_id:int,plan_id:int,tacticas:int[],piezas:int[]}
      */
-    public static function crear(PDO $pdo, string $etiqueta = 'base', bool $con_meta = true): array
+    public static function crear(PDO $pdo, string $etiqueta = 'base', bool $con_meta = true,
+                                 string $rol = 'proveedor'): array
     {
         $sufijo = $etiqueta . '-' . bin2hex(random_bytes(4));   // unico por corrida
         $email  = 'fixture.' . $sufijo . '@prueba.local';
 
         $pdo->prepare("INSERT INTO usuarios (nombre,email,password,rol,verificado,activo)
-                       VALUES (?,?,?, 'proveedor',1,1)")
-            ->execute([self::SELLO . ' Dueña', $email, password_hash('fixture', PASSWORD_DEFAULT)]);
+                       VALUES (?,?,?,?,1,1)")
+            ->execute([self::SELLO . ' Dueña', $email, password_hash('fixture', PASSWORD_DEFAULT), $rol]);
         $uid = (int)$pdo->lastInsertId();
 
         $pdo->prepare("INSERT INTO crecer_marca (usuario_id,nombre_negocio,descripcion)

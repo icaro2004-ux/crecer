@@ -689,7 +689,7 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
     <p class="cr-sub" id="wzFinP"></p>
     <div class="wz-nav fin">
       <?php if ($jugada_id): ?>
-        <a class="wz-go" href="<?= htmlspecialchars(MetaRetorno::url((int)$marca_id, 'aprobado'), ENT_QUOTES) ?>">Volver a tu meta <?= ico('send') ?></a>
+        <a class="wz-go" href="<?= htmlspecialchars(MetaRetorno::url((int)$marca_id, 'programado'), ENT_QUOTES) ?>">Volver a tu meta <?= ico('send') ?></a>
       <?php else: ?>
         <a class="wz-go" href="<?= $BASE ?>/aprobar2.php?marca=<?= $marca_id ?>&tab=programados">Ver tus posts <?= ico('send') ?></a>
       <?php endif; ?>
@@ -886,6 +886,14 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
     });
   }
 
+  // La vuelta la calcula el servidor, una por RESULTADO: programar y publicar
+  // no son lo mismo y no pueden confirmar lo mismo.
+  var META_VUELTA = <?= (MetaRetorno::vieneDeMeta($_GET) || $jugada_id)
+        ? json_encode(['programado' => MetaRetorno::url((int)$marca_id, 'programado'),
+                       'publicado'  => MetaRetorno::url((int)$marca_id, 'publicado')],
+                      JSON_UNESCAPED_SLASHES)
+        : 'null' ?>;
+
   // ── DESPUÉS DE PUBLICAR, LA VERDAD: primero "en camino", y el poll (~90s)
   //    lo convierte en "¡Publicado!" con el link real, o en el aviso honesto
   //    de que quedó guardado para reintentar. Nada de botarte a inicio mudo. ──
@@ -903,10 +911,15 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
         var e=(d&&d.post_estado)||'';
         if(e==='publicado'){
           clearInterval(t);
+          // Si vino de Tu Meta, la salida principal es volver allá — y el acuse
+          // dice PUBLICADO, no «aprobado»: este camino no aprobó nada, publicó.
+          var salida = META_VUELTA
+            ? '<button type="button" class="cr-fbgo" onclick="location.href=\''+META_VUELTA.publicado+'\'">Volver a tu meta</button>'
+            : '<button type="button" class="cr-fbgo" onclick="location.href=\''+BASE+'/index.php?marca='+MARCA+'\'">Ir al inicio</button>';
           cardOv('<h3>¡Publicado!</h3><p>Tu carrusel ya está en la calle.</p>'
             +'<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px">'
             +((d.permalink)?'<a class="cr-fbgo" style="text-decoration:none" href="'+d.permalink+'" target="_blank" rel="noopener">Verlo en la red ↗</a>':'')
-            +'<button type="button" class="cr-fbgo" onclick="location.href=\''+BASE+'/index.php?marca='+MARCA+'\'">Ir al inicio</button></div>');
+            +salida+'</div>');
         } else if(e==='fallido'){
           clearInterval(t);
           cardOv('<h3>No salió esta vez</h3><p>Tranquilo: tu carrusel quedó <b>guardado</b> — no se perdió. Reintenta cuando quieras.</p>'

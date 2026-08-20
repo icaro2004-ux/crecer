@@ -38,10 +38,15 @@ final class MetaRetorno
      */
     private const HECHOS = [
         'aprobado'   => ['Aprobado.',            'Queda en cola y sale en su fecha.'],
-        'material'   => ['Recibí tu material.',  'Lo monto y te aviso cuando esté listo para tu OK.'],
+        'material'   => ['Recibí tu material.',  'Ya tienes tu video listo.'],
         'publicado'  => ['Publicado.',           'Ahora toca esperar los números.'],
         'programado' => ['Quedó programado.',    'Sale solo en la fecha que escogiste.'],
-        'cancelado'  => ['No cambié nada.',      'Sigue pendiente cuando quieras retomarlo.'],
+        // LA SALIDA MANUAL NO PUEDE AFIRMAR NADA. Antes decía «No cambié nada»,
+        // y eso es mentira en cuanto el dueño edita un texto o sube una foto y
+        // luego se va por el enlace de arriba: cambió cosas, solo que no
+        // termino. Lo unico que consta es que volvio y que aquello sigue
+        // pendiente — y eso es lo que se dice.
+        'pendiente'  => ['Volviste a tu meta.',  'Esta acción sigue pendiente.'],
     ];
 
     /** ¿Se llegó a esta pantalla desde Tu Meta? */
