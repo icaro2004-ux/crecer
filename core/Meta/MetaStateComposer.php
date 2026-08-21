@@ -71,10 +71,11 @@ class MetaStateComposer
         if (!empty($s['meta'])) return null;
         return new MetaState(
             MetaState::A_SIN_META,
-            'Vamos a ponerle un número a esto',
-            'Escoge qué quieres lograr este mes y yo armo el camino.',
-            ['etiqueta' => 'Escoger mi meta', 'destino' => self::url($s, 'meta.php'),
-             'consecuencia' => 'Con eso preparo tu plan.', 'tipo' => 'decision'],
+            'Elige qué quieres lograr y cuánto',
+            'Escoges el objetivo y la cantidad, y te armo el camino para llegar.',
+            ['etiqueta' => 'Crear mi meta', 'destino' => self::url($s, 'meta.php'),
+             'consecuencia' => 'Son dos minutos. Puedes cambiarla cuando quieras.',
+             'tipo' => 'decision'],
             [], self::camino($s), 'sin_senal', 'sin_meta_activa');
     }
 
@@ -90,8 +91,12 @@ class MetaStateComposer
             MetaState::M_CERRADA,
             $estado_meta === 'lograda' ? 'Meta lograda' : 'Esta meta se cerró',
             'Mira lo que dejó y ponemos la próxima.',
-            ['etiqueta' => 'Preparar la próxima meta', 'destino' => self::url($s, 'meta.php'),
-             'consecuencia' => 'Empezamos un camino nuevo.', 'tipo' => 'decision'],
+            ['etiqueta' => 'Poner la próxima meta', 'destino' => self::url($s, 'meta.php'),
+             //  Lo que frena a la gente no es empezar: es creer que empezar
+             //  borra lo hecho. Se dice que no, y donde queda.
+             'consecuencia' => 'Nada se pierde: lo publicado se queda en Tus Posts, '
+                             . 'y arranco el mes nuevo con lo aprendido.',
+             'tipo' => 'decision'],
             ['meta_id' => (int)($s['meta']['id'] ?? 0)],
             self::camino($s), self::cobertura($s), $razon);
     }
@@ -245,7 +250,7 @@ class MetaStateComposer
                 $es_video ? 'Para seguir, necesito tu video' : 'Para seguir, necesito tu material',
                 $es_video
                     ? 'Un clip corto con el celular basta. Ya te dejé escrito qué grabar.'
-                    : 'Falta el material que solo tú puedes dar.',
+                    : 'Así mostramos tu producto real. La del celular sirve.',
                 ['etiqueta' => $es_video ? 'Grabar ahora' : 'Subirlo',
                  'destino' => $destino,
                  'consecuencia' => 'Al subirlo lo monto y queda listo para tu OK.',
@@ -379,8 +384,10 @@ class MetaStateComposer
 
         return new MetaState(
             MetaState::J_PROGRAMADO,
-            'Nada pendiente de ti',
-            $futuras === 1 ? 'Queda 1 pieza programada.' : 'Quedan ' . $futuras . ' piezas programadas.',
+            'Tranqui, no tienes nada pendiente',
+            $futuras === 1
+                ? 'Tengo 1 pieza lista y programada. Sigo yo.'
+                : 'Tengo ' . $futuras . ' piezas listas y programadas. Sigo yo.',
             null,
             ['programadas' => $futuras, 'proxima_id' => (int)($proxima['id'] ?? 0),
              'proxima_fecha' => (string)($proxima['fecha_programada'] ?? '')],

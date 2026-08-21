@@ -1686,6 +1686,15 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
             break;
         }
     }
+    //  M · el cierre dice CON CUANTO, y siempre «registrados»: sin esa
+    //  palabra «18 pedidos» se lee como los pedidos del negocio, y Crecer
+    //  solo cuenta los que pasaron por aqui.
+    if ($E->estado === MetaState::M_CERRADA && $mt_snap['meta']
+        && $mt_snap['progreso']['actual'] !== null) {
+        [$sust_m, $part_m] = $uni;
+        $n_m = rtrim(rtrim(number_format((float)$mt_snap['progreso']['actual'], 2), '0'), '.');
+        $titulo = 'Cerraste con ' . $n_m . ' ' . $sust_m . ' ' . $part_m;
+    }
     $objeto = (array)($E->evidencia['objeto'] ?? []);
   ?>
   <section class="tm-ahora">
@@ -1869,7 +1878,6 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
   </nav>
 </div>
 
-<?= cuota_aviso_css() ?>
 <div class="ah-toast" id="ahToast"></div>
 
 <script>
@@ -1959,6 +1967,11 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
       ah.style.setProperty('--ah-zona', (falta || MARGEN) + 'px');
     };
     alCargar(ajustar); window.addEventListener('resize', ajustar);
+    //  Y cada vez que una capa se abre o se cierra: la pagina cambia de alto
+    //  y con ella cambia lo que queda debajo de la barra fija.
+    document.addEventListener('toggle', function(e){
+      if (e.target && e.target.tagName === 'DETAILS') setTimeout(ajustar, 30);
+    }, true);
   })();
 
   //  AYUDA SE APARTA DE CUALQUIER CONTROL PRINCIPAL, no solo de la cola.
@@ -2001,6 +2014,11 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
     };
     alCargar(montar);
     window.addEventListener('resize', montar);
+    //  Al abrir una capa aparecen controles que antes no existian: si no se
+    //  vuelve a montar, Ayuda no los vigila y puede quedarse encima.
+    document.addEventListener('toggle', function(e){
+      if (e.target && e.target.tagName === 'DETAILS') setTimeout(montar, 60);
+    }, true);
   })();
 
   // Aceptar el plan. Se sella una vez y la pantalla se recompone sola: al
