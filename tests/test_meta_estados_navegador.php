@@ -120,7 +120,7 @@ try {
                     if ($intento > 0) usleep(1500000);
                     $sal = [];
                     exec('node ' . escapeshellarg(__DIR__ . DIRECTORY_SEPARATOR . '_navegador_estados.mjs')
-                         . " {$sid} {$M} {$w} {$hgt} {$modo} 2>&1", $sal);
+                         . " {$sid} {$M} {$w} {$hgt} \"{$modo}\" 2>&1", $sal);
                     $d = json_decode((string)end($sal), true);
                     if (is_array($d) && !isset($d['error'])) $j = $d;
                 }

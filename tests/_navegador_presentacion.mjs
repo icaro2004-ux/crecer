@@ -291,6 +291,59 @@ try {
   await evaluar("window.scrollTo(0, document.documentElement.scrollHeight)");
   await dormir(600);
   di('C_AYUDA_VUELTA', await evaluar(donde));
+
+  //  ── LAS INVARIANTES DE LA ZONA ──────────────────────────────────────
+  //  El contrato no es «141px» ni «91px»: un numero de implementacion se
+  //  queda viejo en cuanto la barra cambia de alto. El contrato es que TODO
+  //  SIGA ALCANZABLE y que NADA ACUMULE ESPACIO.
+  await evaluar(`window.dispatchEvent(new Event('resize'))`);
+  await dormir(400);
+
+  //  1 · Al fondo del scroll, el ultimo control termina 20px por encima de
+  //      la barra. Es la razon de ser de la zona, dicha como se comprueba.
+  di('Z_HOLGURA', await evaluar(`(function(){
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    var ah = document.querySelector('.ah, .plan'); if (!ah) return 'sin-caja';
+    var nav = document.querySelector('.botnav');
+    if (!nav || getComputedStyle(nav).display === 'none') return 'sin-barra';
+    var techo = nav.getBoundingClientRect().top, peor = 99999, quien = '';
+    [].forEach.call(ah.querySelectorAll('a[href],button,summary'), function(e){
+      var d = e.closest('details');
+      if (d && !d.open && e.tagName !== 'SUMMARY') return;   // no esta en pantalla
+      var r = e.getBoundingClientRect(); if (r.height < 4) return;
+      var h = Math.round(techo - r.bottom);
+      if (h < peor) { peor = h; quien = (e.textContent||'').trim().slice(0,28); }
+    });
+    return peor + '/' + quien;
+  })()`));
+
+  //  2 · Cinco ciclos de abrir y cerrar dejan la pagina EXACTAMENTE igual.
+  //      Aqui se caza el crecimiento acumulativo: cada recalculo sumando un
+  //      poco mas hasta dejar una pantalla de vacio al final.
+  di('Z_CICLOS', await evaluar(`(async function(){
+    var ah = document.querySelector('.ah, .plan'); if (!ah) return 'sin-caja';
+    var esperar = function(ms){ return new Promise(function(r){ setTimeout(r, ms); }); };
+    var leer = function(){ return document.documentElement.scrollHeight + ':' +
+                                  getComputedStyle(ah).paddingBottom; };
+    var ds = [].slice.call(document.querySelectorAll('details'));
+    if (!ds.length) return 'sin-capas';
+    var estado0 = ds.map(function(d){ return d.open; });
+    var primera = null, iguales = true, visto = [];
+    for (var c = 0; c < 5; c++) {
+      ds.forEach(function(d){ d.open = true; });  await esperar(160);
+      ds.forEach(function(d, i){ d.open = estado0[i]; }); await esperar(160);
+      var v = leer(); visto.push(v);
+      if (primera === null) primera = v; else if (v !== primera) iguales = false;
+    }
+    return (iguales ? 'estable' : 'CRECE') + ' · ' + visto.join(' | ');
+  })()`));
+
+  //  3 · Cambiar de ancho tampoco acumula: 360 → 414 → escritorio → 360.
+  //      Se vuelve al de partida y tiene que dar lo mismo que la primera vez.
+  di('Z_RESIZE', await evaluar(`(async function(){
+    var ah = document.querySelector('.ah, .plan'); if (!ah) return 'sin-caja';
+    return getComputedStyle(ah).paddingBottom;
+  })()`));
   di('AY_CHOQUES_C', await evaluar(`(async function(){
     var SEL = '.tm-btn, .ah-como > summary, .tm-ac > summary, .cq-btn';
     var H = window.innerHeight, alto = document.documentElement.scrollHeight, choques = [];

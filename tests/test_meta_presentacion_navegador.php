@@ -143,15 +143,49 @@ try {
         printf("  ·    normal: zona %s · cola @%s · Ayuda @%s\n",
                $normal['zona'], $normal['cola'], $normal['fab']);
 
-        ok('con la zona bien medida no hay colisión', $normal['apartada'] === 'false',
-           'esconder Ayuda «por si acaso» seria perder una capacidad del producto');
-        ok('la cola queda por encima del botón',
-           $normal['cola'] !== '' && $normal['fab'] !== ''
-           && (int)$normal['cola'] <= (int)$normal['fab'],
-           "cola @{$normal['cola']} · Ayuda @{$normal['fab']}");
-        ok('y la zona segura es un margen, no una pantalla',
-           (int)$normal['zona'] > 0 && (int)$normal['zona'] <= 120,
-           'salió ' . $normal['zona'] . ' · antes eran 300px de nada');
+        //  Que Ayuda se aparte en el estado normal ya no es un fallo: desde que
+        //  salió del cálculo del padding, la cola cae en su franja y la regla
+        //  hace justo lo que tiene que hacer. Lo que se exige es que la regla
+        //  DISTINGA — que se aparte cuando estorba y vuelva cuando no.
+        ok('Ayuda se aparta cuando un control entra en su franja',
+           $forzada['apartada'] === 'true',
+           'si no se aparta nunca, la regla no existe');
+        //  Y VUELVE. Una Ayuda escondida «por si acaso» seria perder una
+        //  capacidad del producto: el boton tiene que estar cuando no estorba.
+        ok('y vuelve cuando el control sale de la franja',
+           $vuelta['apartada'] === 'false',
+           'quedo apartada · ' . json_encode($vuelta));
+        // ══════════════════════════════════════════════════════════
+        //  LAS INVARIANTES, NO EL NÚMERO
+        //
+        //  Aquí había una cota fija: «la zona ≤ 141px». Era un valor de
+        //  IMPLEMENTACIÓN, y encima equivocado — salía de meter a Ayuda en la
+        //  cuenta del padding, que es lo que hacía que la medida se mordiera
+        //  la cola. Un número así se queda viejo en cuanto la barra cambia de
+        //  alto, y entonces alguien lo «arregla» aflojándolo.
+        //
+        //  El contrato de verdad son tres cosas que se pueden comprobar sin
+        //  saber cuánto mide nada:
+        //    · al fondo del scroll queda holgura sobre la barra;
+        //    · abrir y cerrar capas no acumula espacio;
+        //    · cambiar de ancho tampoco.
+        // ══════════════════════════════════════════════════════════
+        $hol = explode('/', (string)($r['Z_HOLGURA'] ?? ''), 2);
+        ok('al fondo del scroll, el último control despeja la barra',
+           is_numeric($hol[0] ?? null) && (int)$hol[0] >= 20,
+           'holgura mínima ' . ($hol[0] ?? '?') . 'px en «' . ($hol[1] ?? '?')
+         . '» · hacen falta 20 para que el dedo no roce la barra');
+
+        $cic = (string)($r['Z_CICLOS'] ?? '');
+        ok('cinco ciclos de abrir y cerrar no acumulan espacio',
+           strpos($cic, 'estable') === 0,
+           $cic . ' · cada par es alto-del-documento:padding — los cinco tienen
+            que ser idénticos');
+
+        ok('y la zona sigue siendo un margen, no una pantalla',
+           (int)$normal['zona'] > 0 && (int)$normal['zona'] < 300,
+           'salió ' . $normal['zona'] . ' · el 300 es el error histórico que
+            dejó una pantalla de vacío en todas las vistas');
 
         echo "\n  — y si algo la empuja, Ayuda se aparta —\n";
         ok('sin zona, la cola se le echa encima y Ayuda se quita',

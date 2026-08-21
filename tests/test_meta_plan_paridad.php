@@ -113,6 +113,13 @@ try {
         $crear((int)$ids[5], 'carrusel', 'borrador',  null,    null);
     }
 
+    //  La fixture no le pone diagnostico ni contexto a la meta, asi que esos
+    //  dos bloques no se pintaban y la prueba no comprobaba nada de ellos.
+    $pdo->prepare("UPDATE crecer_meta SET diagnostico=?, veredicto=?, contexto=?
+                    WHERE id=? AND marca_id=?")
+        ->execute(['[prueba] Tu fuerte son los encargos por WhatsApp.', 'alcanzable',
+                   '[prueba] Trabajo sola y horneo de noche.', $META, $M]);
+
     $html = $pedir('marca=' . $M . '&vista=plan');
     ok('la vista del plan responde', trim($html) !== '' && strpos($html, '<html') !== false,
        'sin HTML no hay nada que comprobar · ¿está Apache arriba?');
@@ -162,10 +169,17 @@ try {
        stripos($html, 'Regla del negocio') !== false || stripos($html, 'Siempre') !== false);
 
     echo "\n  — 6 · replanificar —\n";
+    //  EL CONTROL, no el texto. La primera version buscaba «plan nuevo» en el
+    //  HTML y eso tambien casa con el aviso que el guion enseña al pulsar: al
+    //  quitar el boton, la prueba siguio verde. Una afirmacion que se cumple
+    //  con el eco de si misma no comprueba nada.
     ok('hay un control para empezar un plan nuevo',
-       stripos($html, 'plan nuevo') !== false);
+       strpos($html, 'id="replan"') !== false,
+       'el guion engancha por ese id: sin el boton, addEventListener revienta');
     ok('y llega a la acción replan', strpos($html, "accion:'replan'") !== false);
-    ok('hay un control para cambiar de meta', stripos($html, 'Cambiar de meta') !== false);
+    ok('hay un control para cambiar de meta',
+       strpos($html, 'id="cerrar"') !== false,
+       'mismo motivo: el id es lo que el guion busca');
     ok('y llega a la acción cerrar', strpos($html, "accion:'cerrar'") !== false);
 
     echo "\n  — 7 · evaluar un plan —\n";
@@ -200,6 +214,16 @@ try {
     //  Y LO QUE EL PLAN NUNCA DEBE HACER
     // ══════════════════════════════════════════════════════════
     echo "
+  — 11 · el diagnostico de la Estratega —
+";
+    //  Estaba en el codigo Y en la pantalla. Al reordenar puede quedarse en el
+    //  codigo y desaparecer de la vista sin que nadie lo note.
+    ok('el diagnostico se pinta', strpos($html, 'diag') !== false
+       && strpos($html, 'Estratega') !== false,
+       'plegado esta bien; desaparecido no');
+    ok('y el contexto que dio el dueño', stripos($html, 'Lo que me contaste') !== false);
+
+    echo "
   --- VUELTA: cada capa tiene su salida ---
 ";
     //  Una capa sin puerta de vuelta es una capa donde el dueño se queda
@@ -221,6 +245,55 @@ try {
     ok('no dice «Vas atrasado»', stripos($html, 'Vas atrasado') === false);
     ok('no pinta un porcentaje de la meta', strpos($html, '% logrado') === false,
        'un porcentaje afirma que se conoce el total, y no se conoce');
+
+    // ══════════════════════════════════════════════════════════
+    //  CONTROL POSITIVO · el contrato se OBEDECE, no se esquiva
+    //
+    //  Las dos afirmaciones de arriba se pueden aprobar haciendo trampa:
+    //  borrando los textos. Esto lo impide. Con cobertura COMPLETA el
+    //  compositor deja afirmar el progreso, y entonces la barra, el
+    //  porcentaje y el ritmo TIENEN que aparecer. Si no aparecen, es que se
+    //  borraron en vez de condicionarse.
+    // ══════════════════════════════════════════════════════════
+    echo "
+  --- CONTROL POSITIVO: con cobertura completa SI se afirma ---
+";
+    require_once __DIR__ . '/../core/Meta/MetaSnapshotReader.php';
+    require_once __DIR__ . '/../core/Meta/MetaStateComposer.php';
+    $snap = MetaSnapshotReader::leer($pdo, $M);
+    $est  = MetaStateComposer::componer($snap);
+    ok('hoy la cobertura es parcial', !$est->puedeAfirmarProgreso(),
+       'cobertura=' . $est->cobertura . ' · si ya fuera completa, las dos de
+        arriba no estarian probando nada');
+
+    //  Se compone a mano un estado con cobertura COMPLETA y se comprueba que
+    //  la vista lo respeta. No se toca la base: se pregunta a la funcion que
+    //  la vista usa, que es la misma.
+    $completo = new MetaState($est->estado, $est->titulo, $est->instruccion, $est->accion,
+                              $est->evidencia, $est->camino, 'completa', $est->razon);
+    ok('con cobertura completa, el contrato SI deja afirmar',
+       $completo->puedeAfirmarProgreso(),
+       'si esto fuera falso, el contrato no distinguiria nada');
+
+    //  Y la vista pregunta por ahi: el fuente tiene que consultarlo, no tener
+    //  los textos borrados a mano.
+    //  SOLO la vista del plan. La primera version se comio el archivo entero
+    //  porque la cadena de busqueda se rompio al escribirla: strpos devolvia
+    //  false, substr empezaba en 0, y las afirmaciones pasaban leyendo la
+    //  capa 1. Un falso verde de manual.
+    $corte = strpos($fuente, chr(36) . "vista === 'plan'");
+    ok('se localiza la vista del plan en el fuente', $corte !== false,
+       'sin esto, lo de abajo estaria leyendo todo el archivo');
+    $vplan = $corte !== false ? substr($fuente, $corte) : '';
+    ok('la vista del plan consulta puedeAfirmarProgreso()',
+       strpos($vplan, 'puedeAfirmarProgreso()') !== false,
+       'es el MISMO contrato que la capa 1, no una segunda interpretacion');
+    ok('y conserva el texto del porcentaje para cuando toque',
+       strpos($vplan, '% logrado') !== false,
+       'si el texto no esta en el fuente, no se condiciono: se borro');
+    ok('y el del ritmo',
+       stripos($vplan, 'vas en ritmo') !== false && stripos($vplan, 'vas atrasado') !== false,
+       'lo mismo: condicionados, no desaparecidos');
 
 } finally {
     @unlink($ruta . DIRECTORY_SEPARATOR . 'sess_' . $sid);
