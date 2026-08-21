@@ -1322,9 +1322,26 @@ $cf = [
         <input type="datetime-local" class="fecha-in" data-id="<?= $p['id'] ?>" value="<?= date('Y-m-d\TH:i', strtotime($p['fecha_programada'] ?: 'now')) ?>">
         <span class="hint">cámbialo si quieres (ej. un día especial)</span>
       </div>
+      <?php if ((string)($p['img_estado'] ?? '') === 'error'): ?>
+        <?php /* Ni rojo ni «error»: no se rompio el producto, se perdio un
+                 encargo y se puede repetir. La cuota ya volvio. */ ?>
+        <p style="margin:0;padding:0 17px 10px;font-size:13px;line-height:1.5;color:var(--muted)">
+          El arte de esta pieza no llegó a salir. <b>No te contó imagen</b> — puedes intentarlo otra vez.
+        </p>
+      <?php endif; ?>
       <div class="toolrow" id="tools-<?= $p['id'] ?>" style="padding:0 17px 12px;display:flex;gap:16px;flex-wrap:wrap;font-size:13px">
         <a href="#" class="editlink" data-id="<?= $p['id'] ?>" style="font-weight:700;color:var(--terracota);text-decoration:none"><?= ico('edit') ?> Editar</a>
-        <a href="#" class="artbtn" data-id="<?= $p['id'] ?>" style="font-weight:700;color:var(--terracota);text-decoration:none"><?= ico('image') ?> <?= $has_art ? 'Cambiar arte' : 'Crear arte' ?></a>
+        <?php
+          //  UN FALLO RECUPERABLE SE DICE, Y SE OFRECE LA SALIDA.
+          //  Cuando el proveedor no reconoce el job (404), la pieza queda en
+          //  'error' y su unidad de cuota YA se devolvio. Antes esto se quedaba
+          //  callado: la tarjeta seguia diciendo «Crear arte» como si nada, y el
+          //  dueño no sabia que su arte se habia perdido ni que podia repetir
+          //  sin que le costara. Se le dice, y el boton cambia de nombre.
+          $arte_fallo = (string)($p['img_estado'] ?? '') === 'error';
+          $etq_arte = $arte_fallo ? 'Intentar otra vez' : ($has_art ? 'Cambiar arte' : 'Crear arte');
+        ?>
+        <a href="#" class="artbtn" data-id="<?= $p['id'] ?>" style="font-weight:700;color:var(--terracota);text-decoration:none"><?= ico('image') ?> <?= $etq_arte ?></a>
         <a href="#" class="regenlink" data-id="<?= $p['id'] ?>" style="font-weight:700;color:var(--muted);text-decoration:none"><?= ico('refresh') ?> Regenerar texto</a>
         <?php if ($has_art): ?><a href="#" class="prevlink" data-img="<?= $h($p['grafica_path']) ?>" data-copy="<?= $h($p['caption']) ?>" style="font-weight:700;color:var(--teal);text-decoration:none"><?= ico('eye') ?> Ver en redes</a><?php endif; ?>
         <a href="#" class="borrarlink" data-id="<?= $p['id'] ?>" style="font-weight:700;color:#b4342a;text-decoration:none;margin-left:auto"><?= ico('trash') ?> Borrar</a>

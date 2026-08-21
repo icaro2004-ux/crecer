@@ -85,7 +85,8 @@ function img_poll_clase_error(?string $msg): string {
  *
  * 'incidente' = UNA fila en crecer_ia_log, y solo en una transicion.
  */
-function img_poll_decidir(array $j, ?string $status, ?string $err, string $ahora, bool $dedicado = false): array {
+function img_poll_decidir(array $j, ?string $status, ?string $err, string $ahora,
+                          bool $dedicado = false, ?int $http = null): array {
     $intentos = (int)($j['intentos'] ?? 0);
     $t        = strtotime($ahora) ?: time();
     $edad_h   = !empty($j['job_at']) ? max(0, ($t - (int)strtotime((string)$j['job_at'])) / 3600) : 0;
@@ -101,6 +102,20 @@ function img_poll_decidir(array $j, ?string $status, ?string $err, string $ahora
     if (in_array((string)$status, ['failed', 'cancelled', 'incomplete'], true)) {
         return ['accion'=>'fallback', 'intentos'=>$intentos, 'espera_seg'=>null,
                 'incidente'=>true, 'clase'=>'proveedor_' . $status];
+    }
+
+    //  EL PROVEEDOR DICE QUE ESE JOB NO EXISTE (404). Es TERMINAL para este
+    //  job: no va a aparecer nunca, y seguir preguntando por el es sondear al
+    //  vacio. Pero NO es prueba de que el proveedor rechazara la imagen, asi
+    //  que NO habilita el respaldo automatico — eso lo decide el dueño.
+    //
+    //  Antes esto no se podia distinguir: ia_http_get perdia el codigo y el
+    //  mensaje de OpenAI no lo lleva, asi que caia en 'no_clasificado' y el
+    //  sondeo esperaba para siempre. Es lo que dejo #656 colgada con la unidad
+    //  de cuota retenida.
+    if ($http === 404) {
+        return ['accion'=>'soltar', 'intentos'=>$intentos, 'espera_seg'=>null,
+                'incidente'=>true, 'clase'=>'job_no_existe'];
     }
 
     $intentos++;
@@ -355,6 +370,20 @@ function img_resp_encolar_res(PDO $pdo, int $marca_id, int $post_id, string $cop
         $m = function_exists('leer_marca') ? leer_marca($pdo, $marca_id)
            : $pdo->query("SELECT * FROM crecer_marca WHERE id=" . (int)$marca_id)->fetch(PDO::FETCH_ASSOC);
         if (!$m) return ['res' => 'rechazado_confirmado', 'job' => '', 'clase' => 'sin_marca'];
+
+        //  SI YA HAY UN JOB VIVO, NO SE ENCOLA OTRO.
+        //  Sin esta guarda, dos encolados de la misma pieza creaban DOS trabajos
+        //  de fondo en OpenAI y el segundo sobreescribia img_job: el primero
+        //  quedaba huerfano, inalcanzable y posiblemente facturado. El cliente
+        //  no pagaba doble -la llave idempotente lo impide- pero la plataforma
+        //  si. carrusel.php ya tenia esta guarda; esta ruta no.
+        try {
+            $qv = $pdo->prepare("SELECT img_job FROM crecer_contenido
+                                   WHERE id=? AND marca_id=? AND img_estado='queued'");
+            $qv->execute([$post_id, $marca_id]);
+            $vivo = trim((string)($qv->fetchColumn() ?: ''));
+            if ($vivo !== '') return ['res' => 'encolado', 'job' => $vivo, 'clase' => 'ya_encolado'];
+        } catch (Throwable $e) { /* sin la consulta, se sigue como antes */ }
         // LOGO REAL del negocio (si subió/tiene uno) → se pasa como referencia para NO inventar.
         $logo = null;
         if (!empty($m['logo_path'])) {
@@ -530,7 +559,16 @@ function img_gemini_fallback(PDO $pdo, int $marca_id, int $post_id, string $copy
                            ['origen_tipo' => 'contenido', 'origen_id' => $post_id, 'costo' => 0.10])]
             + ($imgs ? ['imagenes' => $imgs] : []));
         $bin = $r['data'] ?? '';
-        if ($bin === '') return '';
+        if ($bin === '') {
+            //  Gemini tampoco entrego. Ahora si es definitivo para esta imagen:
+            //  fallaron los dos proveedores y el dueño no recibio nada, asi que
+            //  la unidad vuelve. Es el UNICO sitio del camino de respaldo que
+            //  libera — el sondeo la deja viva a proposito para que este reuso
+            //  sea posible.
+            CuotaImg::liberar($pdo, CuotaImg::asientoDePieza($pdo, $marca_id, $post_id),
+                'falló gpt-image y el respaldo tampoco entregó');
+            return '';
+        }
         $rel = "marca_{$marca_id}/graficas/gem_{$post_id}_" . substr(md5((string)microtime(true)), 0, 6) . '.png';
         $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
         @mkdir(dirname($abs), 0775, true); @file_put_contents($abs, $bin);
@@ -538,6 +576,9 @@ function img_gemini_fallback(PDO $pdo, int $marca_id, int $post_id, string $copy
         // Cuenta el intento SOLO al producir la imagen (no al encolar). Ver aprobar2 'arte'.
         $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, img_estado='ok', img_job=NULL, arte_intentos=arte_intentos+1, updated_at=NOW() WHERE id=? AND marca_id=?")
             ->execute([$url, $post_id, $marca_id]);
+        //  El respaldo entrego: se cierra LA MISMA unidad que abrio el encolado
+        //  original. Una imagen del cliente, una unidad, dos proveedores.
+        CuotaImg::confirmar($pdo, CuotaImg::asientoDePieza($pdo, $marca_id, $post_id), 0.10);
         try { $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,estado) VALUES (?,?,?,?,?,?, 'ok')")
             ->execute([$marca_id, 'director_imagen', 'Respaldo Gemini (gpt no pudo)', 'gemini-3-pro-image', $brief, $url]); } catch (Throwable $e) {}
         return $url;
@@ -642,21 +683,49 @@ function img_resp_completar(PDO $pdo, int $marca_id, int $post_id, bool $dedicad
     }
 
     $ahora  = (string)($row['ahora_sql'] ?? date('Y-m-d H:i:s'));
-    $status = null; $err = null; $st = [];
+    $status = null; $err = null; $st = []; $http = null;
     try {
         $st = openai_responses_estado($rid);
         $status = (string)($st['status'] ?? '');
         // 'completed' sin bytes no es un completado utilizable: se trata como vivo.
         if ($status === 'completed' && ($st['b64'] ?? '') === '') $status = 'in_progress';
+    } catch (IaHttp $e) {
+        //  El codigo VIENE en la excepcion, no se adivina leyendo el mensaje.
+        error_log('img_resp_completar: ' . $e->getMessage());
+        $err = $e->getMessage(); $http = $e->http;
     } catch (Throwable $e) {
         error_log('img_resp_completar: ' . $e->getMessage());
         $err = $e->getMessage();          // status queda null = NO se pudo consultar
     }
 
+    //  R5 · SELLO DE CONTROL PARA JOBS HEREDADOS.
+    //
+    //  img_job_at nacio con la migracion del 19 de agosto y NO se relleno hacia
+    //  atras, asi que las piezas anteriores lo tienen NULL. img_poll_decidir lee
+    //  esa columna como edad y, con NULL, calcula CERO — el aparcado a las 24h
+    //  no se dispara nunca. Asi es como #644 llego a 33 sondeos sin morirse.
+    //
+    //  Y NO se puede usar updated_at en su lugar: cada sondeo la reescribe, asi
+    //  que el trabajo rejuveneceria en cada vuelta y seria igual de inmortal.
+    //  Se sella una fecha explicita UNA vez —solo si esta NULL— y a partir de
+    //  ahi corre su unica ventana. La guarda 'IS NULL' la hace inmutable.
+    if ($cols && empty($row['img_job_at'])) {
+        $pdo->prepare("UPDATE crecer_contenido SET img_job_at = NOW()
+                        WHERE id=? AND marca_id=? AND img_job=? AND img_job_at IS NULL")
+            ->execute([$post_id, $marca_id, $rid]);
+        $row['img_job_at'] = $ahora;      // desde ya cuenta su ventana
+    }
+
     $d = img_poll_decidir(
         ['intentos' => (int)($row['img_intentos'] ?? 0), 'job_at' => $row['img_job_at'] ?? null],
-        $status, $err, $ahora, $dedicado
+        $status, $err, $ahora, $dedicado, $http
     );
+
+    //  El asiento de cuota de ESTA imagen. Se busca por su origen porque la
+    //  reserva se abrio en otra peticion, horas antes. Sin esto, ninguna unidad
+    //  del camino asincrono podia cerrarse jamas.
+    require_once __DIR__ . '/cuota_imagenes.php';
+    $asiento = CuotaImg::asientoDePieza($pdo, $marca_id, $post_id);
 
     // ── GUARDAR ────────────────────────────────────────────────────────────
     if ($d['accion'] === 'guardar') {
@@ -676,7 +745,32 @@ function img_resp_completar(PDO $pdo, int $marca_id, int $post_id, bool $dedicad
                                    arte_intentos=arte_intentos+1, updated_at=NOW()
                              WHERE id=? AND marca_id=? AND img_job=?");
         $u->execute([$url, $post_id, $marca_id, $rid]);
+        //  LA UNIDAD SE CIERRA AQUI. Antes se guardaba la imagen y el asiento se
+        //  quedaba en 'reservado' para siempre: el numero del cubo era correcto
+        //  pero el estado mentia, y barrerCaducadas() no los toca porque tienen
+        //  job. Solo el PRIMERO que guarda cierra (rowCount), como con la pieza.
+        if ($u->rowCount() === 1) CuotaImg::confirmar($pdo, $asiento, 0.17, $rid);
         return ['estado' => 'ok', 'img' => $url];
+    }
+
+    // ── SOLTAR: el proveedor dice que ese job NO EXISTE ────────────────────
+    //    Terminal para el job y solo para el job. Se devuelve la unidad -el
+    //    dueño no recibio nada- y la pieza queda en un fallo RECUPERABLE, con
+    //    su boton de «Intentar otra vez» en la pantalla. NO se dispara Gemini:
+    //    que el job no aparezca no prueba que el proveedor rechazara la imagen,
+    //    y lanzar un segundo proveedor por nuestra cuenta es gastar a ciegas.
+    if ($d['accion'] === 'soltar') {
+        $extra = $cols ? ", img_intentos={$d['intentos']}, img_next_poll_at=NULL, img_error_clase=" . $pdo->quote((string)$d['clase']) : "";
+        $u = $pdo->prepare("UPDATE crecer_contenido
+                               SET img_estado='error', img_job=NULL{$extra}, updated_at=NOW()
+                             WHERE id=? AND marca_id=? AND img_job=?");
+        $u->execute([$post_id, $marca_id, $rid]);
+        if ($u->rowCount() === 1) {
+            CuotaImg::liberar($pdo, $asiento, 'el proveedor no reconoce el job (404)');
+            img_poll_incidente($pdo, $marca_id, $post_id, $rid,
+                'El proveedor no reconoce el job', (string)$d['clase'], (int)$d['intentos']);
+        }
+        return ['estado' => 'error', 'img' => null, 'recuperable' => true];
     }
 
     // ── FALLBACK: el proveedor CONFIRMO que ese trabajo no sale ────────────
@@ -687,6 +781,12 @@ function img_resp_completar(PDO $pdo, int $marca_id, int $post_id, bool $dedicad
                                SET img_estado='error', img_job=NULL{$extra}, updated_at=NOW()
                              WHERE id=? AND marca_id=? AND img_job=?");
         $u->execute([$post_id, $marca_id, $rid]);
+        //  LA RESERVA NO SE LIBERA AQUI, Y ES DELIBERADO. Este camino lleva a
+        //  Gemini a hacer LA MISMA IMAGEN: si se devolviera la unidad ahora, el
+        //  respaldo tendria que pedir otra —y el dueño pagaria dos por una—.
+        //  El asiento se queda reservado, Gemini lo reusa por su llave
+        //  idempotente, y se cierra cuando entregue. Si tambien falla
+        //  definitivamente, es img_gemini_fallback quien libera.
         if ($u->rowCount() === 1 && $d['incidente']) {
             img_poll_incidente($pdo, $marca_id, $post_id, $rid,
                 'El proveedor descarto el job de imagen', (string)$d['clase'], (int)$d['intentos']);
@@ -712,6 +812,13 @@ function img_resp_completar(PDO $pdo, int $marca_id, int $post_id, bool $dedicad
                                    AND (img_error_clase IS NULL OR img_error_clase NOT LIKE 'ap:%')");
             $u->execute([$d['intentos'], $marca, $post_id, $marca_id, $rid]);
             if ($u->rowCount() === 1 && $d['incidente']) {
+                //  APARCAR = nos rendimos de preguntar, pero el job puede seguir
+                //  vivo y facturarse. El dueño no puede pagar por algo que quiza
+                //  no reciba: se le devuelve la unidad y el costo posible se
+                //  anota como riesgo NUESTRO. Es el mismo trato que el P4 sin
+                //  identificador, y por el mismo motivo.
+                CuotaImg::riesgoPlataforma($pdo, $asiento, 0.17,
+                    'job aparcado sin confirmacion del proveedor');
                 img_poll_incidente($pdo, $marca_id, $post_id, $rid,
                     'Job de imagen aparcado sin confirmacion del proveedor', (string)$d['clase'], (int)$d['intentos']);
             }
