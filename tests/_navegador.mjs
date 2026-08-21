@@ -230,10 +230,10 @@ try {
   // ── 1 · TU META: la acción dominante ──────────────────────────────────
   await ir(`${BASE}/panel/meta.php?marca=${marca}`);
   di('META_URL', await url());
-  di('AHORA_ANTES', await evaluar(`(document.querySelector('.ah-tit')||{}).textContent || ''`));
-  const destino = await evaluar(`(document.querySelector('.ah-btn[href]')||{}).href || ''`);
+  di('AHORA_ANTES', await evaluar(`(document.querySelector('.tm-frase')||{}).textContent || ''`));
+  const destino = await evaluar(`(document.querySelector('.tm-btn[href]')||{}).href || ''`);
   di('ACCION_HREF', destino);
-  di('PRIMARIAS_META', await evaluar(`document.querySelectorAll('.ah-btn').length`));
+  di('PRIMARIAS_META', await evaluar(`document.querySelectorAll('.tm-btn').length`));
 
   // ── 2 · Abre la pieza EXACTA ──────────────────────────────────────────
   if (destino) { await ir(destino); }
@@ -306,12 +306,12 @@ try {
   }
   await listo();
   di('VUELTA_URL', await url());
-  di('ACUSE', await evaluar(`(document.querySelector('.ah-hecho')||{}).textContent || ''`));
-  di('AHORA_DESPUES', await evaluar(`(document.querySelector('.ah-tit')||{}).textContent || ''`));
+  di('ACUSE', await evaluar(`(document.querySelector('.tm-vuelta')||{}).textContent || ''`));
+  di('AHORA_DESPUES', await evaluar(`(document.querySelector('.tm-frase')||{}).textContent || ''`));
   // «Se recalculo» no es que cambie el titulo: con dos piezas esperando, el
   // estado sigue siendo F y apunta a la SIGUIENTE. Lo que prueba el recalculo
   // es que la accion ya no lleva a la pieza que se acaba de aprobar.
-  di('ACCION_HREF_DESPUES', await evaluar(`(document.querySelector('.ah-btn[href]')||{}).href || ''`));
+  di('ACCION_HREF_DESPUES', await evaluar(`(document.querySelector('.tm-btn[href]')||{}).href || ''`));
 
   // ── 4 · La salida manual, sin afirmar nada ────────────────────────────
   await ir(`${BASE}/panel/aprobar2.php?marca=${marca}&volver=meta`);
@@ -320,7 +320,7 @@ try {
        x=>/Volver a tu meta/i.test(x.textContent||'')); return a? a.href : ''; })()`);
   di('SALIDA_MANUAL_HREF', manual);
   if (manual) { await ir(manual); di('SALIDA_MANUAL_URL', await url());
-                di('SALIDA_MANUAL_ACUSE', await evaluar(`(document.querySelector('.ah-hecho')||{}).textContent || ''`)); }
+                di('SALIDA_MANUAL_ACUSE', await evaluar(`(document.querySelector('.tm-vuelta')||{}).textContent || ''`)); }
 
   // ── 5 · JERARQUIA: una sola accion primaria por pantalla ──────────────
   //  El reel y el carrusel no se terminan de verdad aqui — eso es Shotstack y

@@ -94,7 +94,7 @@ try {
            'bottom/alto = ' . ($r['C_ACCION_SIN_SCROLL'] ?? '?'));
         ok('criterio 3 · un solo botón primario',
            (int)($r['C_PRIMARIAS'] ?? 9) === 1,
-           'hay ' . ($r['C_PRIMARIAS'] ?? '?') . ' con clase .ah-btn');
+           'hay ' . ($r['C_PRIMARIAS'] ?? '?') . ' con clase .tm-btn');
         ok('criterio 7 · ningún texto por debajo de 14px',
            (float)($r['C_MIN_PX'] ?? 0) >= 14,
            'el más pequeño mide ' . ($r['C_MIN_PX'] ?? '?') . 'px');
@@ -224,12 +224,18 @@ try {
         ok('el navegador completó la etapa', ($c['OK'] ?? '0') === '1',
            ($c['ERROR'] ?? '') ?: implode(' | ', array_slice($c['_sal'] ?? [], -3)));
         ok('el aviso aparece', ($c['CQ_HAY'] ?? '') === 'true');
-        ok('dice que se acabaron las del mes',
-           strpos($c['CQ_TITULO'] ?? '', 'imágenes de este mes') !== false,
+        ok('dice que no quedan imágenes',
+           stripos($c['CQ_TITULO'] ?? '', 'imágenes') !== false,
            'salió: ' . ($c['CQ_TITULO'] ?? '—'));
-        ok('y que el corillo sigue trabajando',
-           strpos($c['CQ_SIGUE'] ?? '', 'sigue trabajando') !== false,
-           'sin esa frase el dueño entiende «se acabó mi mes» en vez de «se acabó una parte»');
+        //  Y CUANDO VUELVEN. Un limite sin fecha se lee como una averia; con
+        //  fecha se lee como lo que es, el tope del plan.
+        ok('y cuándo vuelven',
+           (bool)preg_match('~\d{2}/\d{2}~', (string)($c['CQ_TITULO'] ?? '')),
+           'salió: ' . ($c['CQ_TITULO'] ?? '—'));
+        //  Aprobar no necesita pintar: el limite NO puede quitarle su boton.
+        ok('y la acción normal sigue en pie',
+           stripos($c['CQ_ACCION'] ?? '', 'aprobar') !== false,
+           'salió: ' . ($c['CQ_ACCION'] ?? '—'));
         ok('se lee sin hacer scroll', ($c['CQ_SIN_SCROLL'] ?? '') === 'si',
            'bottom/alto = ' . ($c['CQ_SIN_SCROLL'] ?? '?'));
         ok('un solo botón primario en toda la pantalla',

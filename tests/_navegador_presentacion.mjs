@@ -213,17 +213,17 @@ try {
   await ir(`${BASE}/panel/meta.php?marca=${marca}`);
   await despejarBien();
   di('C_URL', await url());
-  di('C_TITULO', await evaluar(`(document.querySelector('.ah-tit')||{}).textContent || ''`));
+  di('C_TITULO', await evaluar(`(document.querySelector('.tm-frase')||{}).textContent || ''`));
   di('C_BOTON', await evaluar(`(document.querySelector('#ahEmpezar')||{}).textContent || ''`));
-  di('C_TRATO', await evaluar(`document.querySelector('.ah-trato') !== null`));
+  di('C_TRATO', await evaluar(`document.querySelector('.tm-trato') !== null`));
   di('C_REPARTO', await evaluar(
-    `[].map.call(document.querySelectorAll('.ah-reparto div'),function(d){return d.textContent.trim().replace(/\\s+/g,' ');}).join(' | ')`));
+    `[].map.call(document.querySelectorAll('.tm-reparto div'),function(d){return d.textContent.trim().replace(/\\s+/g,' ');}).join(' | ')`));
   //  Criterio 3 del contrato: nunca dos primarios compitiendo.
-  di('C_PRIMARIAS', await evaluar(`document.querySelectorAll('.ah-btn').length`));
+  di('C_PRIMARIAS', await evaluar(`document.querySelectorAll('.tm-btn').length`));
   //  Criterio 7: ningun texto de uso normal por debajo de 14px.
   di('C_MIN_PX', await evaluar(`(function(){
     var min = 99;
-    [].forEach.call(document.querySelectorAll('.ah-trato, .ah-trato *, .ah-tit, .ah-ins'), function(e){
+    [].forEach.call(document.querySelectorAll('.tm-trato, .tm-trato *, .tm-frase, .tm-cons'), function(e){
       if (!e.textContent.trim()) return;
       if (e.children.length && e.tagName !== 'DIV') return;
       var s = parseFloat(getComputedStyle(e).fontSize);
@@ -249,7 +249,7 @@ try {
     var r = function(s){ var e=document.querySelector(s); if(!e) return null;
       var b=e.getBoundingClientRect(); return {alto:Math.round(b.height), top:Math.round(b.top)}; };
     window.scrollTo(0, document.documentElement.scrollHeight);
-    var ult = document.querySelector('.ah-mas a:last-child');
+    var ult = document.querySelector('.tm-mas a:last-child');
     return {
       doc: document.documentElement.scrollHeight,
       vp: window.innerHeight,
@@ -272,7 +272,7 @@ try {
   await evaluar("window.scrollTo(0, document.documentElement.scrollHeight)");
   await dormir(500);
   const donde = `(function(){
-    var f = document.querySelector('.ay-fab'), c = document.querySelector('.ah-mas');
+    var f = document.querySelector('.ay-fab'), c = document.querySelector('.tm-mas');
     return [document.body.classList.contains('ah-cola'),
             f ? Math.round(f.getBoundingClientRect().top) : '?',
             c ? Math.round(c.getBoundingClientRect().bottom) : '?',
@@ -292,7 +292,7 @@ try {
   await dormir(600);
   di('C_AYUDA_VUELTA', await evaluar(donde));
   di('AY_CHOQUES_C', await evaluar(`(async function(){
-    var SEL = '.ah-btn, .ah-btn2, .ah-como > summary, .cq-btn';
+    var SEL = '.tm-btn, .ah-como > summary, .tm-ac > summary, .cq-btn';
     var H = window.innerHeight, alto = document.documentElement.scrollHeight, choques = [];
     var esperar = function(ms){ return new Promise(function(r){ setTimeout(r, ms); }); };
     for (var y = 0; y <= alto; y += 80) {
@@ -333,17 +333,17 @@ try {
   await listo();
   await despejarBien();
   di('POST_URL', await url());
-  di('POST_TITULO', await evaluar(`(document.querySelector('.ah-tit')||{}).textContent || ''`));
+  di('POST_TITULO', await evaluar(`(document.querySelector('.tm-frase')||{}).textContent || ''`));
   di('POST_SIGUE_C', await evaluar(`document.querySelector('#ahEmpezar') !== null`));
-  di('POST_SIGUE_TRATO', await evaluar(`document.querySelector('.ah-trato') !== null`));
+  di('POST_SIGUE_TRATO', await evaluar(`document.querySelector('.tm-trato') !== null`));
   di('POST_HAY_ACCION', await evaluar(
-    `document.querySelectorAll('.ah-btn, .ah-como > summary').length`));
+    `document.querySelectorAll('.tm-btn, .ah-como > summary').length`));
 
   const mD = await medir();
   di('POST_DESBORDE', mD.desborde);
   di('POST_TAPADOS', mD.tapados.length);
   di('POST_TAPADOS_DET', JSON.stringify(mD.tapados));
-  await captura('meta_plan_presentado', '.ah-btn');
+  await captura('meta_plan_presentado', '.tm-btn');
 
   // ── 3 · VOLVER ATRAS NO RESUCITA EL TRATO ─────────────────────────────
   //  El sello vive en la base, no en la URL: recargar o volver atras tiene
@@ -352,7 +352,7 @@ try {
   await ir(`${BASE}/panel/meta.php?marca=${marca}`);
   await despejarBien();
   di('RECARGA_SIGUE_C', await evaluar(`document.querySelector('#ahEmpezar') !== null`));
-  di('RECARGA_TITULO', await evaluar(`(document.querySelector('.ah-tit')||{}).textContent || ''`));
+  di('RECARGA_TITULO', await evaluar(`(document.querySelector('.tm-frase')||{}).textContent || ''`));
   }
 
   if (etapa === 'cuota') {
@@ -362,20 +362,30 @@ try {
   //  haya dos primarios peleandose.
   await ir(`${BASE}/panel/meta.php?marca=${marca}`);
   await despejarBien();
-  di('CQ_HAY', await evaluar("document.querySelector('.cq') !== null"));
-  di('CQ_TITULO', await evaluar("(document.querySelector('.cq-tit')||{}).textContent || ''"));
-  di('CQ_SIGUE', await evaluar("(document.querySelector('.cq-sigue')||{}).textContent || ''"));
+  di('CQ_HAY', await evaluar("document.querySelector('.tm-lim, .tm-turno.limite') !== null"));
+  di('CQ_TITULO', await evaluar("(document.querySelector('.tm-lim, .tm-turno.limite')||{}).textContent || ''"));
+  //  Que la accion normal SIGA en pie es la mitad del contrato: el limite que
+  //  no bloquea no puede quitarle el boton a lo que si se puede hacer hoy.
+  di('CQ_ACCION', await evaluar("(document.querySelector('.tm-btn')||{}).textContent || ''"));
+  //  Lo que el corillo SIGUE haciendo vive en el acordeon, abierto de nacimiento
+  //  justo porque esta es una de las dos pantallas que no pueden pedir la accion
+  //  normal del plan.
+  di('CQ_SIGUE', await evaluar("(document.querySelector('.tm-capas')||{}).textContent || ''"));
+  //  Con el limite mandando NO hay primaria solida: la accion normal no se
+  //  puede completar y ofrecerla mandaria a la dueña a un callejon. Queda una
+  //  sola accion, y es de linea porque mirar no es decidir.
   di('CQ_PRIMARIOS', await evaluar(
-    "document.querySelectorAll('.cq-btn, .ah-btn').length"));
+    "document.querySelectorAll('.cq-btn, .tm-btn').length"));
   di('CQ_SIN_SCROLL', await evaluar(`(function(){
-    var c = document.querySelector('.cq'); if (!c) return 'sin-aviso';
+    var c = document.querySelector('.tm-lim, .tm-turno.limite'); if (!c) return 'sin-aviso';
     window.scrollTo(0,0);
     var r = c.getBoundingClientRect();
     return (r.top >= 0 && r.bottom <= window.innerHeight) ? 'si' : Math.round(r.bottom) + '/' + window.innerHeight;
   })()`));
   di('CQ_MIN_PX', await evaluar(`(function(){
     var min = 99;
-    [].forEach.call(document.querySelectorAll('.cq p, .cq a'), function(e){
+    [].forEach.call(document.querySelectorAll('.ah p, .ah a, .ah span, .ah b'), function(e){
+      if (e.children.length) return;
       if (!e.textContent.trim()) return;
       var s = parseFloat(getComputedStyle(e).fontSize);
       if (s && s < min) min = s;
@@ -383,7 +393,10 @@ try {
     return min;
   })()`));
   //  Ni rojo ni icono de alarma: el color es lo primero que dice si algo se rompio.
-  di('CQ_FONDO', await evaluar("getComputedStyle(document.querySelector('.cq')).backgroundColor"));
+  //  La pastilla va en ambar, que es la familia de AVISO — ni el rosa de «te
+  //  toca a ti» ni el teal de «corre solo», porque no es ninguna de las dos.
+  di('CQ_FONDO', await evaluar("(function(){var e=document.querySelector('.tm-lim, .tm-turno.limite');"
+    + "return e ? getComputedStyle(e).backgroundColor : 'sin-aviso';})()"));
   //  AYUDA CONTRA EL PRIMARIO, EN CADA POSICION DE SCROLL.
   //
   //  «Se alcanza haciendo scroll» NO vale para el boton mas importante de la
@@ -392,7 +405,7 @@ try {
   //  abajo y en CADA parada se comprueba si algun control principal se solapa
   //  con el boton flotante. Un solo solape en un solo scroll ya es un defecto.
   di('AY_CHOQUES', await evaluar(`(async function(){
-    var SEL = '.ah-btn, .ah-btn2, .ah-como > summary, .cq-btn';
+    var SEL = '.tm-btn, .ah-como > summary, .tm-ac > summary, .cq-btn';
     var H = window.innerHeight;
     var alto = document.documentElement.scrollHeight;
     var choques = [];
@@ -423,7 +436,7 @@ try {
   di('CQ_DESBORDE', mQ.desborde);
   di('CQ_TAPADOS', mQ.tapados.length);
   di('CQ_TAPADOS_DET', JSON.stringify(mQ.tapados));
-  await captura('meta_sin_cuota', '.cq');
+  await captura('meta_sin_cuota', '.tm-turno.limite');
   }
 
   di('OK', 1);

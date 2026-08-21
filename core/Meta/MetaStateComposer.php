@@ -251,7 +251,8 @@ class MetaStateComposer
                  'consecuencia' => 'Al subirlo lo monto y queda listo para tu OK.',
                  'tipo' => 'material'],
                 ['contenido_id' => (int)$p['id'], 'tactica_id' => (int)($p['tactica_id'] ?? 0),
-                 'guion' => (string)($p['guion'] ?? '')],
+                 'guion' => (string)($p['guion'] ?? ''),
+                 'objeto' => self::objetoDePieza($s, $p)],
                 self::camino($s, (int)($p['tactica_id'] ?? 0)), self::cobertura($s), 'pieza_necesita_material');
         }
         return null;
@@ -277,7 +278,8 @@ class MetaStateComposer
                 ['etiqueta' => 'Revisar y aprobar', 'destino' => $destino,
                  'consecuencia' => 'Al aprobarlo, sale a la hora que mejor te funciona.',
                  'tipo' => 'aprobacion'],
-                ['contenido_id' => (int)$p['id'], 'tactica_id' => (int)($p['tactica_id'] ?? 0)],
+                ['contenido_id' => (int)$p['id'], 'tactica_id' => (int)($p['tactica_id'] ?? 0),
+                 'objeto' => self::objetoDePieza($s, $p)],
                 self::camino($s, (int)($p['tactica_id'] ?? 0)), self::cobertura($s), 'pieza_espera_aprobacion');
         }
         return null;
@@ -536,8 +538,68 @@ class MetaStateComposer
         }
         if ($ahora === null && $abiertas) $ahora = (string)$abiertas[0]['titulo'];
         $despues = max(0, count($abiertas) - ($ahora === null ? 0 : 1));
-        return ['hecho' => $hecho, 'ahora' => $ahora, 'despues' => $despues];
+
+        //  LOS PROXIMOS, CON DUEÑO. Tres como mucho: mas alla de eso ya no es
+        //  «lo que sigue», es el plan entero — y el plan entero tiene su vista.
+        $proximos = [];
+        foreach ($abiertas as $t) {
+            if ($ahora !== null && (string)$t['titulo'] === $ahora) continue;
+            $proximos[] = [
+                'titulo' => (string)$t['titulo'],
+                'semana' => (int)($t['semana'] ?? 0),
+                'tuyo'   => (string)($t['clase'] ?? '') === 'accion_dueno',
+            ];
+            if (count($proximos) >= 3) break;
+        }
+        return ['hecho' => $hecho, 'ahora' => $ahora, 'despues' => $despues,
+                'proximos' => $proximos];
     }
+
+    /**
+     * EL OBJETO DEL QUE HABLA LA PANTALLA.
+     *
+     * Un titulo y un subtitulo para la pieza que este estado ya eligio. El
+     * titulo sale de la jugada -«La historia del bizcocho»- porque es lo que
+     * el dueño reconoce; si no hay jugada, del caption. El subtitulo dice red
+     * y cuando, que es lo que decide si aprobar ahora o luego.
+     *
+     * Vive aqui y no en la vista para que la vista no tenga que saber de
+     * jugadas ni de captions: recibe dos cadenas y las pinta.
+     */
+    private static function objetoDePieza(array $s, array $p): array
+    {
+        $t = self::jugada($s, (int)($p['tactica_id'] ?? 0));
+        $titulo = trim((string)($t['titulo'] ?? ''));
+        if ($titulo === '') {
+            $cap = trim((string)($p['caption'] ?? ''));
+            //  Del caption se toma la primera frase, no los primeros N
+            //  caracteres: cortar a ciegas parte palabras y queda a medias.
+            if ($cap !== '') {
+                $corte = preg_split('/(?<=[.!?\n])\s+/u', $cap, 2);
+                $titulo = trim($corte[0] ?? $cap);
+                if (mb_strlen($titulo) > 70) $titulo = rtrim(mb_substr($titulo, 0, 70)) . '…';
+            }
+        }
+        if ($titulo === '') $titulo = self::TIPOS[(string)($p['tipo'] ?? '')] ?? 'Una pieza de tu plan';
+
+        $red = trim((string)($p['plataforma'] ?? ''));
+        return [
+            'titulo' => $titulo,
+            'red'    => $red !== '' ? (self::REDES[mb_strtolower($red)] ?? ucfirst($red)) : '',
+            //  CRUDA. Ponerla en cristiano es cosa de la vista: dar formato a
+            //  una fecha depende del reloj y de la zona de la maquina, y este
+            //  objeto tiene que salir igual en cualquier sitio con el mismo
+            //  snapshot. La prueba de pureza escanea el fuente, asi que aqui
+            //  ni siquiera se nombra la funcion.
+            'fecha'  => trim((string)($p['fecha_programada'] ?? '')),
+            'tipo'   => (string)($p['tipo'] ?? 'post'),
+        ];
+    }
+
+    private const REDES = ['instagram' => 'Instagram', 'facebook' => 'Facebook',
+                           'ambas' => 'Instagram y Facebook', 'whatsapp' => 'WhatsApp'];
+    private const TIPOS = ['reel' => 'Un reel', 'carrusel' => 'Un carrusel',
+                           'post' => 'Un post', 'historia' => 'Una historia'];
 
     /** ¿La jugada de esta pieza sigue viva? Lo hecho y lo descartado no pide nada. */
     private static function jugadaVivaDe(array $s, array $pieza): bool

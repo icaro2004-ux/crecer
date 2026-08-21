@@ -110,8 +110,11 @@ try {
        !in_array('Paso de relleno 1', (array)($ev['pide'] ?? []), true) &&
        (int)($ev['hago_yo'] ?? 0) + (int)($ev['te_pido'] ?? 0) === 5,
        'la fixture trae 6 jugadas, una ya hecha');
-    ok('el camino NO se pinta entero aqui', is_array($e->camino) && count($e->camino) === 3,
-       'el contrato §C dice: no mostrar aqui todas las jugadas');
+    ok('el camino NO se pinta entero aqui',
+       is_array($e->camino) && count((array)($e->camino['proximos'] ?? [])) <= 3,
+       'el contrato §C dice: no mostrar aqui todas las jugadas. El camino trae los
+        tres numeros y, como mucho, TRES proximos: mas alla de eso ya no es «lo que
+        sigue», es el plan — y el plan tiene su vista.');
 
     // ══════════════════════════════════════════════════════════
     //  5a · IDEMPOTENCIA · el segundo clic no hace nada
@@ -330,13 +333,16 @@ try {
     ok('y el boton dice Empezar', strpos($html, '>Empezar</button>') !== false,
        'tiene que ser <button>: un <a> lo dispara el prefetch del navegador');
     ok('con el plan a sellar dentro', strpos($html, 'data-plan="' . $PLAN_A . '"') !== false);
-    ok('se ensena el reparto del trabajo', strpos($html, '<div class="ah-reparto">') !== false);
+    ok('se ensena el reparto del trabajo', strpos($html, '<div class="tm-reparto">') !== false);
     ok('con lo que me toca a mi', strpos($html, 'cosas las hago yo') !== false);
     ok('y lo que le toca a el', strpos($html, 'cosas te tocan a ti') !== false);
     ok('y se le dice por su nombre', strpos($html, 'Lo que te voy a pedir') !== false);
+    //  La fixture trae SEIS jugadas. La capa 1 puede nombrar como mucho cuatro:
+    //  el objeto del que habla ahora y los tres «lo que sigue». Nombrar las seis
+    //  seria pintar el plan entero, que es lo que el contrato §C prohibe aqui.
     ok('el plan entero NO se pinta aqui',
-       strpos($html, '<span class="jg-tag') === false && substr_count($html, 'Paso de relleno') <= 3,
-       'el contrato §C: no mostrar aqui todas las jugadas · ojo: jg-tag tambien es el nombre de la clase en el <style>');
+       strpos($html, '<span class="jg-tag') === false && substr_count($html, 'Paso de relleno') <= 4,
+       'nombra ' . substr_count($html, 'Paso de relleno') . ' jugadas de 6 · ojo: jg-tag tambien es el nombre de la clase en el <style>');
 
     echo "\n  — pulsar Empezar —\n";
     //  La salida del arnes trae avisos de PHP delante (constantes ya definidas
@@ -366,9 +372,9 @@ try {
     echo "\n  — y al recargar —\n";
     $html2 = $pedir('marca=' . $A);
     ok('la pantalla ya no ofrece Empezar', strpos($html2, '>Empezar</button>') === false);
-    ok('ni el resumen del trato', strpos($html2, '<div class="ah-reparto">') === false);
+    ok('ni el resumen del trato', strpos($html2, '<div class="tm-reparto">') === false);
     ok('ahora pide lo que toca de verdad',
-       strpos($html2, 'ah-btn') !== false && trim($html2) !== '',
+       strpos($html2, 'tm-btn') !== false && trim($html2) !== '',
        'quedarse sin accion seria peor que el estado C');
 
 } finally {

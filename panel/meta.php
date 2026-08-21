@@ -233,6 +233,103 @@ $mt_unidad = function (string $objetivo): array {
         default:               return ['resultados',   'registrados'];
     }
 };
+
+/** Cuando vuelven las imagenes. La cuota lo trae en dd/mm; si viene vacio
+ *  -sin libro todavia- se calcula el dia 1 del mes que entra.            */
+$mt_reset = function (?array $cuota): string {
+    $r = trim((string)($cuota['reset'] ?? ''));
+    return $r !== '' ? $r : date('d/m', strtotime('first day of next month'));
+};
+
+/**  De donde sale el numero, en cristiano. La cifra NUNCA va sola: si no
+ *   dice de donde sale, el dueño entiende que Crecer cuenta todo lo suyo.  */
+$mt_fuente = function (string $objetivo, string $participio): string {
+    switch ($objetivo) {
+        case 'pedidos': case 'ventas':  return $participio . ' en Crecer';
+        case 'conversaciones':          return $participio . ' por los canales conectados';
+        default:                        return $participio . ' por Instagram y Facebook';
+    }
+};
+
+/**  LA FECHA, EN CRISTIANO. Vive aqui y no en el compositor porque dar
+ *   formato depende del reloj y de la zona, y el compositor tiene que dar
+ *   el mismo resultado en cualquier maquina con el mismo retrato.         */
+$mt_cuando = function (string $fecha): string {
+    $fecha = trim($fecha);
+    if ($fecha === '') return '';
+    $ts = strtotime($fecha);
+    if (!$ts) return '';
+    $dias = ['Sun'=>'domingo','Mon'=>'lunes','Tue'=>'martes','Wed'=>'miércoles',
+             'Thu'=>'jueves','Fri'=>'viernes','Sat'=>'sábado'];
+    $dia  = $dias[date('D', $ts)] ?? date('d/m', $ts);
+    $hora = ltrim(date('g:i', $ts), '0') . ' ' . date('a', $ts);
+    return $dia . ' ' . $hora;
+};
+
+/** El subtitulo del objeto: la red y cuando sale. */
+$mt_sub_obj = function (array $o) use (&$mt_cuando): string {
+    $partes = [];
+    if (trim((string)($o['red'] ?? '')) !== '')   $partes[] = trim((string)$o['red']);
+    $c = $mt_cuando((string)($o['fecha'] ?? ''));
+    if ($c !== '') $partes[] = $c;
+    return implode(' · ', $partes);
+};
+
+/** El icono del objeto, por tipo de pieza. */
+$mt_ico_obj = function (string $tipo): string {
+    switch ($tipo) {
+        case 'reel':     return 'bolt';
+        case 'carrusel': return 'list';
+        case 'historia': return 'camera';
+        default:         return 'image';
+    }
+};
+
+/** El icono de la accion, por lo que la accion hace. */
+$mt_ico_act = function (string $tipo): string {
+    switch ($tipo) {
+        case 'aprobacion': return 'check';
+        case 'material':   return 'upload';
+        case 'decision':   return 'target';
+        case 'informativa': return 'eye';
+        default:           return 'chev-der';
+    }
+};
+
+/**  «COMO VOY» SIN AFIRMAR LO QUE NO SE SABE.
+ *
+ *   Decia «vas en ritmo» y un porcentaje. Con cobertura parcial eso es una
+ *   afirmacion sin respaldo: Crecer cuenta lo que pasa por dentro, no lo que
+ *   el negocio cierra por WhatsApp. Asi que se dice el numero, de cuantos, y
+ *   de donde sale. El ritmo solo se menciona cuando el compositor certifica
+ *   que la cobertura es completa — y esa decision es suya, no de aqui.       */
+$mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fuente): string {
+    $num = fn($v) => rtrim(rtrim(number_format((float)$v, 2), '0'), '.');
+    [$sust, $part] = $uni;
+    $a = $snap['progreso']['actual'];
+    $c = $snap['meta']['cantidad'] ?? null;
+    $frases = [];
+    if ($a !== null && $c !== null) {
+        $frases[] = 'Llevas ' . $num($a) . ' ' . $sust . ' ' . $mt_fuente($obj, $part)
+                  . ', de los ' . $num($c) . ' de tu meta.';
+    } elseif ($a !== null) {
+        $frases[] = 'Llevas ' . $num($a) . ' ' . $sust . ' ' . $mt_fuente($obj, $part) . '.';
+    } else {
+        $frases[] = 'Todavía no tengo señal de esta meta.';
+    }
+    if ($E->puedeAfirmarProgreso() && !empty($snap['progreso']['ritmo_dia'])) {
+        $frases[] = 'Para llegar hacen falta como '
+                  . rtrim(rtrim(number_format((float)$snap['progreso']['ritmo_dia'], 1), '0'), '.')
+                  . ' al día de aquí a la fecha.';
+    } else {
+        $frases[] = $obj === 'pedidos' || $obj === 'ventas'
+            ? 'Solo cuento los que pasan por aquí: lo que cierras por WhatsApp no entra solo — dímelo y lo sumo.'
+            : ($obj === 'conversaciones'
+               ? 'Cuento los mensajes que llegaron por los canales conectados.'
+               : 'Instagram y Facebook reportan con retraso, así que este número va un día por detrás.');
+    }
+    return implode(' ', $frases);
+};
 ?>
 <style>
   /* ══ LA META ══ el norte del negocio.
@@ -441,20 +538,35 @@ $mt_unidad = function (string $objetivo): array {
   .plan-barra i{display:block;height:100%;background:linear-gradient(90deg,var(--teal,#00A49F),var(--magenta,#EF4375));border-radius:99px;transition:width .5s}
   .plan-obs{background:color-mix(in srgb,var(--teal,#00A49F) 10%,#fff);border:1px solid color-mix(in srgb,var(--teal,#00A49F) 30%,#fff);color:#0a6a5f;border-radius:13px;padding:12px 14px;font-size:13px;line-height:1.55;margin:0 0 14px}
 
-  /* ══ CAPA 1 · META · AHORA · CAMINO ═══════════════════════════════════
-     Móvil 360 primero: las tres zonas caben antes del primer scroll. Nada de
-     texto por debajo de 14px, controles de 48px, y UNA sola acción primaria.
-     Desktop no añade decisiones: añade aire. */
-  /*  ZONA SEGURA, no relleno. La barra de abajo YA tiene su hueco reservado
-      (.content{padding-bottom:104px} en encuentralo-ui.css): volver a pedirlo
-      aqui era contarlo dos veces. Lo que de verdad tapaba el ultimo renglon no
-      era la barra sino Ayuda, que flota POR ENCIMA de ese hueco -y para eso
-      esta la regla de abajo, no 300px de nada-.
-      Lo que se reserva aqui es EL FALTANTE, que el guion del final calcula y
-      escribe en --ah-zona: cuanto le falta a la cola de la pantalla para
-      quedar por encima de lo fijo, contando lo que el contenedor ya reserva.
-      Casi siempre sale 0. Sin guion, 20px de margen y nada roto. */
-  .ah{max-width:560px;margin:0 auto;padding-bottom:var(--ah-zona, 20px)}
+  /* ══ CAPA 1 · TU META ═════════════════════════════════════════════════
+     El sistema de la lámina aprobada. Tres reglas lo gobiernan:
+
+       1. UNA sola voz grande por pantalla. La meta es un dato, no un titular.
+       2. El color contesta «¿me toca a mí?» antes de leer — pero NUNCA solo:
+          la pastilla lleva siempre la palabra, porque hay quien no distingue
+          el color y porque una pastilla muda no se puede leer en voz alta.
+       3. Nada de contenido por debajo de 14px.
+
+     Los tonos de marca se separan por CONTRASTE MEDIDO. Blanco sobre el rosa
+     #EF4375 da 3.66:1 y no llega al 4.5 de AA; el mismo rosa hondo da 4.90.
+     Asi que el rosa y el teal de marca se quedan para lo que NO lleva texto
+     -el punto, el icono, la barra- y para texto y botones entran sus versiones
+     hondas. Sigue siendo el color de Crecer, y se lee. */
+  .ah{
+    --tm-rosa:#EF4375;        /* marca · nunca detras de texto chico */
+    --tm-rosa-tx:#C81E52;     /* 5.50:1 sobre crema */
+    --tm-rosa-bt:#D42A5C;     /* 4.90:1 con texto blanco */
+    --tm-rosa-bt-h:#B81F4C;
+    --tm-rosa-piel:#FDF0F4;
+    --tm-teal:#00A49F;
+    --tm-teal-tx:#00726F;     /* 5.69:1 sobre crema */
+    --tm-teal-piel:#EDF7F6;
+    --tm-aviso:#8A5310;
+    --tm-aviso-piel:#FBF3E7;
+    --tm-r:12px;
+    --tm-r-bt:10px;
+    max-width:560px;margin:0 auto;padding-bottom:var(--ah-zona, 20px);
+  }
 
   /*  AYUDA SE APARTA CUANDO ASOMA LA COLA.
       El boton flota en la franja de 78-121px sobre el borde inferior, que es
@@ -462,107 +574,180 @@ $mt_unidad = function (string $objetivo): array {
       360x800 los tapaba y ya no quedaba scroll para moverlos: no habia forma
       de pulsarlos. Se aparta quien esta de mas, y vuelve solo al subir. */
   body .ay-fab{transition:transform .2s ease, opacity .2s ease}
-  /*  Tiene que salir DE LA PANTALLA, no posarse sobre la barra: con un 150%
-      se movia 64px y aterrizaba encima de la botnav, igual de presente. */
   body.ah-cola .ay-fab{transform:translateY(calc(100% + 96px));opacity:0;pointer-events:none}
   .mt-volver{display:inline-block;font-size:14px;font-weight:700;color:var(--muted);
     text-decoration:none;padding:10px 0;margin-bottom:6px;min-height:44px;line-height:24px}
 
-  /* — meta, compacta — */
-  .ah-meta{border-bottom:1px solid var(--line);padding-bottom:13px;margin-bottom:18px}
-  .ah-meta b{display:block;font-family:var(--font-display,'Oswald',sans-serif);font-weight:700;
-    font-size:21px;letter-spacing:.2px;line-height:1.2;color:var(--tinta)}
-  .ah-meta span{display:block;font-size:14px;color:var(--muted);margin-top:3px}
-  .ah-cob{display:block;font-size:14px;line-height:1.45;color:var(--muted);margin-top:7px}
-  .ah-barra{display:block;height:6px;border-radius:99px;background:var(--line);margin-top:10px;overflow:hidden}
-  .ah-barra b{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#FF6B3D,#EF4375)}
+  /* — LA BARRA DE CONTEXTO · un dato, no un titular — */
+  .tm-meta{border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:20px}
+  .tm-meta-fila{display:flex;align-items:center;gap:7px}
+  .tm-meta-fila .ic{width:15px;height:15px;flex:none;color:var(--muted);stroke-width:1.9}
+  .tm-obj-nom{font-size:14px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--muted)}
+  .tm-dias{margin-left:auto;font-size:14px;color:var(--muted)}
+  /*  «REGISTRADOS» VIAJA PEGADO AL NUMERO.
+      Vivia tres renglones mas abajo, en un parrafo que nadie leia, y quien no
+      lo leia entendia que Crecer contaba TODOS sus pedidos. La palabra va aqui,
+      donde no se puede saltar. */
+  .tm-cifra{display:flex;align-items:baseline;gap:6px;margin-top:7px;flex-wrap:wrap}
+  .tm-cifra b{font-size:23px;font-weight:700;color:var(--tinta);line-height:1.1;
+    font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .tm-cifra .et{font-size:14px;color:var(--ink,#4A434F);font-weight:500}
+  .tm-cifra .de{font-size:14px;color:var(--muted)}
+  /*  LA BARRA SE QUEDA DEFINIDA Y CASI NUNCA SE PINTA, A PROPOSITO.
+      Una barra AFIRMA de un vistazo «vas por aqui de un total que conozco», y
+      con cobertura parcial Crecer no conoce el total: solo cuenta lo que pasa
+      por dentro. Quien decide si se puede afirmar es el compositor
+      (puedeAfirmarProgreso), no esta hoja. El dia que la cobertura sea
+      completa, la barra ya esta aqui. */
+  .tm-barra{display:block;height:4px;border-radius:99px;background:var(--line);
+    margin-top:10px;overflow:hidden}
+  .tm-barra b{display:block;height:100%;border-radius:99px;background:var(--tm-teal)}
+  .tm-lim{display:flex;gap:8px;align-items:center;font-size:14px;line-height:1.4;
+    color:var(--tm-aviso);background:var(--tm-aviso-piel);border-radius:9px;
+    padding:8px 10px;margin-top:10px}
+  .tm-lim .ic{width:15px;height:15px;flex:none;stroke-width:2}
 
-  /* — ahora, el bloque dominante — */
-  .ah-now{background:var(--card);border:1.5px solid var(--line);border-radius:18px;
-    padding:18px 17px;box-shadow:0 14px 34px -28px rgba(35,31,32,.5)}
-  .ah-now.quieto{background:#f7fbf8;border-color:#d8ece0;box-shadow:none}
-  .ah-kick{font-size:14px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;
-    color:var(--magenta,#EF4375);margin-bottom:8px}
-  .ah-kick.tranquilo{color:#0a6a4a}
-  .ah-tit{font-family:var(--font-display,'Oswald',sans-serif);font-weight:700;font-size:23px;
-    line-height:1.22;letter-spacing:.2px;margin:0 0 9px;color:var(--tinta)}
-  .ah-ins{font-size:16px;line-height:1.5;color:var(--ink,#4A434F);margin:0 0 15px}
-  /* La vuelta: acuse de recibo, no una alarma. Va arriba del todo porque es lo
-     primero que el dueño busca al regresar, y en 16px porque es texto de uso
-     normal (criterio 7 del contrato). */
-  .ah-hecho{display:flex;gap:10px;align-items:flex-start;margin:0 0 16px;padding:13px 15px;
-    border-radius:12px;background:#EAF7F5;color:#0A5B57;font-size:16px;line-height:1.45}
-  .ah-hecho b{font-weight:800}
-  .ah-hecho-ico{flex:none;display:inline-flex;width:22px;height:22px;margin-top:1px}
-  .ah-hecho-ico svg{width:22px;height:22px;stroke:#00827E;stroke-width:2.6}
-  .ah-btn{display:block;width:100%;min-height:48px;border:0;border-radius:14px;cursor:pointer;
-    text-decoration:none;text-align:center;line-height:48px;font-family:inherit;font-weight:800;
-    font-size:16px;color:#fff;background:linear-gradient(135deg,#FF6B3D,#EF4375);
-    box-shadow:0 12px 26px -14px rgba(239,67,117,.7)}
-  .ah-btn:disabled{opacity:.55;cursor:default}
-  .ah-como{margin:0}
-  .ah-como > summary{list-style:none;display:block}
-  .ah-como > summary::-webkit-details-marker{display:none}
-  .ah-pasos{margin-top:14px;border-top:1px solid var(--line);padding-top:13px}
+  /* — LA VUELTA · que paso con lo anterior — */
+  .tm-vuelta{display:flex;gap:9px;align-items:flex-start;background:var(--tm-teal-piel);
+    border-radius:var(--tm-r);padding:12px 14px;font-size:15px;line-height:1.45;
+    color:var(--tm-teal-tx);margin:0 0 18px}
+  .tm-vuelta .ic{width:18px;height:18px;flex:none;margin-top:1px;stroke-width:2}
+  .tm-vuelta b{color:var(--tm-teal-tx);font-weight:700}
+
+  /* — EL TURNO · se dice, no se grita —
+     Versalitas espaciadas es el tic de la interfaz corporativa. Esto va en caja
+     normal, como habla el corillo, dentro de una pastilla de su color. */
+  .tm-turno{display:inline-flex;align-items:center;gap:7px;font-size:14px;font-weight:600;
+    color:var(--tm-rosa-tx);background:var(--tm-rosa-piel);border-radius:99px;
+    padding:6px 13px 6px 11px;margin-bottom:12px}
+  .tm-turno u{width:7px;height:7px;border-radius:50%;background:var(--tm-rosa);
+    display:block;flex:none}
+  .tm-turno.mio{color:var(--tm-teal-tx);background:var(--tm-teal-piel)}
+  .tm-turno.mio u{background:var(--tm-teal)}
+  .tm-turno.limite{color:var(--tm-aviso);background:var(--tm-aviso-piel)}
+  .tm-turno.limite .ic{width:16px;height:16px;flex:none;stroke-width:2}
+
+  /* — LA FRASE · la unica voz grande — */
+  .tm-frase{font-family:var(--font-display,'Poppins',sans-serif);font-weight:700;
+    font-size:26px;line-height:1.22;letter-spacing:-.022em;color:var(--tinta);
+    margin:0;text-wrap:balance}
+  /*  Cuando el texto se alarga, la voz cede tamaño ANTES que empujar el boton
+      fuera de la pantalla. Lo pone el guion del final, medido. */
+  .ah.tm-largo .tm-frase{font-size:22px}
+
+  /* — EL OBJETO · la unica superficie enmarcada del centro — */
+  .tm-obj{margin-top:18px;border:1px solid var(--line);border-radius:var(--tm-r);
+    display:flex;gap:12px;align-items:center;padding:10px;background:var(--card,#fff)}
+  .tm-obj-ic{width:56px;height:56px;border-radius:9px;flex:none;background:#F1ECE6;
+    display:flex;align-items:center;justify-content:center;color:#A79C90}
+  .tm-obj-ic .ic{width:22px;height:22px;stroke-width:1.7}
+  .tm-obj-tx{min-width:0}
+  .tm-obj-tx b{display:block;font-size:15px;line-height:1.3;color:var(--tinta);font-weight:600;
+    overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .tm-obj-tx span{display:block;font-size:14px;line-height:1.4;color:var(--muted);margin-top:3px}
+
+  /* — LA ACCION · una sola, y se ve que se puede pulsar — */
+  .tm-btn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;
+    min-height:52px;border:0;border-radius:var(--tm-r-bt);background:var(--tm-rosa-bt);
+    color:#fff;font-family:inherit;font-size:17px;font-weight:700;letter-spacing:-.01em;
+    margin-top:18px;cursor:pointer;text-decoration:none;
+    transition:background .14s ease, transform .1s ease}
+  .tm-btn:hover{background:var(--tm-rosa-bt-h)}
+  .tm-btn:active{transform:translateY(1px)}
+  .tm-btn:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
+  .tm-btn:disabled{opacity:.55;cursor:default;transform:none}
+  .tm-btn .ic{width:18px;height:18px;flex:none;stroke-width:2}
+  .tm-btn.teal{background:var(--tm-teal-tx)}
+  .tm-btn.teal:hover{background:#005E5B}
+  /*  DE LINEA CUANDO NO HAY NADA QUE DECIDIR. No es una primaria mas floja:
+      es que mirar no es decidir, y el peso del boton lo tiene que decir. */
+  .tm-btn.linea{background:transparent;color:var(--tinta);border:1px solid var(--line)}
+  .tm-btn.linea:hover{background:var(--crema,#faf7f4)}
+  .tm-cons{font-size:15px;line-height:1.5;color:var(--muted);margin:11px 0 0}
+
+  /* — LAS CAPAS · siempre en el mismo sitio, siempre pulsables — */
+  .tm-capas{margin-top:24px;border-top:1px solid var(--line)}
+  .tm-ac{border-bottom:1px solid var(--line)}
+  .tm-ac:last-child{border-bottom:0}
+  .tm-ac > summary{list-style:none;display:flex;align-items:center;gap:10px;
+    min-height:56px;padding:0 2px;cursor:pointer;
+    font-size:16px;font-weight:600;color:var(--tinta)}
+  .tm-ac > summary::-webkit-details-marker{display:none}
+  .tm-ac > summary:hover{color:var(--tm-rosa-tx)}
+  .tm-ac > summary:focus-visible{outline:2px solid var(--tinta);outline-offset:2px;border-radius:8px}
+  .tm-ac .cta{margin-left:auto;font-size:14px;color:var(--muted);font-weight:500}
+  .tm-ac .chev{width:16px;height:16px;flex:none;color:var(--muted);stroke-width:2;
+    transition:transform .18s ease}
+  .tm-ac[open] > summary .chev{transform:rotate(180deg)}
+  .tm-ac .dentro{padding:2px 2px 18px;animation:tmAbre .18s ease}
+  @keyframes tmAbre{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+  .tm-ac p{font-size:15px;line-height:1.55;color:var(--muted);margin:0}
+  .tm-pasos{display:flex;flex-direction:column;gap:13px}
+  .tm-paso{display:flex;gap:10px;align-items:flex-start}
+  .tm-paso .ic{width:18px;height:18px;flex:none;margin-top:2px;stroke-width:1.9;
+    color:var(--tm-teal-tx)}
+  .tm-paso.tuyo .ic{color:var(--tm-rosa-tx)}
+  .tm-paso div{min-width:0}
+  .tm-paso b{display:block;font-size:15px;line-height:1.35;color:var(--tinta);font-weight:600}
+  .tm-paso span{display:block;font-size:14px;line-height:1.4;color:var(--muted);margin-top:2px}
+
+  /* — pasos de la inversion y confirmaciones (estados excepcionales) — */
+  .ah-pasos{margin-top:16px;border-top:1px solid var(--line);padding-top:14px}
   .ah-monto{font-size:15px;margin:0 0 10px;color:var(--tinta)}
   .ah-pasos ol{margin:0 0 12px;padding-left:20px}
   .ah-pasos li{font-size:15px;line-height:1.5;color:var(--ink,#4A434F);margin-bottom:7px}
   .ah-aviso{font-size:14px;line-height:1.45;color:var(--muted);margin:0 0 14px}
-  .ah-btn2{display:block;width:100%;min-height:48px;border:1.5px solid var(--tinta);border-radius:14px;
-    cursor:pointer;background:#fff;color:var(--tinta);font-family:inherit;font-weight:800;font-size:16px}
-  .ah-btn2:disabled{opacity:.55;cursor:default}
-  .ah-cons{font-size:14px;line-height:1.45;color:var(--muted);margin:10px 0 0}
-  /*  El aviso de cuota trae su propio CSS (includes/cuota_aviso.php) para que
-      sea el mismo en todas las pantallas y no se diverja copiandolo. */
 
-  /* — el trato: lo que se enseña ANTES de que el dueño diga que sí —
-     Dos números y una frase. El plan entero vive en su vista; aquí lo que
-     decide es "de esto me encargo yo, esto te lo voy a pedir a ti". */
-  .ah-trato{margin:0 0 16px;padding:14px 15px;border-radius:14px;background:#FAF7F5;
-    border:1px solid var(--line)}
-  .ah-estr{font-size:16px;line-height:1.5;color:var(--tinta);margin:0 0 12px;font-weight:600}
-  .ah-reparto{display:flex;gap:10px}
-  .ah-reparto div{flex:1;min-width:0;background:#fff;border:1px solid var(--line);
-    border-radius:11px;padding:10px 11px}
-  .ah-reparto b{display:block;font-family:var(--font-display,'Oswald',sans-serif);
-    font-size:24px;line-height:1.1;color:var(--tinta)}
-  .ah-reparto span{display:block;font-size:14px;line-height:1.35;color:var(--muted);margin-top:2px}
-  .ah-reparto .mia b{color:var(--teal,#00A49F)}
-  .ah-reparto .tuya b{color:var(--magenta,#EF4375)}
-  .ah-pide{font-size:14px;line-height:1.5;color:var(--ink,#4A434F);margin:11px 0 0}
-  .ah-pide b{color:var(--tinta)}
-  .ah-guion{margin-top:14px;border-top:1px solid var(--line);padding-top:11px}
-  .ah-guion summary{font-size:14px;font-weight:700;color:var(--teal,#00A49F);cursor:pointer;
-    min-height:44px;line-height:44px;list-style:none}
-  .ah-guion summary::-webkit-details-marker{display:none}
-  .ah-guion p{font-size:14px;line-height:1.55;color:var(--ink,#4A434F);margin:0}
+  /* — el trato del plan nuevo — */
+  .tm-trato{margin:18px 0 0;padding:14px 15px;border-radius:var(--tm-r);
+    background:var(--crema,#FAF7F4);border:1px solid var(--line)}
+  .tm-estr{font-size:16px;line-height:1.5;color:var(--tinta);margin:0 0 12px;font-weight:600}
+  .tm-reparto{display:flex;gap:10px}
+  .tm-reparto div{flex:1;min-width:0;background:var(--card,#fff);border:1px solid var(--line);
+    border-radius:9px;padding:10px 11px}
+  .tm-reparto b{display:block;font-size:23px;line-height:1.1;color:var(--tinta);font-weight:700;
+    font-variant-numeric:tabular-nums}
+  .tm-reparto span{display:block;font-size:14px;line-height:1.35;color:var(--muted);margin-top:2px}
+  .tm-reparto .mia b{color:var(--tm-teal-tx)}
+  .tm-reparto .tuya b{color:var(--tm-rosa-tx)}
+  .tm-pide{font-size:14px;line-height:1.5;color:var(--ink,#4A434F);margin:11px 0 0}
+  .tm-pide b{color:var(--tinta)}
 
-  /* — camino, tres posiciones — */
-  .ah-cam{display:flex;align-items:center;gap:8px;margin-top:16px;font-size:14px;color:var(--muted)}
-  .ah-paso{flex:none}
-  .ah-paso.on{flex:1;min-width:0;color:var(--tinta);font-weight:700;
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-    border-left:1px solid var(--line);border-right:1px solid var(--line);padding:0 10px;text-align:center}
-  .ah-paso b{color:var(--tinta);font-weight:800}
-
-  .ah-mas{display:flex;flex-direction:column;gap:2px;margin-top:20px;
-    border-top:1px solid var(--line);padding-top:8px}
-  .ah-mas a{font-size:14px;font-weight:700;color:var(--muted);text-decoration:none;
-    min-height:44px;line-height:44px}
-  .ah-mas a:hover{color:var(--tinta)}
+  /* — CAPA 3 · filas, no texto en negrita —
+     Eran dos lineas sin recuadro, sin subrayado y sin color de enlace: las
+     puertas al plan y al corillo no invitaban a nada. Ahora son filas
+     pulsables de 56px con su flecha, como los acordeones. */
+  .tm-mas{display:flex;flex-direction:column;margin-top:2px;border-top:1px solid var(--line)}
+  .tm-mas a{display:flex;align-items:center;gap:11px;min-height:56px;
+    text-decoration:none;color:var(--tinta);font-size:16px;font-weight:600;
+    border-bottom:1px solid var(--line);padding:0 2px}
+  .tm-mas a:last-child{border-bottom:0}
+  .tm-mas a:hover{color:var(--tm-rosa-tx)}
+  .tm-mas a:focus-visible{outline:2px solid var(--tinta);outline-offset:2px;border-radius:8px}
+  .tm-mas a .ic{width:18px;height:18px;flex:none;color:var(--muted);stroke-width:1.9}
+  .tm-mas a .ic:last-child{margin-left:auto;width:16px;height:16px}
 
   .ah-toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);opacity:0;
     background:var(--tinta);color:#fff;font-size:14px;font-weight:700;padding:12px 18px;
     border-radius:12px;pointer-events:none;transition:.2s;z-index:80;max-width:92vw}
   .ah-toast.on{opacity:1;transform:translate(-50%,0)}
 
-  @media (min-width:720px){
-    .ah{max-width:620px}
-    .ah-now{padding:24px 24px}
-    .ah-tit{font-size:27px}
-    .ah-ins{font-size:17px}
-    .ah-btn{width:auto;min-width:260px;padding:0 30px}
-    .ah-mas{flex-direction:row;gap:22px}
+  /* ══ ESCRITORIO ══════════════════════════════════════════════════════
+     No es el movil estirado ni el movil pegado a la izquierda con un vacio
+     al lado: es la MISMA columna, CENTRADA en el espacio que deja la barra
+     lateral, y con la capa 2 abierta porque aqui hay alto para ella. */
+  @media (min-width:1000px){
+    .ah{max-width:680px}
+    .tm-frase{font-size:36px}
+    .tm-meta{border:1px solid var(--line);border-radius:var(--tm-r);
+      padding:14px 18px;margin-bottom:26px}
+    .tm-obj{padding:12px;gap:15px}
+    .tm-obj-ic{width:96px;height:96px}
+    .tm-obj-ic .ic{width:30px;height:30px}
+    .tm-obj-tx b{font-size:17px}
+    .tm-btn{max-width:340px;min-height:54px}
+    .tm-capas{margin-top:28px}
   }
 
   /* ── PLAN CONTRA PLAN ──────────────────────────────────────────────────
@@ -1403,89 +1588,130 @@ $mt_unidad = function (string $objetivo): array {
 
 <div class="ah">
 
-  <?php /* ── LA VUELTA · lo que acaba de pasar, en un renglón ──────────
-           El estado ya viene recalculado: MetaSnapshotReader lee en cada carga,
-           así que al volver de aprobar una pieza el bloque Ahora YA muestra lo
-           siguiente. Falta solo decir qué pasó, porque si no el dueño vuelve a
-           una pantalla distinta sin saber si su acción sirvió.
-           El texto NO sale de la URL: la URL trae una llave y el texto vive en
-           MetaRetorno. Llave que no reconozca, no pinta nada. */ ?>
-  <?php if ($mt_confirma = MetaRetorno::confirmacion($_GET['hecho'] ?? null)): ?>
-    <div class="ah-hecho" role="status">
-      <span class="ah-hecho-ico" aria-hidden="true"><?= ico('check') ?></span>
-      <span><b><?= $h($mt_confirma[0]) ?></b> <?= $h($mt_confirma[1]) ?></span>
-    </div>
-  <?php endif; ?>
+  <?php /* ── BARRA DE CONTEXTO · un DATO, no un titular ────────────────
+           Era un encabezado de 21px que competia con el titulo del estado:
+           dos voces grandes, una encima de otra, y el ojo sin saber cual era
+           el asunto. Ahora es una tira: objetivo, cifra y dias.
 
-  <?php /* ── SIN IMAGENES ESTE MES · un limite, no una averia ──────────
-           Va arriba porque explica lo que el dueño esta a punto de ver: una
-           pantalla que no le va a dejar pedir arte nuevo. Enterarse despues de
-           intentarlo es lo que manda gente a soporte. */ ?>
-  <?php if ($mt_cuota && !empty($mt_cuota['lleno'])): ?>
-    <?= cuota_aviso_html($mt_cuota, $marca_id, $mt_cuota_manda, $BASE) ?>
-  <?php endif; ?>
-
-  <?php /* ── ZONA META · compacta, y honesta con lo que puede afirmar ── */ ?>
+           Y la cifra dice DE DONDE SALE en la misma linea. Antes «7 de 25» y,
+           tres renglones mas abajo, un parrafo explicando que lo de WhatsApp
+           no entraba. Quien no leia el parrafo entendia otra cosa. */ ?>
   <?php if ($mt_snap['meta']): ?>
     <?php
       [$sust, $part] = $uni;
       $num = fn($v) => rtrim(rtrim(number_format((float)$v, 2), '0'), '.');
-      $trozos = [];
-      if ($mt_snap['progreso']['actual'] !== null) {
-          $trozos[] = $num($mt_snap['progreso']['actual']) . ' ' . $part . ' hasta hoy';
-      } else {
-          $trozos[] = 'sin señal todavía';
-      }
+      $dias = '';
       if ($mt_snap['progreso']['dias_rest'] !== null) {
           $d = (int)$mt_snap['progreso']['dias_rest'];
-          $trozos[] = $d <= 0 ? 'sin días por delante' : ($d === 1 ? 'queda 1 día' : "quedan {$d} días");
+          $dias = $d <= 0 ? 'sin días por delante'
+                          : ($d === 1 ? 'queda 1 día' : "quedan {$d} días");
       }
+      $cerrada = $E->estado === MetaState::M_CERRADA;
+      $pct = $mt_snap['progreso']['pct'];
     ?>
-    <section class="ah-meta">
-      <b><?= $mt_snap['meta']['cantidad'] !== null
-            ? 'Meta: ' . $h($num($mt_snap['meta']['cantidad'])) . ' ' . $h($sust)
-            : 'Meta: ' . $h($sust) ?></b>
-      <span><?= $h(implode(' · ', $trozos)) ?></span>
-      <?php if ($E->puedeAfirmarProgreso() && $mt_snap['progreso']['pct'] !== null): ?>
-        <i class="ah-barra"><b style="width:<?= max(0, min(100, (int)$mt_snap['progreso']['pct'])) ?>%"></b></i>
-      <?php else: ?>
-        <?php /* Cobertura parcial: ni barra, ni %, ni ritmo, ni "faltan N".
-                 Se dice de dónde sale el número y se acabó. */ ?>
-        <small class="ah-cob"><?= $obj === 'pedidos' || $obj === 'ventas'
-          ? 'Cuenta lo registrado en Crecer. Lo que cierras por WhatsApp no entra solo.'
-          : ($obj === 'conversaciones'
-             ? 'Cuenta los mensajes que llegaron por los canales conectados.'
-             : 'Instagram y Facebook reportan con retraso.') ?></small>
+    <section class="tm-meta">
+      <div class="tm-meta-fila">
+        <?= ico($cerrada ? 'check-circle' : 'compass') ?>
+        <span class="tm-obj-nom"><?= $h($cerrada ? $sust . ' · cerrada' : $sust) ?></span>
+        <?php if ($dias !== ''): ?><span class="tm-dias"><?= $h($dias) ?></span><?php endif; ?>
+      </div>
+      <div class="tm-cifra">
+        <?php if ($mt_snap['progreso']['actual'] !== null): ?>
+          <b><?= $h($num($mt_snap['progreso']['actual'])) ?></b>
+          <span class="et"><?= $h($mt_fuente($obj, $part)) ?></span>
+        <?php else: ?>
+          <span class="et">Sin señal todavía</span>
+        <?php endif; ?>
+        <?php if ($mt_snap['meta']['cantidad'] !== null): ?>
+          <span class="de">· de <?= $h($num($mt_snap['meta']['cantidad'])) ?></span>
+        <?php endif; ?>
+      </div>
+      <?php /* La barra solo cuando el COMPOSITOR dice que se puede afirmar el
+               progreso. Con cobertura parcial no se pinta: una barra afirma
+               «vas por aqui de un total que conozco», y no lo conocemos. */ ?>
+      <?php if ($E->puedeAfirmarProgreso() && $pct !== null): ?>
+        <i class="tm-barra"><b style="width:<?= max(0, min(100, (int)$pct)) ?>%"></b></i>
+      <?php endif; ?>
+      <?php /* El limite de imagenes, cuando NO bloquea lo de hoy: un renglon
+               mas de contexto. Cuando bloquea se lleva la pantalla entera, y
+               eso lo decide el aviso de arriba, no esta tira. */ ?>
+      <?php if ($mt_cuota && !empty($mt_cuota['lleno']) && !$mt_cuota_manda): ?>
+        <div class="tm-lim"><?= ico('image') ?>
+          <span>Sin imágenes nuevas hasta el <?= $h($mt_reset($mt_cuota)) ?></span>
+        </div>
       <?php endif; ?>
     </section>
   <?php endif; ?>
 
-  <?php /* ── ZONA AHORA · el estado dominante, una sola acción ── */ ?>
-  <?php
-    // El rótulo no puede repetir el título. El compositor devuelve títulos que
-    // se explican solos ("Para seguir, necesito tu video") porque Home los usa
-    // sueltos; aquí, con el rótulo delante, se le quita el prefijo. Si al
-    // quitarlo no queda nada, se deja el título entero y se cae el rótulo.
-    $kick = '';
-    if ($E->pideAlgoAlDueno())   $kick = 'Para seguir, necesito';
-    elseif ($act === null)       $kick = 'Nada pendiente de ti';
-    $titulo = $E->titulo;
-    if ($kick !== '' && stripos($titulo, $kick) === 0) {
-        $resto = trim(mb_substr($titulo, mb_strlen($kick)));
-        if ($resto !== '') $titulo = mb_strtoupper(mb_substr($resto, 0, 1)) . mb_substr($resto, 1);
-        else               $kick = '';
-    } elseif ($kick !== '' && mb_strtolower(trim($titulo)) === mb_strtolower($kick)) {
-        $kick = '';
-    }
-  ?>
-  <section class="ah-now<?= $act === null ? ' quieto' : '' ?>">
-    <?php if ($kick !== ''): ?>
-      <div class="ah-kick<?= $act === null ? ' tranquilo' : '' ?>"><?= $h($kick) ?></div>
-    <?php endif; ?>
+  <?php /* ── LA VUELTA · qué pasó con lo anterior ───────────────────────
+           Va DESPUES de la meta y antes del turno: es el acuse de recibo de
+           lo que el dueño acaba de hacer, y lo primero que busca al volver.
+           El texto NO sale de la URL: la URL trae una llave y el texto vive
+           en MetaRetorno. Llave que no reconozca, no pinta nada. */ ?>
+  <?php if ($mt_confirma = MetaRetorno::confirmacion($_GET['hecho'] ?? null)): ?>
+    <div class="tm-vuelta" role="status">
+      <?= ico('check-circle') ?>
+      <span><b><?= $h($mt_confirma[0]) ?></b> <?= $h($mt_confirma[1]) ?></span>
+    </div>
+  <?php endif; ?>
 
-    <h1 class="ah-tit"><?= $h($titulo) ?></h1>
-    <?php if (trim($E->instruccion) !== ''): ?>
-      <p class="ah-ins"><?= $h($E->instruccion) ?></p>
+  <?php /* ── ZONA AHORA · el turno, una frase y UNA acción ─────────────
+           Quien decide el estado sigue siendo el compositor: aqui solo se
+           pregunta lo que el estado ya sabe de si mismo -si pide algo al
+           dueño, si tiene accion- y se pinta. Ninguna regla nueva. */ ?>
+  <?php
+    //  EL TURNO. Tres posibles, y siempre CON PALABRA: la regla de
+    //  accesibilidad dice que la informacion no puede viajar solo en el
+    //  color, porque hay quien no lo distingue y porque una pastilla muda
+    //  no se puede leer en voz alta.
+    $turno_cls = ''; $turno_txt = ''; $turno_ico = '';
+    if ($mt_cuota_manda) {
+        $turno_cls = 'limite'; $turno_txt = 'Sin imágenes este mes'; $turno_ico = 'image';
+    } elseif ($E->pideAlgoAlDueno()) {
+        $turno_cls = ''; $turno_txt = 'Te toca a ti';
+    } elseif ($act === null) {
+        $turno_cls = 'mio'; $turno_txt = 'Me toca a mí';
+    } else {
+        $turno_cls = 'mio'; $turno_txt = 'Ya está listo';
+    }
+
+    //  EL TITULO YA NO REPITE EL ROTULO. El compositor devuelve titulos que
+    //  se explican solos ("Para seguir, necesito tu video") porque Home los
+    //  usa sueltos; aqui, con el turno delante, sobra el prefijo.
+    $titulo = trim($E->titulo);
+    foreach (['Para seguir, necesito', 'Nada pendiente de ti'] as $pref) {
+        if (stripos($titulo, $pref) === 0) {
+            $resto = trim(mb_substr($titulo, mb_strlen($pref)));
+            if ($resto !== '') $titulo = mb_strtoupper(mb_substr($resto, 0, 1)) . mb_substr($resto, 1);
+            break;
+        }
+    }
+    $objeto = (array)($E->evidencia['objeto'] ?? []);
+  ?>
+  <section class="tm-ahora">
+    <span class="tm-turno <?= $h($turno_cls) ?>">
+      <?php if ($turno_ico !== ''): ?><?= ico($turno_ico) ?><?php else: ?><u></u><?php endif; ?>
+      <?= $h($turno_txt) ?>
+    </span>
+
+    <h1 class="tm-frase"><?= $h($titulo) ?></h1>
+
+    <?php /* EL OBJETO. La pantalla enseña de qué habla ANTES de que el dueño
+             pulse: hasta ahora habia que entrar al post para saber cual era.
+             Solo cuando el estado trae uno — si lo que falta es material, lo
+             que se pide es justo lo que NO hay, y enmarcar un hueco no dice
+             nada. */ ?>
+    <?php if ($objeto && trim((string)($objeto['titulo'] ?? '')) !== ''): ?>
+      <div class="tm-obj">
+        <span class="tm-obj-ic"><?= ico($mt_ico_obj((string)($objeto['tipo'] ?? 'post'))) ?></span>
+        <span class="tm-obj-tx">
+          <b><?= $h($objeto['titulo']) ?></b>
+          <?php $sub_obj = $mt_sub_obj($objeto); ?>
+          <?php if ($sub_obj !== ''): ?>
+            <span><?= $h($sub_obj) ?></span>
+          <?php endif; ?>
+        </span>
+      </div>
     <?php endif; ?>
 
     <?php if ($act): $tipo = (string)($act['tipo'] ?? ''); ?>
@@ -1495,7 +1721,7 @@ $mt_unidad = function (string $objetivo): array {
                  primaria ENSEÑA cómo hacerlo; confirmarlo es un paso aparte, y
                  solo esa confirmación cierra la jugada. */ ?>
         <details class="ah-como" id="ahComo">
-          <summary class="ah-btn"><?= $h($act['etiqueta']) ?></summary>
+          <summary class="tm-btn"><?= ico('dollar') ?><?= $h($act['etiqueta']) ?></summary>
           <div class="ah-pasos">
             <p class="ah-monto">Presupuesto de esta jugada: <b><?= $h('$' . rtrim(rtrim(number_format((float)($E->evidencia['inversion'] ?? 0), 2), '0'), '.')) ?></b></p>
             <ol>
@@ -1506,13 +1732,13 @@ $mt_unidad = function (string $objetivo): array {
             </ol>
             <p class="ah-aviso">Yo no puedo promocionarlo por ti ni ver si el pago salió.
               Cuando lo hayas hecho, dímelo aquí y lo doy por hecho.</p>
-            <button type="button" class="ah-btn2" id="ahConfirmar"
-                    data-jugada="<?= (int)($E->evidencia['tactica_id'] ?? 0) ?>">Confirmar que ya lo promocioné</button>
+            <button type="button" class="tm-btn linea" id="ahConfirmar"
+                    data-jugada="<?= (int)($E->evidencia['tactica_id'] ?? 0) ?>"><?= ico('check') ?>Confirmar que ya lo promocioné</button>
           </div>
         </details>
       <?php elseif ($tipo === 'fisica'): ?>
-        <button type="button" class="ah-btn" id="ahConfirmar"
-                data-jugada="<?= (int)($E->evidencia['tactica_id'] ?? 0) ?>"><?= $h($act['etiqueta']) ?></button>
+        <button type="button" class="tm-btn" id="ahConfirmar"
+                data-jugada="<?= (int)($E->evidencia['tactica_id'] ?? 0) ?>"><?= ico('check') ?><?= $h($act['etiqueta']) ?></button>
       <?php elseif ($tipo === 'presentacion'): ?>
         <?php /* El contrato pide RESUMEN, no el plan entero (§C): la meta ya
                  está arriba, aquí va la estrategia en una frase y el reparto
@@ -1524,65 +1750,121 @@ $mt_unidad = function (string $objetivo): array {
           $ev_tuyo = (int)($E->evidencia['te_pido'] ?? 0);
           $ev_pide = (array)($E->evidencia['pide'] ?? []);
         ?>
-        <div class="ah-trato">
+        <div class="tm-trato">
           <?php if ($ev_est !== ''): ?>
-            <p class="ah-estr"><?= $h($ev_est) ?></p>
+            <p class="tm-estr"><?= $h($ev_est) ?></p>
           <?php endif; ?>
-          <div class="ah-reparto">
+          <div class="tm-reparto">
             <div class="mia"><b><?= $ev_mio ?></b><span><?= $ev_mio === 1 ? 'cosa la hago yo' : 'cosas las hago yo' ?></span></div>
             <div class="tuya"><b><?= $ev_tuyo ?></b><span><?= $ev_tuyo === 1 ? 'cosa te toca a ti' : 'cosas te tocan a ti' ?></span></div>
           </div>
           <?php if ($ev_pide): ?>
-            <p class="ah-pide"><b>Lo que te voy a pedir:</b>
+            <p class="tm-pide"><b>Lo que te voy a pedir:</b>
               <?= $h(implode(' · ', $ev_pide)) ?><?= $ev_tuyo > count($ev_pide) ? '…' : '' ?></p>
           <?php elseif ($ev_tuyo === 0): ?>
-            <p class="ah-pide">De este plan me encargo yo entero. Tú apruebas y ya.</p>
+            <p class="tm-pide">De este plan me encargo yo entero. Tú apruebas y ya.</p>
           <?php endif; ?>
         </div>
         <?php /* Botón, no enlace: esto ESCRIBE. Un <a> lo repetiría el
                  prefetch del navegador y lo guardaría el historial. */ ?>
-        <button type="button" class="ah-btn" id="ahEmpezar"
-                data-plan="<?= (int)($E->evidencia['plan_id'] ?? 0) ?>"><?= $h($act['etiqueta']) ?></button>
+        <button type="button" class="tm-btn teal" id="ahEmpezar"
+                data-plan="<?= (int)($E->evidencia['plan_id'] ?? 0) ?>"><?= ico('eye') ?><?= $h($act['etiqueta']) ?></button>
       <?php elseif ($tipo === 'reintento_job'): ?>
         <?php /* Reencola la jugada de verdad con la acción `ejecutar` que ya
                  existe. Un enlace aquí recargaría la pantalla dejando el fallo
                  igual de trabado. */ ?>
-        <button type="button" class="ah-btn" id="ahReintentar"
-                data-jugada="<?= (int)($E->evidencia['tactica_id'] ?? 0) ?>"><?= $h($act['etiqueta']) ?></button>
+        <button type="button" class="tm-btn" id="ahReintentar"
+                data-jugada="<?= (int)($E->evidencia['tactica_id'] ?? 0) ?>"><?= ico('refresh') ?><?= $h($act['etiqueta']) ?></button>
+      <?php elseif ($mt_cuota_manda): ?>
+        <?php /* SIN CUOTA Y LO DE HOY NECESITA PINTAR.
+                 La accion normal no puede completarse, asi que NO se enseña:
+                 dejarla ahi mandaria al dueño a un callejon. Lo unico cierto
+                 hoy es mirar lo que ya existe, y eso no es una decision — va
+                 en boton de linea. */ ?>
+        <a class="tm-btn linea" href="<?= $BASE ?>/propuestas.php?marca=<?= $marca_id ?>"><?= ico('eye') ?>Ver lo que ya está listo</a>
       <?php else: ?>
-        <?php /* Cuando el aviso de cuota se llevo el primario, esta accion baja
-                 a secundaria en vez de desaparecer: sigue siendo verdad que hay
-                 algo que hacer, solo que hoy no se puede completar pintando. */ ?>
-        <a class="<?= $mt_cuota_manda ? 'ah-btn2' : 'ah-btn' ?>" href="<?= $h($destino) ?>"><?= $h($act['etiqueta']) ?></a>
+        <a class="tm-btn<?= $E->pideAlgoAlDueno() ? '' : ' teal' ?>" href="<?= $h($destino) ?>"><?= ico($mt_ico_act((string)$tipo)) ?><?= $h($act['etiqueta']) ?></a>
       <?php endif; ?>
-      <?php if (trim((string)$act['consecuencia']) !== ''): ?>
-        <p class="ah-cons"><?= $h($act['consecuencia']) ?></p>
+
+      <?php /* La consecuencia de pulsar. Cuando el limite manda, la de la
+               accion normal ya no es verdad: se dice lo que SI pasa. */ ?>
+      <?php if ($mt_cuota_manda): ?>
+        <p class="tm-cons">El resto del plan continúa. Lo que necesita imagen queda en pausa.</p>
+      <?php elseif (trim((string)$act['consecuencia']) !== ''): ?>
+        <p class="tm-cons"><?= $h($act['consecuencia']) ?></p>
       <?php endif; ?>
+    <?php else: ?>
+      <?php /* Sin accion del dueño: hay algo que MIRAR, nada que decidir, y el
+               peso del boton lo tiene que decir. */ ?>
+      <a class="tm-btn linea" href="<?= $BASE ?>/calendario.php?marca=<?= $marca_id ?>"><?= ico('calendar') ?>Ver el mes completo</a>
+      <p class="tm-cons">Te aviso en cuanto haya algo para tu OK.</p>
     <?php endif; ?>
 
     <?php if ($E->estado === MetaState::G_MATERIAL && trim((string)($E->evidencia['guion'] ?? '')) !== ''): ?>
-      <details class="ah-guion">
-        <summary>Ver qué grabar</summary>
-        <p><?= nl2br($h($E->evidencia['guion'])) ?></p>
+      <details class="tm-ac" style="border-top:1px solid var(--line);margin-top:18px">
+        <summary>Ver qué grabar<?= ico('chev-abajo') ?></summary>
+        <div class="dentro"><p><?= nl2br($h($E->evidencia['guion'])) ?></p></div>
       </details>
     <?php endif; ?>
   </section>
 
-  <?php /* ── ZONA CAMINO · tres posiciones, nunca el plan entero ── */ ?>
-  <?php $cm = $E->camino; if ($cm['ahora'] !== null || $cm['hecho'] > 0 || $cm['despues'] > 0): ?>
-    <section class="ah-cam">
-      <span class="ah-paso hecho"><b><?= (int)$cm['hecho'] ?></b> hecho<?= (int)$cm['hecho'] === 1 ? '' : 's' ?></span>
-      <span class="ah-paso on"><?= $cm['ahora'] !== null ? $h($cm['ahora']) : 'ahora' ?></span>
-      <span class="ah-paso"><b><?= (int)$cm['despues'] ?></b> después</span>
-    </section>
-  <?php endif; ?>
+  <?php /* ── CAPA 2 · el camino y la meta, plegados ─────────────────────
+           Nacen ABIERTOS solo cuando la pantalla no puede pedir la accion
+           normal del plan -no hay nada que decidir, o el limite lo impide-.
+           En el resto, cerrados: primero la decision, y quien quiera mas la
+           abre. */ ?>
+  <?php
+    $cm = $E->camino;
+    $abre = ($act === null) || $mt_cuota_manda;
+    $prox = (array)($cm['proximos'] ?? []);
+    //  EN LA PRESENTACION DEL PLAN, «Lo que sigue» SOBRA.
+    //  Esa pantalla ya ES el plan: el trato de arriba dice cuantas cosas hago
+    //  yo, cuantas te pido y cuales. Repetirlas debajo nombra casi todas las
+    //  jugadas, que es justo lo que el contrato §C no quiere en la capa 1.
+    if ($E->estado === MetaState::C_PLAN_POR_VER) $prox = [];
+  ?>
+  <div class="tm-capas">
+    <?php if ($mt_cuota_manda): ?>
+      <details class="tm-ac" open>
+        <summary>Qué sigo haciendo mientras <span class="cta">4</span><?= ico('chev-abajo') ?></summary>
+        <div class="dentro"><div class="tm-pasos">
+          <div class="tm-paso"><?= ico('pen') ?><div><b>Escribo los textos</b><span>eso no gasta imágenes</span></div></div>
+          <div class="tm-paso"><?= ico('calendar') ?><div><b>Publico lo que ya aprobaste</b><span>en su hora</span></div></div>
+          <div class="tm-paso"><?= ico('chat') ?><div><b>Contesto los mensajes</b><span>como siempre</span></div></div>
+          <div class="tm-paso"><?= ico('clock') ?><div><b>El <?= $h($mt_reset($mt_cuota)) ?> vuelve la cuota</b><span>podrás retomar lo que quedó en pausa</span></div></div>
+        </div></div>
+      </details>
+    <?php elseif ($prox): ?>
+      <details class="tm-ac"<?= $abre ? ' open' : '' ?>>
+        <summary>Lo que sigue <span class="cta"><?= count($prox) ?></span><?= ico('chev-abajo') ?></summary>
+        <div class="dentro"><div class="tm-pasos">
+          <?php foreach ($prox as $p): ?>
+            <div class="tm-paso<?= !empty($p['tuyo']) ? ' tuyo' : '' ?>">
+              <?= ico(!empty($p['tuyo']) ? 'camera' : 'bolt') ?>
+              <div><b><?= $h($p['titulo']) ?></b>
+                <span><?= $h((!empty($p['semana']) ? 'semana ' . (int)$p['semana'] . ' · ' : '')
+                         . (!empty($p['tuyo']) ? 'te la pido' : 'la hago yo')) ?></span></div>
+            </div>
+          <?php endforeach; ?>
+        </div></div>
+      </details>
+    <?php endif; ?>
 
-  <nav class="ah-mas">
+    <?php if ($mt_snap['meta']): ?>
+      <details class="tm-ac">
+        <summary>Cómo voy con la meta<?= ico('chev-abajo') ?></summary>
+        <div class="dentro"><p><?= $h($mt_como_voy($E, $mt_snap, $uni, $obj)) ?></p></div>
+      </details>
+    <?php endif; ?>
+  </div>
+
+  <?php /* ── CAPA 3 · otra pantalla, detras de un enlace ── */ ?>
+  <nav class="tm-mas">
     <?php if ($meta): ?>
-      <a href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&vista=plan">Ver el plan completo</a>
-      <a href="<?= $BASE ?>/sala.php?marca=<?= $marca_id ?>">Discutirla con el corillo</a>
+      <a href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&vista=plan"><?= ico('list') ?>Ver el plan completo<?= ico('chev-der') ?></a>
+      <a href="<?= $BASE ?>/sala.php?marca=<?= $marca_id ?>"><?= ico('chat') ?>Discutirla con el corillo<?= ico('chev-der') ?></a>
     <?php else: ?>
-      <a href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&vista=wizard">Escoger otra meta</a>
+      <a href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&vista=wizard"><?= ico('target') ?>Escoger otra meta<?= ico('chev-der') ?></a>
     <?php endif; ?>
   </nav>
 </div>
@@ -1693,7 +1975,7 @@ $mt_unidad = function (string $objetivo): array {
   //  La banda es la franja del propio boton con 16px de aviso a cada lado: se
   //  quita ANTES de rozar, no cuando ya tapa.
   (function(){
-    var SEL = '.ah-btn, .ah-btn2, .ah-como > summary, .cq-btn, .ah-mas';
+    var SEL = '.tm-btn, .ah-como > summary, .tm-ac > summary, .cq-btn, .tm-mas a';
     if (!('IntersectionObserver' in window)) return;
     var ob = null, dentro = null;
     var montar = function(){
