@@ -27,6 +27,11 @@ $caso  = (string)($argv[3] ?? 'vivo');
 //  de aqui igual — ia_http_get_res esta sustituida abajo.
 define('OPENAI_API_KEY', 'sk-prueba-la-red-esta-sustituida');
 
+//  Este runner SI recorre el camino completo, pero contra su propio
+//  transporte: la funcion de red va sustituida abajo. Se declara para que la
+//  valla lo deje pasar — y solo a el.
+if (!defined('CRECER_TEST_RED_FALSA')) define('CRECER_TEST_RED_FALSA', true);
+
 require __DIR__ . '/_sin_gasto.php';
 
 function ia_http_get_res(string $url, array $headers): array {

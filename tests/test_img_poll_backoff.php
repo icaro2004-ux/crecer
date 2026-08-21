@@ -77,14 +77,20 @@ echo "\n  — un job que el proveedor sostiene no se mata a las 24h —\n";
 $d = img_poll_decidir($viejo, 'in_progress', null, $AHORA);
 ok('vivo a las 49h → sigue esperando', $d['accion'] === 'esperar');
 ok('vivo a las 49h NO dispara respaldo', $d['accion'] !== 'fallback');
-//  LOS INTENTOS NO MATAN UN JOB VIVO... hasta el tope absoluto.
-//  Por debajo del tope manda la EDAD, como siempre. Pero tiene que haber un
-//  techo: sin el, #644 llego a 35 sondeos porque su edad se leia como cero y
-//  nada mas podia pararla. El tope es la red, no la regla.
-$d = img_poll_decidir(['intentos' => IMG_POLL_INTENTOS_MAX - 1, 'job_at' => '2026-08-19 11:00:00'], 'queued', null, $AHORA);
-ok('por debajo del tope, un job vivo sigue esperando', $d['accion'] === 'esperar');
+//  LOS INTENTOS NO MATAN UN JOB VIVO. Ni con 999 sondeos: mientras el proveedor
+//  conteste 'queued' o 'in_progress' esta sosteniendo el trabajo, y a ese lo
+//  decide la EDAD. El tope cuenta otra cosa — ver justo abajo.
 $d = img_poll_decidir(['intentos' => 999, 'job_at' => '2026-08-19 11:00:00'], 'queued', null, $AHORA);
-ok('pasado el tope, se aparca', $d['accion'] === 'aparcar' && $d['clase'] === 'tope_intentos',
+ok('un job VIVO no se aparca por intentos', $d['accion'] === 'esperar',
+   "salio {$d['accion']} · el tope es para consultas FALLIDAS, no para trabajos sanos");
+
+//  LO QUE SI CUENTA EL TOPE: consultas que no se pudieron hacer. Ese es el caso
+//  de #644 — su edad se leia como cero y nada mas podia pararla.
+$d = img_poll_decidir(['intentos' => IMG_POLL_INTENTOS_MAX - 1, 'job_at' => null], null, 'boom', $AHORA);
+ok('por debajo del tope de fallos, sigue esperando', $d['accion'] === 'esperar');
+$d = img_poll_decidir(['intentos' => IMG_POLL_INTENTOS_MAX + 1, 'job_at' => null], null, 'boom', $AHORA);
+ok('pasado el tope de FALLOS, se aparca',
+   $d['accion'] === 'aparcar' && $d['clase'] === 'tope_fallos_consulta',
    "salio {$d['accion']}/{$d['clase']} · ningun trabajo puede volver a 35 sondeos");
 ok('y aparcar no autoriza respaldo', $d['accion'] !== 'fallback');
 $d = img_poll_decidir($anciano, 'in_progress', null, $AHORA);

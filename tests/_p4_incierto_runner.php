@@ -26,6 +26,11 @@ $post  = (int)($argv[2] ?? 0);
 //  no puede salir de aqui igual — ia_http_post_retry esta sustituida abajo.
 define('OPENAI_API_KEY', 'sk-prueba-la-red-esta-sustituida');
 
+//  Este runner SI recorre el camino completo, pero contra su propio
+//  transporte: la funcion de red va sustituida abajo. Se declara para que la
+//  valla lo deje pasar — y solo a el.
+if (!defined('CRECER_TEST_RED_FALSA')) define('CRECER_TEST_RED_FALSA', true);
+
 require __DIR__ . '/_sin_gasto.php';
 
 //  El borde: 200 limpio, sin error y sin id. Definido ANTES de cargar ia.php,

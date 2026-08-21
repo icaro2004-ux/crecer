@@ -39,7 +39,9 @@ if (!defined('IMG_POLL_LEASE_SEG'))     define('IMG_POLL_LEASE_SEG', 120);
 if (!defined('IMG_POLL_LEASE_DED_SEG')) define('IMG_POLL_LEASE_DED_SEG', 10);
 /** Horas sin poder CONSULTAR tras las que el job se aparca (no se da por fallido). */
 if (!defined('IMG_POLL_MAX_HORAS'))     define('IMG_POLL_MAX_HORAS', 24);
-//  TOPE ABSOLUTO DE SONDEOS, pase lo que pase con las fechas.
+//  TOPE ABSOLUTO DE CONSULTAS FALLIDAS, pase lo que pase con las fechas.
+//  Cuenta SOLO los sondeos en que no se pudo consultar. Un proveedor que
+//  contesta queued/in_progress no muere por intentos: a ese lo decide la edad.
 //  Los otros dos topes miran la EDAD del job, y la edad depende de una columna
 //  que puede estar vacia (los trabajos anteriores al 19 de agosto) o de un reloj
 //  que puede ir en otra zona. Cuando eso falla, no hay freno: #644 llego a 35
@@ -148,14 +150,6 @@ function img_poll_decidir(array $j, ?string $status, ?string $err, string $ahora
 
     $intentos++;
 
-    //  LA RED DE SEGURIDAD. Antes que cualquier cuenta de edad: si se ha
-    //  preguntado demasiadas veces, se aparca y punto. Los topes por edad
-    //  dependen de img_job_at y del reloj; este no depende de nada.
-    if ($intentos > (int)IMG_POLL_INTENTOS_MAX) {
-        return ['accion'=>'aparcar', 'intentos'=>$intentos, 'espera_seg'=>null,
-                'incidente'=>true, 'clase'=>'tope_intentos'];
-    }
-
     // El backoff depende de QUIEN sondea. El worker dedicado mantiene su cadencia
     // de 3s (el dueno esta mirando); el barrido de pantalla sube 1-2-4...60 min.
     // Sin esta distincion el backoff mataria el camino rapido: un dano mayor que
@@ -171,9 +165,23 @@ function img_poll_decidir(array $j, ?string $status, ?string $err, string $ahora
     $espera = $dedicado ? 3 : min(60, (int)pow(2, max(0, $intentos - 1))) * 60;
 
     if ($status === null) {
-        // NO SE PUDO CONSULTAR. Nunca terminal, nunca respaldo. Se aparca por
-        // TIEMPO, no por numero de intentos: asi la decision no depende de la
-        // cadencia con que se pregunte.
+        // NO SE PUDO CONSULTAR. Nunca terminal, nunca respaldo.
+        //
+        //  EL TOPE CUENTA SOLO ESTO: consultas que FALLARON. Un proveedor que
+        //  contesta 'queued' o 'in_progress' esta sosteniendo el trabajo, y a
+        //  ese no se le mata por haber preguntado muchas veces — a ese lo
+        //  decide la EDAD, que es lo unico que dice si vale la pena seguir.
+        //
+        //  La primera version ponia el tope arriba, antes de mirar el status, y
+        //  aparcaba tambien los trabajos vivos. Eso convertia una red de
+        //  seguridad en una guillotina: un job lento pero sano moria por
+        //  impaciencia del sondeo.
+        if ($intentos > (int)IMG_POLL_INTENTOS_MAX) {
+            return ['accion'=>'aparcar', 'intentos'=>$intentos, 'espera_seg'=>null,
+                    'incidente'=>true, 'clase'=>'tope_fallos_consulta'];
+        }
+        // Y por tiempo: asi la decision no depende de la cadencia con que se
+        // pregunte.
         if ($edad_h >= (float)IMG_POLL_MAX_HORAS) {
             return ['accion'=>'aparcar', 'intentos'=>$intentos, 'espera_seg'=>null,
                     'incidente'=>true, 'clase'=>img_poll_clase_error($err)];

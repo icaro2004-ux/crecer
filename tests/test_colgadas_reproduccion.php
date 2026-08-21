@@ -3,16 +3,17 @@
 //  CRECER — REPRODUCCION EXACTA DEL SINTOMA DE #644 Y #656
 //  tests/test_colgadas_reproduccion.php
 //
-//  NO ES UNA PRUEBA DE QUE ALGO FUNCIONE. Es lo contrario: fija por escrito
-//  DOS DEFECTOS que siguen vivos despues del commit 25cc3c5, para poder hablar
-//  de ellos con hechos en vez de con hipotesis. Cuando se arreglen, estas
-//  afirmaciones se invierten y esta cabecera se reescribe.
+//  NACIO fijando por escrito dos defectos vivos, para poder hablar de ellos con
+//  hechos en vez de con hipotesis. El primero ya esta arreglado y su afirmacion
+//  quedo INVERTIDA, como decia esta cabecera que pasaria. El segundo sigue, pero
+//  acotado — ver abajo.
 //
-//  SINTOMA A · img_job_at SE QUEDA NULL
-//    El sello de la R5 esta DESPUES de img_poll_tomar_lease(). Con la puerta
-//    del backoff cerrada, img_resp_completar() se va en el lease y no llega
-//    nunca al sello. Y #644 lleva 35 intentos: su backoff es de 60 minutos, o
-//    sea que casi siempre esta cerrada. El sello prometido no se puede alcanzar.
+//  SINTOMA A · img_job_at SE QUEDABA NULL — YA ARREGLADO.
+//    El sello estaba DESPUES de img_poll_tomar_lease(): con la puerta del
+//    backoff cerrada, img_resp_completar() se iba en el lease y no llegaba
+//    nunca. Y #644 lleva 35 intentos, o sea 60 minutos de backoff: casi siempre
+//    cerrada. Ahora el sello va ANTES —no consume turno ni llama a nadie— y la
+//    afirmacion de abajo esta INVERTIDA: comprueba que se sella.
 //
 //  SINTOMA B · no_clasificado CON EL CODIGO NUEVO
 //    La R1 metio el codigo HTTP en el mensaje, pero img_poll_clase_error()
@@ -95,14 +96,15 @@ try {
     $r = $sondear($M, $P, 'vivo');
     $a1 = $pieza($P);
     ok('el sondeo se va en el lease', ($r['ESTADO'] ?? '') === 'queued');
-    //  ESTE ES EL DEFECTO. Se afirma que ocurre, no que este bien.
-    ok('DEFECTO VIVO: la fecha de control sigue sin sellarse', $a1['img_job_at'] === null,
-       'si esto se pusiera verde al reves, el defecto estaria arreglado');
-    ok('y los intentos tampoco suben', (int)$a1['img_intentos'] === 35,
-       'el lease devuelve antes de decidir, asi que no hay sondeo que contar');
-    echo "    >> el sello de la R5 vive DESPUES del lease. Con 35 intentos el\n";
-    echo "       backoff es de 60 min, asi que la puerta casi nunca esta abierta\n";
-    echo "       y la fecha no se alcanza. En produccion lleva asi desde el 19.\n";
+    //  DEFECTO ARREGLADO — y la afirmación se invierte, como decía la cabecera.
+    //  El sello vive ahora ANTES del lease: sellar no consume turno ni llama a
+    //  nadie, así que no tiene por qué esperar a ganar el sondeo.
+    ok('la fecha de control YA se sella, con la puerta cerrada', $a1['img_job_at'] !== null,
+       'era el defecto de #644: el sello estaba detrás del lease y con 35 intentos '
+       . 'el backoff de 60 min lo hacía inalcanzable justo para las piezas que lo necesitan');
+    ok('y los intentos siguen sin subir', (int)$a1['img_intentos'] === 35,
+       'el lease devuelve antes de decidir, así que no hay sondeo que contar — '
+       . 'sellar no cuenta como sondear');
 
     echo "\n  — con la puerta abierta sí se sella —\n";
     $pdo->prepare("UPDATE crecer_contenido SET img_next_poll_at=NULL WHERE id=?")->execute([$P]);

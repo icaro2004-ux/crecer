@@ -175,16 +175,22 @@ try {
     ok('hay un tope declarado', defined('IMG_POLL_INTENTOS_MAX'));
     ok('y es menor que los 35 que se vieron', (int)IMG_POLL_INTENTOS_MAX < 35,
        'tope=' . (int)IMG_POLL_INTENTOS_MAX);
-    //  Se comprueba en la decisión pura, sin base ni red: es donde vive la regla.
-    $d = img_poll_decidir(['intentos' => (int)IMG_POLL_INTENTOS_MAX, 'job_at' => null],
-                          'in_progress', null, date('Y-m-d H:i:s'));
-    ok('pasado el tope, se aparca', $d['accion'] === 'aparcar',
+    //  En la decisión pura, sin base ni red: es donde vive la regla. Y el tope
+    //  cuenta SOLO consultas fallidas (status null): un proveedor que contesta
+    //  está sosteniendo el trabajo y no puede morir por haber preguntado mucho.
+    $d = img_poll_decidir(['intentos' => (int)IMG_POLL_INTENTOS_MAX + 1, 'job_at' => null],
+                          null, 'no se pudo consultar', date('Y-m-d H:i:s'));
+    ok('pasado el tope de fallos, se aparca', $d['accion'] === 'aparcar',
        "salió «{$d['accion']}»");
-    ok('con su clase propia', $d['clase'] === 'tope_intentos');
+    ok('con su clase propia', $d['clase'] === 'tope_fallos_consulta');
     $d2 = img_poll_decidir(['intentos' => 2, 'job_at' => null],
-                           'in_progress', null, date('Y-m-d H:i:s'));
+                           null, 'boom', date('Y-m-d H:i:s'));
     ok('y por debajo del tope sigue esperando', $d2['accion'] === 'esperar',
        'el tope es la red de seguridad, no la regla normal');
+    $d3 = img_poll_decidir(['intentos' => 999, 'job_at' => date('Y-m-d H:i:s')],
+                           'in_progress', null, date('Y-m-d H:i:s'));
+    ok('un proveedor que CONTESTA no muere por intentos', $d3['accion'] === 'esperar',
+       "salió «{$d3['accion']}» con 999 sondeos y el job vivo");
 
     echo "\n  — el crédito agotado se reconoce por código y por mensaje —\n";
     ok('credit_balance_exhausted', img_credito_agotado('credit_balance_exhausted'));
