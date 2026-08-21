@@ -909,6 +909,191 @@ try {
         } catch (Throwable $e) { echo "  (error: " . $e->getMessage() . ")\n"; }
     }
 
+
+    // ¿POR QUE SIGUEN COLGADAS #644 Y #656?   &test=colgadas[&pieza=N][&preguntar=1]
+    //
+    //   SOLO LECTURA por defecto. No genera, no encola, no libera, no escribe
+    //   nada. Contesta las cuatro preguntas del incidente con hechos:
+    //
+    //     a) QUE CODIGO ESTA CORRIENDO — y no solo cual esta en el disco. Son
+    //        dos cosas distintas: OPcache puede seguir sirviendo el de antes
+    //        despues de un Redeploy, y entonces el fuente dice una cosa y el
+    //        proceso hace otra. Se comparan las dos.
+    //     b) EL CAMINO que toco las piezas: quien escribe img_next_poll_at.
+    //     c) LA FOTO EXACTA de cada pieza, con el reloj de MySQL al lado.
+    //     d) EL ERROR REAL del proveedor — solo con &preguntar=1, y guardando
+    //        UNICAMENTE http, error.type y error.code. Nunca el cuerpo, ni el
+    //        prompt, ni nada que se parezca a una credencial.
+    if ($__test === 'colgadas') {
+        echo "\n--- POR QUE SIGUEN COLGADAS ---\n";
+
+        // ── a) DISCO vs CARGADO ─────────────────────────────────────────
+        echo "\n  a) Que codigo corre AHORA MISMO\n";
+        $leer = function (string $rel): string {
+            $p = __DIR__ . '/' . $rel;
+            return is_file($p) ? (string)file_get_contents($p) : '';
+        };
+        $ia  = $leer('includes/ia.php');
+        $img = $leer('includes/img_responses.php');
+
+        //  EN EL DISCO: marcadores del commit 25cc3c5.
+        $en_disco = [
+            'ia_http_get_res (R1)'        => strpos($ia,  'function ia_http_get_res') !== false,
+            'class IaHttp (R1)'           => strpos($ia,  'class IaHttp') !== false,
+            'accion soltar (R2)'          => strpos($img, "'accion'=>'soltar'") !== false,
+            'clase job_no_existe (R2)'    => strpos($img, 'job_no_existe') !== false,
+            'confirmar al guardar (R3)'   => strpos($img, 'CuotaImg::confirmar') !== false,
+            'sello img_job_at (R5)'       => strpos($img, 'SELLO DE CONTROL') !== false,
+            'guarda de reencolado (R4)'   => strpos($img, 'ya_encolado') !== false,
+        ];
+        //  CARGADO EN ESTE PROCESO: lo unico que de verdad decide.
+        $cargado = [
+            'ia_http_get_res (R1)'        => function_exists('ia_http_get_res'),
+            'class IaHttp (R1)'           => class_exists('IaHttp', false),
+        ];
+        $desfase = false;
+        foreach ($en_disco as $que => $hay) {
+            $c = array_key_exists($que, $cargado) ? ($cargado[$que] ? 'si' : 'NO') : '—';
+            if ($c === 'NO' && $hay) $desfase = true;
+            printf("    %-30s disco:%-3s cargado:%s\n", $que, $hay ? 'si' : 'NO', $c);
+        }
+        if (!$en_disco['ia_http_get_res (R1)']) {
+            echo "    >> EL CODIGO NUEVO NO ESTA EN EL DISCO. No hubo Redeploy de 25cc3c5,\n";
+            echo "       o el deploy no llego a estos archivos. Nada mas que mirar aqui.\n";
+        } elseif ($desfase) {
+            echo "    >> EL DISCO LO TIENE Y EL PROCESO NO: es OPcache sirviendo lo viejo.\n";
+            echo "       Se limpia con  _cache.php?k=crecer  y se vuelve a mirar.\n";
+        } else {
+            echo "    >> El codigo nuevo esta en el disco y cargado.\n";
+        }
+
+        // ── b) QUIEN ESCRIBE img_next_poll_at ───────────────────────────
+        echo "\n  b) Quien pudo tocar las piezas\n";
+        echo "    Abrir Tus Posts llama a img_sweep_pendientes(), que trae hasta 4\n";
+        echo "    piezas 'queued' CUYA PUERTA YA VENCIO y llama a img_resp_completar()\n";
+        echo "    con cada una. Dentro, lo PRIMERO es img_poll_tomar_lease(), que\n";
+        echo "    escribe img_next_poll_at = NOW() + lease para reclamar el turno.\n";
+        echo "    Si el lease se deniega, se vuelve ANTES de sondear y antes de\n";
+        echo "    cualquier otra escritura. Dos piezas con el MISMO img_next_poll_at\n";
+        echo "    salen de la misma pasada del barrido.\n";
+        printf("    lease normal: %ds · lease dedicado: %ds\n",
+               defined('IMG_POLL_LEASE_SEG') ? (int)IMG_POLL_LEASE_SEG : -1,
+               defined('IMG_POLL_LEASE_DED_SEG') ? (int)IMG_POLL_LEASE_DED_SEG : -1);
+
+        // ── c) LA FOTO DE CADA PIEZA ────────────────────────────────────
+        echo "\n  c) Las piezas, con el reloj de MySQL al lado\n";
+        try {
+            $ids = isset($_GET['pieza']) ? [(int)$_GET['pieza']] : [];
+            $sql = "SELECT c.id, c.marca_id, c.img_estado, c.img_job, c.img_intentos,
+                           c.img_job_at, c.img_next_poll_at, c.img_error_clase,
+                           c.grafica_path, c.updated_at, NOW() AS ahora,
+                           TIMESTAMPDIFF(MINUTE, NOW(), c.img_next_poll_at) AS faltan_min
+                      FROM crecer_contenido c
+                     WHERE c.img_estado='queued' AND c.img_job IS NOT NULL";
+            if ($ids) $sql .= " AND c.id IN (" . implode(',', array_map('intval', $ids)) . ")";
+            $sql .= " ORDER BY c.id DESC LIMIT 20";
+            foreach ($pdo->query($sql) as $r) {
+                printf("\n    #%s (marca %s)\n", $r['id'], $r['marca_id']);
+                printf("      estado=%s  intentos=%s  clase=%s\n",
+                       $r['img_estado'], $r['img_intentos'], $r['img_error_clase'] ?: '(vacia)');
+                printf("      job=%s\n", mb_substr((string)$r['img_job'], 0, 40));
+                printf("      img_job_at=%s\n", $r['img_job_at'] ?: 'NULL  <<< sin fecha de control');
+                printf("      next_poll=%s  (faltan %s min)   ahora=%s\n",
+                       $r['img_next_poll_at'] ?: 'NULL', $r['faltan_min'] ?? '?', $r['ahora']);
+                printf("      grafica=%s\n", $r['grafica_path'] ?: '(ninguna)');
+                //  LA PREGUNTA QUE IMPORTA para el sello: la R5 vive DESPUES del
+                //  lease. Con la puerta cerrada, img_resp_completar se va antes
+                //  de llegar a ella — y la fecha no se sella nunca.
+                $puerta_abierta = empty($r['img_next_poll_at']) || $r['img_next_poll_at'] <= $r['ahora'];
+                printf("      puerta del backoff: %s\n",
+                       $puerta_abierta ? 'ABIERTA (el proximo sondeo entra)'
+                                       : 'CERRADA (se va en el lease, sin sellar ni sondear)');
+                if (empty($r['img_job_at']) && !$puerta_abierta) {
+                    echo "      >> AQUI ESTA EL LAZO: sin fecha de control Y con la puerta\n";
+                    echo "         cerrada. El sello esta detras del lease, asi que no se\n";
+                    echo "         alcanza mientras la puerta siga cerrada.\n";
+                }
+            }
+        } catch (Throwable $e) { echo "    (error: " . $e->getMessage() . ")\n"; }
+
+        // ── el libro de cuota de esas piezas ────────────────────────────
+        echo "\n  d) El libro de cuota\n";
+        try {
+            foreach ($pdo->query("SELECT marca_id, cubo, limite, usadas FROM crecer_img_cuota_cubo
+                                   ORDER BY marca_id DESC LIMIT 10") as $r) {
+                printf("    cubo %-12s marca %-6s %s/%s\n", $r['cubo'], $r['marca_id'], $r['usadas'], $r['limite']);
+            }
+            foreach ($pdo->query("SELECT id, marca_id, operacion, ruta, estado, unidades, llamadas,
+                                         origen_id, provider_job_id, costo_usd
+                                    FROM crecer_img_cuota_asiento ORDER BY id DESC LIMIT 10") as $r) {
+                printf("    asiento #%-4s %-11s %-22s u=%s llam=%s origen=%s job=%s\n",
+                       $r['id'], $r['estado'], $r['ruta'], $r['unidades'], $r['llamadas'],
+                       $r['origen_id'], mb_substr((string)$r['provider_job_id'], 0, 18) ?: '(sin)');
+            }
+        } catch (Throwable $e) { echo "    (sin libro todavia: " . $e->getMessage() . ")\n"; }
+
+        // ── e) EL ERROR REAL DEL PROVEEDOR — solo si se pide ────────────
+        echo "\n  e) Que contesta el proveedor\n";
+        if (empty($_GET['preguntar'])) {
+            echo "    (no se pregunto · &pieza=N&marca=N&preguntar=1 hace UNA consulta de ESTADO)\n";
+            echo "    Es un GET al job que ya existe: no genera imagen ni crea trabajo.\n";
+            echo "    Se guardan SOLO http, error.type y error.code. Nunca el cuerpo,\n";
+            echo "    ni el prompt, ni nada parecido a una credencial.\n";
+        } else {
+            require_once __DIR__ . '/includes/diag_colgadas.php';
+            $pid = (int)($_GET['pieza'] ?? 0);
+            $mid = (int)($_GET['marca'] ?? 0);
+            //  PERTENENCIA: hacen falta LAS DOS, y la fila tiene que existir con
+            //  las dos. Con solo el id de la pieza, cambiar un numero en la URL
+            //  consultaria el trabajo de otro negocio. La regla vive en
+            //  includes/diag_colgadas.php justamente para poder probarla: aqui
+            //  dentro no se puede, porque este archivo termina en exit().
+            if (!$pid || !$mid) {
+                echo "    Hacen falta &pieza=N Y &marca=N. Con la pieza sola no se\n";
+                echo "    pregunta: la marca es lo que confirma que el job es suyo.\n";
+            } else {
+                $rid = diag_job_de_pieza($pdo, $pid, $mid);
+                if ($rid === null) {
+                    echo "    Nada que consultar: la pieza #{$pid} no existe, no es de la\n";
+                    echo "    marca {$mid}, o no tiene job. NO se llamo al proveedor.\n";
+                } elseif (!function_exists('ia_http_get_res')) {
+                    echo "    ia_http_get_res() NO esta cargada: este proceso corre el\n";
+                    echo "    codigo viejo. Mira el punto (a) antes de seguir.\n";
+                } else {
+                    try {
+                        $r = ia_http_get_res('https://api.openai.com/v1/responses/' . rawurlencode($rid),
+                                             ['Authorization: Bearer ' . OPENAI_API_KEY]);
+                        $d = json_decode($r['body'], true);
+                        //  SOLO LOS CUATRO CAMPOS SEGUROS. El cuerpo entero puede
+                        //  traer el prompt revisado y el nombre del negocio; el
+                        //  prompt, lo que el dueño escribio de lo suyo. Nada de eso
+                        //  pinta en un diagnostico, y una vez impreso no se recoge.
+                        $c = diag_campos_seguros((int)$r['code'], is_array($d) ? $d : null);
+                        printf("    http=%d\n", $c['http']);
+                        printf("    status=%s\n",     $c['status']     !== '' ? $c['status']     : '(ninguno)');
+                        printf("    error.type=%s\n", $c['error_type'] !== '' ? $c['error_type'] : '(ninguno)');
+                        printf("    error.code=%s\n", $c['error_code'] !== '' ? $c['error_code'] : '(ninguno)');
+                        //  Y como lo clasificaria el codigo CARGADO: es lo que
+                        //  explica el 'no_clasificado' que se ve en la tabla.
+                        if (function_exists('img_poll_clase_error')) {
+                            printf("    -> el codigo cargado lo clasificaria como: %s\n",
+                                   img_poll_clase_error('Responses(estado) HTTP ' . $c['http'] . ': '
+                                       . ($c['error_type'] ?: 'error')));
+                            printf("       (con ese http, img_poll_decidir %s 'soltar')\n",
+                                   $c['http'] === 404 ? 'DEVOLVERIA' : 'NO devuelve');
+                        }
+                    } catch (Throwable $e) {
+                        //  Ni el mensaje: puede traer la URL con el id del job.
+                        printf("    la consulta fallo (%s)\n", get_class($e));
+                    }
+                }
+            }
+        }
+
+        echo "\n  --- que NO se hizo aqui ---\n";
+        echo "  No se genero ninguna imagen, no se encolo nada, no se libero ni\n";
+        echo "  confirmo ninguna unidad y no se escribio en crecer_contenido.\n";
+    }
     // ¿QUEDÓ ASENTADO EL HOTFIX DE SONDEO?   &test=sondeo
     //   Contesta de un tiro las cuatro preguntas del despliegue, sin gastar un
     //   centavo y sin generar nada: qué código corre de verdad, si la migración
