@@ -218,7 +218,61 @@ ok('si no puede crear bases, se salta en vez de improvisar',
    'saltarse una prueba es honesto; tocar la base compartida para no saltarsela, no');
 
 // ══════════════════════════════════════════════════════════════
-//  7 · EL SMOKE DEL MODELO VIVO NO ES REGRESION
+//  7 · NINGUNA PRUEBA GASTA EN SU PROPIO PROCESO
+//
+//      El 21 de agosto una prueba llamó a img_gemini_fallback() directamente y
+//      generó DOS IMÁGENES REALES en Gemini —$0.268— porque su proceso cargaba
+//      db.php y con él config.local.php, o sea las credenciales de verdad. La
+//      intención era comprobar un permiso; el efecto fue pagar.
+//
+//      La regla: lo que llama a un proveedor solo se ejercita en un proceso que
+//      cargue _sin_gasto.php, que pone las llaves en blanco. En la práctica eso
+//      significa un runner aparte. Aquí se vigila.
+// ══════════════════════════════════════════════════════════════
+echo "\n  — ninguna prueba llama a un proveedor en su propio proceso —\n";
+$gastan = [
+    'img_gemini_fallback(', 'generar_grafica(', 'generar_grafica_responses(',
+    'crear_post_muestra(', 'relevo_del_corillo(', 'trabajo_autonomo(',
+    'openai_imagen(', 'gemini_imagen(', 'openai_responses_imagen(',
+    'openai_responses_crear_bg(', 'ia_imagen(', 'ia_ejecutar(',
+];
+$culpables = 0;
+foreach ($archivos as $f => $s) {
+    //  Los runners SÍ pueden: son procesos aparte que cargan _sin_gasto.php.
+    if (strpos($s, '_sin_gasto.php') !== false) continue;
+    //  Y los smokes que declaran su gasto detrás de --vivo también: no corren
+    //  en la suite normal, corren cuando alguien lo pide a propósito.
+    if (strpos($s, "in_array('--vivo'") !== false) continue;
+
+    //  SE QUITAN LAS CADENAS ANTES DE BUSCAR. Las pruebas del diagnóstico
+    //  llevan estos nombres ENTRE COMILLAS, precisamente para afirmar que la
+    //  página NO los llama. Acusarlas por eso es el mismo falso positivo que
+    //  dio TRUNCATE, y el que dio «caption». Ya van tres: la regla es mirar la
+    //  llamada, nunca la palabra.
+    $codigo = '';
+    foreach (explode("\n", $s) as $l) {
+        if (preg_match('/^\s*(\/\/|\*|\/\*|#)/', $l)) continue;      // comentario
+        $codigo .= preg_replace('/([\'"]).*?\1/', "''", $l) . "\n";  // sin cadenas
+    }
+    foreach ($gastan as $fn) {
+        if (strpos($codigo, $fn) === false) continue;
+        $culpables++;
+        ok("{$f} no llama a {$fn} en su proceso", false,
+           'esa función sale al proveedor con las credenciales de verdad. '
+           . 'Ejercítala en un runner que cargue _sin_gasto.php.');
+    }
+}
+ok('ninguna prueba gasta en su propio proceso', $culpables === 0,
+   $culpables . ' llamada(s) — cada una sale nombrada arriba');
+
+$sg = $archivos['_sin_gasto.php'] ?? '';
+ok('_sin_gasto.php pone las llaves en blanco',
+   strpos($sg, "define('OPENAI_API_KEY', '')") !== false
+   && strpos($sg, "define('GEMINI_API_KEY', '')") !== false,
+   'define() gana el primero: por eso tiene que cargarse ANTES que config.local');
+
+// ══════════════════════════════════════════════════════════════
+//  8 · EL SMOKE DEL MODELO VIVO NO ES REGRESION
 // ══════════════════════════════════════════════════════════════
 echo "\n  — lo que cuesta dinero se corre a proposito —\n";
 $sp = $archivos['smoke_pipeline_tesis_funcional.php'] ?? '';

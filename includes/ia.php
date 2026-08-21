@@ -61,6 +61,39 @@ class IaError extends RuntimeException {}
  */
 class IaIncierto extends IaError {}
 
+/** La red esta cerrada porque estamos en pruebas. No es un fallo: es la valla. */
+class RedBloqueada extends IaError {}
+
+/**
+ * ¿ESTA CERRADA LA RED?
+ *
+ * Una regla estatica que lea el fuente y diga «esta prueba no llama al
+ * proveedor» solo ve lo que esta escrito: no ve lo que pasa tres funciones mas
+ * abajo. El 21 de agosto una prueba llamo a img_gemini_fallback() creyendo que
+ * solo comprobaba un permiso, y por dentro llego hasta Gemini: dos imagenes
+ * reales, $0.268. La regla estatica no podia verlo, porque la llamada estaba en
+ * otro archivo.
+ *
+ * Asi que la valla se pone donde el dinero sale de verdad. En modo prueba
+ * -CRECER_TEST_MODE, que define tests/_sin_gasto.php- los cuatro puntos de
+ * proveedor lanzan ANTES del curl. Un runner que quiera ejercitar el camino
+ * completo declara CRECER_TEST_RED_FALSA y sustituye el transporte: entonces la
+ * llamada corre, pero contra su propio doble, no contra la red.
+ */
+function crecer_red_cerrada(): bool {
+    if (!defined('CRECER_TEST_MODE') || !CRECER_TEST_MODE) return false;
+    return !(defined('CRECER_TEST_RED_FALSA') && CRECER_TEST_RED_FALSA);
+}
+
+/** Se llama al principio de cada punto de proveedor, antes de tocar nada. */
+function crecer_red_exigir(string $punto): void {
+    if (!crecer_red_cerrada()) return;
+    throw new RedBloqueada(
+        "{$punto}: la red esta cerrada en modo prueba. Si esta ruta hay que "
+        . 'ejercitarla, hazlo en un runner que sustituya el transporte y declare '
+        . 'CRECER_TEST_RED_FALSA. Nunca desde el proceso de la prueba.');
+}
+
 /**
  * Error del proveedor que SI sabe su codigo HTTP. Existe para que la decision de
  * arriba no tenga que adivinarlo leyendo el mensaje: 404 es «ese job no existe»
@@ -437,6 +470,7 @@ function ia_veto_ip(string $prompt): string {
 //  vivir donde el usuario mira: tiene que vivir donde se gasta.
 function gemini_imagen(string $prompt, array $opts = []): array {
     require_once __DIR__ . '/cuota_imagenes.php';
+    crecer_red_exigir('P1 gemini_imagen');
     $__cuota = CuotaImg::garantizar($opts['cuota'] ?? null, 'P1 gemini_imagen');
     $prompt = ia_veto_ip($prompt);
     $modelo = $opts['modelo'] ?? 'gemini-2.5-flash-image';
@@ -546,6 +580,12 @@ function resolver_modelo_ia(string $cfg): string {
 //  funcion mas arriba seria probar el sustituto.
 if (!function_exists('ia_http_get_res')) {
 function ia_http_get_res(string $url, array $headers): array {
+    //  DEFENSA EN PROFUNDIDAD. Aqui no hay escape: si estamos en pruebas y esta
+    //  funcion es la DE VERDAD, no sale. Un runner con transporte falso la
+    //  sustituye entera, asi que esta linea ni se ejecuta.
+    if (defined('CRECER_TEST_MODE') && CRECER_TEST_MODE) {
+        throw new RedBloqueada('ia_http_get_res: transporte real en modo prueba.');
+    }
     $ch = curl_init($url);
     curl_setopt_array($ch, [CURLOPT_HTTPHEADER => $headers, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20]);
     $r = curl_exec($ch);
@@ -674,6 +714,7 @@ function openai_extraer_img(string $resp, string $modelo): array {
 //  vivir donde el usuario mira: tiene que vivir donde se gasta.
 function openai_imagen(string $prompt, array $opts = []): array {
     require_once __DIR__ . '/cuota_imagenes.php';
+    crecer_red_exigir('P2 openai_imagen');
     $__cuota = CuotaImg::garantizar($opts['cuota'] ?? null, 'P2 openai_imagen');
     if (!openai_configurado()) throw new IaSinCredenciales('Falta OPENAI_API_KEY.');
     $prompt   = ia_veto_ip($prompt);
@@ -745,16 +786,14 @@ function openai_imagen(string $prompt, array $opts = []): array {
 //  vivir donde el usuario mira: tiene que vivir donde se gasta.
 function openai_responses_imagen(string $brief, array $opts = []): array {
     require_once __DIR__ . '/cuota_imagenes.php';
+    crecer_red_exigir('P3 openai_responses_imagen');
     $__cuota = CuotaImg::garantizar($opts['cuota'] ?? null, 'P3 openai_responses_imagen');
     try {
         return _openai_responses_imagen($brief, $opts);
     } catch (Throwable $e) {
-        //  Mismo motivo que en P4: un fallo nuestro no se cobra de su plan.
-        //  P1 y P2 no lo necesitan aqui porque motor_imagen() ya los cubre —y
-        //  ademas tiene que dejar la reserva VIVA entre el motor que falla y el
-        //  de respaldo, que es justo lo que evita el cobro doble.
-        CuotaImg::liberar($__cuota->pdo, $__cuota->asiento_id,
-            'falló el proveedor: ' . mb_substr($e->getMessage(), 0, 180));
+        //  Igual que en P4: la unidad se queda ABIERTA para el respaldo.
+        //  Cerrarla aqui retiraba su llave y el respaldo abria otra — dos
+        //  unidades por la misma imagen.
         throw $e;
     }
 }
@@ -837,6 +876,7 @@ if (!function_exists('openai_responses_crear_bg')) {
 //  devuelve la unidad al cliente y el riesgo de costo se anota como nuestro.
 function openai_responses_crear_bg(string $brief, array $opts = []): array {
     require_once __DIR__ . '/cuota_imagenes.php';
+    crecer_red_exigir('P4 openai_responses_crear_bg');
     $__cuota = CuotaImg::garantizar($opts['cuota'] ?? null, 'P4 openai_responses_crear_bg');
     try {
         return _openai_responses_crear_bg($brief, $opts, $__cuota);
@@ -846,12 +886,19 @@ function openai_responses_crear_bg(string $brief, array $opts = []): array {
         //  reembolsaria dos veces.
         throw $e;
     } catch (Throwable $e) {
-        //  UN FALLO LIMPIO DEVUELVE LA UNIDAD AL MOMENTO. Sin esto, el dueño se
-        //  quedaba sin una de sus 40 durante los 45 minutos del barrido cada vez
-        //  que faltaba una credencial o el proveedor devolvia un 400 — un error
-        //  nuestro cobrandose de su plan.
-        CuotaImg::liberar($__cuota->pdo, $__cuota->asiento_id,
-            'no se pudo encolar: ' . mb_substr($e->getMessage(), 0, 180));
+        //  AQUI NO SE LIBERA, Y ES DELIBERADO.
+        //
+        //  Lo hacia, para no dejar la unidad retenida 45 minutos cuando fallaba
+        //  una credencial. Pero liberar CIERRA la unidad y retira su llave, asi
+        //  que el intento siguiente POR LA MISMA IMAGEN abre una reserva nueva:
+        //  dos unidades por un solo arte. Salio al probar el credito agotado,
+        //  con tres asientos donde tenia que haber uno.
+        //
+        //  QUIEN CIERRA ES EL DUEÑO DEL CICLO DE VIDA DE LA IMAGEN, no el punto
+        //  de proveedor: el sondeo cuando el proveedor confirma que no sale,
+        //  img_gemini_fallback cuando el respaldo tampoco entrega, o el barrido
+        //  a los 45 minutos si nadie vuelve. Retener una unidad un rato es
+        //  reparable; cobrar dos por una imagen, no.
         throw $e;
     }
 }
@@ -927,11 +974,25 @@ function openai_responses_estado(string $rid): array {
     if (!is_array($d)) {
         throw new IaHttp('Responses(estado) no-JSON: ' . substr($resp, 0, 300), $r['code']);
     }
-    if (isset($d['error']) || $r['code'] >= 400) {
+
+    //  UN TRABAJO QUE FALLO NO ES UN ERROR DE LA CONSULTA.
+    //
+    //  Aqui estaba el nudo de #656, y llevaba asi desde antes de la R1. Una
+    //  respuesta de fondo que fracasa vuelve con HTTP 200, `status: failed` Y un
+    //  campo `error` DENTRO DEL MISMO CUERPO. Como se lanzaba en cuanto habia
+    //  `error`, el `failed` no llegaba nunca a img_poll_decidir: se convertia en
+    //  excepcion, el status quedaba null, y la pieza caia en «no se pudo
+    //  consultar» — que no es terminal y por tanto se reintenta para siempre.
+    //  Un trabajo muerto sondeado sin fin.
+    //
+    //  La regla correcta: si el cuerpo trae STATUS, la consulta funciono y quien
+    //  decide es el de arriba. Solo se lanza cuando no hay status que leer, que
+    //  es cuando la consulta de verdad fallo.
+    $status = (string)($d['status'] ?? '');
+    if ($status === '' && (isset($d['error']) || $r['code'] >= 400)) {
         throw new IaHttp('Responses(estado) HTTP ' . $r['code'] . ': '
             . ($d['error']['message'] ?? 'error'), $r['code']);
     }
-    $status = (string)($d['status'] ?? '');
     $b64 = ''; $revised = ''; $igc = null;
     foreach (($d['output'] ?? []) as $o) {
         if (($o['type'] ?? '') === 'image_generation_call') {
@@ -953,7 +1014,13 @@ function openai_responses_estado(string $rid): array {
         'tools_echo'            => $d['tools'] ?? null,        // parámetros de la herramienta tal como los devuelve la API
         'image_generation_call' => $igc,                      // revised_prompt real + cualquier campo de modelo interno
     ];
-    return ['status' => $status, 'b64' => $b64, 'revised' => $revised, 'model' => (string)($d['model'] ?? ''), 'raw' => $raw];
+    //  error_code viaja aparte y en crudo: es lo unico que distingue «se acabo
+    //  el credito» de «el prompt no paso el filtro», y las dos son 'failed'.
+    return ['status' => $status, 'b64' => $b64, 'revised' => $revised,
+            'model' => (string)($d['model'] ?? ''),
+            'error_code' => (string)($d['error']['code'] ?? ''),
+            'error_type' => (string)($d['error']['type'] ?? ''),
+            'raw' => $raw];
 }
 
 /** gpt-image-1 /images/edits — incorpora UNA imagen (el logo) al arte, a calidad ALTA. */
@@ -1035,7 +1102,10 @@ function motor_imagen(string $prompt, array $opts = []): array {
     } catch (Throwable $e) {
         $alt = $primero === 'openai' ? 'gemini' : 'openai';
         $alt_ok = ($alt === 'openai') ? openai_configurado() : (ia_transporte() === 'gemini_api');
-        if (!$alt_ok) { CuotaImg::liberarPorCtx($opts['cuota'] ?? null, 'falló ' . $primero . ' y no hay respaldo'); throw $e; }
+        //  Tampoco se libera aqui: quien llamo puede seguir intentando la misma
+        //  imagen por otra ruta (el rescate de img_gemini_fallback hace justo
+        //  eso). Cerrar la unidad ahora obligaria a abrir otra.
+        if (!$alt_ok) throw $e;
         error_log("motor_imagen: {$primero} falló ({$e->getMessage()}); respaldo a {$alt}");
         try {
             //  EL RESPALDO NO COBRA OTRA UNIDAD. La segunda llamada lleva el
@@ -1045,9 +1115,9 @@ function motor_imagen(string $prompt, array $opts = []): array {
             //  unidad, por muchos motores que haga falta probar.
             $r = $gen($alt);
         } catch (Throwable $e2) {
-            //  Fallaron los dos: se le devuelve la unidad al dueño ahora mismo,
-            //  sin esperar a que la barra el reloj.
-            CuotaImg::liberarPorCtx($opts['cuota'] ?? null, 'fallaron los dos motores');
+            //  Fallaron los dos motores, pero esto sigue sin ser el final de la
+            //  imagen: el que llamo puede tener otra ruta. La unidad se queda
+            //  abierta y la cierra quien sepa que ya no hay mas que intentar.
             throw $e2;
         }
         $r['motor'] = $alt; $r['razon'] = "Respaldo automático: {$primero} falló, se usó {$alt}."; return $r;

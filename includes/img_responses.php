@@ -39,6 +39,15 @@ if (!defined('IMG_POLL_LEASE_SEG'))     define('IMG_POLL_LEASE_SEG', 120);
 if (!defined('IMG_POLL_LEASE_DED_SEG')) define('IMG_POLL_LEASE_DED_SEG', 10);
 /** Horas sin poder CONSULTAR tras las que el job se aparca (no se da por fallido). */
 if (!defined('IMG_POLL_MAX_HORAS'))     define('IMG_POLL_MAX_HORAS', 24);
+//  TOPE ABSOLUTO DE CONSULTAS FALLIDAS, pase lo que pase con las fechas.
+//  Cuenta SOLO los sondeos en que no se pudo consultar. Un proveedor que
+//  contesta queued/in_progress no muere por intentos: a ese lo decide la edad.
+//  Los otros dos topes miran la EDAD del job, y la edad depende de una columna
+//  que puede estar vacia (los trabajos anteriores al 19 de agosto) o de un reloj
+//  que puede ir en otra zona. Cuando eso falla, no hay freno: #644 llego a 35
+//  sondeos. Este cuenta lo unico que no depende de nada — cuantas veces se ha
+//  preguntado— y cierra la puerta. Es la red de seguridad, no la regla normal.
+if (!defined('IMG_POLL_INTENTOS_MAX'))   define('IMG_POLL_INTENTOS_MAX', 24);
 /** Tope duro para un job que el proveedor sigue reportando VIVO. */
 if (!defined('IMG_POLL_VIVO_DIAS'))     define('IMG_POLL_VIVO_DIAS', 7);
 
@@ -85,8 +94,22 @@ function img_poll_clase_error(?string $msg): string {
  *
  * 'incidente' = UNA fila en crecer_ia_log, y solo en una transicion.
  */
+/**
+ * Codigos del proveedor que significan «no queda credito». Son terminales y de
+ * los que SI habilitan el respaldo: consta que ese trabajo no va a salir.
+ */
+function img_credito_agotado(?string $code, ?string $msg = null): bool {
+    $c = strtolower(trim((string)$code));
+    if ($c !== '' && in_array($c, ['credit_balance_exhausted', 'insufficient_quota',
+                                    'billing_hard_limit_reached', 'quota_exceeded'], true)) return true;
+    $m = strtolower((string)$msg);
+    return $m !== '' && (strpos($m, 'credit_balance_exhausted') !== false
+                       || strpos($m, 'insufficient_quota') !== false);
+}
+
 function img_poll_decidir(array $j, ?string $status, ?string $err, string $ahora,
-                          bool $dedicado = false, ?int $http = null): array {
+                          bool $dedicado = false, ?int $http = null,
+                          ?string $error_code = null): array {
     $intentos = (int)($j['intentos'] ?? 0);
     $t        = strtotime($ahora) ?: time();
     $edad_h   = !empty($j['job_at']) ? max(0, ($t - (int)strtotime((string)$j['job_at'])) / 3600) : 0;
@@ -99,9 +122,16 @@ function img_poll_decidir(array $j, ?string $status, ?string $err, string $ahora
 
     // El PROVEEDOR confirma que ese trabajo no va a salir. Unico caso que
     // habilita el respaldo automatico, porque es el unico donde consta.
+    //
+    //  SE ACABO EL CREDITO es ese caso con nombre propio. Importa distinguirlo
+    //  por dos motivos: se le puede decir al dueño lo que pasa de verdad, y
+    //  queda escrito en la pieza para la forense. Terminal igual, respaldo
+    //  igual — pero UNO solo, y eso lo garantiza la marca 'fb:' de mas abajo.
     if (in_array((string)$status, ['failed', 'cancelled', 'incomplete'], true)) {
+        $sin_credito = img_credito_agotado($error_code, $err);
         return ['accion'=>'fallback', 'intentos'=>$intentos, 'espera_seg'=>null,
-                'incidente'=>true, 'clase'=>'proveedor_' . $status];
+                'incidente'=>true,
+                'clase'=> $sin_credito ? 'sin_credito' : 'proveedor_' . $status];
     }
 
     //  EL PROVEEDOR DICE QUE ESE JOB NO EXISTE (404). Es TERMINAL para este
@@ -119,6 +149,7 @@ function img_poll_decidir(array $j, ?string $status, ?string $err, string $ahora
     }
 
     $intentos++;
+
     // El backoff depende de QUIEN sondea. El worker dedicado mantiene su cadencia
     // de 3s (el dueno esta mirando); el barrido de pantalla sube 1-2-4...60 min.
     // Sin esta distincion el backoff mataria el camino rapido: un dano mayor que
@@ -134,9 +165,23 @@ function img_poll_decidir(array $j, ?string $status, ?string $err, string $ahora
     $espera = $dedicado ? 3 : min(60, (int)pow(2, max(0, $intentos - 1))) * 60;
 
     if ($status === null) {
-        // NO SE PUDO CONSULTAR. Nunca terminal, nunca respaldo. Se aparca por
-        // TIEMPO, no por numero de intentos: asi la decision no depende de la
-        // cadencia con que se pregunte.
+        // NO SE PUDO CONSULTAR. Nunca terminal, nunca respaldo.
+        //
+        //  EL TOPE CUENTA SOLO ESTO: consultas que FALLARON. Un proveedor que
+        //  contesta 'queued' o 'in_progress' esta sosteniendo el trabajo, y a
+        //  ese no se le mata por haber preguntado muchas veces — a ese lo
+        //  decide la EDAD, que es lo unico que dice si vale la pena seguir.
+        //
+        //  La primera version ponia el tope arriba, antes de mirar el status, y
+        //  aparcaba tambien los trabajos vivos. Eso convertia una red de
+        //  seguridad en una guillotina: un job lento pero sano moria por
+        //  impaciencia del sondeo.
+        if ($intentos > (int)IMG_POLL_INTENTOS_MAX) {
+            return ['accion'=>'aparcar', 'intentos'=>$intentos, 'espera_seg'=>null,
+                    'incidente'=>true, 'clase'=>'tope_fallos_consulta'];
+        }
+        // Y por tiempo: asi la decision no depende de la cadencia con que se
+        // pregunte.
         if ($edad_h >= (float)IMG_POLL_MAX_HORAS) {
             return ['accion'=>'aparcar', 'intentos'=>$intentos, 'espera_seg'=>null,
                     'incidente'=>true, 'clase'=>img_poll_clase_error($err)];
@@ -505,6 +550,38 @@ function img_resp_encolar_res(PDO $pdo, int $marca_id, int $post_id, string $cop
  * yendo por Gemini como siempre; ahí es el motor correcto, no un sustituto.
  */
 function img_gemini_fallback(PDO $pdo, int $marca_id, int $post_id, string $copy): string {
+    //  EL PERMISO, Y SE CONSUME AL ENTRAR.
+    //  Solo se respalda una pieza que venga marcada 'fb:' — es decir, cuyo
+    //  proveedor CONFIRMO que su trabajo no sale. Y se cambia a 'fbx:' en el
+    //  mismo UPDATE que lo comprueba: si dos barridos coinciden, solo uno
+    //  pasa. Sin esta puerta, «error sin job» era una invitacion abierta a
+    //  pedir otra imagen en cada recarga.
+    if (img_poll_columnas($pdo)) {
+        //  DOS CASOS TIENEN PERMISO, y cada uno UNA sola vez:
+        //   · 'fb:'  — el proveedor confirmo que su trabajo no sale.
+        //   · sin job — el worker murio antes de crearlo, asi que nunca
+        //     hubo trabajo que confirmar. Este rescate ya existia y se
+        //     conserva; lo que se le añade es que no pueda repetirse.
+        //  El sello 'fbx:' se pone en el MISMO UPDATE que da el permiso: si
+        //  dos barridos coinciden, solo uno pasa.
+        $permiso = $pdo->prepare("UPDATE crecer_contenido
+                                     SET img_error_clase = CASE
+                                           WHEN img_error_clase LIKE 'fb:%'
+                                             THEN CONCAT('fbx:', SUBSTRING(img_error_clase, 4))
+                                           ELSE 'fbx:rescate' END,
+                                         updated_at = NOW()
+                                   WHERE id=? AND marca_id=?
+                                     AND ( img_error_clase LIKE 'fb:%'
+                                        OR ( img_job IS NULL
+                                             AND (img_error_clase IS NULL
+                                                  OR img_error_clase NOT LIKE 'fbx:%') ) )");
+        $permiso->execute([$post_id, $marca_id]);
+        if ($permiso->rowCount() !== 1) {
+            error_log("img_gemini_fallback #{$post_id}: sin permiso — no se respalda (ya se uso, o el proveedor no confirmo nada)");
+            return '';
+        }
+    }
+
     // ── 1) Reintento con OPENAI, que es el que queremos que gane ──
     // arte_worker.php no carga agentes.php, así que sin esto el reintento se
     // saltaba justo en uno de los cuatro caminos. Los require_once de agentes
@@ -514,7 +591,11 @@ function img_gemini_fallback(PDO $pdo, int $marca_id, int $post_id, string $copy
     }
     if (function_exists('generar_grafica')) {
         try {
-            $g = generar_grafica($pdo, $marca_id, null, ['copy' => $copy, 'con_logo' => false]);
+            //  LA PIEZA VIAJA. Sin contenido_id, este rescate abre su propia
+            //  reserva -«contenido/0»- en vez de reusar la del encolado, y el
+            //  dueño acaba pagando dos unidades por la misma imagen.
+            $g = generar_grafica($pdo, $marca_id, null,
+                    ['copy' => $copy, 'con_logo' => false, 'contenido_id' => $post_id]);
             if (!empty($g['archivo'])) {
                 $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, img_estado='ok', updated_at=NOW()
                                 WHERE id=? AND marca_id=?")
@@ -549,7 +630,7 @@ function img_gemini_fallback(PDO $pdo, int $marca_id, int $post_id, string $copy
         } catch (Throwable $e) {}
 
         $brief = img_resp_brief($m, $copy, null, !empty($imgs), null, 'realista', $lente, $evitar);
-        //  RUTA 7 — el respaldo. MISMO origen que la ruta 5, a proposito: su
+            //  RUTA 7 — el respaldo. MISMO origen que la ruta 5, a proposito: su
         //  llave idempotente choca con la reserva ya abierta para esta imagen y
         //  se reusa. El dueño paga UNA unidad aunque hayan hecho falta dos
         //  proveedores para entregarle un solo arte.
@@ -675,6 +756,40 @@ function img_resp_completar(PDO $pdo, int $marca_id, int $post_id, bool $dedicad
     $rid = trim((string)($row['img_job'] ?? ''));
     if ($rid === '') return ['estado' => ($row['grafica_path'] ? 'ok' : 'none'), 'img' => $row['grafica_path'] ?: null];
 
+    //  #640 · YA TIENE ARTE. Si la pieza ya tiene grafica, no hay nada que
+    //  preguntarle a nadie: la imagen llego por otro camino -el respaldo, una
+    //  foto del dueño, otra pasada que si guardo- y lo unico que queda es un job
+    //  huerfano manteniendola en cola. Se cierra sin tocar al proveedor y se
+    //  cierra tambien su unidad, que si no se queda retenida para siempre.
+    if (trim((string)($row['grafica_path'] ?? '')) !== '') {
+        require_once __DIR__ . '/cuota_imagenes.php';
+        $u = $pdo->prepare("UPDATE crecer_contenido
+                               SET img_estado='ok', img_job=NULL, updated_at=NOW()
+                             WHERE id=? AND marca_id=? AND img_job=?");
+        $u->execute([$post_id, $marca_id, $rid]);
+        if ($u->rowCount() === 1) {
+            CuotaImg::confirmar($pdo, CuotaImg::asientoDePieza($pdo, $marca_id, $post_id), 0);
+        }
+        return ['estado' => 'ok', 'img' => $row['grafica_path'], 'ya_estaba' => true];
+    }
+
+    //  EL SELLO VA ANTES DEL LEASE, y esa posicion es la correccion.
+    //  Estaba detras: con la puerta del backoff cerrada, img_resp_completar se
+    //  iba en el lease y no llegaba nunca a sellar. Y una pieza con 35 intentos
+    //  tiene un backoff de 60 minutos, o sea que casi nunca esta abierta — el
+    //  sello prometido era inalcanzable justo para las piezas que lo necesitan.
+    //  Sellar no consume turno ni llama a nadie: es apuntar cuando la vimos por
+    //  primera vez. La guarda IS NULL lo hace inmutable, asi que sondear no la
+    //  rejuvenece.
+    if (img_poll_columnas($pdo) && empty($row['img_job_at'])) {
+        $pdo->prepare("UPDATE crecer_contenido SET img_job_at = NOW()
+                        WHERE id=? AND marca_id=? AND img_job=? AND img_job_at IS NULL")
+            ->execute([$post_id, $marca_id, $rid]);
+        $q2 = $pdo->prepare("SELECT img_job_at FROM crecer_contenido WHERE id=? AND marca_id=?");
+        $q2->execute([$post_id, $marca_id]);
+        $row['img_job_at'] = $q2->fetchColumn() ?: null;
+    }
+
     // ── EL LEASE. Un UPDATE condicional decide quien pregunta: quien mueva la
     //    fila gana y llama al proveedor; los demas se van sin llamar a nadie.
     //    Va ANTES de la llamada, no despues, que es lo unico que sirve.
@@ -698,27 +813,9 @@ function img_resp_completar(PDO $pdo, int $marca_id, int $post_id, bool $dedicad
         $err = $e->getMessage();          // status queda null = NO se pudo consultar
     }
 
-    //  R5 · SELLO DE CONTROL PARA JOBS HEREDADOS.
-    //
-    //  img_job_at nacio con la migracion del 19 de agosto y NO se relleno hacia
-    //  atras, asi que las piezas anteriores lo tienen NULL. img_poll_decidir lee
-    //  esa columna como edad y, con NULL, calcula CERO — el aparcado a las 24h
-    //  no se dispara nunca. Asi es como #644 llego a 33 sondeos sin morirse.
-    //
-    //  Y NO se puede usar updated_at en su lugar: cada sondeo la reescribe, asi
-    //  que el trabajo rejuveneceria en cada vuelta y seria igual de inmortal.
-    //  Se sella una fecha explicita UNA vez —solo si esta NULL— y a partir de
-    //  ahi corre su unica ventana. La guarda 'IS NULL' la hace inmutable.
-    if ($cols && empty($row['img_job_at'])) {
-        $pdo->prepare("UPDATE crecer_contenido SET img_job_at = NOW()
-                        WHERE id=? AND marca_id=? AND img_job=? AND img_job_at IS NULL")
-            ->execute([$post_id, $marca_id, $rid]);
-        $row['img_job_at'] = $ahora;      // desde ya cuenta su ventana
-    }
-
     $d = img_poll_decidir(
         ['intentos' => (int)($row['img_intentos'] ?? 0), 'job_at' => $row['img_job_at'] ?? null],
-        $status, $err, $ahora, $dedicado, $http
+        $status, $err, $ahora, $dedicado, $http, (string)($st['error_code'] ?? '')
     );
 
     //  El asiento de cuota de ESTA imagen. Se busca por su origen porque la
@@ -776,7 +873,13 @@ function img_resp_completar(PDO $pdo, int $marca_id, int $post_id, bool $dedicad
     // ── FALLBACK: el proveedor CONFIRMO que ese trabajo no sale ────────────
     //    Unico camino que suelta img_job y habilita el respaldo automatico.
     if ($d['accion'] === 'fallback') {
-        $extra = $cols ? ", img_intentos={$d['intentos']}, img_next_poll_at=NULL, img_error_clase=" . $pdo->quote((string)$d['clase']) : "";
+        //  'fb:' AUTORIZA UN RESPALDO, Y SOLO UNO.
+        //  El prefijo es el permiso: img_gemini_fallback() lo consume al entrar
+        //  y lo cambia por 'fbx:'. Sin esto, cada pasada del barrido veia una
+        //  pieza en error sin job y volvia a pedirle una imagen a Gemini — que
+        //  tambien cuesta. Un trabajo muerto puede acabar pagandose muchas veces.
+        $marca_fb = 'fb:' . mb_substr((string)$d['clase'], 0, 20);
+        $extra = $cols ? ", img_intentos={$d['intentos']}, img_next_poll_at=NULL, img_error_clase=" . $pdo->quote($marca_fb) : "";
         $u = $pdo->prepare("UPDATE crecer_contenido
                                SET img_estado='error', img_job=NULL{$extra}, updated_at=NOW()
                              WHERE id=? AND marca_id=? AND img_job=?");

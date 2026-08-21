@@ -25,6 +25,14 @@
 // por stdout y rompe cualquier header() posterior. Al log si, a la salida no.
 @ini_set('display_errors', '0');
 
+//  LA VALLA, NO SOLO LAS LLAVES EN BLANCO.
+//  Las llaves vacias impiden que una llamada AUTENTIQUE, pero no impiden que
+//  salga: hay caminos que llegan al curl igual. CRECER_TEST_MODE cierra la red
+//  en los cuatro puntos de proveedor y en el transporte, lanzando ANTES del
+//  curl. Un runner que necesite recorrer el camino completo declara ademas
+//  CRECER_TEST_RED_FALSA y sustituye el transporte por uno suyo.
+if (!defined('CRECER_TEST_MODE')) define('CRECER_TEST_MODE', true);
+
 define('OPENAI_API_KEY', '');
 define('GEMINI_API_KEY', '');
 define('GCP_PROJECT_ID', '');

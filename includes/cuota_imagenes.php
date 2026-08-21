@@ -48,6 +48,14 @@ class CuotaImg
     /** Minutos tras los cuales una reserva SIN job identificado se libera sola. */
     public const CADUCA_MIN = 45;
 
+    /**
+     * Operaciones cuya unidad es UNA PIEZA CONCRETA. Todas exigen origen_id: sin
+     * el, la llave idempotente seria la misma para todas las piezas de la marca.
+     * Las que no estan aqui -logo, diagnostico, laboratorio, muestra- tienen su
+     * propia forma de identidad.
+     */
+    public const POR_PIEZA = ['arte_post', 'realce', 'slide'];
+
     /** Exenciones legitimas. Cualquier otra cadena se rechaza: nada de exentos por error de dedo. */
     public const EXENCIONES = [
         'logo',              // el logo tiene su propio tope de por vida
@@ -140,6 +148,23 @@ class CuotaImg
         if ($ctx->exencion !== '' && !in_array($ctx->exencion, self::EXENCIONES, true)) {
             throw new InvalidArgumentException("Exencion desconocida: «{$ctx->exencion}». "
                 . 'Las exenciones se declaran en CuotaImg::EXENCIONES, no se inventan al vuelo.');
+        }
+
+        //  UNA IMAGEN DE UNA PIEZA TIENE QUE DECIR DE QUE PIEZA ES.
+        //
+        //  Sin origen, la llave idempotente sale de (marca, operacion, '-', 0) y
+        //  es LA MISMA para todas las piezas de esa marca: dos artes distintos
+        //  compartirian reserva, el segundo saldria gratis y ninguno se podria
+        //  confirmar por separado. Paso de verdad — las rutas 2 y 3 leian un
+        //  contenido_id que nadie les pasaba, y abrian todo con origen 0.
+        //
+        //  Falla cerrado, y a proposito: un olvido aqui no se nota hasta que
+        //  alguien cuadra la factura.
+        if (in_array($ctx->operacion, self::POR_PIEZA, true)
+            && (int)$ctx->origen_id <= 0) {
+            throw new InvalidArgumentException(
+                "Cuota: la operacion «{$ctx->operacion}» es POR PIEZA y llego sin origen_id "
+                . "(ruta «{$ctx->ruta}»). Sin el, dos piezas distintas compartirian reserva.");
         }
 
         $cubo   = $ctx->operacion === 'logo' ? self::cuboLogos() : self::cuboMes();
