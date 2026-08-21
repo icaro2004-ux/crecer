@@ -3,8 +3,8 @@
 //  CRECER — EL RESPALDO, CON LOS DOS BORDES DE RED SUSTITUIDOS
 //  tests/_respaldo_runner.php
 //
-//  Reproduce el incidente de #656: el proveedor confirma que el trabajo A no
-//  sale (failed + credit_balance_exhausted) y el respaldo se dispara.
+//  Nace del incidente de #656: el proveedor confirma que el trabajo A no sale
+//  (failed + credit_balance_exhausted) y el respaldo se dispara.
 //
 //  El runner del sondeo sustituye SOLO ia_http_get_res(), que basta para
 //  sondear. Aqui no basta: el camino del respaldo hace POST —crea trabajos,
@@ -12,13 +12,21 @@
 //  este runner saldria de verdad a api.openai.com con una llave falsa, y eso ya
 //  no es una prueba: es una llamada al proveedor.
 //
-//    php tests/_respaldo_runner.php <marca> <post>
+//    php tests/_respaldo_runner.php <marca> <post> [modo]
+//
+//  modos:
+//    entrega     (def) Gemini entrega. Se cierra la pieza y se confirma.
+//    segunda     el respaldo se llama DOS veces: la segunda tiene que rebotar.
+//    falla       Gemini no entrega. Se libera y la pieza queda recuperable.
+//    reconcilia  la pieza ya tiene grafica: cuadrar el libro sin tocar la red.
+//    worker      el predicado con el que el worker decide si reencolar.
+//    atar        una reserva atada no se reata a otro trabajo.
 //
 //  El transporte falso responde:
 //    · GET  /v1/responses/<id>       → failed + credit_balance_exhausted
-//    · POST /v1/responses            → un trabajo NUEVO (resp_B_...)   ← la trampa
-//    · POST /v1/images/generations   → error (asi cae al otro motor)
-//    · POST generativelanguage       → un PNG de 1x1 (Gemini entrega)
+//    · POST /v1/responses            → un trabajo NUEVO (resp_B_...)   ← el sensor
+//    · POST /v1/images/generations   → error
+//    · POST generativelanguage       → un PNG de 1x1 (o nada, en modo «falla»)
 //
 //  El id que devuelve el POST a /v1/responses es el sensor: si aparece en el
 //  libro, es que alguien encolo OTRO trabajo de OpenAI sobre la misma unidad.
@@ -28,6 +36,7 @@
 
 $marca = (int)($argv[1] ?? 0);
 $post  = (int)($argv[2] ?? 0);
+$modo  = (string)($argv[3] ?? 'entrega');
 
 //  Llaves falsas ANTES de _sin_gasto.php: define() gana el primero. Hacen falta
 //  para que openai_configurado() y ia_transporte() digan que si — si no, los
@@ -42,6 +51,7 @@ if (!defined('CRECER_TEST_RED_FALSA')) define('CRECER_TEST_RED_FALSA', true);
 
 require __DIR__ . '/_sin_gasto.php';
 
+$GLOBALS['MODO'] = $modo;
 $GLOBALS['RED'] = [];          // toda salida, en orden
 $GLOBALS['JOBS_NUEVOS'] = [];  // los trabajos que el doble llego a repartir
 
@@ -75,8 +85,14 @@ function ia_http_post_retry(string $url, array $headers, string $body,
                                         'code' => 'credit_balance_exhausted']]);
     }
 
-    //  P1 · Gemini. Entrega.
-    if (strpos($url, 'generativelanguage') !== false) {
+    //  P1 · Gemini, el unico respaldo legitimo.
+    if (strpos($url, 'image:generateContent') !== false) {
+        if (($GLOBALS['MODO'] ?? '') === 'falla') {
+            //  Contesta, pero sin imagen. Es el caso que tiene que liberar.
+            return json_encode(['candidates' => [['content' => ['parts' => [
+                ['text' => 'no pude generar la imagen'],
+            ]]]]]);
+        }
         return json_encode(['candidates' => [['content' => ['parts' => [
             ['inlineData' => ['mimeType' => 'image/png', 'data' => _rr_png()]],
         ]]]]]);
@@ -106,6 +122,27 @@ require_once __DIR__ . '/../includes/img_responses.php';
 
 $di = fn(string $k, $v) => print($k . '=' . str_replace("\n", ' ', (string)$v) . "\n");
 
+// ══════════════════════════════════════════════════════════════
+//  MODO «worker» · el predicado, sin base de datos ni red
+// ══════════════════════════════════════════════════════════════
+if ($modo === 'worker') {
+    $casos = [
+        'terminal_fb'     => ['img_job' => null, 'img_error_clase' => 'fb:sin_credito'],
+        'terminal_fbx'    => ['img_job' => null, 'img_error_clase' => 'fbx:rescate'],
+        'aparcado'        => ['img_job' => null, 'img_error_clase' => 'ap:tope_fallos_consulta'],
+        'encolo_incierto' => ['img_job' => null, 'img_error_clase' => 'enc:timeout'],
+        'nunca_hubo'      => ['img_job' => null, 'img_error_clase' => null],
+        'esperando'       => ['img_job' => null, 'img_error_clase' => 'esperando'],
+    ];
+    foreach ($casos as $k => $fila) $di('CICLO_' . $k, img_ciclo_cerrado($fila) ? '1' : '0');
+    $di('CICLO_sin_fila', img_ciclo_cerrado(null) ? '1' : '0');
+    //  Y que el worker use ESTE predicado, no una copia suya que se despegue.
+    $w = (string)@file_get_contents(__DIR__ . '/../panel/arte_worker.php');
+    $di('WORKER_USA_PREDICADO', strpos($w, 'img_ciclo_cerrado($row)') !== false ? '1' : '0');
+    $di('SALIDAS_TOTAL', count($GLOBALS['RED']));
+    exit(0);
+}
+
 // ── 1 · La pieza tal como quedo el trabajo A: encolado y con su unidad ──
 $pdo->prepare("UPDATE crecer_contenido
                   SET img_estado='queued', img_job='resp_A', grafica_path=NULL,
@@ -125,6 +162,12 @@ $leer = function () use ($pdo, $asiento): array {
     $q->execute([$asiento]);
     return $q->fetch(PDO::FETCH_ASSOC) ?: [];
 };
+$pieza = function () use ($pdo, $marca, $post): array {
+    $q = $pdo->prepare("SELECT img_job, img_error_clase, img_estado, grafica_path
+                          FROM crecer_contenido WHERE id=? AND marca_id=?");
+    $q->execute([$post, $marca]);
+    return $q->fetch(PDO::FETCH_ASSOC) ?: [];
+};
 
 $a0 = $leer();
 $di('ASIENTO', $asiento);
@@ -132,11 +175,74 @@ $di('JOB_A', (string)($a0['provider_job_id'] ?? ''));
 $di('LLAMADAS_ANTES', (string)($a0['llamadas'] ?? '0'));
 $di('COSTO_ANTES', (string)($a0['costo_usd'] ?? '0'));
 
+// ══════════════════════════════════════════════════════════════
+//  MODO «atar» · una reserva atada no se reata a otro trabajo
+// ══════════════════════════════════════════════════════════════
+//  Con el respaldo ya arreglado, el camino largo no vuelve a atar: hay que
+//  probar la guarda de frente, o queda cubierta solo por accidente.
+if ($modo === 'atar') {
+    CuotaImg::atarJob($pdo, $asiento, 'resp_B_intruso');
+    $a = $leer();
+    $di('TRAS_INTRUSO', (string)($a['provider_job_id'] ?? ''));
+
+    //  Reatar con el MISMO id sigue valiendo: un reintento idempotente no es un
+    //  conflicto, y hay caminos que atan dos veces por seguridad.
+    CuotaImg::atarJob($pdo, $asiento, 'resp_A');
+    $a2 = $leer();
+    $di('TRAS_MISMO', (string)($a2['provider_job_id'] ?? ''));
+
+    //  Y una reserva SIN atar si acepta el primero que llegue.
+    $c3 = CuotaImg::garantizar(CuotaCtx::de($pdo, $marca, 'arte_post', 'otra_pieza',
+            ['origen_tipo' => 'contenido', 'origen_id' => $post + 9000, 'costo' => 0.17]),
+        'P4 openai_responses_crear_bg');
+    CuotaImg::atarJob($pdo, $c3->asiento_id, 'resp_C');
+    $q3 = $pdo->prepare("SELECT provider_job_id FROM crecer_img_cuota_asiento WHERE id=?");
+    $q3->execute([$c3->asiento_id]);
+    $di('VIRGEN_ACEPTA', (string)($q3->fetchColumn() ?: ''));
+    $di('SALIDAS_TOTAL', count($GLOBALS['RED']));
+    exit(0);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MODO «reconcilia» · la pieza ya tiene su arte; falta el libro
+// ══════════════════════════════════════════════════════════════
+if ($modo === 'reconcilia') {
+    //  El estado exacto en que quedo #656: arte entregado, pieza en error y la
+    //  unidad abierta. Nadie cerro nada.
+    $pdo->prepare("UPDATE crecer_contenido
+                      SET grafica_path='uploads/marca_x/graficas/ya_entregada.png',
+                          img_estado='error', img_job=NULL,
+                          img_error_clase='fbx:rescate', updated_at=NOW()
+                    WHERE id=? AND marca_id=?")->execute([$post, $marca]);
+
+    $GLOBALS['RED'] = [];   // el contador arranca limpio: aqui no se toca la red
+    $seco = img_reconciliar_entregada($pdo, $marca, $post, false);
+    $di('SECO_PUEDE', $seco['puede'] ? '1' : '0');
+    $di('SECO_HECHO', $seco['hecho'] ? '1' : '0');
+
+    $r = img_reconciliar_entregada($pdo, $marca, $post, true);
+    $p = $pieza(); $a = $leer();
+    $di('REC_PUEDE', $r['puede'] ? '1' : '0');
+    $di('REC_HECHO', $r['hecho'] ? '1' : '0');
+    $di('PIEZA_ESTADO', (string)($p['img_estado'] ?? ''));
+    $di('PIEZA_CLASE', (string)($p['img_error_clase'] ?? ''));
+    $di('PIEZA_GRAFICA', (string)($p['grafica_path'] ?? ''));
+    $di('ASIENTO_ESTADO', (string)($a['estado'] ?? ''));
+    $di('COSTO_DESPUES', (string)($a['costo_usd'] ?? '0'));
+    $di('SALIDAS_TOTAL', count($GLOBALS['RED']));
+
+    //  Y sin grafica no reconcilia nada: reconciliar no es generar.
+    $pdo->prepare("UPDATE crecer_contenido SET grafica_path=NULL WHERE id=? AND marca_id=?")
+        ->execute([$post, $marca]);
+    $v = img_reconciliar_entregada($pdo, $marca, $post, true);
+    $di('SIN_GRAFICA_PUEDE', $v['puede'] ? '1' : '0');
+    $di('SIN_GRAFICA_HECHO', $v['hecho'] ? '1' : '0');
+    exit(0);
+}
+
 // ── 2 · El sondeo. El proveedor confirma que A no sale ──
 $r = img_resp_completar($pdo, $marca, $post, true);
-$q = $pdo->prepare("SELECT img_job, img_error_clase FROM crecer_contenido WHERE id=? AND marca_id=?");
-$q->execute([$post, $marca]);
-$p1 = $q->fetch(PDO::FETCH_ASSOC) ?: [];
+$p1 = $pieza();
 $di('SONDEO_ESTADO', (string)($r['estado'] ?? ''));
 $di('TRAS_SONDEO_JOB', (string)($p1['img_job'] ?? ''));
 $di('TRAS_SONDEO_CLASE', (string)($p1['img_error_clase'] ?? ''));
@@ -144,12 +250,17 @@ $di('TRAS_SONDEO_CLASE', (string)($p1['img_error_clase'] ?? ''));
 // ── 3 · El respaldo, por donde lo llama el barrido ──
 $url = img_gemini_fallback($pdo, $marca, $post, 'copy de prueba');
 
+//  MODO «segunda»: el respaldo otra vez, sobre la misma pieza. El permiso ya se
+//  consumio, asi que esta no puede llegar a ningun proveedor.
+if ($modo === 'segunda') {
+    $antes_red = count($GLOBALS['RED']);
+    $url2 = img_gemini_fallback($pdo, $marca, $post, 'copy de prueba');
+    $di('FB_URL2', $url2);
+    $di('RED_EN_LA_SEGUNDA', count($GLOBALS['RED']) - $antes_red);
+}
+
 $a1 = $leer();
-$q->execute([$post, $marca]);
-$q2 = $pdo->prepare("SELECT img_job, img_error_clase, img_estado, grafica_path
-                       FROM crecer_contenido WHERE id=? AND marca_id=?");
-$q2->execute([$post, $marca]);
-$p2 = $q2->fetch(PDO::FETCH_ASSOC) ?: [];
+$p2 = $pieza();
 
 $di('FB_URL', $url);
 $di('PIEZA_ESTADO', (string)($p2['img_estado'] ?? ''));
@@ -163,6 +274,16 @@ $di('PROVIDER_JOB_DESPUES', (string)($a1['provider_job_id'] ?? ''));
 
 $di('ASIENTOS_TOTAL', (int)$pdo->query("SELECT COUNT(*) FROM crecer_img_cuota_asiento
                                           WHERE marca_id={$marca}")->fetchColumn());
+
+//  MODO «falla»: tras liberar, la llave idempotente queda retirada. Un intento
+//  NUEVO del dueño tiene que abrir OTRO asiento — y costarle su unidad.
+if ($modo === 'falla') {
+    $c2 = CuotaImg::garantizar(CuotaCtx::de($pdo, $marca, 'arte_post', 'reintento_explicito',
+            ['origen_tipo' => 'contenido', 'origen_id' => $post, 'costo' => 0.17]),
+        'P4 openai_responses_crear_bg');
+    $di('ASIENTO_DEL_REINTENTO', $c2->asiento_id);
+    $di('ASIENTO_ES_OTRO', $c2->asiento_id !== $asiento ? '1' : '0');
+}
 
 //  Los sensores: cuantos trabajos nuevos de OpenAI se repartieron, y por que
 //  puntos de proveedor se paso.

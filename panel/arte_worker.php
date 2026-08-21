@@ -43,7 +43,8 @@ $con_texto = ($ct_raw === 'x' ? null : ($ct_raw === '1'));
 $extra = trim((string)($_GET['extra'] ?? ''));
 $estilo = trim((string)($_GET['est'] ?? 'realista')) ?: 'realista';
 $link = '/crecer/panel/propuestas.php?marca=' . $mid;
-$row  = $pdo->query("SELECT img_job, caption FROM crecer_contenido WHERE id=" . $pid)->fetch(PDO::FETCH_ASSOC);
+$row  = $pdo->query("SELECT img_job, caption, img_estado, img_error_clase
+                        FROM crecer_contenido WHERE id=" . $pid)->fetch(PDO::FETCH_ASSOC);
 $copy = (string)($row['caption'] ?? '');
 
 // avisa ok/respaldo/error por notificación
@@ -66,6 +67,28 @@ if (($_GET['fb'] ?? '') === '1') { error_log("arte_worker #{$pid}: re-disparo �
 //    si la petición se fue en timeout, OpenAI pudo haberla aceptado y el trabajo
 //    existe con un id que nunca recibimos. Por eso encolar devuelve un veredicto
 //    y no una cadena vacía que confunde el rechazo con la duda.
+//  UN CICLO TERMINADO NO SE REENCOLA SOLO.
+//
+//  «img_job vacio» significaba «nunca hubo trabajo» y era mentira a medias:
+//  cuando el proveedor CONFIRMA que su trabajo no sale, la rama terminal deja
+//  el job en NULL justamente para habilitar el respaldo. Con eso, cualquier
+//  redisparo del worker sobre esa pieza volvia a encolar en OpenAI — otro
+//  trabajo, sobre la misma unidad de cliente, sin que nadie lo pidiera.
+//
+//  El sello de img_error_clase es lo que distingue las dos cosas:
+//    fb: / fbx:  el proveedor confirmo el fallo y ya se decidio el respaldo
+//    ap:         nos rendimos de preguntar; el trabajo puede seguir vivo
+//    enc:        se encolo sin confirmacion; puede existir un trabajo invisible
+//  En los cuatro casos, empezar otro ciclo cuesta una unidad nueva y esa
+//  decision es del dueño. El «generar otra vez» de su post limpia el sello
+//  (img_poll_reiniciar) y entonces si se encola.
+$sello = (string)($row['img_error_clase'] ?? '');
+if ($row && img_ciclo_cerrado($row) && trim((string)($row['img_job'] ?? '')) === '') {
+    error_log("arte_worker #{$pid}: el ciclo anterior ya cerro ({$sello}). "
+            . 'No se reencola solo — hace falta que el dueño lo pida.');
+    exit;
+}
+
 if ($row && trim((string)($row['img_job'] ?? '')) === '') {
     $enc = img_resp_encolar_res($pdo, $mid, $pid, $copy, $con_texto, $extra !== '' ? $extra : null, $estilo);
 
