@@ -120,9 +120,12 @@ ok('y no se inventa un objeto en pausa', MetaLimiteImagen::objetoPausado($e) ===
 // ══════════════════════════════════════════════════════════════
 //  5 · E · PRODUCCIÓN SIN EMPEZAR — aquí SÍ manda
 // ══════════════════════════════════════════════════════════════
-echo "\n  — cuota llena · queda producción por hacer —\n";
+echo "\n  — cuota llena · queda un POST por producir —\n";
 $e = MetaStateComposer::componer(snap([
-    'jugadas' => [jugada(['id' => 55, 'titulo' => 'El reel del flan de coco', 'formato' => 'reel'])],
+    //  OJO AL FORMATO: la primera version usaba un REEL para decir «produccion
+    //  que si necesita imagen», y el reel es justo el que NO pinta. La prueba
+    //  de mas abajo lo cazo. Aqui va un POST, que si cae a generar_grafica().
+    'jugadas' => [jugada(['id' => 55, 'titulo' => 'La historia del flan de coco', 'formato' => 'post'])],
 ]));
 ok('el estado es E', $e->estado === MetaState::E_CRECER_TRABAJA, "salió {$e->estado}");
 ok('la razón es producción pendiente', $e->razon === 'produccion_pendiente_sin_piezas',
@@ -136,15 +139,62 @@ ok('pero con cuota NO manda', !MetaLimiteImagen::manda($e, $QUEDAN),
    'si mandara también con cuota, la regla no estaría mirando el libro');
 
 // ══════════════════════════════════════════════════════════════
+//  5b · FORMATO POR FORMATO — no vale «es producción, luego pinta»
+//
+//  Declararlo para toda jugada de producción era generalizar por categoría,
+//  el mismo error que se acababa de corregir un piso más arriba. Lo que
+//  manda es lo que hace includes/meta_ejecutar.php con CADA formato:
+//
+//    post/historia/mixto → cae a generar_grafica(): llega al proveedor.
+//    reel                → escribe el guion, pide video y hace `continue`
+//                          ANTES del arte. No pinta.
+//    carrusel            → carrusel_generar() escribe caption y slides en
+//                          crecer_carrusel y devuelve. Las imágenes se piden
+//                          después, desde la pantalla del carrusel.
+// ══════════════════════════════════════════════════════════════
+echo "
+  — por formato, siguiendo al ejecutor —
+";
+$porFormato = [
+    ['post',     true,  'cae a generar_grafica()'],
+    ['historia', true,  'misma caída que el post'],
+    ['mixto',    true,  'puede producir posts'],
+    ['reel',     false, 'escribe el guion y pide video: `continue` antes del arte'],
+    ['carrusel', false, 'escribe los slides; las imágenes se piden después'],
+];
+foreach ($porFormato as [$fmt, $pinta, $porque]) {
+    $x = MetaStateComposer::componer(snap([
+        'jugadas' => [jugada(['id' => 60, 'formato' => $fmt,
+                              'titulo' => 'Jugada de ' . $fmt])],
+    ]));
+    ok("{$fmt} · compone producción pendiente",
+       $x->razon === 'produccion_pendiente_sin_piezas', "salió {$x->razon}");
+    ok("{$fmt} · " . ($pinta ? 'SÍ pinta' : 'NO pinta') . " — {$porque}",
+       MetaLimiteImagen::necesitaImagen($x) === $pinta,
+       'declaró consume=' . json_encode($x->evidencia['consume'] ?? null));
+    ok("{$fmt} · y el límite " . ($pinta ? 'manda' : 'NO manda') . ' con el mes agotado',
+       MetaLimiteImagen::manda($x, $LLENA) === $pinta,
+       $pinta ? '' : 'bloquear un reel o un carrusel es pararle al corillo un '
+                   . 'trabajo que puede hacer perfectamente sin cuota');
+}
+//  Un formato que nadie ha declarado se trata como los que pintan: es lo que
+//  hace el ejecutor (cae a 'post') y es el lado seguro para el tope del mes.
+$raro = MetaStateComposer::componer(snap([
+    'jugadas' => [jugada(['id' => 61, 'formato' => 'formato_que_no_existe'])],
+]));
+ok('un formato desconocido se trata como los que pintan',
+   MetaLimiteImagen::necesitaImagen($raro));
+
+// ══════════════════════════════════════════════════════════════
 //  6 · EL OBJETO PAUSADO ES LA JUGADA DE VERDAD
 // ══════════════════════════════════════════════════════════════
 echo "\n  — lo que se enseña en pausa —\n";
 $o = MetaLimiteImagen::objetoPausado($e);
 ok('trae un objeto', $o !== []);
 ok('y es la jugada que el compositor eligió',
-   ($o['titulo'] ?? '') === 'El reel del flan de coco',
+   ($o['titulo'] ?? '') === 'La historia del flan de coco',
    'salió: «' . ($o['titulo'] ?? '—') . '» · tiene que ser la pieza real, no un ejemplo');
-ok('con su formato', ($o['tipo'] ?? '') === 'reel', 'salió: ' . ($o['tipo'] ?? '—'));
+ok('con su formato', ($o['tipo'] ?? '') === 'post', 'salió: ' . ($o['tipo'] ?? '—'));
 
 // ══════════════════════════════════════════════════════════════
 //  7 · LO QUE SIGUE PASANDO SE DEMUESTRA, NO SE PROMETE

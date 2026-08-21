@@ -369,12 +369,11 @@ class MetaStateComposer
                 ? 'Tengo pendiente preparar: ' . (string)$primera['titulo']
                 : 'Tengo ' . $pendientes . ' cosas del plan por preparar.',
             null,
-            //  ESTE es el unico caso que se queda parado sin imagenes: hay que
-            //  PRODUCIR piezas que todavia no existen, y producir un post pasa
-            //  por pintar. Un job ya en marcha no, y el material del dueño
-            //  tampoco: eso lo sube el.
+            //  ¿ESTA JUGADA LLEGA A UN PROVEEDOR DE IMAGENES? Depende del
+            //  FORMATO, no de que sea produccion. Lo dice el ejecutor.
             ['tactica_id' => (int)($primera['id'] ?? 0), 'pendientes' => $pendientes,
-             'consume' => ['imagen'],
+             'formato' => (string)($primera['formato'] ?? 'post'),
+             'consume' => self::consumeDe((string)($primera['formato'] ?? 'post')),
              'objeto' => ['titulo' => (string)($primera['titulo'] ?? ''),
                           'red' => '', 'fecha' => '',
                           'tipo' => (string)($primera['formato'] ?? 'post')]],
@@ -619,6 +618,42 @@ class MetaStateComposer
                            'ambas' => 'Instagram y Facebook', 'whatsapp' => 'WhatsApp'];
     private const TIPOS = ['reel' => 'Un reel', 'carrusel' => 'Un carrusel',
                            'post' => 'Un post', 'historia' => 'Una historia'];
+
+    /**
+     * QUÉ CONSUME PRODUCIR UNA JUGADA DE ESTE FORMATO.
+     *
+     * No se deduce de que la jugada sea «de producción»: se sigue lo que hace
+     * el ejecutor de verdad, en includes/meta_ejecutar.php, formato a formato.
+     *
+     *   post · historia · mixto
+     *       Escribe el caption y CAE a generar_grafica() — llega al proveedor
+     *       de imágenes. Con foto real del negocio también: realzarla con IA
+     *       cuenta una unidad. mixto entra aquí porque puede producir posts.
+     *
+     *   reel
+     *       Escribe el guion, marca la pieza «necesita_material=video» y hace
+     *       `continue` ANTES del arte. El comentario del ejecutor lo dice con
+     *       todas las letras: «NO se le genera arte: lo que falta es el video
+     *       del dueño». Un reel pendiente NO se para por falta de cuota.
+     *
+     *   carrusel
+     *       carrusel_generar() escribe el caption y las ideas de cada slide en
+     *       crecer_carrusel y devuelve. No toca ningún proveedor de imágenes —
+     *       el propio ejecutor lo anota: «la historia está escrita, faltan las
+     *       imágenes». Esas se piden después, desde la pantalla del carrusel.
+     *
+     * Si mañana el ejecutor cambia, esto tiene que cambiar con él: por eso la
+     * prueba va formato por formato y no por «es producción».
+     */
+    private static function consumeDe(string $formato): array
+    {
+        $pinta = ['post' => true, 'historia' => true, 'story' => true, 'mixto' => true,
+                  'reel' => false, 'carrusel' => false];
+        //  Un formato que no esté en la lista se trata como los que sí pintan:
+        //  es lo que hace el ejecutor —$permitidos cae a ['post']— y además es
+        //  el lado seguro para el tope del mes.
+        return ($pinta[mb_strtolower($formato)] ?? true) ? ['imagen'] : [];
+    }
 
     /** ¿La jugada de esta pieza sigue viva? Lo hecho y lo descartado no pide nada. */
     private static function jugadaVivaDe(array $s, array $pieza): bool
