@@ -211,7 +211,11 @@ class CuotaImg
     /** El asiento que ya existia para esta imagen: se reusa, no se cobra otra vez. */
     private static function reusar(PDO $pdo, int $marca_id, string $idem): array
     {
-        $q = $pdo->prepare("SELECT * FROM crecer_img_cuota_asiento WHERE marca_id=? AND idem=?");
+        //  Solo se reusa una unidad ABIERTA. Con la llave retirada al cerrar,
+        //  aqui no deberia llegar ninguna cerrada — pero si llegara, reusarla
+        //  seria regalar una imagen.
+        $q = $pdo->prepare("SELECT * FROM crecer_img_cuota_asiento
+                              WHERE marca_id=? AND idem=? AND estado IN ('reservado','riesgo')");
         $q->execute([$marca_id, $idem]);
         $a = $q->fetch(PDO::FETCH_ASSOC) ?: [];
         return ['ok' => true, 'asiento_id' => (int)($a['id'] ?? 0), 'reusado' => true,
@@ -251,6 +255,14 @@ class CuotaImg
             self::otraLlamada($ctx->pdo, $ctx->asiento_id, $ctx->costo_potencial);
             return $ctx;
         }
+        //  UN INCREMENTO POR ENTRADA AL PUNTO, Y EN UN SOLO SITIO: aqui.
+        //
+        //  Antes se sumaba en tres lugares distintos —al reusar la reserva, al
+        //  atar el job y al confirmar— y ninguno sabia de los otros. En
+        //  produccion salio llamadas=3 para DOS encolados: un numero que no
+        //  significaba ni llamadas ni sondeos. Ahora `llamadas` quiere decir
+        //  exactamente una cosa: cuantas veces se entro a un punto de proveedor
+        //  por esta imagen. Los sondeos NO cuentan: son GET y no generan nada.
         $r = self::reservar($ctx->pdo, $ctx);
         if (!$r['ok']) {
             if ($r['motivo'] === 'sin_libro') {
@@ -266,7 +278,10 @@ class CuotaImg
                 : 'Este mes ya se usaron las ' . self::TOPE_MES . ' imágenes del plan.',
                 $r['motivo']);
         }
-        if ($r['reusado']) self::otraLlamada($ctx->pdo, (int)$r['asiento_id'], $ctx->costo_potencial);
+        //  Fresca o reusada, da igual: se va a llamar al proveedor, y eso es lo
+        //  que `llamadas` cuenta. Antes solo se sumaba al REUSAR, así que la
+        //  primera llamada de cada imagen no se contaba nunca.
+        self::otraLlamada($ctx->pdo, (int)$r['asiento_id'], $ctx->costo_potencial);
         return $ctx->conAsiento((int)$r['asiento_id']);
     }
 
@@ -279,13 +294,16 @@ class CuotaImg
         if ($asiento_id <= 0 || !self::disponible($pdo)) return;
         try {
             $pdo->prepare(
+                //  Que lleguen los bytes no es una llamada nueva: la llamada ya
+                //  se conto al entrar al punto. Aqui solo se cierra la unidad.
                 "UPDATE crecer_img_cuota_asiento
-                    SET estado = 'confirmado', llamadas = llamadas + 1,
+                    SET estado = 'confirmado',
                         costo_usd = costo_usd + ?,
                         provider_job_id = COALESCE(?, provider_job_id),
                         updated_at = NOW()
                   WHERE id = ? AND estado IN ('reservado','riesgo')")
                 ->execute([$costo_usd, $job_id, $asiento_id]);
+            self::retirarLlave($pdo, $asiento_id);
         } catch (Throwable $e) { error_log('CuotaImg::confirmar ' . $e->getMessage()); }
     }
 
@@ -297,7 +315,7 @@ class CuotaImg
      * unidades. Es la simetria del reservar.
      */
     public static function liberar(PDO $pdo, int $asiento_id, string $motivo,
-                                   float $costo_usd = 0): void
+                                   float $costo_usd = 0, bool $retirar = true): void
     {
         if ($asiento_id <= 0 || !self::disponible($pdo)) return;
         $propia = !$pdo->inTransaction();
@@ -321,6 +339,9 @@ class CuotaImg
                     ->execute([(int)$a['unidades'], (int)$a['marca_id'], (string)$a['cubo']]);
             }
             if ($propia) $pdo->commit();
+            //  $retirar=false lo usa riesgoPlataforma(): esa fila queda a la
+            //  espera de correlacionar y no debe soltar su llave todavia.
+            if ($retirar) self::retirarLlave($pdo, $asiento_id);
         } catch (Throwable $e) {
             if ($propia && $pdo->inTransaction()) $pdo->rollBack();
             error_log('CuotaImg::liberar ' . $e->getMessage());
@@ -339,7 +360,7 @@ class CuotaImg
                                             string $motivo = 'P4 aceptó sin devolver job id'): void
     {
         if ($asiento_id <= 0 || !self::disponible($pdo)) return;
-        self::liberar($pdo, $asiento_id, $motivo, $costo_potencial);
+        self::liberar($pdo, $asiento_id, $motivo, $costo_potencial, false);
         try {
             $pdo->prepare("UPDATE crecer_img_cuota_asiento SET estado='riesgo', updated_at=NOW()
                             WHERE id=? AND estado='liberado'")->execute([$asiento_id]);
@@ -384,11 +405,12 @@ class CuotaImg
             }
             $pdo->prepare("UPDATE crecer_img_cuota_asiento
                               SET estado='confirmado', provider_job_id=?, overage=?,
-                                  llamadas = llamadas + 1, costo_usd = costo_usd + ?,
+                                  costo_usd = costo_usd + ?,
                                   motivo='correlacionado tarde', updated_at=NOW()
                             WHERE id=?")
                 ->execute([$job_id, $over ? 1 : 0, $costo_usd, $asiento_id]);
             if ($propia) $pdo->commit();
+            self::retirarLlave($pdo, $asiento_id);
             return ['ok' => true, 'overage' => $over];
         } catch (Throwable $e) {
             if ($propia && $pdo->inTransaction()) $pdo->rollBack();
@@ -418,6 +440,35 @@ class CuotaImg
     }
 
     /**
+    /**
+     * RETIRA LA LLAVE IDEMPOTENTE de un asiento ya cerrado.
+     *
+     * La llave (marca, idem) existe para que el RESPALDO y el reintento
+     * automatico reusen la unidad abierta en vez de cobrar otra. Pero eso solo
+     * vale MIENTRAS la unidad esta abierta. Cerrada —entregada o devuelta—, la
+     * llave tiene que soltarse: si no, la siguiente peticion por la misma pieza
+     * chocaria con ella y reusaria un asiento muerto. Efectos:
+     *
+     *   · tras LIBERAR: el dueño pulsa «Intentar otra vez» y se le da una imagen
+     *     sin descontarle unidad ninguna — gratis, y sin poder confirmarla.
+     *   · tras CONFIRMAR: «Cambiar arte» sobre una pieza que ya tiene imagen
+     *     seria igual de gratis.
+     *
+     * La fila NO se borra: se le cambia la llave por una derivada y muerta, para
+     * que el rastro de auditoria quede entero.
+     */
+    private static function retirarLlave(PDO $pdo, int $asiento_id): void
+    {
+        if ($asiento_id <= 0) return;
+        try {
+            $pdo->prepare("UPDATE crecer_img_cuota_asiento
+                              SET idem = SHA1(CONCAT(idem, '|cerrado|', id)), updated_at = NOW()
+                            WHERE id = ? AND estado IN ('confirmado','liberado')")
+                ->execute([$asiento_id]);
+        } catch (Throwable $e) { error_log('CuotaImg::retirarLlave ' . $e->getMessage()); }
+    }
+
+    /**
      * Ata la reserva al job remoto. A partir de aqui NO caduca por reloj: un
      * job identificado puede tardar lo que tarde el proveedor, y devolverle la
      * unidad al cubo antes de tiempo descuadraria el mes cuando llegara.
@@ -426,8 +477,10 @@ class CuotaImg
     {
         if ($asiento_id <= 0 || $job_id === '' || !self::disponible($pdo)) return;
         try {
+            //  Atar NO es llamar: aquí sumaba un segundo +1 por el mismo
+            //  encolado que garantizar() ya había contado.
             $pdo->prepare("UPDATE crecer_img_cuota_asiento
-                              SET provider_job_id = ?, llamadas = llamadas + 1, updated_at = NOW()
+                              SET provider_job_id = ?, updated_at = NOW()
                             WHERE id = ? AND estado = 'reservado'")
                 ->execute([$job_id, $asiento_id]);
         } catch (Throwable $e) { error_log('CuotaImg::atarJob ' . $e->getMessage()); }
@@ -470,6 +523,38 @@ class CuotaImg
         } catch (Throwable $e) { error_log('CuotaImg::barrerCaducadas ' . $e->getMessage()); return 0; }
     }
 
+    /**
+     * El asiento de una imagen concreta, buscado por su origen.
+     *
+     * Lo necesita el sondeo. Cuando la imagen llega —o cuando se da por
+     * perdida— hay que cerrar ESA unidad, y quien sondea no tiene el id a mano:
+     * la reserva se abrió en otra petición, minutos u horas antes. Sin esto,
+     * ningún asiento del camino asíncrono podía salir de 'reservado' jamás, que
+     * es exactamente la fuga que se vio el 21 de agosto.
+     */
+    public static function porOrigen(PDO $pdo, int $marca_id, string $operacion,
+                                     ?string $origen_tipo, ?int $origen_id): ?array
+    {
+        if (!self::disponible($pdo)) return null;
+        try {
+            //  La VIVA: las cerradas ya soltaron su llave, pero se pide estado
+            //  explicito para que esto siga siendo cierto aunque la llave no se
+            //  hubiera retirado por lo que sea.
+            $q = $pdo->prepare("SELECT * FROM crecer_img_cuota_asiento
+                                  WHERE marca_id=? AND idem=? AND estado IN ('reservado','riesgo')
+                                  ORDER BY id DESC LIMIT 1");
+            $q->execute([$marca_id, self::idem($marca_id, $operacion, $origen_tipo, $origen_id)]);
+            return $q->fetch(PDO::FETCH_ASSOC) ?: null;
+        } catch (Throwable $e) { return null; }
+    }
+
+    /** El id del asiento de una pieza de contenido, o 0. El atajo del sondeo. */
+    public static function asientoDePieza(PDO $pdo, int $marca_id, int $contenido_id): int
+    {
+        $a = self::porOrigen($pdo, $marca_id, 'arte_post', 'contenido', $contenido_id);
+        return (int)($a['id'] ?? 0);
+    }
+
     // ── CONSULTAR ───────────────────────────────────────────────────────────
 
     public static function restantes(PDO $pdo, int $marca_id, ?string $cubo = null): int
@@ -493,15 +578,41 @@ class CuotaImg
             //  Sin libro no se puede afirmar nada sobre su consumo, asi que no
             //  se inventa un numero: se dice que no hay imagenes disponibles,
             //  que es la verdad operativa mientras dure la ventana.
-            return ['usadas' => 0, 'limite' => self::TOPE_MES, 'restantes' => 0,
+            return ['usadas' => 0, 'retenidas' => 0, 'consumidas' => 0,
+                    'limite' => self::TOPE_MES, 'restantes' => 0,
                     'lleno' => !$exento, 'exento' => $exento, 'sin_libro' => true,
                     'reset' => '', 'logos' => 0, 'logos_tope' => self::TOPE_LOGOS_VIDA];
         }
         $cubo = self::cuboMes();
         $rest = self::restantes($pdo, $marca_id, $cubo);
         $tz   = new DateTimeZone(defined('APP_TZ') ? APP_TZ : 'America/Puerto_Rico');
+
+        //  RETENIDAS ≠ CONSUMIDAS, y hay que poder verlas por separado.
+        //
+        //  El cubo suma las dos porque para ARBITRAR EL TOPE tiene que hacerlo:
+        //  si una reserva no retuviera su unidad, dos peticiones simultáneas se
+        //  saltarían el límite. Pero mirar solo `usadas` no distingue una imagen
+        //  ENTREGADA de otra que sigue cocinándose — y eso es justo lo que hizo
+        //  falta el 21 de agosto para entender qué pasaba: 1 usada, 0
+        //  confirmadas, y ninguna forma de verlo sin abrir phpMyAdmin.
+        //
+        //  La ecuación que fija la prueba:  usadas = retenidas + consumidas
+        $ret = 0; $con = 0;
+        try {
+            $q = $pdo->prepare("SELECT estado, COALESCE(SUM(unidades),0) u
+                                  FROM crecer_img_cuota_asiento
+                                 WHERE marca_id=? AND cubo=? AND estado IN ('reservado','confirmado')
+                                 GROUP BY estado");
+            $q->execute([$marca_id, $cubo]);
+            foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                if ($r['estado'] === 'reservado') $ret = (int)$r['u']; else $con = (int)$r['u'];
+            }
+        } catch (Throwable $e) { /* sin el detalle, los totales de abajo siguen valiendo */ }
+
         return [
-            'usadas'    => self::TOPE_MES - $rest,
+            'usadas'     => self::TOPE_MES - $rest,
+            'retenidas'  => $ret,        // apartadas, todavía sin entregar
+            'consumidas' => $con,        // entregadas de verdad
             'limite'    => self::TOPE_MES,
             'restantes' => $rest,
             'lleno'     => (!$exento && $rest <= 0),

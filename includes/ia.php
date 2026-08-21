@@ -62,6 +62,18 @@ class IaError extends RuntimeException {}
 class IaIncierto extends IaError {}
 
 /**
+ * Error del proveedor que SI sabe su codigo HTTP. Existe para que la decision de
+ * arriba no tenga que adivinarlo leyendo el mensaje: 404 es «ese job no existe»
+ * y es terminal; 429 o 5xx son «vuelve luego». Sin el tipo, los dos se veian
+ * igual y el sondeo no podia cerrar nunca.
+ */
+class IaHttp extends IaError
+{
+    public function __construct(string $mensaje, public readonly int $http = 0)
+    { parent::__construct($mensaje); }
+}
+
+/**
  * Detecta qué transporte usar según las credenciales disponibles.
  * @return string 'gemini_api' | 'vertex' | 'mock'
  */
@@ -516,13 +528,36 @@ function resolver_modelo_ia(string $cfg): string {
 }
 
 /** GET HTTP simple (para consultar /v1/models). */
-function ia_http_get(string $url, array $headers): string {
+/**
+ * GET que NO pierde el codigo HTTP.
+ *
+ * ia_http_get() devolvia solo el cuerpo, asi que un 404 llegaba como una
+ * respuesta normal y el unico rastro que quedaba era la prosa de error del
+ * proveedor. Aguas abajo, img_poll_clase_error() clasifica BUSCANDO el numero
+ * en el mensaje — y OpenAI no lo pone. Resultado: TODO error del sondeo caia en
+ * 'no_clasificado', y el sondeo no podia distinguir «ese job no existe»
+ * (terminal) de «espera, hay cola» (reintentable). Esperaba para siempre.
+ *
+ * @return array{code:int, body:string}
+ */
+//  Envuelta en function_exists por lo mismo que ia_http_post_retry: es el
+//  borde de red del SONDEO, y sustituir solo el borde es lo unico que permite
+//  probar «el proveedor no reconoce el job» sin llamar a nadie. Sustituir una
+//  funcion mas arriba seria probar el sustituto.
+if (!function_exists('ia_http_get_res')) {
+function ia_http_get_res(string $url, array $headers): array {
     $ch = curl_init($url);
     curl_setopt_array($ch, [CURLOPT_HTTPHEADER => $headers, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20]);
     $r = curl_exec($ch);
     if ($r === false) { $e = curl_error($ch); curl_close($ch); throw new IaError('HTTP GET: ' . $e); }
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    return (string)$r;
+    return ['code' => $code, 'body' => (string)$r];
+}
+}   // fin del envoltorio function_exists
+
+function ia_http_get(string $url, array $headers): string {
+    return ia_http_get_res($url, $headers)['body'];
 }
 
 /**
@@ -881,11 +916,21 @@ function _openai_responses_crear_bg(string $brief, array $opts, CuotaCtx $__cuot
  */
 function openai_responses_estado(string $rid): array {
     if (!openai_configurado()) throw new IaSinCredenciales('Falta OPENAI_API_KEY.');
-    $resp = ia_http_get('https://api.openai.com/v1/responses/' . rawurlencode($rid),
+    $r = ia_http_get_res('https://api.openai.com/v1/responses/' . rawurlencode($rid),
         ['Authorization: Bearer ' . OPENAI_API_KEY]);
+    $resp = $r['body'];
     $d = json_decode($resp, true);
-    if (!is_array($d))      throw new IaError('Responses(estado) no-JSON: ' . substr($resp, 0, 300));
-    if (isset($d['error'])) throw new IaError('Responses(estado): ' . ($d['error']['message'] ?? 'error'));
+    //  EL CODIGO VIAJA EN LA EXCEPCION, no escondido en la prosa. Quien decida
+    //  arriba necesita saber si fue un 404 -ese job no existe, es terminal- o un
+    //  429 -vuelve luego-. Deducirlo leyendo el texto del proveedor fue el error
+    //  que dejo #656 sondeando sin poder concluir nada.
+    if (!is_array($d)) {
+        throw new IaHttp('Responses(estado) no-JSON: ' . substr($resp, 0, 300), $r['code']);
+    }
+    if (isset($d['error']) || $r['code'] >= 400) {
+        throw new IaHttp('Responses(estado) HTTP ' . $r['code'] . ': '
+            . ($d['error']['message'] ?? 'error'), $r['code']);
+    }
     $status = (string)($d['status'] ?? '');
     $b64 = ''; $revised = ''; $igc = null;
     foreach (($d['output'] ?? []) as $o) {

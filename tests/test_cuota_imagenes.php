@@ -244,15 +244,24 @@ try {
     ok('y no dice que esté lleno', CuotaImg::estado($pdo, $M)['lleno'] === false);
 
     echo "\n  — la misma imagen NO cobra dos veces —\n";
-    $r2 = CuotaImg::reservar($pdo, $ctx($M, 'arte_post', 'img_gemini_fallback', 101));
-    ok('el respaldo reusa el asiento', $r2['reusado'] === true && $r2['asiento_id'] === $r1['asiento_id'],
+    //  Por garantizar(), que es por donde entran los puntos de proveedor de
+    //  verdad. `llamadas` se cuenta AHI y solo ahí: reservar() a secas no
+    //  representa una entrada al proveedor, así que contarla desde aquí medía
+    //  otra cosa. Es el arreglo del 21 de agosto — antes se sumaba en tres
+    //  sitios que no se conocían y salían 3 llamadas para 2 encolados.
+    $g1 = CuotaImg::garantizar($ctx($M, 'arte_post', 'img_resp_encolar_res', 101),
+                               'P4 openai_responses_crear_bg');
+    $g2 = CuotaImg::garantizar($ctx($M, 'arte_post', 'img_gemini_fallback', 101),
+                               'P1 gemini_imagen');
+    ok('el respaldo reusa el asiento', $g2->asiento_id === $g1->asiento_id
+       && $g1->asiento_id === $r1['asiento_id'],
        'aqui es donde un rechazo de gpt-image-1 le costaria 2 de 40 al dueño');
     ok('y el mes sigue en una sola unidad', CuotaImg::restantes($pdo, $M) === CuotaImg::TOPE_MES - 1);
     CuotaImg::confirmar($pdo, $r1['asiento_id'], 0.10);
     $q = $pdo->prepare("SELECT llamadas, unidades, estado FROM crecer_img_cuota_asiento WHERE id=?");
     $q->execute([$r1['asiento_id']]); $a = $q->fetch(PDO::FETCH_ASSOC);
-    ok('pero se anotan las dos llamadas de proveedor', (int)$a['llamadas'] >= 1,
-       'una unidad de cliente, las llamadas que hagan falta colgadas de ella');
+    ok('pero se anotan las dos llamadas de proveedor', (int)$a['llamadas'] === 2,
+       'salió ' . $a['llamadas'] . ' · una unidad de cliente, las llamadas que hagan falta colgadas de ella');
     ok('y la unidad sigue siendo una', (int)$a['unidades'] === 1);
     ok('la imagen queda confirmada', $a['estado'] === 'confirmado');
 
