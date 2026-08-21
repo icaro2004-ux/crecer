@@ -247,7 +247,11 @@ class MetaStateComposer
 
             return new MetaState(
                 MetaState::G_MATERIAL,
-                $es_video ? 'Para seguir, necesito tu video' : 'Para seguir, necesito tu material',
+                //  FRASE ENTERA, NO UN TROZO. Con el turno delante, la pantalla
+                //  quitaba el «Para seguir, necesito» y quedaba «Tu material»,
+                //  que no es una frase: es una etiqueta. De qué material se
+                //  trata lo dice el objeto que va justo debajo.
+                $es_video ? 'Necesito un video tuyo' : 'Necesito una foto tuya',
                 $es_video
                     ? 'Un clip corto con el celular basta. Ya te dejé escrito qué grabar.'
                     : 'Así mostramos tu producto real. La del celular sirve.',
@@ -365,7 +369,15 @@ class MetaStateComposer
                 ? 'Tengo pendiente preparar: ' . (string)$primera['titulo']
                 : 'Tengo ' . $pendientes . ' cosas del plan por preparar.',
             null,
-            ['tactica_id' => (int)($primera['id'] ?? 0), 'pendientes' => $pendientes],
+            //  ESTE es el unico caso que se queda parado sin imagenes: hay que
+            //  PRODUCIR piezas que todavia no existen, y producir un post pasa
+            //  por pintar. Un job ya en marcha no, y el material del dueño
+            //  tampoco: eso lo sube el.
+            ['tactica_id' => (int)($primera['id'] ?? 0), 'pendientes' => $pendientes,
+             'consume' => ['imagen'],
+             'objeto' => ['titulo' => (string)($primera['titulo'] ?? ''),
+                          'red' => '', 'fecha' => '',
+                          'tipo' => (string)($primera['formato'] ?? 'post')]],
             self::camino($s, (int)($primera['id'] ?? 0)), self::cobertura($s), 'produccion_pendiente_sin_piezas');
     }
 

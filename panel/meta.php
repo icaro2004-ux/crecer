@@ -234,6 +234,13 @@ $mt_unidad = function (string $objetivo): array {
     }
 };
 
+/** El mes de hoy, en castellano. La cuota se cuenta por mes natural. */
+$mt_mes = function (): string {
+    $m = ['enero','febrero','marzo','abril','mayo','junio','julio',
+          'agosto','septiembre','octubre','noviembre','diciembre'];
+    return $m[(int)date('n') - 1] ?? '';
+};
+
 /** Cuando vuelven las imagenes. La cuota lo trae en dd/mm; si viene vacio
  *  -sin libro todavia- se calcula el dia 1 del mes que entra.            */
 $mt_reset = function (?array $cuota): string {
@@ -1565,13 +1572,19 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
   //  lo que toca es aprobar, publicar o confirmar algo, el aviso va SIN boton y
   //  la accion normal se queda con el suyo: dos primarios compitiendo es el
   //  criterio 3 del contrato, y en esa pantalla el dueño ya no sabe que tocar.
+  //  QUIEN MANDA NO LO DECIDE LA LETRA DEL ESTADO.
+  //  Estaba escrito como «si es E o G, manda la cuota», y eso le quitaba a la
+  //  dueña la unica accion que SI podia hacer con el mes agotado: G le pide
+  //  material suyo -una foto, un video- y subirlo no gasta ni una imagen. Y E
+  //  cubre tanto un trabajo ya en marcha, que no se para, como uno que ni ha
+  //  empezado, que si. La regla vive ahora en MetaLimiteImagen y pregunta lo
+  //  que hay que preguntar: ¿lo proximo necesita PINTAR algo nuevo?
   require_once __DIR__ . '/../includes/cuota_aviso.php';
+  require_once __DIR__ . '/../core/Meta/MetaLimiteImagen.php';
   $mt_cuota = null; $mt_cuota_manda = false;
   try {
       $mt_cuota = img_cuota_estado($pdo, $marca_id, ($usuario['rol'] ?? '') === 'admin');
-      if (!empty($mt_cuota['lleno'])) {
-          $mt_cuota_manda = in_array($E->estado, [MetaState::E_CRECER_TRABAJA, MetaState::G_MATERIAL], true);
-      }
+      $mt_cuota_manda = MetaLimiteImagen::manda($E, $mt_cuota);
   } catch (Throwable $e) { $mt_cuota = null; }
   // El destino de la acción vuelve aquí cuando termine.
   // El destino sale del compositor; aquí solo se le añade el regreso y, para
@@ -1664,10 +1677,13 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
     //  accesibilidad dice que la informacion no puede viajar solo en el
     //  color, porque hay quien no lo distingue y porque una pastilla muda
     //  no se puede leer en voz alta.
+    //  Rosa = solo tu puedes hacerlo. Teal = ya esta hecho o corre solo.
+    $TUYAS = ['material', 'aprobacion', 'inversion', 'fisica', 'decision',
+              'reintento', 'reintento_job'];
     $turno_cls = ''; $turno_txt = ''; $turno_ico = '';
     if ($mt_cuota_manda) {
         $turno_cls = 'limite'; $turno_txt = 'Sin imágenes este mes'; $turno_ico = 'image';
-    } elseif ($E->pideAlgoAlDueno()) {
+    } elseif ($act !== null && in_array((string)($act['tipo'] ?? ''), $TUYAS, true)) {
         $turno_cls = ''; $turno_txt = 'Te toca a ti';
     } elseif ($act === null) {
         $turno_cls = 'mio'; $turno_txt = 'Me toca a mí';
@@ -1686,6 +1702,16 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
             break;
         }
     }
+    //  CON EL LIMITE MANDANDO, LA PANTALLA DICE QUE PASA.
+    //  Cambiar solo la pastilla y dejar el titulo del estado normal era medio
+    //  aviso: la dueña leia «Me toca a mi» con una pastilla ambar al lado y
+    //  tenia que atar cabos. Se dice entero, con el numero y el mes.
+    if ($mt_cuota_manda) {
+        $lim = (int)($mt_cuota['limite'] ?? 0);
+        $titulo = $lim > 0
+            ? 'Usaste las ' . $lim . ' imágenes de ' . $mt_mes()
+            : 'Se acabaron las imágenes de ' . $mt_mes();
+    }
     //  M · el cierre dice CON CUANTO, y siempre «registrados»: sin esa
     //  palabra «18 pedidos» se lee como los pedidos del negocio, y Crecer
     //  solo cuenta los que pasaron por aqui.
@@ -1696,6 +1722,10 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
         $titulo = 'Cerraste con ' . $n_m . ' ' . $sust_m . ' ' . $part_m;
     }
     $objeto = (array)($E->evidencia['objeto'] ?? []);
+    //  El objeto pausado es el que el compositor eligio, no un ejemplo. Si el
+    //  estado no trae ninguno, la pantalla no se inventa uno.
+    $pausado = $mt_cuota_manda ? MetaLimiteImagen::objetoPausado($E) : [];
+    if ($pausado) $objeto = $pausado;
   ?>
   <section class="tm-ahora">
     <span class="tm-turno <?= $h($turno_cls) ?>">
@@ -1715,7 +1745,9 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
         <span class="tm-obj-ic"><?= ico($mt_ico_obj((string)($objeto['tipo'] ?? 'post'))) ?></span>
         <span class="tm-obj-tx">
           <b><?= $h($objeto['titulo']) ?></b>
-          <?php $sub_obj = $mt_sub_obj($objeto); ?>
+          <?php $sub_obj = $mt_cuota_manda
+              ? 'en pausa · le falta la imagen'
+              : $mt_sub_obj($objeto); ?>
           <?php if ($sub_obj !== ''): ?>
             <span><?= $h($sub_obj) ?></span>
           <?php endif; ?>
@@ -1792,7 +1824,7 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
                  en boton de linea. */ ?>
         <a class="tm-btn linea" href="<?= $BASE ?>/propuestas.php?marca=<?= $marca_id ?>"><?= ico('eye') ?>Ver lo que ya está listo</a>
       <?php else: ?>
-        <a class="tm-btn<?= $E->pideAlgoAlDueno() ? '' : ' teal' ?>" href="<?= $h($destino) ?>"><?= ico($mt_ico_act((string)$tipo)) ?><?= $h($act['etiqueta']) ?></a>
+        <a class="tm-btn<?= $turno_cls === 'mio' ? ' teal' : '' ?>" href="<?= $h($destino) ?>"><?= ico($mt_ico_act((string)$tipo)) ?><?= $h($act['etiqueta']) ?></a>
       <?php endif; ?>
 
       <?php /* La consecuencia de pulsar. Cuando el limite manda, la de la
@@ -1833,14 +1865,22 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
     if ($E->estado === MetaState::C_PLAN_POR_VER) $prox = [];
   ?>
   <div class="tm-capas">
-    <?php if ($mt_cuota_manda): ?>
+    <?php /*  LO QUE SIGUE PASANDO SALE DEL RETRATO, NO DE UNA LISTA FIJA.
+              Habia cuatro renglones iguales para todo el mundo: escribo,
+              publico, contesto mensajes y la fecha. Tres eran afirmaciones
+              sobre ESTA marca que nadie habia comprobado — si no tiene nada
+              aprobado no va a publicar, y si no tiene canales conectados no va
+              a contestar—. Prometerlo aqui es peor que callarlo: es el momento
+              en que la dueña decide si esto le sirve. */ ?>
+    <?php $sigue = $mt_cuota_manda
+        ? MetaLimiteImagen::sigueHaciendo($mt_snap, $mt_reset($mt_cuota)) : []; ?>
+    <?php if ($mt_cuota_manda && $sigue): ?>
       <details class="tm-ac" open>
-        <summary>Qué sigo haciendo mientras <span class="cta">4</span><?= ico('chev-abajo') ?></summary>
+        <summary>Qué sigue pasando <span class="cta"><?= count($sigue) ?></span><?= ico('chev-abajo') ?></summary>
         <div class="dentro"><div class="tm-pasos">
-          <div class="tm-paso"><?= ico('pen') ?><div><b>Escribo los textos</b><span>eso no gasta imágenes</span></div></div>
-          <div class="tm-paso"><?= ico('calendar') ?><div><b>Publico lo que ya aprobaste</b><span>en su hora</span></div></div>
-          <div class="tm-paso"><?= ico('chat') ?><div><b>Contesto los mensajes</b><span>como siempre</span></div></div>
-          <div class="tm-paso"><?= ico('clock') ?><div><b>El <?= $h($mt_reset($mt_cuota)) ?> vuelve la cuota</b><span>podrás retomar lo que quedó en pausa</span></div></div>
+          <?php foreach ($sigue as $sg): ?>
+            <div class="tm-paso"><?= ico($sg['ico']) ?><div><b><?= $h($sg['titulo']) ?></b><span><?= $h($sg['pie']) ?></span></div></div>
+          <?php endforeach; ?>
         </div></div>
       </details>
     <?php elseif ($prox): ?>
@@ -1873,7 +1913,7 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
       <a href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&vista=plan"><?= ico('list') ?>Ver el plan completo<?= ico('chev-der') ?></a>
       <a href="<?= $BASE ?>/sala.php?marca=<?= $marca_id ?>"><?= ico('chat') ?>Discutirla con el corillo<?= ico('chev-der') ?></a>
     <?php else: ?>
-      <a href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&vista=wizard"><?= ico('target') ?>Escoger otra meta<?= ico('chev-der') ?></a>
+      <a href="<?= $BASE ?>/sala.php?marca=<?= $marca_id ?>"><?= ico('chat') ?>Preguntarle al corillo<?= ico('chev-der') ?></a>
     <?php endif; ?>
   </nav>
 </div>
