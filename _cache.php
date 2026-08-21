@@ -910,6 +910,196 @@ try {
     }
 
 
+
+    // ¿QUE DISPARO LAS 148 GENERACIONES?   &test=forense[&desde=&hasta=][&marca=N]
+    //
+    //   El 10 de agosto de 2026 —un LUNES— salieron 104 imagenes y $17.31 en un
+    //   dia. El 9 fueron 21 y el 11, 23. Esto NO propone una causa: reparte los
+    //   numeros por dia, por hora, por marca, por ruta y por pieza para que la
+    //   causa se vea sola. Que fuera lunes es un dato, no una conclusion — la
+    //   reparticion por hora es la que dice si fue una tanda o goteo.
+    //
+    //   SOLO LECTURA Y SIN DATOS DEL CLIENTE. No se imprime ni un prompt, ni un
+    //   caption, ni un nombre de negocio: solo conteos, costos, y el id numerico
+    //   de la pieza sacado del NOMBRE del archivo guardado.
+    if ($__test === 'forense') {
+        echo "\n--- QUE DISPARO LAS GENERACIONES ---\n";
+        $desde = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['desde'] ?? ''))
+                 ? $_GET['desde'] : '2026-08-06';
+        $hasta = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['hasta'] ?? ''))
+                 ? $_GET['hasta'] : '2026-08-22';
+        $marca = (int)($_GET['marca'] ?? 0);
+        $fm    = $marca > 0 ? " AND marca_id = {$marca}" : '';
+        printf("  ventana: %s → %s%s\n", $desde, $hasta, $marca ? "  ·  marca {$marca}" : '  ·  todas las marcas');
+
+        //  Los modelos que PINTAN. El texto no entra: son centavos y ensucia.
+        $IMG = "'gpt-image-1','gpt-image-2','dall-e-3','gemini-3-pro-image','gemini-2.5-flash-image','responses/gpt-image-1'";
+        $vent = "created_at >= '{$desde} 00:00:00' AND created_at < '{$hasta} 00:00:00'";
+        $base = "FROM crecer_ia_log WHERE {$vent} AND modelo IN ({$IMG}){$fm}";
+
+        try {
+            // ── 1 · POR DIA ────────────────────────────────────────────
+            echo "\n  1) Por dia (solo modelos de imagen)\n";
+            printf("     %-12s %-10s %5s %5s %5s %10s\n", 'dia', 'semana', 'tot', 'ok', 'err', 'costo');
+            $tot_n = 0; $tot_c = 0.0; $picos = [];
+            foreach ($pdo->query("SELECT DATE(created_at) d, COUNT(*) n,
+                                         SUM(estado='ok') ok, SUM(estado='error') err,
+                                         COALESCE(SUM(costo_usd),0) c
+                                    {$base} GROUP BY d ORDER BY d") as $r) {
+                $dia = (string)$r['d'];
+                printf("     %-12s %-10s %5d %5d %5d %10.3f\n", $dia,
+                       ['Sunday'=>'domingo','Monday'=>'LUNES','Tuesday'=>'martes','Wednesday'=>'miercoles',
+                        'Thursday'=>'jueves','Friday'=>'viernes','Saturday'=>'sabado'][date('l', strtotime($dia))] ?? '',
+                       $r['n'], $r['ok'], $r['err'], $r['c']);
+                $tot_n += (int)$r['n']; $tot_c += (float)$r['c'];
+                if ((int)$r['n'] >= 15) $picos[] = $dia;
+            }
+            printf("     %-23s %5d %11s %10.3f\n", 'TOTAL', $tot_n, '', $tot_c);
+            echo "     (el costo de aqui es el que Crecer APUNTO; la factura de OpenAI manda)\n";
+
+            // ── 2 · LAS HORAS DE LOS DIAS PICO ─────────────────────────
+            echo "\n  2) Reparticion por hora en los dias pico\n";
+            echo "     Una tanda concentrada en una hora huele a cron o a bucle.\n";
+            echo "     Goteo a lo largo del dia huele a alguien pulsando botones.\n";
+            if (!$picos) { echo "     (ningun dia llego a 15 generaciones)\n"; }
+            foreach ($picos as $dia) {
+                echo "\n     · {$dia}\n";
+                foreach ($pdo->query("SELECT HOUR(created_at) h, COUNT(*) n, COALESCE(SUM(costo_usd),0) c
+                                        FROM crecer_ia_log
+                                       WHERE DATE(created_at)='{$dia}' AND modelo IN ({$IMG}){$fm}
+                                       GROUP BY h ORDER BY h") as $r) {
+                    printf("       %02d:00  %-40s %3d  %7.3f\n", $r['h'],
+                           str_repeat('#', min(40, (int)$r['n'])), $r['n'], $r['c']);
+                }
+            }
+
+            // ── 3 · POR MARCA ──────────────────────────────────────────
+            echo "\n  3) Por marca\n";
+            foreach ($pdo->query("SELECT marca_id, COUNT(*) n, COALESCE(SUM(costo_usd),0) c
+                                    {$base} GROUP BY marca_id ORDER BY n DESC LIMIT 20") as $r) {
+                printf("     marca %-8s %4d generaciones   %8.3f\n", $r['marca_id'] ?: '(null)', $r['n'], $r['c']);
+            }
+
+            // ── 4 · POR RUTA ───────────────────────────────────────────
+            //  `accion` es la etiqueta que cada ruta escribe al loguear: es lo
+            //  mas cerca de "quien lo pidio" que hay para las fechas de agosto,
+            //  cuando todavia no existia el libro de cuota con su campo `ruta`.
+            echo "\n  4) Por ruta (la etiqueta que dejo cada llamada)\n";
+            foreach ($pdo->query("SELECT agente, accion, modelo, COUNT(*) n,
+                                         SUM(estado='error') err, COALESCE(SUM(costo_usd),0) c
+                                    {$base} GROUP BY agente, accion, modelo ORDER BY n DESC LIMIT 25") as $r) {
+                printf("     %4d  %-9s %-42s %-22s err=%-3d %8.3f\n",
+                       $r['n'], mb_substr((string)$r['agente'], 0, 9),
+                       mb_substr((string)$r['accion'], 0, 42),
+                       mb_substr((string)$r['modelo'], 0, 22), $r['err'], $r['c']);
+            }
+
+            // ── 5 · POR PIEZA, CON DUPLICADOS ──────────────────────────
+            //  El id de la pieza sale del NOMBRE del archivo guardado, que es
+            //  publico y no lleva datos del cliente:
+            //    resp_<pieza>_  ·  gem_<pieza>_  ·  carr_<slide>_  ·  gen_<id>_
+            //  `post_<uniqid>` NO lleva id: esas no se pueden atribuir a una
+            //  pieza y se cuentan aparte. Es una limitacion real, no un cero.
+            echo "\n  5) Por pieza — aqui se ven los duplicados\n";
+            $por_pieza = []; $sin_id = 0; $tipos = [];
+            $q = $pdo->prepare("SELECT respuesta, modelo, created_at, marca_id
+                                  FROM crecer_ia_log
+                                 WHERE {$vent} AND modelo IN ({$IMG}){$fm} AND estado='ok'");
+            $q->execute();
+            foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $u = (string)$r['respuesta'];
+                if (preg_match('#/(resp|gem|carr|gen)_(\d+)_#', $u, $m)) {
+                    $k = $m[1] . ':' . $m[2] . ':m' . (int)$r['marca_id'];
+                    $por_pieza[$k] = ($por_pieza[$k] ?? 0) + 1;
+                    $tipos[$m[1]] = ($tipos[$m[1]] ?? 0) + 1;
+                } elseif (preg_match('#/(post|logo)_#', $u, $m)) {
+                    $sin_id++; $tipos[$m[1]] = ($tipos[$m[1]] ?? 0) + 1;
+                } else { $sin_id++; }
+            }
+            echo "     por tipo de archivo:\n";
+            foreach ($tipos as $t => $n) {
+                $etq = ['resp'=>'arte por Responses','gem'=>'respaldo Gemini','carr'=>'slide de carrusel',
+                        'gen'=>'muestra del gateway','post'=>'arte directo (sin id en el nombre)',
+                        'logo'=>'logo'][$t] ?? $t;
+                printf("       %-7s %4d   %s\n", $t . '_', $n, $etq);
+            }
+            printf("     sin id de pieza atribuible: %d\n", $sin_id);
+
+            arsort($por_pieza);
+            $rep = array_filter($por_pieza, fn($n) => $n > 1);
+            printf("\n     piezas con id: %d   ·   de esas, REPETIDAS: %d\n",
+                   count($por_pieza), count($rep));
+            if ($rep) {
+                echo "     las mas repetidas (tipo:pieza:marca → cuantas imagenes):\n";
+                $i = 0;
+                foreach ($rep as $k => $n) {
+                    printf("       %-24s %d imagenes\n", $k, $n);
+                    if (++$i >= 20) { echo "       …\n"; break; }
+                }
+                printf("     imagenes de mas por repeticion: %d\n",
+                       array_sum($rep) - count($rep));
+                echo "     (cada una por encima de 1 es una imagen que se pinto dos veces\n";
+                echo "      para la MISMA pieza — justo lo que el libro impide ahora)\n";
+            }
+
+            // ── 6 · LOS ERRORES, POR CLASE ─────────────────────────────
+            echo "\n  6) Errores en la ventana (por su clase, sin el mensaje entero)\n";
+            $clases = [];
+            $qe = $pdo->prepare("SELECT error_msg FROM crecer_ia_log
+                                  WHERE {$vent} AND estado='error'{$fm}");
+            $qe->execute();
+            foreach ($qe->fetchAll(PDO::FETCH_COLUMN) as $msg) {
+                $m = strtolower((string)$msg);
+                $c = 'otro';
+                foreach (['credit_balance_exhausted' => 'credito agotado',
+                          'insufficient_quota'       => 'credito agotado',
+                          'billing'                  => 'facturacion',
+                          '429'                      => 'rate limit',
+                          '401'                      => 'credenciales',
+                          '403'                      => 'credenciales',
+                          '400'                      => 'peticion rechazada',
+                          '404'                      => 'no encontrado',
+                          'timeout'                  => 'timeout',
+                          'timed out'                => 'timeout'] as $aguja => $etq) {
+                    if (strpos($m, $aguja) !== false) { $c = $etq; break; }
+                }
+                $clases[$c] = ($clases[$c] ?? 0) + 1;
+            }
+            arsort($clases);
+            if (!$clases) echo "     (ninguno)\n";
+            foreach ($clases as $c => $n) printf("     %-22s %4d\n", $c, $n);
+            echo "     'credito agotado' aqui es la senal de que la recarga se acabo\n";
+            echo "     EN MEDIO de la tanda: a partir de ahi todo intento fallaba.\n";
+
+            // ── 7 · CONTEXTO ───────────────────────────────────────────
+            echo "\n  7) Contexto\n";
+            try {
+                $ap = (int)$pdo->query("SELECT COUNT(*) FROM crecer_marca WHERE autopilot=1")->fetchColumn();
+                printf("     marcas con piloto automatico HOY: %d\n", $ap);
+            } catch (Throwable $e) {}
+            try {
+                foreach ($pdo->query("SELECT id, marca_id, arte_intentos, img_intentos, img_estado
+                                        FROM crecer_contenido
+                                       WHERE arte_intentos >= 3 ORDER BY arte_intentos DESC LIMIT 10") as $r) {
+                    printf("     pieza #%-6s marca %-6s arte_intentos=%-3s img_intentos=%-3s %s\n",
+                           $r['id'], $r['marca_id'], $r['arte_intentos'], $r['img_intentos'], $r['img_estado']);
+                }
+            } catch (Throwable $e) {}
+            echo "     (arte_intentos alto = a esa pieza se le pinto arte varias veces)\n";
+
+            echo "\n  --- como leer esto ---\n";
+            echo "  · Una hora con casi todo el conteo = una tanda automatica.\n";
+            echo "  · Muchas piezas repetidas = se repitio la MISMA imagen.\n";
+            echo "  · Muchas piezas distintas de una sola ruta = esa ruta produjo de mas.\n";
+            echo "  · 'credito agotado' temprano en la tanda = lo que vino despues\n";
+            echo "    fueron intentos fallidos, no imagenes entregadas.\n";
+            echo "\n  --- que NO se hizo aqui ---\n";
+            echo "  Ni una escritura, ni una llamada a ningun proveedor, y no se\n";
+            echo "  imprimio ningun prompt, caption ni nombre de negocio.\n";
+        } catch (Throwable $e) {
+            echo "  (error: " . $e->getMessage() . ")\n";
+        }
+    }
     // ¿POR QUE SIGUEN COLGADAS #644 Y #656?   &test=colgadas[&pieza=N][&preguntar=1]
     //
     //   SOLO LECTURA por defecto. No genera, no encola, no libera, no escribe
