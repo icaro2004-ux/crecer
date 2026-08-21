@@ -991,7 +991,7 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
     //    de más → cae a Gemini para no trabar la fábrica. ──
     if (!$tiene_foto && function_exists('img_resp_activo') && img_resp_activo()) {
         $estilo_raw = (trim($opts['estilo_arte'] ?? 'realista') ?: 'realista');
-        $rr = generar_grafica_responses($pdo, $marca_id, $m, $copy, $con_texto, ($con_logo && $logo_abs) ? $logo_abs : null, $fname, $estilo_raw, $instr);
+        $rr = generar_grafica_responses($pdo, $marca_id, $m, $copy, $con_texto, ($con_logo && $logo_abs) ? $logo_abs : null, $fname, $estilo_raw, $instr, (int)($opts['contenido_id'] ?? 0));
         if ($rr) {
             $pdo->prepare("INSERT INTO crecer_graficas (marca_id, archivo, copy_text) VALUES (?,?,?)")
                 ->execute([$marca_id, $rr['archivo'], $copy]);
@@ -1025,7 +1025,12 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
  * suele completar en 20-45s). Soporta el LOGO real. Devuelve ['archivo','costo','modelo']
  * o null → el llamador cae a Gemini (nunca se traba la fábrica). Loguea en crecer_ia_log.
  */
-function generar_grafica_responses(PDO $pdo, int $marca_id, array $m, string $copy, bool $con_texto, ?string $logo_abs, string $fname, string $estilo = 'realista', string $extra = ''): ?array {
+//  $contenido_id NO es decorativo: es la IDENTIDAD de la unidad de cuota.
+//  Sin el, la reserva se abre para «arte_post/contenido/0» y no para esta pieza,
+//  asi que el respaldo NO reusa la reserva del encolado original — abre otra, y
+//  el dueño paga dos por la misma imagen. Salio al probar el respaldo del
+//  credito agotado: dos asientos extra con origen=0.
+function generar_grafica_responses(PDO $pdo, int $marca_id, array $m, string $copy, bool $con_texto, ?string $logo_abs, string $fname, string $estilo = 'realista', string $extra = '', int $contenido_id = 0): ?array {
     require_once __DIR__ . '/img_responses.php';
     if (!function_exists('openai_configurado') || !openai_configurado()) return null;
     $logo = null;
@@ -1050,7 +1055,7 @@ function generar_grafica_responses(PDO $pdo, int $marca_id, array $m, string $co
         require_once __DIR__ . '/cuota_imagenes.php';
         $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1']
             + ['cuota' => CuotaCtx::de($pdo, $marca_id, 'arte_post', 'crear_arte_post_responses',
-                          ['origen_tipo' => 'contenido', 'origen_id' => (int)($opts['contenido_id'] ?? 0),
+                          ['origen_tipo' => 'contenido', 'origen_id' => $contenido_id,
                            'costo' => 0.17])]
             + ($logo ? ['logo' => $logo] : []));
     } catch (Throwable $e) { error_log('generar_grafica_responses crear: ' . $e->getMessage()); return null; }

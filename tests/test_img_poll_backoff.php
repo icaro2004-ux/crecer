@@ -77,8 +77,16 @@ echo "\n  — un job que el proveedor sostiene no se mata a las 24h —\n";
 $d = img_poll_decidir($viejo, 'in_progress', null, $AHORA);
 ok('vivo a las 49h → sigue esperando', $d['accion'] === 'esperar');
 ok('vivo a las 49h NO dispara respaldo', $d['accion'] !== 'fallback');
+//  LOS INTENTOS NO MATAN UN JOB VIVO... hasta el tope absoluto.
+//  Por debajo del tope manda la EDAD, como siempre. Pero tiene que haber un
+//  techo: sin el, #644 llego a 35 sondeos porque su edad se leia como cero y
+//  nada mas podia pararla. El tope es la red, no la regla.
+$d = img_poll_decidir(['intentos' => IMG_POLL_INTENTOS_MAX - 1, 'job_at' => '2026-08-19 11:00:00'], 'queued', null, $AHORA);
+ok('por debajo del tope, un job vivo sigue esperando', $d['accion'] === 'esperar');
 $d = img_poll_decidir(['intentos' => 999, 'job_at' => '2026-08-19 11:00:00'], 'queued', null, $AHORA);
-ok('los intentos no matan un job vivo', $d['accion'] === 'esperar');
+ok('pasado el tope, se aparca', $d['accion'] === 'aparcar' && $d['clase'] === 'tope_intentos',
+   "salio {$d['accion']}/{$d['clase']} · ningun trabajo puede volver a 35 sondeos");
+ok('y aparcar no autoriza respaldo', $d['accion'] !== 'fallback');
 $d = img_poll_decidir($anciano, 'in_progress', null, $AHORA);
 ok('solo el tope duro (7 días) lo aparca', $d['accion'] === 'aparcar' && $d['clase'] === 'vivo_tope_duro');
 ok('y aparcar tampoco autoriza respaldo', $d['accion'] !== 'fallback');

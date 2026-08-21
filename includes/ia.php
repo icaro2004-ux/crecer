@@ -749,12 +749,9 @@ function openai_responses_imagen(string $brief, array $opts = []): array {
     try {
         return _openai_responses_imagen($brief, $opts);
     } catch (Throwable $e) {
-        //  Mismo motivo que en P4: un fallo nuestro no se cobra de su plan.
-        //  P1 y P2 no lo necesitan aqui porque motor_imagen() ya los cubre —y
-        //  ademas tiene que dejar la reserva VIVA entre el motor que falla y el
-        //  de respaldo, que es justo lo que evita el cobro doble.
-        CuotaImg::liberar($__cuota->pdo, $__cuota->asiento_id,
-            'falló el proveedor: ' . mb_substr($e->getMessage(), 0, 180));
+        //  Igual que en P4: la unidad se queda ABIERTA para el respaldo.
+        //  Cerrarla aqui retiraba su llave y el respaldo abria otra — dos
+        //  unidades por la misma imagen.
         throw $e;
     }
 }
@@ -846,12 +843,19 @@ function openai_responses_crear_bg(string $brief, array $opts = []): array {
         //  reembolsaria dos veces.
         throw $e;
     } catch (Throwable $e) {
-        //  UN FALLO LIMPIO DEVUELVE LA UNIDAD AL MOMENTO. Sin esto, el dueño se
-        //  quedaba sin una de sus 40 durante los 45 minutos del barrido cada vez
-        //  que faltaba una credencial o el proveedor devolvia un 400 — un error
-        //  nuestro cobrandose de su plan.
-        CuotaImg::liberar($__cuota->pdo, $__cuota->asiento_id,
-            'no se pudo encolar: ' . mb_substr($e->getMessage(), 0, 180));
+        //  AQUI NO SE LIBERA, Y ES DELIBERADO.
+        //
+        //  Lo hacia, para no dejar la unidad retenida 45 minutos cuando fallaba
+        //  una credencial. Pero liberar CIERRA la unidad y retira su llave, asi
+        //  que el intento siguiente POR LA MISMA IMAGEN abre una reserva nueva:
+        //  dos unidades por un solo arte. Salio al probar el credito agotado,
+        //  con tres asientos donde tenia que haber uno.
+        //
+        //  QUIEN CIERRA ES EL DUEÑO DEL CICLO DE VIDA DE LA IMAGEN, no el punto
+        //  de proveedor: el sondeo cuando el proveedor confirma que no sale,
+        //  img_gemini_fallback cuando el respaldo tampoco entrega, o el barrido
+        //  a los 45 minutos si nadie vuelve. Retener una unidad un rato es
+        //  reparable; cobrar dos por una imagen, no.
         throw $e;
     }
 }
@@ -927,11 +931,25 @@ function openai_responses_estado(string $rid): array {
     if (!is_array($d)) {
         throw new IaHttp('Responses(estado) no-JSON: ' . substr($resp, 0, 300), $r['code']);
     }
-    if (isset($d['error']) || $r['code'] >= 400) {
+
+    //  UN TRABAJO QUE FALLO NO ES UN ERROR DE LA CONSULTA.
+    //
+    //  Aqui estaba el nudo de #656, y llevaba asi desde antes de la R1. Una
+    //  respuesta de fondo que fracasa vuelve con HTTP 200, `status: failed` Y un
+    //  campo `error` DENTRO DEL MISMO CUERPO. Como se lanzaba en cuanto habia
+    //  `error`, el `failed` no llegaba nunca a img_poll_decidir: se convertia en
+    //  excepcion, el status quedaba null, y la pieza caia en «no se pudo
+    //  consultar» — que no es terminal y por tanto se reintenta para siempre.
+    //  Un trabajo muerto sondeado sin fin.
+    //
+    //  La regla correcta: si el cuerpo trae STATUS, la consulta funciono y quien
+    //  decide es el de arriba. Solo se lanza cuando no hay status que leer, que
+    //  es cuando la consulta de verdad fallo.
+    $status = (string)($d['status'] ?? '');
+    if ($status === '' && (isset($d['error']) || $r['code'] >= 400)) {
         throw new IaHttp('Responses(estado) HTTP ' . $r['code'] . ': '
             . ($d['error']['message'] ?? 'error'), $r['code']);
     }
-    $status = (string)($d['status'] ?? '');
     $b64 = ''; $revised = ''; $igc = null;
     foreach (($d['output'] ?? []) as $o) {
         if (($o['type'] ?? '') === 'image_generation_call') {
@@ -953,7 +971,13 @@ function openai_responses_estado(string $rid): array {
         'tools_echo'            => $d['tools'] ?? null,        // parámetros de la herramienta tal como los devuelve la API
         'image_generation_call' => $igc,                      // revised_prompt real + cualquier campo de modelo interno
     ];
-    return ['status' => $status, 'b64' => $b64, 'revised' => $revised, 'model' => (string)($d['model'] ?? ''), 'raw' => $raw];
+    //  error_code viaja aparte y en crudo: es lo unico que distingue «se acabo
+    //  el credito» de «el prompt no paso el filtro», y las dos son 'failed'.
+    return ['status' => $status, 'b64' => $b64, 'revised' => $revised,
+            'model' => (string)($d['model'] ?? ''),
+            'error_code' => (string)($d['error']['code'] ?? ''),
+            'error_type' => (string)($d['error']['type'] ?? ''),
+            'raw' => $raw];
 }
 
 /** gpt-image-1 /images/edits — incorpora UNA imagen (el logo) al arte, a calidad ALTA. */
@@ -1035,7 +1059,10 @@ function motor_imagen(string $prompt, array $opts = []): array {
     } catch (Throwable $e) {
         $alt = $primero === 'openai' ? 'gemini' : 'openai';
         $alt_ok = ($alt === 'openai') ? openai_configurado() : (ia_transporte() === 'gemini_api');
-        if (!$alt_ok) { CuotaImg::liberarPorCtx($opts['cuota'] ?? null, 'falló ' . $primero . ' y no hay respaldo'); throw $e; }
+        //  Tampoco se libera aqui: quien llamo puede seguir intentando la misma
+        //  imagen por otra ruta (el rescate de img_gemini_fallback hace justo
+        //  eso). Cerrar la unidad ahora obligaria a abrir otra.
+        if (!$alt_ok) throw $e;
         error_log("motor_imagen: {$primero} falló ({$e->getMessage()}); respaldo a {$alt}");
         try {
             //  EL RESPALDO NO COBRA OTRA UNIDAD. La segunda llamada lleva el
@@ -1045,9 +1072,9 @@ function motor_imagen(string $prompt, array $opts = []): array {
             //  unidad, por muchos motores que haga falta probar.
             $r = $gen($alt);
         } catch (Throwable $e2) {
-            //  Fallaron los dos: se le devuelve la unidad al dueño ahora mismo,
-            //  sin esperar a que la barra el reloj.
-            CuotaImg::liberarPorCtx($opts['cuota'] ?? null, 'fallaron los dos motores');
+            //  Fallaron los dos motores, pero esto sigue sin ser el final de la
+            //  imagen: el que llamo puede tener otra ruta. La unidad se queda
+            //  abierta y la cierra quien sepa que ya no hay mas que intentar.
             throw $e2;
         }
         $r['motor'] = $alt; $r['razon'] = "Respaldo automático: {$primero} falló, se usó {$alt}."; return $r;
