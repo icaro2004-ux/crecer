@@ -1284,6 +1284,42 @@ try {
         echo "  No se genero ninguna imagen, no se encolo nada, no se libero ni\n";
         echo "  confirmo ninguna unidad y no se escribio en crecer_contenido.\n";
     }
+    // RECONCILIAR UNA PIEZA QUE YA TIENE SU IMAGEN   &test=reconciliar&pieza=N&marca=N[&hacer=1]
+    //
+    //   El caso de #656: el arte se entrego y la contabilidad se quedo abierta.
+    //   Esto cierra la pieza y confirma el asiento SIN LLAMAR A NADIE — ni para
+    //   preguntar. Por defecto solo dice lo que haria; escribe con &hacer=1.
+    //
+    //   No genera. Si la pieza no tiene grafica, no hace nada: reconciliar es
+    //   cuadrar el libro con lo que ya existe, no fabricar lo que falta.
+    if ($__test === 'reconciliar') {
+        echo "\n--- RECONCILIAR (cero red) ---\n";
+        require_once __DIR__ . '/includes/img_responses.php';
+        $pid = (int)($_GET['pieza'] ?? 0);
+        $mid = (int)($_GET['marca'] ?? 0);
+        if (!$pid || !$mid) {
+            echo "\n  Hacen falta &pieza=N Y &marca=N. Con la pieza sola no se toca:\n";
+            echo "  la marca es lo que confirma que la pieza es suya.\n";
+        } else {
+            $hacer = !empty($_GET['hacer']);
+            try {
+                $r = img_reconciliar_entregada($pdo, $mid, $pid, $hacer);
+                printf("\n  pieza #%d de la marca %d\n", $pid, $mid);
+                printf("  grafica        %s\n", $r['grafica'] !== '' ? $r['grafica'] : '(ninguna)');
+                printf("  asiento        %s %s\n", $r['asiento'] ?: '(ninguno)', $r['asiento_estado']);
+                printf("  se puede       %s\n", $r['puede'] ? 'si' : 'no');
+                printf("  se hizo        %s\n", $r['hecho'] ? 'SI' : 'no');
+                printf("  %s\n", $r['motivo']);
+                if ($r['puede'] && !$hacer) {
+                    echo "\n  (no se escribio nada · añade &hacer=1 para cerrarlo)\n";
+                }
+            } catch (Throwable $e) {
+                echo "  (error: " . $e->getMessage() . ")\n";
+            }
+        }
+        echo "\n  --- que NO se hizo aqui ---\n";
+        echo "  Cero llamadas a proveedor, ni de generacion ni de consulta.\n";
+    }
     // ¿QUEDÓ ASENTADO EL HOTFIX DE SONDEO?   &test=sondeo
     //   Contesta de un tiro las cuatro preguntas del despliegue, sin gastar un
     //   centavo y sin generar nada: qué código corre de verdad, si la migración

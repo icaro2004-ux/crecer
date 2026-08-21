@@ -524,27 +524,30 @@ function img_resp_encolar_res(PDO $pdo, int $marca_id, int $post_id, string $cop
 }
 
 /**
- * RESPALDO: si gpt-image-2 (Responses) no pudo, genera con GEMINI (Nano Banana Pro,
- * gemini-3-pro-image) y guarda en la pieza. Usa el logo real si hay. Devuelve la URL o ''.
+ * EL RESPALDO. Genera con GEMINI (Nano Banana Pro, gemini-3-pro-image), guarda
+ * en la pieza y cierra la unidad de cuota. Devuelve la URL o ''.
  * Corre donde haya tiempo (worker), NUNCA en la pantalla del dueño.
- */
-/**
- * RESCATE de un arte que se quedó en cola. Intenta OPENAI primero; Gemini es el
- * último recurso, no el atajo.
  *
- * Por qué se reescribió (2026-08-14). El rescate llamaba a Gemini directo, y eso
- * tapaba el fallo de verdad: el disparador del worker dejó de funcionar el 12 de
- * agosto y NADIE se enteró, porque cada pieza salía igual — con otro motor y
- * otra calidad. Tres días con cero llamadas a OpenAI y el producto "funcionando".
+ * TRES REGLAS, Y LAS TRES SE PAGARON CARAS:
  *
- * El punto clave: cuando el worker no arranca, OPENAI NO HA FALLADO. Lo que
- * falló fue el disparo (curl del servidor a sí mismo). Una llamada síncrona a
- * OpenAI desde aquí sí funciona — por eso reintentarla recupera la mayoría de
- * los casos con el motor bueno, en vez de regalárselos a Gemini.
+ * 1) UN RESPALDO POR IMAGEN. Se entra con el permiso 'fb:' que puso el sondeo
+ *    al confirmar que el trabajo del proveedor no sale, y se consume en el
+ *    mismo UPDATE que lo comprueba. Sin esa puerta, cada pasada del barrido
+ *    veia «pieza en error sin job» y pedia otra imagen.
  *
- * Gemini se queda como red: mejor una imagen de respaldo que ninguna. Pero pasa
- * a ser lo que debe ser — el último recurso — y queda en el log cuál de los dos
- * la hizo, para poder medirlo.
+ * 2) SOLO GEMINI. Aqui hubo un «reintento con OpenAI» que llamaba a
+ *    generar_grafica() entera. La intencion era buena —el motor bueno primero,
+ *    en vez de regalarle las piezas al respaldo— y el efecto fue una fuga: para
+ *    arte desde cero, generar_grafica() encola OTRO trabajo en segundo plano y
+ *    despues prueba otros dos motores. El 20 de agosto se midio sobre #656:
+ *    un solo rescate entro a TRES puntos de proveedor y dejo inalcanzable el
+ *    trabajo original. Quien quiera el motor bueno, que empiece un ciclo nuevo
+ *    a proposito y pague su unidad.
+ *
+ * 3) LA UNIDAD SE CIERRA AQUI, EN LOS DOS SENTIDOS. Si Gemini entrega, se
+ *    confirma; si no, se libera y la pieza queda en fallo RECUPERABLE, sellada
+ *    para que nada automatico vuelva a entrar. El sondeo deja la reserva viva a
+ *    proposito para que este respaldo pueda reusarla: es el ultimo que la toca.
  *
  * OJO: esto es SOLO el rescate. La edición de FOTOS REALES del negocio sigue
  * yendo por Gemini como siempre; ahí es el motor correcto, no un sustituto.
@@ -582,38 +585,54 @@ function img_gemini_fallback(PDO $pdo, int $marca_id, int $post_id, string $copy
         }
     }
 
-    // ── 1) Reintento con OPENAI, que es el que queremos que gane ──
-    // arte_worker.php no carga agentes.php, así que sin esto el reintento se
-    // saltaba justo en uno de los cuatro caminos. Los require_once de agentes
-    // hacia este archivo viven dentro de funciones, así que no hay círculo.
-    if (!function_exists('generar_grafica') && is_file(__DIR__ . '/agentes.php')) {
-        try { require_once __DIR__ . '/agentes.php'; } catch (Throwable $e) {}
-    }
-    if (function_exists('generar_grafica')) {
-        try {
-            //  LA PIEZA VIAJA. Sin contenido_id, este rescate abre su propia
-            //  reserva -«contenido/0»- en vez de reusar la del encolado, y el
-            //  dueño acaba pagando dos unidades por la misma imagen.
-            $g = generar_grafica($pdo, $marca_id, null,
-                    ['copy' => $copy, 'con_logo' => false, 'contenido_id' => $post_id]);
-            if (!empty($g['archivo'])) {
-                $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, img_estado='ok', updated_at=NOW()
-                                WHERE id=? AND marca_id=?")
-                    ->execute([$g['archivo'], $post_id, $marca_id]);
-                error_log("rescate #{$post_id}: recuperado por OPENAI (el worker no habia disparado).");
-                return (string)$g['archivo'];
-            }
-        } catch (Throwable $e) {
-            error_log("rescate #{$post_id}: OpenAI tampoco pudo (" . mb_substr($e->getMessage(), 0, 120) . "); va Gemini.");
-        }
-    }
+    // ── EL RESPALDO ES GEMINI. SOLO GEMINI. ──
+    //
+    //  Aqui vivia un «reintento con OpenAI» que llamaba a generar_grafica()
+    //  entera. Sonaba razonable —el motor bueno primero— y era la fuga: para
+    //  arte desde cero, generar_grafica() encola OTRO trabajo en segundo plano
+    //  (P4), y despues prueba P2 y P1 por su cuenta. Un solo rescate entraba a
+    //  TRES puntos de proveedor y le pisaba a la reserva el identificador del
+    //  trabajo original, que quedaba inalcanzable.
+    //
+    //  El 20 de agosto se midio en produccion sobre #656: llamadas +3 y el
+    //  provider_job_id cambiado por otro. Asi que este camino ya no pasa por
+    //  generar_grafica(), ni por motor_imagen(), ni por P2, ni por P4. Llama a
+    //  gemini_imagen() y punto. El que quiera el motor bueno que empiece un
+    //  ciclo nuevo a proposito — y pague su unidad.
+    error_log("rescate #{$post_id}: GEMINI (unico respaldo).");
 
-    // ── 2) Último recurso: Gemini. Mejor algo que nada. ──
-    error_log("rescate #{$post_id}: cae a GEMINI.");
+    //  RENDIRSE ES UNA COSA SOLA, Y SON TRES PASOS.
+    //
+    //  Antes habia tres salidas distintas -bytes vacios, marca ilegible, y el
+    //  catch de abajo- y solo UNA devolvia la unidad. Por las otras dos la
+    //  reserva se quedaba abierta para siempre: barrerCaducadas() la salta
+    //  porque tiene job atado. Aqui se cierra el circulo en un sitio.
+    //
+    //  Y liberar() RETIRA la llave idempotente. Eso es deliberado: el proximo
+    //  intento de esta imagen ya no reusa esta reserva, abre una nueva y cuesta
+    //  su unidad. Es lo que separa «el respaldo fallo» de «el dueño pidio otra».
+    $rendirse = function (string $motivo) use ($pdo, $marca_id, $post_id): string {
+        try {
+            CuotaImg::liberar($pdo, CuotaImg::asientoDePieza($pdo, $marca_id, $post_id), $motivo);
+        } catch (Throwable $e) { error_log("rescate #{$post_id}: al liberar — " . $e->getMessage()); }
+        //  FALLO RECUPERABLE, NO AGUJERO NEGRO. La pieza queda en error y con
+        //  el sello 'fbx:' puesto, que es lo que impide que cualquier barrido o
+        //  worker vuelva a entrar solo. Recuperarla es una decision del dueño.
+        try {
+            $cols  = img_poll_columnas($pdo);
+            $extra = $cols ? ", img_error_clase='fbx:respaldo_fallo', img_next_poll_at=NULL" : "";
+            $pdo->prepare("UPDATE crecer_contenido
+                              SET img_estado='error', img_job=NULL{$extra}, updated_at=NOW()
+                            WHERE id=? AND marca_id=?")->execute([$post_id, $marca_id]);
+        } catch (Throwable $e) { error_log("rescate #{$post_id}: al marcar — " . $e->getMessage()); }
+        return '';
+    };
+
+    require_once __DIR__ . '/cuota_imagenes.php';
     try {
         $m = function_exists('leer_marca') ? leer_marca($pdo, $marca_id)
            : $pdo->query("SELECT * FROM crecer_marca WHERE id=" . (int)$marca_id)->fetch(PDO::FETCH_ASSOC);
-        if (!$m) return '';
+        if (!$m) return $rendirse('no se pudo leer la marca del respaldo');
         $imgs = [];
         if (!empty($m['logo_path'])) {
             $labs = rtrim(UPLOADS_PATH, '/\\') . '/' . ltrim(str_replace(rtrim(UPLOADS_URL, '/'), '', (string)$m['logo_path']), '/');
@@ -630,7 +649,7 @@ function img_gemini_fallback(PDO $pdo, int $marca_id, int $post_id, string $copy
         } catch (Throwable $e) {}
 
         $brief = img_resp_brief($m, $copy, null, !empty($imgs), null, 'realista', $lente, $evitar);
-            //  RUTA 7 — el respaldo. MISMO origen que la ruta 5, a proposito: su
+        //  RUTA 7 — el respaldo. MISMO origen que la ruta 5, a proposito: su
         //  llave idempotente choca con la reserva ya abierta para esta imagen y
         //  se reusa. El dueño paga UNA unidad aunque hayan hecho falta dos
         //  proveedores para entregarle un solo arte.
@@ -640,16 +659,10 @@ function img_gemini_fallback(PDO $pdo, int $marca_id, int $post_id, string $copy
                            ['origen_tipo' => 'contenido', 'origen_id' => $post_id, 'costo' => 0.10])]
             + ($imgs ? ['imagenes' => $imgs] : []));
         $bin = $r['data'] ?? '';
-        if ($bin === '') {
-            //  Gemini tampoco entrego. Ahora si es definitivo para esta imagen:
-            //  fallaron los dos proveedores y el dueño no recibio nada, asi que
-            //  la unidad vuelve. Es el UNICO sitio del camino de respaldo que
-            //  libera — el sondeo la deja viva a proposito para que este reuso
-            //  sea posible.
-            CuotaImg::liberar($pdo, CuotaImg::asientoDePieza($pdo, $marca_id, $post_id),
-                'falló gpt-image y el respaldo tampoco entregó');
-            return '';
-        }
+        //  Gemini contesto pero sin imagen. El dueño no recibio nada: la unidad
+        //  vuelve. El sondeo la dejo viva a proposito para que este respaldo
+        //  pudiera reusarla; si tampoco entrega, aqui se cierra.
+        if ($bin === '') return $rendirse('falló gpt-image y el respaldo tampoco entregó');
         $rel = "marca_{$marca_id}/graficas/gem_{$post_id}_" . substr(md5((string)microtime(true)), 0, 6) . '.png';
         $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
         @mkdir(dirname($abs), 0775, true); @file_put_contents($abs, $bin);
@@ -658,12 +671,118 @@ function img_gemini_fallback(PDO $pdo, int $marca_id, int $post_id, string $copy
         $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, img_estado='ok', img_job=NULL, arte_intentos=arte_intentos+1, updated_at=NOW() WHERE id=? AND marca_id=?")
             ->execute([$url, $post_id, $marca_id]);
         //  El respaldo entrego: se cierra LA MISMA unidad que abrio el encolado
-        //  original. Una imagen del cliente, una unidad, dos proveedores.
+        //  original. Una imagen del cliente, una unidad — aunque el primer
+        //  proveedor se quedara por el camino.
         CuotaImg::confirmar($pdo, CuotaImg::asientoDePieza($pdo, $marca_id, $post_id), 0.10);
         try { $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,estado) VALUES (?,?,?,?,?,?, 'ok')")
             ->execute([$marca_id, 'director_imagen', 'Respaldo Gemini (gpt no pudo)', 'gemini-3-pro-image', $brief, $url]); } catch (Throwable $e) {}
         return $url;
-    } catch (Throwable $e) { error_log('img_gemini_fallback: ' . $e->getMessage()); return ''; }
+    } catch (Throwable $e) {
+        //  Cualquier reventon del camino de respaldo -red, cuota, disco- deja
+        //  al dueño sin imagen. Se le devuelve la unidad igual que si Gemini
+        //  hubiera contestado en blanco: por dentro son el mismo suceso.
+        error_log('img_gemini_fallback: ' . $e->getMessage());
+        return $rendirse('el respaldo reventó: ' . mb_substr($e->getMessage(), 0, 120));
+    }
+}
+
+/**
+ * ¿EL CICLO DE IMAGEN DE ESTA PIEZA YA CERRO?
+ *
+ * «img_job vacio» no basta para decidir si se puede encolar: la rama terminal
+ * lo deja en NULL a proposito, para habilitar el respaldo. Lo que distingue
+ * «nunca hubo trabajo» de «hubo uno y termino» es el sello:
+ *
+ *   fb: / fbx:   el proveedor confirmo el fallo; el respaldo ya se decidio
+ *   ap:          nos rendimos de preguntar; el trabajo puede seguir vivo
+ *   enc:         se encolo sin confirmacion; puede existir un trabajo invisible
+ *
+ * En los cuatro casos, arrancar otro ciclo cuesta una unidad nueva, y esa es
+ * una decision del dueño — no de un worker que se redispara.
+ *
+ * Vive aqui, y no dentro de arte_worker.php, para que se pueda probar: el
+ * worker es un endpoint con llave y salida por HTTP.
+ */
+function img_ciclo_cerrado(?array $fila): bool
+{
+    if (!$fila) return false;
+    $sello = trim((string)($fila['img_error_clase'] ?? ''));
+    if ($sello === '') return false;
+    return preg_match('/^(fb:|fbx:|ap:|enc:)/', $sello) === 1;
+}
+
+/**
+ * RECONCILIAR UNA PIEZA QUE YA TIENE SU IMAGEN — SIN TOCAR LA RED.
+ *
+ * Sale de #656: el rescate entrego el arte y nadie cerro la unidad, asi que la
+ * pieza quedaba en 'error' con su grafica puesta y el asiento reservado para
+ * siempre (barrerCaducadas() lo salta porque tiene job atado). Lo que falta ahi
+ * no es una imagen: es la contabilidad.
+ *
+ * Por eso esto NO llama a ningun proveedor, ni siquiera para preguntar. Mira el
+ * archivo que ya existe, cierra la pieza y confirma el asiento. Si la pieza no
+ * tiene grafica, no hace nada: reconciliar no es generar.
+ *
+ * Se confirma con costo 0 A PROPOSITO. El costo que hay anotado es POTENCIAL
+ * —lo que habria costado si el proveedor hubiera cobrado— y no es evidencia de
+ * factura: un intento rechazado por falta de credito puede no haberse cobrado
+ * nunca. Sumar aqui otra vez seria inventar gasto. La cifra real sale de la
+ * factura del proveedor, no de este libro.
+ *
+ * @param bool $hacer  false = solo dice que haria. true = lo hace.
+ * @return array{puede:bool,hecho:bool,motivo:string,grafica:string,asiento:int,asiento_estado:string,red:int}
+ */
+function img_reconciliar_entregada(PDO $pdo, int $marca_id, int $post_id, bool $hacer = false): array
+{
+    $out = ['puede' => false, 'hecho' => false, 'motivo' => '', 'grafica' => '',
+            'asiento' => 0, 'asiento_estado' => '', 'red' => 0];
+
+    //  LAS DOS, y en la misma fila. Con el id de la pieza solo, cambiar un
+    //  numero en una URL cerraria la pieza de otro negocio.
+    $q = $pdo->prepare("SELECT grafica_path, img_estado, img_job, img_error_clase
+                          FROM crecer_contenido WHERE id=? AND marca_id=?");
+    $q->execute([$post_id, $marca_id]);
+    $p = $q->fetch(PDO::FETCH_ASSOC);
+    if (!$p) { $out['motivo'] = 'la pieza no existe o no es de esta marca'; return $out; }
+
+    $graf = trim((string)($p['grafica_path'] ?? ''));
+    if ($graf === '') {
+        $out['motivo'] = 'la pieza no tiene grafica: no hay nada que reconciliar '
+                       . '(reconciliar no genera)';
+        return $out;
+    }
+
+    require_once __DIR__ . '/cuota_imagenes.php';
+    $asiento = CuotaImg::asientoDePieza($pdo, $marca_id, $post_id);
+    $out['puede'] = true;
+    $out['grafica'] = $graf;
+    $out['asiento'] = $asiento;
+
+    if ($asiento > 0) {
+        $a = $pdo->prepare("SELECT estado FROM crecer_img_cuota_asiento WHERE id=?");
+        $a->execute([$asiento]);
+        $out['asiento_estado'] = (string)($a->fetchColumn() ?: '');
+    }
+
+    if (!$hacer) {
+        $out['motivo'] = 'cerraria la pieza y confirmaria el asiento'
+                       . ($asiento > 0 ? " #{$asiento}" : ' (no hay asiento abierto)');
+        return $out;
+    }
+
+    $cols  = img_poll_columnas($pdo);
+    $extra = $cols ? ", img_error_clase=NULL, img_next_poll_at=NULL" : "";
+    $pdo->prepare("UPDATE crecer_contenido
+                      SET img_estado='ok', img_job=NULL{$extra}, updated_at=NOW()
+                    WHERE id=? AND marca_id=?")->execute([$post_id, $marca_id]);
+
+    //  Confirmar retira la llave idempotente: la proxima imagen de esta pieza
+    //  abre su propia unidad, como debe ser.
+    if ($asiento > 0) CuotaImg::confirmar($pdo, $asiento, 0.0);
+
+    $out['hecho'] = true;
+    $out['motivo'] = 'pieza cerrada y asiento confirmado, sin llamar a nadie';
+    return $out;
 }
 
 /**

@@ -504,10 +504,31 @@ class CuotaImg
         try {
             //  Atar NO es llamar: aquí sumaba un segundo +1 por el mismo
             //  encolado que garantizar() ya había contado.
-            $pdo->prepare("UPDATE crecer_img_cuota_asiento
-                              SET provider_job_id = ?, updated_at = NOW()
-                            WHERE id = ? AND estado = 'reservado'")
-                ->execute([$job_id, $asiento_id]);
+            //
+            //  Y ATAR NO ES REATAR. Esta linea sobrescribia sin condicion: el
+            //  20 de agosto un segundo encolado sobre la misma unidad le pego
+            //  encima su identificador al trabajo original, y el original
+            //  quedo inalcanzable — ni sondearlo ni cancelarlo. Una reserva
+            //  atada a un trabajo se queda atada a ESE. Reatar con el mismo id
+            //  sigue valiendo (un reintento idempotente no es un conflicto).
+            $u = $pdo->prepare("UPDATE crecer_img_cuota_asiento
+                                   SET provider_job_id = ?, updated_at = NOW()
+                                 WHERE id = ? AND estado = 'reservado'
+                                   AND (provider_job_id IS NULL OR provider_job_id = ?)");
+            $u->execute([$job_id, $asiento_id, $job_id]);
+            if ($u->rowCount() !== 1) {
+                //  No es fatal para quien llama —el trabajo remoto existe igual—
+                //  pero tiene que dejar rastro: significa que algo encolo dos
+                //  veces sobre una sola unidad de cliente.
+                $q = $pdo->prepare("SELECT provider_job_id FROM crecer_img_cuota_asiento WHERE id=?");
+                $q->execute([$asiento_id]);
+                $ya = (string)($q->fetchColumn() ?: '');
+                if ($ya !== '' && $ya !== $job_id) {
+                    error_log("CuotaImg::atarJob asiento #{$asiento_id}: ya esta atado a «{$ya}» "
+                            . "y llego «{$job_id}». NO se reemplaza. Alguien encolo dos veces "
+                            . 'sobre la misma unidad.');
+                }
+            }
         } catch (Throwable $e) { error_log('CuotaImg::atarJob ' . $e->getMessage()); }
     }
 
