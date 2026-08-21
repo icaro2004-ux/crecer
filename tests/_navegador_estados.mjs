@@ -21,111 +21,80 @@
 //
 //  No llama a ningun proveedor: abre la pagina y la mide.
 //
-//    node tests/_navegador_estados.mjs <sid> <marca> <ancho> <alto> [abrir] [captura] [vista]
+//    node tests/_navegador_estados.mjs <sid> <marca> <ancho> <alto> [abrir] [captura] [vista] [paso]
+//
+//  `paso` solo aplica al wizard (vista=wizard). Para medir el paso 3 hay que
+//  HABER CONTESTADO los dos anteriores, asi que la sonda los contesta con
+//  gestos de verdad —pulsar el objetivo, escribir el numero, pulsar Siguiente—
+//  y no encendiendo clases a mano. Si el camino se rompe, se rompe aqui.
 //
 //  Imprime UNA linea de JSON. Quien asierta es la prueba en PHP.
 // ============================================================
 
-import { spawn } from 'node:child_process';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
+import fs from "node:fs";
+import path from "node:path";
+import { abrirChrome, cerrarRecibimiento, dormir } from "./_chrome.mjs";
 
-const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const [sid, marca, aS, hS, abrir, captura, vista] = process.argv.slice(2);
+const [sid, marca, aS, hS, abrir, captura, vista, pasoS] = process.argv.slice(2);
+const pasoPedido = parseInt(pasoS || "1", 10) || 1;
+//  Un texto largo de los que no caben, para que el repaso se mida con lo que
+//  de verdad escribe alguien y no con dos palabras.
+const CTX_LARGO = "Tengo el combo de brazo gitano a $18 y en agosto son las fiestas "
+  + "del pueblo, que me cae encima el fin de semana entero y ese sabado hay parranda "
+  + "en la plaza hasta tarde; tambien vendo bizcochos de boda por encargo.";
 const ancho = parseInt(aS, 10), alto = parseInt(hS, 10);
-const perfil = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-')).split(path.sep).join('/');
-//  Puerto con parte aleatoria: corriendo la suite entera hay varios Chrome a
-//  la vez y dos con el mismo puerto se pisan.
-const puerto = 9000 + Math.floor(Math.random() * 900);
-const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 const URL_PAGINA = `http://localhost/crecer/panel/meta.php?marca=${marca}`
-                 + (vista ? `&vista=${vista}` : '');
+                 + (vista ? `&vista=${vista}` : "");
 
 const salir = (obj) => { console.log(JSON.stringify(obj)); };
 
-const ch = spawn(CHROME, [
-  '--headless=new', '--disable-gpu', '--hide-scrollbars', '--no-first-run',
-  `--window-size=${ancho},${alto}`, `--user-data-dir=${perfil}`,
-  `--remote-debugging-port=${puerto}`, 'about:blank',
-], { stdio: 'ignore' });
+//  Arrancar Chrome y el cableado del CDP viven en _chrome.mjs — los comparte
+//  con la sonda del recorrido del wizard.
+const sesion = await abrirChrome({ sid, url: URL_PAGINA, ancho, alto });
+if (sesion.error) { salir(sesion); process.exit(1); }
+const { ev, cmd, cerrar } = sesion;
 
-let cdp = null, id = 0;
-const pend = new Map();
-const cmd = (m, p = {}) => {
-  const i = ++id; cdp.send(JSON.stringify({ id: i, method: m, params: p }));
-  return new Promise((r, j) => pend.set(i, { r, j }));
-};
-const ev = async (e) => {
-  const r = await cmd('Runtime.evaluate', { expression: e, returnByValue: true });
-  if (r.exceptionDetails) {
-    throw new Error('JS: ' + (r.exceptionDetails.exception?.description || r.exceptionDetails.text));
-  }
-  return r.result.value;
-};
-
-(async () => {
-  //  CONECTAR, Y SI NO SE PUEDE, DECIRLO CON NOMBRE Y APELLIDO.
-  //  Antes esto acababa en «TypeError: Invalid URL», que es lo que pasa al
-  //  construir un WebSocket con null. El error real es otro: Chrome no llego a
-  //  levantar su puerto de depuracion. Son cosas distintas y se arreglan
-  //  distinto.
-  let ws = null, ultimoFallo = '';
-  for (let i = 0; i < 80 && !ws; i++) {
-    try {
-      const r = await fetch(`http://127.0.0.1:${puerto}/json/list`);
-      const j = await r.json();
-      const p = j.find((x) => x.type === 'page');
-      if (p) ws = p.webSocketDebuggerUrl;
-    } catch (e) { ultimoFallo = e.message; }
-    if (!ws) await dormir(200);
-  }
-  if (!ws) {
-    salir({ error: `Chrome no levanto el puerto ${puerto} tras 16s`,
-            detalle: ultimoFallo, url: URL_PAGINA, viewport: `${ancho}x${alto}` });
-    try { ch.kill(); } catch (e) {}
-    process.exit(1);
-  }
-
-  cdp = new (globalThis.WebSocket)(ws);
-  await new Promise((r, j) => { cdp.onopen = r; cdp.onerror = () => j(new Error('el socket de Chrome se cayo')); });
-  cdp.onmessage = (e) => {
-    const m = JSON.parse(e.data);
-    if (m.id && pend.has(m.id)) {
-      const { r, j } = pend.get(m.id); pend.delete(m.id);
-      m.error ? j(new Error(m.error.message)) : r(m.result);
-    }
-  };
-
-  await cmd('Page.enable'); await cmd('Runtime.enable'); await cmd('Network.enable');
-  await cmd('Emulation.setDeviceMetricsOverride',
-            { width: ancho, height: alto, deviceScaleFactor: 1, mobile: ancho < 900 });
-  await cmd('Network.setCookie', { name: 'PHPSESSID', value: sid, domain: 'localhost', path: '/' });
-  await cmd('Page.navigate', { url: URL_PAGINA });
-  for (let i = 0; i < 200; i++) {
-    if (await ev('document.readyState === "complete"')) break;
-    await dormir(120);
-  }
-  await dormir(1100);
-
-  //  El Recibimiento sale en cuentas nuevas y tapa la pantalla. Se cierra como
-  //  lo cerraria la dueña, pulsando su propio boton.
-  await ev(`(function(){var t=['Entendido','¡ENTENDIDO!','Saltar','Cerrar','Listo, ya sé'];
-    for(var k=0;k<3;k++){[].forEach.call(document.querySelectorAll('button,a'),function(b){
-      var s=(b.textContent||'').trim();
-      if(t.some(function(x){return s.toLowerCase()===x.toLowerCase();})&&b.offsetParent!==null)b.click();});}})()`);
-  await dormir(800);
-
+try {
+  await cerrarRecibimiento(ev);
   const contenedor = await ev(
-    `document.querySelector('.ah') ? '.ah' : (document.querySelector('.plan') ? '.plan' : '')`);
+    `document.querySelector('.ah') ? '.ah'
+       : (document.querySelector('.plan') ? '.plan'
+       : (document.querySelector('.wz') ? '.wz' : ''))`);
   if (!contenedor) {
     const donde = await ev('location.href');
-    salir({ error: 'la pagina no trae ni .ah ni .plan', url_pedida: URL_PAGINA, url_final: donde,
+    salir({ error: 'la pagina no trae ni .ah ni .plan ni .wz', url_pedida: URL_PAGINA, url_final: donde,
             viewport: `${ancho}x${alto}`,
             titulo: await ev('document.title'),
             pista: 'si la url final es otra, algo redirigio — candado de suscripcion o sesion caida' });
-    try { ch.kill(); } catch (e) {}
+    cerrar();
     process.exit(1);
+  }
+
+  //  ── LLEGAR AL PASO PEDIDO, CONTESTANDO ──────────────────────────────
+  //  Contestar es la unica forma honesta de llegar: si el wizard pierde una
+  //  respuesta al avanzar, o el boton no se habilita, la sonda se queda corta
+  //  y la prueba lo ve en `paso`. Encender la clase `.on` a mano habria dado
+  //  un verde bonito sobre un camino roto.
+  if (contenedor === '.wz' && pasoPedido > 1) {
+    const escribir = (id, val) => ev(`(function(){var e=document.getElementById('${id}');
+      e.value=${JSON.stringify(val)}; e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await ev("document.querySelector('.wz-obj').click()");
+    await dormir(260);
+    await ev("document.getElementById('sigue').click()");
+    await dormir(340);
+    if (pasoPedido > 2) {
+      await escribir('cantidad', '25');
+      await dormir(140);
+      await ev("document.getElementById('sigue').click()");
+      await dormir(340);
+    }
+    if (pasoPedido > 3) {
+      await ev(`document.querySelector('#wzPauta .wz-chip[data-pauta="20"]').click()`);
+      await escribir('contexto', CTX_LARGO);
+      await dormir(140);
+      await ev("document.getElementById('sigue').click()");
+      await dormir(420);
+    }
   }
 
   if (abrir === 'abrir') {
@@ -280,6 +249,23 @@ const ev = async (e) => {
       prim: pr ? {t:(prim.textContent||'').trim().slice(0,26), top:Math.round(pr.top),
                   visible: pr.bottom<=H && pr.top>=0} : null,
       scroll_h: document.documentElement.scrollWidth > W+1,
+      //  El wizard: en que paso quedo de verdad, que dice la etiqueta y que
+      //  respuestas conserva. La prueba no tiene que creerse el recorrido.
+      paso: (function(){ var s=ah.querySelector('.wz-p.on'); return s ? +s.dataset.p : 0; })(),
+      paso_et: (function(){ var e=document.getElementById('wzEt');
+                            return e ? (e.textContent||'').trim() : ''; })(),
+      guardado: (function(){
+        var c=document.getElementById('cantidad'), t=document.getElementById('contexto');
+        var s=document.querySelector('.wz-obj.sel');
+        var fe=document.querySelector('#wzFecha .wz-chip.sel'), pa=document.querySelector('#wzPauta .wz-chip.sel');
+        return c ? { cant:c.value, ctx:(t?t.value:'').slice(0,40),
+                     obj:s?s.dataset.obj:'', dias:fe?fe.dataset.dias:'', pauta:pa?pa.dataset.pauta:'' } : null;
+      })(),
+      repaso: (function(){
+        var r={}; ['rObj','rCant','rFecha','rPauta','rCtx','rMedir'].forEach(function(i){
+          var e=document.getElementById(i); if(e) r[i]=(e.textContent||'').trim(); });
+        return r;
+      })(),
       //  Los destinos de verdad, tal como los lee Chrome tras resolver el href.
       destinos: [].slice.call(ah.querySelectorAll('a[href]')).map(function(a){return a.href;})
                   .filter(function(u){return /aprobar2|reels|carrusel|propuestas|meta\\.php/.test(u);})
@@ -288,17 +274,20 @@ const ev = async (e) => {
   r.tapados = tapados;
 
   if (captura) {
-    await ev('window.scrollTo(0,0)'); await dormir(280);
+    //  La regla de Ayuda corre en un IntersectionObserver y su transicion dura
+    //  .2s: fotografiar a los 280ms pillaba el boton a medio apartar y la
+    //  captura enseñaba un solape que en la pantalla de verdad no existe.
+    await ev('window.scrollTo(0,0)'); await dormir(900);
     const s = await cmd('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(path.join(process.cwd(), 'tests', '_capturas', captura + '.png'),
                      Buffer.from(s.data, 'base64'));
   }
 
   salir(r);
-  ch.kill(); process.exit(0);
-})().catch((e) => {
+  cerrar(); process.exit(0);
+
+} catch (e) {
   salir({ error: e.message, url: URL_PAGINA, viewport: `${ancho}x${alto}`,
           pista: 'error del arnes, no necesariamente de la pantalla' });
-  try { ch.kill(); } catch (x) {}
-  process.exit(1);
-});
+  cerrar(); process.exit(1);
+}

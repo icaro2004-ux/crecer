@@ -286,11 +286,35 @@ try {
   await dormir(600);
   di('C_AYUDA_FORZADA', await evaluar(donde));
 
-  //  Y se le devuelve: Ayuda tiene que volver sola.
+  //  Y VUELVE. Antes se comprobaba devolviendo la zona y mirando en el mismo
+  //  sitio —al fondo del scroll—, y ese verde era FALSO: alli la cola cae en
+  //  la franja del boton tambien con la zona puesta, asi que lo correcto es
+  //  que Ayuda siga apartada. Pasaba solo porque la regla se moria al
+  //  recalcularse con el boton a medio apartar, y una regla muerta deja el
+  //  boton a la vista. Arreglada la regla, la afirmacion se cayo — y era ella
+  //  la equivocada, no el arreglo.
+  //
+  //  Lo que de verdad hay que exigir es que la regla DISTINGA: se aparta donde
+  //  estorba y esta donde no. Asi que se mira donde no hay nada en su franja.
+  //  Y AHORA AL REVES: se le quita de la franja lo que la ocupaba y Ayuda
+  //  tiene que volver SOLA. Se hace apagando la cola de enlaces —lo unico
+  //  que cae ahi a 360— porque en esta pantalla no hay ninguna posicion de
+  //  scroll con la franja libre: se comprobo mirando, no suponiendo. Es el
+  //  espejo del paso de arriba, que tambien fuerza una condicion (zona 0).
+  await evaluar(`document.querySelector('.ah').style.removeProperty('--ah-zona');
+    [].forEach.call(document.querySelectorAll('.tm-mas'), function(e){ e.style.display='none'; });`);
   await evaluar(`window.dispatchEvent(new Event('resize'))`);
   await evaluar("window.scrollTo(0, document.documentElement.scrollHeight)");
-  await dormir(600);
+  await dormir(700);
   di('C_AYUDA_VUELTA', await evaluar(donde));
+
+  //  Y SE DEVUELVE LA COLA. Sin esto, la pagina se queda mas corta de lo que
+  //  es y la medida del espacio muerto que viene despues salia con 185px de
+  //  vacio inventados por esta misma prueba.
+  await evaluar(`[].forEach.call(document.querySelectorAll('.tm-mas'),
+    function(e){ e.style.removeProperty('display'); });
+    window.dispatchEvent(new Event('resize'));`);
+  await dormir(600);
 
   //  ── LAS INVARIANTES DE LA ZONA ──────────────────────────────────────
   //  El contrato no es «141px» ni «91px»: un numero de implementacion se

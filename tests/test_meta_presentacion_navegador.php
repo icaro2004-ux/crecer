@@ -152,9 +152,14 @@ try {
            'si no se aparta nunca, la regla no existe');
         //  Y VUELVE. Una Ayuda escondida «por si acaso» seria perder una
         //  capacidad del producto: el boton tiene que estar cuando no estorba.
-        ok('y vuelve cuando el control sale de la franja',
+        //  Se le quita de la franja lo que la ocupaba y se mira si vuelve.
+        //  Antes se devolvia la zona y se miraba en el mismo sitio, y era pedir
+        //  lo contrario de lo que manda la regla: la cola cae en la franja con
+        //  zona y sin ella, asi que apartarse era lo correcto. Ese verde salia
+        //  de que la regla estaba muerta y una regla muerta deja el boton fijo.
+        ok('y vuelve en cuanto la franja queda libre',
            $vuelta['apartada'] === 'false',
-           'quedo apartada · ' . json_encode($vuelta));
+           'quedo apartada sin nada debajo · ' . json_encode($vuelta));
         // ══════════════════════════════════════════════════════════
         //  LAS INVARIANTES, NO EL NÚMERO
         //
@@ -194,7 +199,8 @@ try {
         ok('y se va de la pantalla, no encima de la barra',
            $forzada['fab'] !== '' && (int)$forzada['fab'] >= 780,
            "el botón quedó en y={$forzada['fab']}; la ventana mide 800");
-        ok('devuelta la zona, Ayuda vuelve sola', $vuelta['apartada'] === 'false');
+        ok('sin nada en su franja, Ayuda vuelve sola', $vuelta['apartada'] === 'false',
+           json_encode($vuelta));
         ok('y vuelve a donde se alcanza',
            $vuelta['fab'] !== '' && (int)$vuelta['fab'] < 780,
            "quedó en y={$vuelta['fab']}: apartarse y no volver deja la ayuda muerta");

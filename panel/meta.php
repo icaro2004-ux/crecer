@@ -56,6 +56,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $obj = (string)($_POST['objetivo'] ?? '');
             if (!isset(meta_objetivos()[$obj])) { echo json_encode(['ok'=>false,'err'=>'Escoge qué quieres lograr.']); exit; }
             $def = meta_objetivo_def($obj);
+            //  DOBLE CLIC · el candado que impide una meta de mas.
+            //  El dedo nervioso y la conexion lenta mandan el mismo formulario
+            //  dos veces. Sin candado salen DOS metas: meta_crear() pausa la
+            //  anterior, asi que la primera se queda en el historial del dueño
+            //  sin que la pidiera — y la Estratega se llama (y se cobra) dos
+            //  veces. Se mira si acaba de entrar una igual.
+            //
+            //  created_at lo pone MySQL y NOW() tambien: los dos lados del
+            //  reloj son el mismo, asi que aqui no hay el desfase de 4h que sale
+            //  cuando una fecha nace en PHP y se compara con NOW().
+            //
+            //  La ventana es corta y el objetivo tiene que coincidir: crear otra
+            //  meta a proposito —tras cerrar la anterior— no cae aqui, porque la
+            //  cerrada ya no esta en estado activa.
+            $rep = $pdo->prepare(
+                "SELECT id FROM crecer_meta
+                   WHERE marca_id=? AND objetivo=? AND estado='activa'
+                     AND created_at >= (NOW() - INTERVAL 3 MINUTE)
+                   ORDER BY id DESC LIMIT 1");
+            $rep->execute([$marca_id, $obj]);
+            $ya = (int)$rep->fetchColumn();
+            if ($ya > 0) {
+                //  Se contesta con la verdad de lo que hay, no con un ok a ciegas:
+                //  si el plan de esa meta no llego a existir, plan_ok es false.
+                $hay = $pdo->prepare("SELECT COUNT(*) FROM crecer_meta_tactica WHERE meta_id=?");
+                $hay->execute([$ya]);
+                echo json_encode(['ok'=>true, 'meta_id'=>$ya,
+                                  'plan_ok'=>((int)$hay->fetchColumn() > 0), 'repetido'=>true]);
+                exit;
+            }
+
             $meta_id = meta_crear($pdo, $marca_id, [
                 'objetivo'          => $obj,
                 'titulo'            => (string)($_POST['titulo'] ?? $def['titulo']),
@@ -799,206 +830,23 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
       Los nombres de clase se conservan porque el guion engancha por ellos.
    */
   @media(max-width:680px){
-    .obj-grid{grid-template-columns:1fr}
     /* Los 4 números del récord no caben en una fila de 360px: 2x2 y se leen. */
     .hp-nums{grid-template-columns:repeat(2,minmax(0,1fr))}
     .plan-cab{align-items:flex-start}
     .plan-prog{text-align:left;min-width:100%}
     .hplan summary{padding:12px 13px}
     .hp-est{margin-left:0}
-    .wz-q{font-size:22px}
     .mv-num{font-size:46px}
-    .mt-num input{width:150px;font-size:32px}
-    .wz-nav .btn-p{flex:1;justify-content:center}
+    /*  Aqui vivian cuatro reglas sueltas del wizard (.obj-grid, .wz-q, .mt-num
+        y .wz-nav .btn-p). Su hoja se fue con el rediseno de la capa 2 y quedaron
+        huerfanas: dos apuntaban a clases que ya no existen y .wz-q peleaba con la
+        nueva. El wizard entero —marca, estilos y guion— vive en _meta_wizard.php. */
   }
 </style>
 
 <?php if (!$meta && $vista === 'wizard'): /* ══════════ WIZARD ══════════ */ ?>
 
-<div class="wz">
-  <h1 class="mt-h1">¿Qué quieres lograr?</h1>
-  <p class="mt-sub">Ponle un norte a tu negocio y el corillo trabaja para eso — no para llenar el calendario.
-     Son tres preguntas cortas.</p>
-
-  <div class="wz-bar"><i id="wz-bar" style="width:25%"></i></div>
-
-  <!-- PASO 1 · el deseo, en sus palabras -->
-  <section class="wz-paso on" data-paso="1">
-    <h2 class="wz-q">Dime qué te haría feliz este mes</h2>
-    <p class="wz-ayuda">Escoge lo que más falta te hace ahora mismo. Después lo puedes cambiar.</p>
-    <div class="obj-grid">
-      <?php foreach ($objetivos as $k => $o): ?>
-        <button type="button" class="obj" data-obj="<?= $h($k) ?>" data-unidad="<?= $h($o['unidad']) ?>"
-                data-pregunta="<?= $h($o['pregunta']) ?>" data-etiqueta="<?= $h($o['unidad']==='dolares' ? 'dólares' : $o['unidad']) ?>">
-          <span class="ic"><?= ico($o['ico']) ?></span>
-          <b><?= $h($o['titulo']) ?></b>
-          <p><?= $h($o['explicacion']) ?></p>
-          <span class="jerga"><?= $h($o['jerga']) ?></span>
-        </button>
-      <?php endforeach; ?>
-    </div>
-  </section>
-
-  <!-- PASO 2 · cuánto y para cuándo -->
-  <section class="wz-paso" data-paso="2">
-    <h2 class="wz-q" id="q2">¿Cuánto quieres lograr?</h2>
-    <p class="wz-ayuda">Un número te deja saber si vas bien o si hay que apretar. Si no sabes cuál poner,
-       yo te lo digo mirando tus propios números.</p>
-    <div class="mt-num">
-      <input type="number" id="cantidad" min="1" step="1" placeholder="25" inputmode="numeric">
-      <span class="mt-unidad" id="unidad">pedidos</span>
-      <button type="button" class="mt-nose" id="nose">No sé — dime tú</button>
-    </div>
-    <div class="mt-tip" id="tip-num"></div>
-
-    <p class="wz-ayuda" style="margin:22px 0 8px"><b style="color:var(--tinta)">¿Para cuándo?</b></p>
-    <div class="chips" id="chips-fecha">
-      <button type="button" class="chip" data-dias="14">En 2 semanas</button>
-      <button type="button" class="chip sel" data-dias="30">En un mes</button>
-      <button type="button" class="chip" data-dias="60">En 2 meses</button>
-      <button type="button" class="chip" data-dias="90">En 3 meses</button>
-    </div>
-  </section>
-
-  <!-- PASO 3 · presupuesto + contexto -->
-  <section class="wz-paso" data-paso="3">
-    <h2 class="wz-q">¿Puedes invertir algo en anuncios?</h2>
-    <p class="wz-ayuda">Pagarle a Instagram o Facebook para que le enseñen tu post a más gente del área
-       — a eso le dicen <b>boost</b> o <b>pauta</b>. Con $10 o $20 ya se nota. Si ahora no puedes, no hay
-       problema: el corillo trabaja sin pagar anuncios y no te lo va a recomendar.</p>
-    <div class="chips" id="chips-pauta">
-      <button type="button" class="chip sel" data-pauta="0">Nada por ahora<small>Todo sin pagar anuncios</small></button>
-      <button type="button" class="chip" data-pauta="20">$20 al mes<small>Para empujar 1 o 2 posts</small></button>
-      <button type="button" class="chip" data-pauta="50">$50 al mes<small>Alcance serio en tu área</small></button>
-      <button type="button" class="chip" data-pauta="100">$100 o más<small>Campaña de verdad</small></button>
-    </div>
-
-    <p class="wz-ayuda" style="margin:24px 0 8px"><b style="color:var(--tinta)">¿Con qué cuentas?</b>
-       Cuéntame si tienes una oferta, un producto que quieres empujar, una fecha especial o un evento.
-       Mientras más me digas, mejor el plan. (Opcional)</p>
-    <textarea class="mt-libre" id="contexto" maxlength="600"
-      placeholder="Ej: Tengo el combo de brazo gitano a $18 y en agosto son las fiestas del pueblo."></textarea>
-  </section>
-
-  <div class="wz-nav" id="wz-nav">
-    <button type="button" class="btn-s" id="atras" style="display:none">Atrás</button>
-    <button type="button" class="btn-p" id="sigue" disabled>Siguiente</button>
-  </div>
-
-  <div class="mt-load" id="cargando">
-    <div class="sp"></div>
-    <b>La Estratega está armando tu plan</b>
-    <span>Está mirando tu negocio, tus números y el calendario para decidir las jugadas.<br>Dale unos segundos.</span>
-  </div>
-
-  <details class="glos">
-    <summary>¿Qué significan las palabras raras del mercadeo?</summary>
-    <dl>
-      <?php foreach ($glosario as $t => $d): ?>
-        <dt><?= $h(ucfirst($t)) ?></dt><dd><?= $h($d) ?></dd>
-      <?php endforeach; ?>
-    </dl>
-  </details>
-</div>
-
-<script>
-(function(){
-  var CSRF=<?= json_encode(csrf_token()) ?>, MARCA=<?= (int)$marca_id ?>;
-  var paso=1, datos={objetivo:'',cantidad:'',dias:30,pauta:0,contexto:''};
-  var bar=document.getElementById('wz-bar'), sigue=document.getElementById('sigue'), atras=document.getElementById('atras');
-
-  function ver(n){
-    paso=n;
-    document.querySelectorAll('.wz-paso').forEach(function(s){ s.classList.toggle('on', +s.dataset.paso===n); });
-    bar.style.width=(n*25+ (n===3?25:0))+'%';
-    atras.style.display = n>1 ? '' : 'none';
-    sigue.textContent = n===3 ? 'Armar mi plan' : 'Siguiente';
-    revisar();
-    window.scrollTo({top:0,behavior:'smooth'});
-  }
-  function revisar(){
-    if(paso===1) sigue.disabled = !datos.objetivo;
-    else if(paso===2) sigue.disabled = !(datos.cantidad && +datos.cantidad>0);
-    else sigue.disabled=false;
-  }
-
-  // Paso 1 — escoger objetivo
-  document.querySelectorAll('.obj').forEach(function(b){
-    b.addEventListener('click', function(){
-      document.querySelectorAll('.obj').forEach(function(x){x.classList.remove('sel');});
-      b.classList.add('sel');
-      datos.objetivo=b.dataset.obj;
-      // La pregunta viene ESCRITA por objetivo (antes se armaba pegando la unidad
-      // y salía "¿Cuántos interacciones quieres?" — mal dicho y mal visto).
-      document.getElementById('unidad').textContent = b.dataset.etiqueta;
-      document.getElementById('q2').textContent = b.dataset.pregunta;
-      document.getElementById('tip-num').classList.remove('on');
-      revisar();
-    });
-  });
-
-  // Paso 2 — cantidad y fecha
-  var cant=document.getElementById('cantidad');
-  cant.addEventListener('input', function(){ datos.cantidad=cant.value; revisar(); });
-  document.getElementById('chips-fecha').addEventListener('click', function(e){
-    var c=e.target.closest('.chip'); if(!c) return;
-    this.querySelectorAll('.chip').forEach(function(x){x.classList.remove('sel');});
-    c.classList.add('sel'); datos.dias=+c.dataset.dias;
-  });
-  document.getElementById('nose').addEventListener('click', function(){
-    var tip=document.getElementById('tip-num');
-    tip.textContent='Mirando tus números…'; tip.classList.add('on');
-    var fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion','sugerir');
-    fd.append('objetivo',datos.objetivo); fd.append('dias',datos.dias);
-    fetch(location.pathname+'?marca='+MARCA,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
-      if(d.ok && d.sugerido){ cant.value=d.sugerido; datos.cantidad=String(d.sugerido); tip.textContent=d.razon; revisar(); }
-      else { tip.textContent = (d && d.razon) ? d.razon : 'Todavía no tengo con qué compararte. Pon el número que te haga sentido.'; }
-    }).catch(function(){ tip.textContent='No pude mirar tus números ahora. Pon el que te haga sentido.'; });
-  });
-
-  // Paso 3 — pauta
-  document.getElementById('chips-pauta').addEventListener('click', function(e){
-    var c=e.target.closest('.chip'); if(!c) return;
-    this.querySelectorAll('.chip').forEach(function(x){x.classList.remove('sel');});
-    c.classList.add('sel'); datos.pauta=+c.dataset.pauta;
-  });
-
-  atras.addEventListener('click', function(){ if(paso>1) ver(paso-1); });
-  sigue.addEventListener('click', function(){
-    if(paso<3){ ver(paso+1); return; }
-    datos.contexto=document.getElementById('contexto').value;
-    // Armar el plan
-    document.querySelectorAll('.wz-paso').forEach(function(s){s.classList.remove('on');});
-    document.getElementById('wz-nav').style.display='none';
-    document.getElementById('cargando').classList.add('on');
-    bar.style.width='100%';
-    var f=new Date(); f.setDate(f.getDate()+datos.dias);
-    // La fecha se arma con la hora LOCAL, no con toISOString(): en Puerto Rico
-    // (UTC-4) a partir de las 8 de la noche toISOString ya devuelve el día
-    // siguiente, así que la meta salía con un día de más.
-    var fLocal = f.getFullYear() + '-' +
-                 String(f.getMonth()+1).padStart(2,'0') + '-' +
-                 String(f.getDate()).padStart(2,'0');
-    var fd=new FormData();
-    fd.append('csrf',CSRF); fd.append('accion','crear');
-    fd.append('objetivo',datos.objetivo); fd.append('cantidad',datos.cantidad);
-    fd.append('fecha_limite', fLocal);
-    fd.append('presupuesto',datos.pauta); fd.append('contexto',datos.contexto);
-    fetch(location.pathname+'?marca='+MARCA,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
-      if(d.ok){ location.href=location.pathname+'?marca='+MARCA; return; }
-      document.getElementById('cargando').classList.remove('on');
-      document.getElementById('wz-nav').style.display='';
-      alert(d.err||'No pude armar el plan. Intenta otra vez.');
-      ver(3);
-    }).catch(function(){
-      document.getElementById('cargando').classList.remove('on');
-      document.getElementById('wz-nav').style.display='';
-      alert('Se cayó la conexión. Intenta otra vez.'); ver(3);
-    });
-  });
-  ver(1);
-})();
-</script>
+<?php require __DIR__ . '/_meta_wizard.php'; ?>
 
 <?php elseif ($meta && $vista === 'plan'): /* ══════ CAPA 2 · EL PLAN COMPLETO ══════ */
   $def = meta_objetivo_def((string)$meta['objetivo']);

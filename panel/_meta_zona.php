@@ -3,8 +3,8 @@
 //  CRECER — LA ZONA SEGURA Y LA REGLA DE AYUDA
 //  panel/_meta_zona.php
 //
-//  Dos comportamientos visuales, compartidos por las dos capas de Tu Meta
-//  (.ah = lo que toca ahora, .plan = el plan completo). Aquí no hay ninguna
+//  Dos comportamientos visuales, compartidos por las TRES capas de Tu Meta
+//  (.ah = lo que toca ahora, .plan = el plan completo, .wz = el wizard). Aquí no hay ninguna
 //  regla del producto: no se decide nada del negocio, no se llama a ninguna
 //  acción, no se lee ningún estado. Solo geometría.
 //
@@ -28,6 +28,11 @@
 //  escribe.
 // ============================================================
 ?>
+<style>
+  /*  Solo mientras se mide. Sin esto, el rectangulo del FAB se lee a medio
+      camino de su propia animacion y la regla se apaga sola. */
+  body.ah-midiendo .ay-fab{transition:none !important}
+</style>
 <script>
 (function () {
   //  OJO AL MOMENTO. La barra de abajo y el botón de Ayuda los pinta
@@ -38,7 +43,7 @@
     if (document.readyState === 'complete') { fn(); return; }
     window.addEventListener('load', fn);
   };
-  var caja = function () { return document.querySelector('.ah, .plan'); };
+  var caja = function () { return document.querySelector('.ah, .plan, .wz'); };
 
   // ══════════════════════════════════════════════════════════════
   //  1 · LA ZONA SEGURA — solo contra .botnav
@@ -106,25 +111,51 @@
     //  capa 2 · el plan. Con la lista corta salieron OCHO controles tapados a
     //  360: los de abrir las piezas de una jugada y las opciones del final.
     '.plan-volver', '.jg-sum', '.jg-hacer', '.jg-ok2', '.jg-ver', '.pu',
-    '.jg-video a', '.plan-ac > summary', '.plan-op button', '.hp-ev', '.hp-s'
+    '.jg-video a', '.plan-ac > summary', '.plan-op button', '.hp-ev', '.hp-s',
+    //  capa 0 · el wizard. Su ultimo control es el boton que CREA la meta:
+    //  dejarlo debajo de Ayuda seria tapar justo lo unico que esta pantalla
+    //  existe para pulsar.
+    '.wz-salir', '.wz-obj', '.wz-chip', '.wz-nose', '.wz-cambiar',
+    '.wz-atras', '.wz-err button', '.wz-glos > summary'
   ].join(', ');
 
   var ob = null, dentro = null;
+
+  /** Devuelve la transicion al FAB, ya con el observador montado. */
+  function destapar() {
+    requestAnimationFrame(function () { requestAnimationFrame(function () {
+      document.body.classList.remove('ah-midiendo');
+    }); });
+  }
 
   function montarAyuda() {
     if (!('IntersectionObserver' in window)) return;
     if (ob) { ob.disconnect(); ob = null; }
     dentro = new Set();
-    document.body.classList.remove('ah-cola');     // medir sin el efecto puesto
 
     var fab = document.querySelector('.ay-fab');
     var objetivos = document.querySelectorAll(SEL);
-    if (!fab || !objetivos.length) return;
+    if (!fab || !objetivos.length) { document.body.classList.remove('ah-cola'); return; }
+
+    //  MEDIR CON LA TRANSICION APAGADA — la trampa que se llevo la regla.
+    //  Apartar el FAB es una transicion de .2s. Al recalcular con el FAB YA
+    //  apartado (abrir un <details> mientras algo estaba en su franja), se le
+    //  quitaba la clase y se le pedia el rectangulo en el mismo suspiro: el
+    //  navegador devolvia la posicion de MEDIO CAMINO, con el boton todavia
+    //  fuera de la pantalla. Entonces `arriba` salia mayor que el alto del
+    //  viewport, se tomaba por «no hay FAB a la vista» y se volvia sin montar
+    //  el observador. La regla no fallaba: DEJABA DE EXISTIR hasta recargar.
+    //
+    //  Con la transicion apagada y un reflujo forzado, el rectangulo es el de
+    //  reposo. Se vuelve a encender dos fotogramas despues, ya con el
+    //  observador puesto, para que no pegue un parpadeo.
+    document.body.classList.add('ah-midiendo');
+    document.body.classList.remove('ah-cola');
+    void fab.offsetWidth;
 
     var AVISO = 16, H = window.innerHeight;
-    var r = fab.getBoundingClientRect();
-    var arriba = Math.round(r.top - AVISO), abajo = Math.round(H - r.bottom - AVISO);
-    if (!(arriba > 0 && arriba < H)) return;       // sin FAB a la vista
+    var r = fab.getBoundingClientRect();    var arriba = Math.round(r.top - AVISO), abajo = Math.round(H - r.bottom - AVISO);
+    if (!(arriba > 0 && arriba < H)) { destapar(); return; }   // sin FAB a la vista
 
     ob = new IntersectionObserver(function (es) {
       es.forEach(function (e) {
@@ -134,6 +165,7 @@
     }, { rootMargin: '-' + arriba + 'px 0px ' + (-abajo) + 'px 0px', threshold: 0 });
 
     [].forEach.call(objetivos, function (o) { ob.observe(o); });
+    destapar();
   }
 
   // ══════════════════════════════════════════════════════════════
