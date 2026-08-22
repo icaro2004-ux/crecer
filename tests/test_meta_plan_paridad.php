@@ -46,6 +46,14 @@ file_put_contents($ruta . DIRECTORY_SEPARATOR . 'sess_' . $sid,
     'usuario_id|i:' . (int)$fx['usuario_id'] . ';');
 
 /** Pide la página como la pediría el navegador, con la sesión puesta. */
+/**  El href de un control, tal cual lo escribe el servidor. Sirve para SEGUIR
+ *   una capacidad que se mudo de pantalla en vez de darla por perdida. */
+$mt_href = function (string $html, string $id): string {
+    if (!preg_match('~<a[^>]*id="' . preg_quote($id, '~') . '"[^>]*href="([^"]+)"~i', $html, $m)
+     && !preg_match('~<a[^>]*href="([^"]+)"[^>]*id="' . preg_quote($id, '~') . '"~i', $html, $m)) return '';
+    return html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
+};
+
 $pedir = function (string $query) use ($sid): string {
     $ctx = stream_context_create(['http' => [
         'method' => 'GET', 'timeout' => 30,
@@ -53,6 +61,16 @@ $pedir = function (string $query) use ($sid): string {
     ]]);
     $html = @file_get_contents('http://localhost/crecer/panel/meta.php?' . $query, false, $ctx);
     return is_string($html) ? $html : '';
+};
+
+/** Abre una URL absoluta del panel, para seguir un enlace hasta su destino. */
+$seguir = function (string $url) use ($sid): string {
+    if ($url === '') return '';
+    $ctx = stream_context_create(['http' => ['method' => 'GET', 'timeout' => 30,
+        'header' => "Cookie: PHPSESSID={$sid}
+"]]);
+    $h = @file_get_contents('http://localhost' . $url, false, $ctx);
+    return is_string($h) ? $h : '';
 };
 
 try {
@@ -176,11 +194,24 @@ try {
     ok('hay un control para empezar un plan nuevo',
        strpos($html, 'id="replan"') !== false,
        'el guion engancha por ese id: sin el boton, addEventListener revienta');
-    ok('y llega a la acción replan', strpos($html, "accion:'replan'") !== false);
+    //  LA CAPACIDAD, NO EL CAMINO. Esto pedia "accion:'replan'" en el guion de
+    //  ESTA pagina, y era correcto mientras el boton disparaba el POST desde
+    //  aqui. Ya no: abre su wizard, que es donde se ensena lo que se mueve
+    //  antes de moverlo. Lo que no se puede perder es que EXISTA un camino y
+    //  que ese camino de verdad rehaga el plan — asi que se sigue el enlace.
+    $destinoReplan = $mt_href($html, 'replan');
+    ok('y lleva a un sitio que rehace el plan',
+       strpos($destinoReplan, 'vista=plan-nuevo') !== false
+       && strpos($seguir($destinoReplan), "accion:'replan'") !== false,
+       'destino=' . ($destinoReplan ?: '(ninguno)'));
     ok('hay un control para cambiar de meta',
        strpos($html, 'id="cerrar"') !== false,
        'mismo motivo: el id es lo que el guion busca');
-    ok('y llega a la acción cerrar', strpos($html, "accion:'cerrar'") !== false);
+    $destinoCerrar = $mt_href($html, 'cerrar');
+    ok('y lleva a un sitio que cierra o cambia la meta',
+       strpos($destinoCerrar, 'vista=cambiar') !== false
+       && strpos($seguir($destinoCerrar), "accion:'cambiar'") !== false,
+       'destino=' . ($destinoCerrar ?: '(ninguno)'));
 
     echo "\n  — 7 · evaluar un plan —\n";
     ok('llega a la acción evaluar', strpos($html, "accion:'evaluar'") !== false,

@@ -77,23 +77,41 @@ try {
   //  un verde bonito sobre un camino roto.
   if (contenedor === '.wz' && pasoPedido > 1) {
     const escribir = (id, val) => ev(`(function(){var e=document.getElementById('${id}');
-      e.value=${JSON.stringify(val)}; e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
-    await ev("document.querySelector('.wz-obj').click()");
-    await dormir(260);
-    await ev("document.getElementById('sigue').click()");
-    await dormir(340);
-    if (pasoPedido > 2) {
-      await escribir('cantidad', '25');
-      await dormir(140);
-      await ev("document.getElementById('sigue').click()");
-      await dormir(340);
-    }
-    if (pasoPedido > 3) {
-      await ev(`document.querySelector('#wzPauta .wz-chip[data-pauta="20"]').click()`);
-      await escribir('contexto', CTX_LARGO);
-      await dormir(140);
-      await ev("document.getElementById('sigue').click()");
-      await dormir(420);
+      if(!e) return; e.value=${JSON.stringify(val)}; e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    const pulsa = async (sel, ms) => {
+      await ev(`(function(){var e=document.querySelector(${JSON.stringify(sel)}); if(e) e.click();})()`);
+      await dormir(ms || 320);
+    };
+    //  Cada wizard contesta lo suyo. El flujo lo dice el propio contenedor, no
+    //  la URL: asi la sonda no tiene que saberse las rutas de memoria.
+    const flujo = await ev(`(document.querySelector('.wz').dataset.flujo || 'crear')`);
+
+    if (flujo === 'crear') {
+      await pulsa('.wz-obj', 260);
+      await pulsa('#sigue');
+      if (pasoPedido > 2) { await escribir('cantidad', '25'); await dormir(140); await pulsa('#sigue'); }
+      if (pasoPedido > 3) {
+        await pulsa('#wzPauta .wz-chip[data-pauta="20"]', 120);
+        await escribir('contexto', CTX_LARGO); await dormir(140);
+        await pulsa('#sigue', 420);
+      }
+    } else {
+      //  Los dos delicados empiezan igual: el motivo. Despues, cambiar pide
+      //  meta nueva y numeros; plan-nuevo solo enseña lo que se mueve.
+      await pulsa('#opMotivo .wz-chip', 200);
+      await escribir('opDetalle', CTX_LARGO);
+      await dormir(120);
+      await pulsa('#sigue');
+      if (pasoPedido > 2) {
+        if (flujo === 'cambiar') { await pulsa('.wz-obj', 260); }
+        await pulsa('#sigue');
+      }
+      if (pasoPedido > 3) {
+        await escribir('cantidad', '30'); await dormir(140);
+        await pulsa('#wzPauta .wz-chip[data-pauta="20"]', 120);
+        await escribir('contexto', CTX_LARGO); await dormir(140);
+        await pulsa('#sigue', 420);
+      }
     }
   }
 
@@ -254,6 +272,9 @@ try {
       paso: (function(){ var s=ah.querySelector('.wz-p.on'); return s ? +s.dataset.p : 0; })(),
       paso_et: (function(){ var e=document.getElementById('wzEt');
                             return e ? (e.textContent||'').trim() : ''; })(),
+      flujo: (function(){ var w=ah.closest('.wz')||ah; return w.dataset ? (w.dataset.flujo||'crear') : 'crear'; })(),
+      motivo: (function(){ var m=document.querySelector('#opMotivo .wz-chip.sel');
+                           return m ? m.dataset.motivo : ''; })(),
       guardado: (function(){
         var c=document.getElementById('cantidad'), t=document.getElementById('contexto');
         var s=document.querySelector('.wz-obj.sel');
@@ -262,7 +283,7 @@ try {
                      obj:s?s.dataset.obj:'', dias:fe?fe.dataset.dias:'', pauta:pa?pa.dataset.pauta:'' } : null;
       })(),
       repaso: (function(){
-        var r={}; ['rObj','rCant','rFecha','rPauta','rCtx','rMedir'].forEach(function(i){
+        var r={}; ['rObj','rCant','rFecha','rPauta','rCtx','rMedir','rMotivo','rVieja'].forEach(function(i){
           var e=document.getElementById(i); if(e) r[i]=(e.textContent||'').trim(); });
         return r;
       })(),

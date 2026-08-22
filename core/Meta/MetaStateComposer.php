@@ -315,7 +315,14 @@ class MetaStateComposer
                  'consecuencia' => 'Cuando lo hagas, me lo confirmas y sigo con lo próximo.',
                  'tipo' => 'inversion'],
                 ['tactica_id' => (int)$t['id'], 'inversion' => (float)$t['inversion'],
-                 'que_hacer' => self::queHacer($t)],
+                 'que_hacer' => self::queHacer($t),
+                 //  QUE PUBLICACION SE PROMOCIONA. Sin esto la pantalla decia
+                 //  «abre la publicacion» y el dueño tenia que adivinar cual de
+                 //  todas. Sale de sus piezas publicadas de verdad; si no hay
+                 //  ninguna, el objeto es null y la vista lo dice — no se
+                 //  inventa un post que no existe.
+                 'objeto' => self::piezaAPromocionar($s),
+                 'publicadas' => count(self::piezasPublicadas($s))],
                 self::camino($s, (int)$t['id']), self::cobertura($s), 'jugada_requiere_inversion');
         }
         return null;
@@ -584,6 +591,33 @@ class MetaStateComposer
      * Vive aqui y no en la vista para que la vista no tenga que saber de
      * jugadas ni de captions: recibe dos cadenas y las pinta.
      */
+    /**
+     * Las piezas del plan que YA estan publicadas — las unicas que se pueden
+     * promocionar. Un borrador no se puede impulsar: todavia no existe en la red.
+     */
+    private static function piezasPublicadas(array $s): array
+    {
+        $out = [];
+        foreach ((array)($s['piezas'] ?? []) as $p) {
+            if ((string)($p['estado'] ?? '') === 'publicado') $out[] = $p;
+        }
+        return $out;
+    }
+
+    /** La mas reciente de las publicadas, o null si todavia no hay ninguna. */
+    private static function piezaAPromocionar(array $s): ?array
+    {
+        $pub = self::piezasPublicadas($s);
+        if (!$pub) return null;
+        //  Sin reloj y sin ordenar por fecha real: se compara la cadena que ya
+        //  trae el lector, que en Y-m-d H:i:s es lexicografica y cronologica a la
+        //  vez. Este compositor es puro y tiene que seguir siendolo.
+        $mejor = $pub[0];
+        foreach ($pub as $p) {
+            if ((string)($p['publicado_at'] ?? '') > (string)($mejor['publicado_at'] ?? '')) $mejor = $p;
+        }
+        return self::objetoDePieza($s, $mejor);
+    }
     private static function objetoDePieza(array $s, array $p): array
     {
         $t = self::jugada($s, (int)($p['tactica_id'] ?? 0));

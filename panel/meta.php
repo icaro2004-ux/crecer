@@ -106,7 +106,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($accion === 'replan') {
             $meta = meta_activa($pdo, $marca_id);
             if (!$meta) { echo json_encode(['ok'=>false,'err'=>'No tienes una meta activa.']); exit; }
-            $plan = meta_plan_generar($pdo, $marca_id, (int)$meta['id']);
+
+            //  DOBLE CLIC, SIN RELOJ. El wizard manda el id del plan que CREE
+            //  estar reemplazando. Si ya no es el vigente, es que el primer
+            //  clic entro: se contesta con el que hay y NO se llama otra vez a
+            //  la Estratega —que cuesta dinero y deja un plan de mas en el
+            //  historial—. Es un compare-and-swap: no depende de cuantos
+            //  segundos pasaron ni de en que zona horaria esta el reloj.
+            $vigente = meta_plan_activo($pdo, (int)$meta['id']);
+            $pedido  = (int)($_POST['plan_actual'] ?? 0);
+            if ($pedido > 0 && $vigente && (int)$vigente['id'] !== $pedido) {
+                echo json_encode(['ok'=>true, 'repetido'=>true, 'plan'=>(int)$vigente['id']]);
+                exit;
+            }
+
+            $plan = meta_plan_generar($pdo, $marca_id, (int)$meta['id'],
+                                      (string)($_POST['motivo'] ?? ''));
             echo json_encode(['ok'=>!empty($plan['ok']), 'err'=>$plan['err'] ?? null], JSON_UNESCAPED_UNICODE);
             exit;
         }
@@ -168,8 +183,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // (f) Cerrar / cambiar la meta.
         if ($accion === 'cerrar') {
             $meta = meta_activa($pdo, $marca_id);
-            if ($meta) meta_ajustar($pdo, (int)$meta['id'], $marca_id, ['estado'=>'cancelada']);
-            echo json_encode(['ok'=>true]);
+            //  Sin meta activa no hay nada que cerrar — y ahi cae el segundo
+            //  clic: se contesta que si, sin volver a escribir.
+            if (!$meta) { echo json_encode(['ok'=>true, 'repetido'=>true]); exit; }
+            $pedida = (int)($_POST['meta_actual'] ?? 0);
+            if ($pedida > 0 && $pedida !== (int)$meta['id']) {
+                echo json_encode(['ok'=>true, 'repetido'=>true, 'meta'=>(int)$meta['id']]); exit;
+            }
+            //  LA DIFERENCIA IMPORTA: no es lo mismo darla por lograda que
+            //  abandonarla. Es el record del negocio, y de ahi aprende el
+            //  Optimizador. Y se cierra tambien su plan, que antes se quedaba
+            //  'activo' colgando de una meta que ya no existe.
+            $cierre = (string)($_POST['cierre'] ?? 'cancelada');
+            if (!in_array($cierre, ['lograda','cancelada'], true)) $cierre = 'cancelada';
+            meta_cerrar_meta($pdo, (int)$meta['id'], $marca_id, $cierre);
+            echo json_encode(['ok'=>true, 'cierre'=>$cierre]);
+            exit;
+        }
+
+        // (f2) CAMBIAR DE META — cerrar la de ahora y estrenar la proxima en
+        //      UNA operacion. Antes eran dos pantallas: se cerraba primero y
+        //      despues se mandaba al wizard vacio, asi que quien se arrepentia
+        //      a mitad se quedaba SIN META. Ahora la proxima se recoge entera
+        //      antes de escribir nada, y el cambio va en transaccion.
+        if ($accion === 'cambiar') {
+            $meta = meta_activa($pdo, $marca_id);
+            if (!$meta) { echo json_encode(['ok'=>false,'err'=>'No tienes una meta activa que cambiar.']); exit; }
+            $pedida = (int)($_POST['meta_actual'] ?? 0);
+            if ($pedida > 0 && $pedida !== (int)$meta['id']) {
+                //  El primer clic ya cambio la meta: la activa es otra.
+                echo json_encode(['ok'=>true, 'repetido'=>true, 'meta_id'=>(int)$meta['id']]); exit;
+            }
+            $obj = (string)($_POST['objetivo'] ?? '');
+            if (!isset(meta_objetivos()[$obj])) { echo json_encode(['ok'=>false,'err'=>'Escoge qué quieres lograr.']); exit; }
+            $cierre = (string)($_POST['cierre'] ?? 'cancelada');
+            if (!in_array($cierre, ['lograda','cancelada'], true)) $cierre = 'cancelada';
+            $def = meta_objetivo_def($obj);
+
+            $nueva = meta_cambiar_meta($pdo, $marca_id, (int)$meta['id'], $cierre, [
+                'objetivo'          => $obj,
+                'titulo'            => (string)($_POST['titulo'] ?? $def['titulo']),
+                'cantidad'          => (string)($_POST['cantidad'] ?? ''),
+                'fecha_limite'      => (string)($_POST['fecha_limite'] ?? ''),
+                'presupuesto_pauta' => (string)($_POST['presupuesto'] ?? ''),
+                'contexto'          => (string)($_POST['contexto'] ?? ''),
+            ]);
+            if (!$nueva) {
+                //  La transaccion se deshizo entera: la meta de antes sigue
+                //  activa. El negocio NO se queda sin norte.
+                echo json_encode(['ok'=>false,
+                                  'err'=>'No pude cambiar la meta. La de ahora sigue en pie — dale otra vez.']); exit;
+            }
+            $plan = meta_plan_generar($pdo, $marca_id, $nueva);
+            echo json_encode(['ok'=>true, 'meta_id'=>$nueva, 'plan_ok'=>!empty($plan['ok']),
+                              'err'=>$plan['err'] ?? null], JSON_UNESCAPED_UNICODE);
             exit;
         }
 
@@ -237,10 +304,16 @@ $mt_estado = MetaStateComposer::componer($mt_snap);
 // TRES CAPAS, no tres pantallas apiladas:
 //   (por defecto) Meta · Ahora · Camino      — lo que toca hoy
 //   ?vista=plan   plan completo, diagnóstico, comparación e historial
-//   ?vista=wizard el wizard de escoger meta (estado A)
+//   ?vista=wizard      el wizard de escoger meta (estado A)
+//   ?vista=plan-nuevo  pedirle otro plan a la Estratega, para esta misma meta
+//   ?vista=cambiar     cerrar esta meta y estrenar la proxima, de una
 $vista = $_GET['vista'] ?? '';
-if (!in_array($vista, ['plan', 'wizard'], true)) $vista = 'ahora';
+if (!in_array($vista, ['plan', 'wizard', 'plan-nuevo', 'cambiar'], true)) $vista = 'ahora';
 if (!$meta && $vista === 'ahora' && !empty($_GET['nueva'])) $vista = 'wizard';
+//  Las dos delicadas piden una meta viva. Sin ella no hay nada que rehacer ni
+//  que cambiar, y mandar a un wizard vacio es como se llegaba antes a que el
+//  negocio se quedara sin norte: se vuelve a lo que toca ahora.
+if (!$meta && in_array($vista, ['plan-nuevo', 'cambiar'], true)) $vista = 'ahora';
 
 /** Volver aquí desde donde sea que mande la acción dominante. */
 $mt_volver = MetaRetorno::marcador();
@@ -591,12 +664,12 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
 
   /* — opciones delicadas, al final y plegadas — */
   .plan-op{display:flex;flex-direction:column;gap:9px}
-  .plan-op button{display:flex;align-items:center;justify-content:center;gap:9px;min-height:52px;
+  .plan-op a{display:flex;text-decoration:none;align-items:center;justify-content:center;gap:9px;min-height:52px;
     border:1px solid var(--line);border-radius:var(--tm-r-bt);background:transparent;
     color:var(--tinta);font-family:inherit;font-size:16px;font-weight:600;cursor:pointer}
-  .plan-op button:hover{border-color:var(--tm-rosa);color:var(--tm-rosa-tx)}
-  .plan-op button:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
-  .plan-op button .ic{width:18px;height:18px;stroke-width:2}
+  .plan-op a:hover{border-color:var(--tm-rosa);color:var(--tm-rosa-tx)}
+  .plan-op a:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
+  .plan-op a .ic{width:18px;height:18px;stroke-width:2}
   .plan-op p{font-size:14px;line-height:1.5;color:var(--muted);margin:2px 0 0}
 
   .plan-obs{font-size:15px;line-height:1.55;color:var(--tm-teal-tx);background:var(--tm-teal-piel);
@@ -767,6 +840,24 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
   .tm-paso span{display:block;font-size:14px;line-height:1.4;color:var(--muted);margin-top:2px}
 
   /* — pasos de la inversion y confirmaciones (estados excepcionales) — */
+  .ah-cual{border:1px solid var(--line);border-radius:var(--tm-r-bt);padding:11px 13px;
+    margin:0 0 12px;background:var(--card,#fff)}
+  .ah-cual .et{display:block;font-size:14px;font-weight:600;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+  .ah-cual b{display:block;font-size:16px;line-height:1.4;color:var(--tinta);font-weight:600}
+  .ah-cual small{display:block;font-size:14px;line-height:1.45;color:var(--muted);margin-top:4px}
+  .ah-cual.sin{background:var(--tm-aviso-piel);border-color:transparent}
+  .ah-cual.sin b{color:var(--tm-aviso);font-weight:600}
+  .ah-cual.sin small{color:var(--tm-aviso)}
+  .ah-monto span{display:block;font-size:14px;line-height:1.45;color:var(--muted);
+    font-weight:400;margin-top:3px}
+  .ah-cierre{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+  .ah-nomarca{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;
+    border:1px solid var(--line);border-radius:var(--tm-r-bt);background:transparent;
+    font-family:inherit;font-size:15px;font-weight:600;color:var(--muted);cursor:pointer}
+  .ah-nomarca:hover{border-color:var(--raya-firme,#D8D3CC);color:var(--tinta)}
+  .ah-nomarca:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
+  .ah-nomarca .ic{width:16px;height:16px;stroke-width:2}
   .ah-pasos{margin-top:16px;border-top:1px solid var(--line);padding-top:14px}
   .ah-monto{font-size:15px;margin:0 0 10px;color:var(--tinta)}
   .ah-pasos ol{margin:0 0 12px;padding-left:20px}
@@ -844,7 +935,12 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
   }
 </style>
 
-<?php if (!$meta && $vista === 'wizard'): /* ══════════ WIZARD ══════════ */ ?>
+<?php if ($meta && in_array($vista, ['plan-nuevo', 'cambiar'], true)):
+        /* ══════ LAS DOS DELICADAS · wizards propios, no un confirm() ══════ */ ?>
+
+<?php require __DIR__ . '/_meta_opciones.php'; ?>
+
+<?php elseif (!$meta && $vista === 'wizard'): /* ══════════ WIZARD ══════════ */ ?>
 
 <?php require __DIR__ . '/_meta_wizard.php'; ?>
 
@@ -1195,21 +1291,23 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
       </details>
 
       <?php /*  LAS OPCIONES DELICADAS, LAS ULTIMAS Y PLEGADAS.
-                Estaban pegadas al progreso — justo donde el dedo va a mirar
-                como va el mes— y son las dos cosas que mas asustan: rehacer
-                el plan y cambiar de meta. Aqui abajo, y cada una diciendo
-                antes que pasa con lo hecho.
-                Siguen siendo un confirm() del navegador; convertirlas en
-                wizards de verdad es el commit 6, no se finge aqui. */ ?>
+                Estaban pegadas al progreso —justo donde el dedo va a mirar como
+                va el mes— y son las dos cosas que mas asustan: rehacer el plan
+                y cambiar de meta.
+
+                Eran un confirm() del navegador. Ahora cada una abre SU wizard,
+                que ensena lo que se mueve antes de moverlo. Los ids se
+                conservan (#replan, #cerrar) porque la red de paridad engancha
+                por ellos, pero ya no disparan nada: son puertas. */ ?>
       <details class="plan-ac">
         <summary>Opciones del plan<?= ico('chev-abajo') ?></summary>
         <div class="dentro">
           <div class="plan-op">
-            <button type="button" id="replan"><?= ico('refresh') ?> Empezar un plan nuevo</button>
-            <p>Jugadas nuevas para esta misma meta. El plan de ahora pasa a historial
-              y lo que el corillo ya te hizo se queda en Tus Posts.</p>
-            <button type="button" id="cerrar"><?= ico('target') ?> Cambiar de meta</button>
-            <p>Cierra esta meta y te llevo a escoger otra. Lo publicado no se toca.</p>
+            <a id="replan" href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&amp;vista=plan-nuevo"><?= ico('refresh') ?> Empezar un plan nuevo</a>
+            <p>Jugadas nuevas para esta misma meta. Antes de cambiar nada te enseno que
+              se mueve y que se queda.</p>
+            <a id="cerrar" href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&amp;vista=cambiar"><?= ico('target') ?> Cambiar de meta</a>
+            <p>Escoges la proxima primero y despues cierro esta. Lo publicado no se toca.</p>
           </div>
         </div>
       </details>
@@ -1315,25 +1413,14 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
     });
   });
 
-  //  SIN SUPONER QUE ESTAN. Viven dentro de una capa plegada; si un dia se
-  //  mueven o se quitan, un addEventListener sobre null tumba el guion entero
-  //  —y con el, producir una jugada, marcarla y evaluar—.
-  var elReplan = document.getElementById('replan');
-  if (elReplan) elReplan.addEventListener('click', function(){
-    if(!confirm('¿Empezar un plan nuevo?\n\nLa Estratega arma jugadas nuevas para esta misma meta.\n\n· El plan de ahora pasa a historial.\n· Lo que el corillo ya te hizo se queda en Tus Posts.\n· Tu meta, tu marca y tu Genoma no se tocan.')) return;
-    var b=this, orig=b.innerHTML;
-    b.disabled=true; b.textContent='La Estratega está pensando…';
-    post({accion:'replan'}).then(function(d){
-      if(d.ok) location.reload();
-      else { b.disabled=false; b.innerHTML=orig; alert(d.err||'No pude armar el plan nuevo.'); }
-    }).catch(function(){ b.disabled=false; b.innerHTML=orig; });
-  });
-
-  var elCerrar = document.getElementById('cerrar');
-  if (elCerrar) elCerrar.addEventListener('click', function(){
-    if(!confirm('¿Cambiar de meta? El corillo dejará de perseguir esta.')) return;
-    post({accion:'cerrar'}).then(function(){ location.reload(); });
-  });
+  //  AQUI VIVIAN LOS DOS confirm(). Ya no hay guion que enganchar: #replan y
+  //  #cerrar son enlaces a ?vista=plan-nuevo y ?vista=cambiar.
+  //
+  //  Un cuadro del navegador es la peor forma de pedir permiso para algo
+  //  grande: no cabe lo que va a pasar, no se lee con calma y no tiene vuelta
+  //  atras. Y el de cambiar de meta ademas MENTIA — decia «el corillo dejara
+  //  de perseguir esta» y lo que hacia era cerrarla y dejar al negocio sin
+  //  meta, esperando que el dueño llenara despues un wizard en blanco.
 
   //  EL ANCLA #aprendizaje ES AHORA UN ACORDEON. Llegando por el salto
   //  -el estado L enlaza a meta.php?vista=plan#aprendizaje- tiene que abrirse
@@ -1556,17 +1643,53 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
         <details class="ah-como" id="ahComo">
           <summary class="tm-btn"><?= ico('dollar') ?><?= $h($act['etiqueta']) ?></summary>
           <div class="ah-pasos">
-            <p class="ah-monto">Presupuesto de esta jugada: <b><?= $h('$' . rtrim(rtrim(number_format((float)($E->evidencia['inversion'] ?? 0), 2), '0'), '.')) ?></b></p>
+            <?php
+              /*  CUAL PUBLICACION. Antes ponia «abre la publicación» a secas y el
+                  dueño tenia que adivinar cual de todas — con lo cual o promocionaba
+                  la equivocada o no promocionaba nada. El objeto sale de sus piezas
+                  PUBLICADAS de verdad (el compositor lo decide); si no hay ninguna,
+                  aqui se dice, no se inventa un post.  */
+              $inv_obj = $E->evidencia['objeto'] ?? null;
+              $inv_pub = (int)($E->evidencia['publicadas'] ?? 0);
+            ?>
+            <?php if (is_array($inv_obj)): ?>
+              <div class="ah-cual">
+                <span class="et">La publicación que se promociona</span>
+                <b><?= $h((string)($inv_obj['titulo'] ?? '')) ?></b>
+                <?php if (($inv_obj['red'] ?? '') !== ''): ?>
+                  <small><?= $h((string)$inv_obj['red']) ?><?= $inv_pub > 1 ? ' · es la última que publiqué de este plan, de ' . $inv_pub : '' ?></small>
+                <?php endif; ?>
+              </div>
+            <?php else: ?>
+              <div class="ah-cual sin">
+                <span class="et">Todavía no hay qué promocionar</span>
+                <b>De este plan no hay ninguna publicación tuya publicada todavía.</b>
+                <small>Promocionar empuja un post que ya está en la red. En cuanto salga el
+                  primero, esta jugada te dice cuál.</small>
+              </div>
+            <?php endif; ?>
+
+            <p class="ah-monto">Presupuesto de esta jugada: <b><?= $h('$' . rtrim(rtrim(number_format((float)($E->evidencia['inversion'] ?? 0), 2), '0'), '.')) ?></b>
+              <span>Lo pones tú en la app de Meta. Ese dinero no pasa por Crecer.</span></p>
             <ol>
-              <li>Abre la publicación en Instagram o Facebook desde tu teléfono.</li>
+              <li>Abre <?= is_array($inv_obj) ? 'esa publicación' : 'la publicación' ?> en
+                <?= is_array($inv_obj) && ($inv_obj['red'] ?? '') !== '' ? $h((string)$inv_obj['red']) : 'Instagram o Facebook' ?>
+                desde tu teléfono.</li>
               <li>Toca <b>Promocionar</b> (o <b>Impulsar publicación</b>).</li>
               <li>Escoge el público de tu zona y pon el presupuesto de arriba.</li>
               <li>Confirma el pago en la app de Meta — eso lo haces tú, no yo.</li>
             </ol>
-            <p class="ah-aviso">Yo no puedo promocionarlo por ti ni ver si el pago salió.
-              Cuando lo hayas hecho, dímelo aquí y lo doy por hecho.</p>
-            <button type="button" class="tm-btn linea" id="ahConfirmar"
-                    data-jugada="<?= (int)($E->evidencia['tactica_id'] ?? 0) ?>"><?= ico('check') ?>Confirmar que ya lo promocioné</button>
+            <p class="ah-aviso">Yo no puedo promocionarlo por ti, no pago el anuncio y no tengo
+              forma de ver si el cobro salió. Mirar estos pasos no marca nada: la jugada solo
+              se da por hecha cuando tú me lo confirmas.</p>
+            <div class="ah-cierre">
+              <button type="button" class="tm-btn linea" id="ahConfirmar"
+                      data-jugada="<?= (int)($E->evidencia['tactica_id'] ?? 0) ?>"><?= ico('check') ?>Confirmar que ya lo promocioné</button>
+              <?php /*  CANCELAR TAMPOCO MARCA. Cerrar el desplegable ya era la
+                        salida, pero solo lo sabia quien lo adivinaba: sin un
+                        control que lo diga, «abrir para mirar» da miedo.  */ ?>
+              <button type="button" class="ah-nomarca" id="ahLuego"><?= ico('x') ?>Todavía no — cerrar sin marcar</button>
+            </div>
           </div>
         </details>
       <?php elseif ($tipo === 'fisica'): ?>
@@ -1746,6 +1869,18 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
     if (!b.dataset.jugada) return;
     enviar(b, {accion:'tactica', id:b.dataset.jugada, estado:'hecha'},
            'Un momento…', 'No se pudo marcar.');
+  });
+
+  //  «TODAVIA NO» cierra el desplegable y NO manda nada. Es la mitad que
+  //  faltaba del contrato de la inversion: abrir para mirar tiene que ser
+  //  gratis, y para que lo sea hay que DECIRLO con un control — no esperar a
+  //  que el dueño adivine que cerrar la capa no marca nada.
+  var noAun = document.getElementById('ahLuego');
+  if (noAun) noAun.addEventListener('click', function(){
+    var caja = document.getElementById('ahComo');
+    if (!caja) return;
+    caja.open = false;
+    var s = caja.querySelector('summary'); if (s) s.focus();
   });
 
   // Aceptar el plan. Se sella una vez y la pantalla se recompone sola: al

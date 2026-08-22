@@ -27,9 +27,10 @@
 
 import { abrirChrome, cerrarRecibimiento, dormir } from './_chrome.mjs';
 
-const [sid, marca, escena, aS, hS] = process.argv.slice(2);
+const [sid, marca, escena, aS, hS, vistaArg] = process.argv.slice(2);
 const ancho = parseInt(aS || '360', 10), alto = parseInt(hS || '800', 10);
-const URL_PAGINA = `http://localhost/crecer/panel/meta.php?marca=${marca}&vista=wizard`;
+const vista = vistaArg || 'wizard';
+const URL_PAGINA = `http://localhost/crecer/panel/meta.php?marca=${marca}&vista=${vista}`;
 const CTX = '[prueba] Tengo el combo de brazo gitano a $18 y en agosto son las fiestas del pueblo.';
 
 const salir = (o) => { console.log(JSON.stringify(o)); };
@@ -120,6 +121,146 @@ try {
     cerrar(); process.exit(0);
   }
 
+  // ══════════════════════════════════════════════════════════════
+  //  LOS DOS DELICADOS · plan nuevo y cambiar de meta
+  //
+  //  Comparten sonda porque comparten contrato: nada se escribe hasta el
+  //  ultimo paso, atras no pierde nada, y el doble clic no repite la
+  //  operacion. Lo que cambia es cuantos pasos tienen y que preguntan.
+  // ══════════════════════════════════════════════════════════════
+  if (escena.indexOf('op-') === 0) {
+    const flujo = await ev(`document.querySelector('.wz').dataset.flujo`);
+    const PASOS = flujo === 'cambiar' ? 4 : 3;
+
+    const mirar = () => ev(`JSON.stringify((function(){
+      var s=document.querySelector('.wz-p.on');
+      var m=document.querySelector('#opMotivo .wz-chip.sel');
+      var o=document.querySelector('.wz-obj.sel');
+      var c=document.getElementById('cantidad'), t=document.getElementById('contexto');
+      var pa=document.querySelector('#wzPauta .wz-chip.sel');
+      var er=document.getElementById('wzErr');
+      return {
+        paso: s ? +s.dataset.p : 0,
+        et: (document.getElementById('wzEt').textContent||'').trim(),
+        motivo: m ? m.dataset.motivo : '',
+        detalle: (document.getElementById('opDetalle').value||'').slice(0,40),
+        obj: o ? o.dataset.obj : '',
+        cant: c ? c.value : '',
+        pauta: pa ? pa.dataset.pauta : '',
+        ctx: t ? t.value.slice(0,40) : '',
+        repaso: ['rMotivo','rVieja','rObj','rCant','rPauta'].reduce(function(a,i){
+          var e=document.getElementById(i); if(e) a[i]=(e.textContent||'').trim(); return a; }, {}),
+        err_visible: er.classList.contains('on'),
+        err_txt: (document.getElementById('wzErrP').textContent||'').trim(),
+        err_enfocado: document.activeElement === er,
+        cargando: document.getElementById('wzLoad').classList.contains('on'),
+        hay_solo_cerrar: !!document.getElementById('opSoloCerrar'),
+        alertas: +(sessionStorage.getItem('wzAlertas') || 0),
+        url: location.href
+      };
+    })())`).then(JSON.parse);
+
+    const contestar = async (hasta) => {
+      await pulsa('#opMotivo .wz-chip', 220);
+      await escribir('opDetalle', '[prueba] Los posts salen bonitos pero nadie escribe.');
+      await dormir(120);
+      if (hasta < 2) return;
+      await pulsa('#sigue');
+      if (hasta < 3) return;
+      if (flujo === 'cambiar') await pulsa('.wz-obj', 240);
+      await pulsa('#sigue');
+      if (hasta < 4) return;
+      await escribir('cantidad', '30');
+      await pulsa('#wzPauta .wz-chip[data-pauta="20"]', 120);
+      await escribir('contexto', '[prueba] Tengo el combo de brazo gitano a $18.');
+      await dormir(120);
+      await pulsa('#sigue', 400);
+    };
+
+    //  SALIR EN CADA PASO. El paso desde el que se sale lo dice la prueba en
+    //  PHP; despues cuenta filas en la base, que es donde se ve si hubo
+    //  escritura de verdad.
+    if (escena === 'op-salir') {
+      const desde = Math.min(PASOS, Math.max(1, parseInt(process.env.WZ_PASO || '2', 10)));
+      await contestar(desde);
+      const antes = await mirar();
+      await ev(`document.getElementById('wzSalir').click()`);
+      for (let i = 0; i < 40; i++) {
+        if (!(await ev(`/vista=(plan-nuevo|cambiar)/.test(location.href)`))) break;
+        await dormir(200);
+      }
+      salir({ escena, flujo, desde, antes, url: await ev('location.href') });
+      cerrar(); process.exit(0);
+    }
+
+    if (escena === 'op-atras') {
+      await contestar(PASOS);
+      const alFinal = await mirar();
+      for (let i = 1; i < PASOS; i++) await pulsa('#atras');
+      const alPrincipio = await mirar();
+      for (let i = 1; i < PASOS; i++) await pulsa('#sigue', 380);
+      const deVuelta = await mirar();
+      await pulsa('.wz-cambiar[data-ir="1"]');
+      const alCambiar = await mirar();
+      salir({ escena, flujo, alFinal, alPrincipio, deVuelta, alCambiar });
+      cerrar(); process.exit(0);
+    }
+
+    if (escena === 'op-error') {
+      await ev(`sessionStorage.setItem('wzPosts','0');
+        window.fetch = function(u, o){
+          var b = o && o.body, acc = (b && b.get) ? b.get('accion') : '';
+          if (acc === 'replan' || acc === 'cambiar') {
+            sessionStorage.setItem('wzPosts', String(+sessionStorage.getItem('wzPosts') + 1));
+            return Promise.resolve({ json: function(){ return Promise.resolve(
+              { ok:false, err:'[prueba] La Estratega no contesto. Nada cambio.' }); } });
+          }
+          return Promise.resolve({ json: function(){ return Promise.resolve({ok:false}); } });
+        };`);
+      await contestar(PASOS);
+      await pulsa('#sigue', 700);
+      const alFallar = await mirar();
+      await pulsa('#wzReintentar', 700);
+      const alReintentar = await mirar();
+      salir({ escena, flujo, alFallar, alReintentar, posts: await contar('wzPosts') });
+      cerrar(); process.exit(0);
+    }
+
+    if (escena === 'op-doble') {
+      await ev(`sessionStorage.setItem('wzPosts','0');
+        var real = window.fetch;
+        window.fetch = function(u, o){
+          var b = o && o.body, acc = (b && b.get) ? b.get('accion') : '';
+          if (acc === 'replan' || acc === 'cambiar')
+            sessionStorage.setItem('wzPosts', String(+sessionStorage.getItem('wzPosts') + 1));
+          return real.apply(window, arguments);
+        };`);
+      await contestar(PASOS);
+      await ev(`(function(){var b=document.getElementById('sigue'); b.click(); b.click(); b.click();})()`);
+      await dormir(700);
+      for (let i = 0; i < 150; i++) {
+        if (!(await ev(`/vista=(plan-nuevo|cambiar)/.test(location.href)`))) break;
+        await dormir(400);
+      }
+      salir({ escena, flujo, posts: await contar('wzPosts'), url: await ev('location.href'),
+              alertas: await contar('wzAlertas') });
+      cerrar(); process.exit(0);
+    }
+
+    //  «SOLO CERRAR POR AHORA» — la tercera salida, la que NO crea meta nueva.
+    if (escena === 'op-solo') {
+      await contestar(PASOS);
+      const antes = await mirar();
+      await ev(`document.getElementById('opSoloCerrar').click()`);
+      for (let i = 0; i < 150; i++) {
+        if (!(await ev(`/vista=cambiar/.test(location.href)`))) break;
+        await dormir(400);
+      }
+      salir({ escena, flujo, antes, url: await ev('location.href'),
+              alertas: await contar('wzAlertas') });
+      cerrar(); process.exit(0);
+    }
+  }
   // ══════════════════════════════════════════════════════════════
   //  LA REGLA DE AYUDA SOBREVIVE A UN <details>
   //
