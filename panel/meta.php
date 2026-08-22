@@ -26,6 +26,8 @@ require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/suscripcion.php';
 require_once __DIR__ . '/../includes/iconos.php';
 require_once __DIR__ . '/../includes/meta_negocio.php';
+require_once __DIR__ . '/../includes/meta_cambio.php';
+require_once __DIR__ . '/../includes/meta_oportunidad.php';
 requiere_login();
 require_once __DIR__ . '/../includes/panel_guard.php';
 requiere_suscripcion($pdo, isset($_GET['marca']) ? (int)$_GET['marca'] : null);
@@ -56,6 +58,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $obj = (string)($_POST['objetivo'] ?? '');
             if (!isset(meta_objetivos()[$obj])) { echo json_encode(['ok'=>false,'err'=>'Escoge qué quieres lograr.']); exit; }
             $def = meta_objetivo_def($obj);
+            //  DOBLE CLIC · el candado que impide una meta de mas.
+            //  El dedo nervioso y la conexion lenta mandan el mismo formulario
+            //  dos veces. Sin candado salen DOS metas: meta_crear() pausa la
+            //  anterior, asi que la primera se queda en el historial del dueño
+            //  sin que la pidiera — y la Estratega se llama (y se cobra) dos
+            //  veces. Se mira si acaba de entrar una igual.
+            //
+            //  created_at lo pone MySQL y NOW() tambien: los dos lados del
+            //  reloj son el mismo, asi que aqui no hay el desfase de 4h que sale
+            //  cuando una fecha nace en PHP y se compara con NOW().
+            //
+            //  La ventana es corta y el objetivo tiene que coincidir: crear otra
+            //  meta a proposito —tras cerrar la anterior— no cae aqui, porque la
+            //  cerrada ya no esta en estado activa.
+            $rep = $pdo->prepare(
+                "SELECT id FROM crecer_meta
+                   WHERE marca_id=? AND objetivo=? AND estado='activa'
+                     AND created_at >= (NOW() - INTERVAL 3 MINUTE)
+                   ORDER BY id DESC LIMIT 1");
+            $rep->execute([$marca_id, $obj]);
+            $ya = (int)$rep->fetchColumn();
+            if ($ya > 0) {
+                //  Se contesta con la verdad de lo que hay, no con un ok a ciegas:
+                //  si el plan de esa meta no llego a existir, plan_ok es false.
+                $hay = $pdo->prepare("SELECT COUNT(*) FROM crecer_meta_tactica WHERE meta_id=?");
+                $hay->execute([$ya]);
+                echo json_encode(['ok'=>true, 'meta_id'=>$ya,
+                                  'plan_ok'=>((int)$hay->fetchColumn() > 0), 'repetido'=>true]);
+                exit;
+            }
+
             $meta_id = meta_crear($pdo, $marca_id, [
                 'objetivo'          => $obj,
                 'titulo'            => (string)($_POST['titulo'] ?? $def['titulo']),
@@ -75,7 +108,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($accion === 'replan') {
             $meta = meta_activa($pdo, $marca_id);
             if (!$meta) { echo json_encode(['ok'=>false,'err'=>'No tienes una meta activa.']); exit; }
-            $plan = meta_plan_generar($pdo, $marca_id, (int)$meta['id']);
+
+            //  DOBLE CLIC, SIN RELOJ. El wizard manda el id del plan que CREE
+            //  estar reemplazando. Si ya no es el vigente, es que el primer
+            //  clic entro: se contesta con el que hay y NO se llama otra vez a
+            //  la Estratega —que cuesta dinero y deja un plan de mas en el
+            //  historial—. Es un compare-and-swap: no depende de cuantos
+            //  segundos pasaron ni de en que zona horaria esta el reloj.
+            $vigente = meta_plan_activo($pdo, (int)$meta['id']);
+            $pedido  = (int)($_POST['plan_actual'] ?? 0);
+            if ($pedido > 0 && $vigente && (int)$vigente['id'] !== $pedido) {
+                echo json_encode(['ok'=>true, 'repetido'=>true, 'plan'=>(int)$vigente['id']]);
+                exit;
+            }
+
+            $plan = meta_plan_generar($pdo, $marca_id, (int)$meta['id'],
+                                      (string)($_POST['motivo'] ?? ''));
             echo json_encode(['ok'=>!empty($plan['ok']), 'err'=>$plan['err'] ?? null], JSON_UNESCAPED_UNICODE);
             exit;
         }
@@ -137,8 +185,139 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // (f) Cerrar / cambiar la meta.
         if ($accion === 'cerrar') {
             $meta = meta_activa($pdo, $marca_id);
-            if ($meta) meta_ajustar($pdo, (int)$meta['id'], $marca_id, ['estado'=>'cancelada']);
-            echo json_encode(['ok'=>true]);
+            //  Sin meta activa no hay nada que cerrar — y ahi cae el segundo
+            //  clic: se contesta que si, sin volver a escribir.
+            if (!$meta) { echo json_encode(['ok'=>true, 'repetido'=>true]); exit; }
+            $pedida = (int)($_POST['meta_actual'] ?? 0);
+            if ($pedida > 0 && $pedida !== (int)$meta['id']) {
+                echo json_encode(['ok'=>true, 'repetido'=>true, 'meta'=>(int)$meta['id']]); exit;
+            }
+            //  LA DIFERENCIA IMPORTA: no es lo mismo darla por lograda que
+            //  abandonarla. Es el record del negocio, y de ahi aprende el
+            //  Optimizador. Y se cierra tambien su plan, que antes se quedaba
+            //  'activo' colgando de una meta que ya no existe.
+            $cierre = (string)($_POST['cierre'] ?? 'cancelada');
+            if (!in_array($cierre, ['lograda','cancelada'], true)) $cierre = 'cancelada';
+            meta_cerrar_meta($pdo, (int)$meta['id'], $marca_id, $cierre);
+            echo json_encode(['ok'=>true, 'cierre'=>$cierre]);
+            exit;
+        }
+
+        // (f2) CAMBIAR DE META — cerrar la de ahora y estrenar la proxima en
+        //      UNA operacion. Antes eran dos pantallas: se cerraba primero y
+        //      despues se mandaba al wizard vacio, asi que quien se arrepentia
+        //      a mitad se quedaba SIN META. Ahora la proxima se recoge entera
+        //      antes de escribir nada, y el cambio va en transaccion.
+        if ($accion === 'cambiar') {
+            $meta = meta_activa($pdo, $marca_id);
+            if (!$meta) { echo json_encode(['ok'=>false,'err'=>'No tienes una meta activa que cambiar.']); exit; }
+            $pedida = (int)($_POST['meta_actual'] ?? 0);
+            if ($pedida > 0 && $pedida !== (int)$meta['id']) {
+                //  El primer clic ya cambio la meta: la activa es otra.
+                echo json_encode(['ok'=>true, 'repetido'=>true, 'meta_id'=>(int)$meta['id']]); exit;
+            }
+            $obj = (string)($_POST['objetivo'] ?? '');
+            if (!isset(meta_objetivos()[$obj])) { echo json_encode(['ok'=>false,'err'=>'Escoge qué quieres lograr.']); exit; }
+            $cierre = (string)($_POST['cierre'] ?? 'cancelada');
+            if (!in_array($cierre, ['lograda','cancelada'], true)) $cierre = 'cancelada';
+            $def = meta_objetivo_def($obj);
+
+            $nueva = meta_cambiar_meta($pdo, $marca_id, (int)$meta['id'], $cierre, [
+                'objetivo'          => $obj,
+                'titulo'            => (string)($_POST['titulo'] ?? $def['titulo']),
+                'cantidad'          => (string)($_POST['cantidad'] ?? ''),
+                'fecha_limite'      => (string)($_POST['fecha_limite'] ?? ''),
+                'presupuesto_pauta' => (string)($_POST['presupuesto'] ?? ''),
+                'contexto'          => (string)($_POST['contexto'] ?? ''),
+            ]);
+            if (!$nueva) {
+                //  La transaccion se deshizo entera: la meta de antes sigue
+                //  activa. El negocio NO se queda sin norte.
+                echo json_encode(['ok'=>false,
+                                  'err'=>'No pude cambiar la meta. La de ahora sigue en pie — dale otra vez.']); exit;
+            }
+            $plan = meta_plan_generar($pdo, $marca_id, $nueva);
+            echo json_encode(['ok'=>true, 'meta_id'=>$nueva, 'plan_ok'=>!empty($plan['ok']),
+                              'err'=>$plan['err'] ?? null], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // (h) AJUSTAR LA META. El token viaja en el POST y el candado esta
+        //     dentro de meta_ajustar_trazado(): aqui no se vuelve a mirar.
+        if ($accion === 'ajustar') {
+            $meta = meta_activa($pdo, $marca_id);
+            if (!$meta) { echo json_encode(['ok'=>false,'err'=>'No tienes una meta activa.']); exit; }
+            $campos = [];
+            foreach (META_AJUSTABLES as $c) {
+                //  Solo lo que de verdad vino. Mandar todos los campos siempre
+                //  llenaria el historial de «cambios» que no cambian nada.
+                if (array_key_exists($c, $_POST)) $campos[$c] = (string)$_POST[$c];
+            }
+            //  POR LA WEB, EL TOKEN ES OBLIGATORIO. meta_ajustar_trazado() deja
+            //  pasar el token vacio a proposito —los llamadores internos no
+            //  tienen pantalla de la que sacarlo—, pero por aqui entra el
+            //  navegador: sin token, un POST viejo pisaria un cambio nuevo sin
+            //  que nadie se entere.
+            $tk = (string)($_POST['token'] ?? '');
+            if ($tk === '') {
+                echo json_encode(['ok'=>false, 'motivo'=>'sin_token',
+                    'err'=>'Recarga la pantalla y vuelve a intentarlo.']); exit;
+            }
+            $r = meta_ajustar_trazado($pdo, $marca_id, (int)$meta['id'], (int)$usuario['id'],
+                $campos, $tk, (string)($_POST['motivo'] ?? ''),
+                !empty($_POST['plan_nuevo']));
+            //  El token nuevo viaja de vuelta: si el dueño sigue en la pantalla
+            //  y ajusta otra cosa, no le rebota su propio cambio.
+            if (!empty($r['meta'])) $r['token'] = meta_token($r['meta']);
+            unset($r['meta']);
+            echo json_encode($r, JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // (h2) PEDIRLE A LA ESTRATEGA UNA ALTERNATIVA. NO escribe nada: la
+        //      propuesta se enseña y el dueño decide. La escritura es (h3).
+        if ($accion === 'alternativa') {
+            $t = $pdo->prepare("SELECT * FROM crecer_meta_tactica WHERE id=? AND marca_id=?");
+            $t->execute([(int)($_POST['jugada'] ?? 0), $marca_id]);
+            $orig = $t->fetch(PDO::FETCH_ASSOC);
+            if (!$orig) { echo json_encode(['ok'=>false,'err'=>'No encuentro esa jugada.']); exit; }
+            $mot = (string)($_POST['motivo'] ?? '');
+            if (!in_array($mot, META_MOTIVOS_SUST, true)) {
+                echo json_encode(['ok'=>false,'err'=>'Dime primero qué te frena.']); exit;
+            }
+            $r = meta_alternativa_jugada($pdo, $marca_id, $orig, $mot, (string)($_POST['nota'] ?? ''));
+            echo json_encode($r, JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // (h3) SUSTITUIR DE VERDAD. La alternativa llega ya aprobada por el
+        //      dueño; la Estratega ya se llamo en (h2), fuera de transaccion.
+        if ($accion === 'sustituir') {
+            $alt = json_decode((string)($_POST['alt'] ?? ''), true);
+            if (!is_array($alt)) { echo json_encode(['ok'=>false,'err'=>'Se perdió la alternativa. Vuelve a pedirla.']); exit; }
+            $r = meta_sustituir_jugada($pdo, $marca_id, (int)($_POST['jugada'] ?? 0),
+                (int)$usuario['id'], (string)($_POST['motivo'] ?? ''),
+                (string)($_POST['nota'] ?? ''), $alt, (string)($_POST['token'] ?? ''));
+            echo json_encode($r, JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // (i) LAS FECHAS DEL CALENDARIO. Tres respuestas y ninguna toca la
+        //     meta, el plan ni el progreso — esa es la garantia de que son
+        //     sugerencias. Añadir inserta UNA pieza en borrador y nada mas.
+        if (in_array($accion, ['oport_add', 'oport_no', 'oport_luego'], true)) {
+            $org = (string)($_POST['origen'] ?? '');
+            $oid = (int)($_POST['oport'] ?? 0);
+            $ocu = (string)($_POST['fecha'] ?? '');
+            if ($accion === 'oport_add') {
+                $r = efem_anadir($pdo, $marca_id, (int)$usuario['id'], $org, $oid, $ocu);
+            } elseif ($accion === 'oport_no') {
+                $r = efem_descartar($pdo, $marca_id, (int)$usuario['id'], $org, $oid, $ocu,
+                                    (string)($_POST['motivo'] ?? ''));
+            } else {
+                $r = efem_posponer($pdo, $marca_id, (int)$usuario['id'], $org, $oid, $ocu);
+            }
+            echo json_encode($r, JSON_UNESCAPED_UNICODE);
             exit;
         }
 
@@ -206,10 +385,21 @@ $mt_estado = MetaStateComposer::componer($mt_snap);
 // TRES CAPAS, no tres pantallas apiladas:
 //   (por defecto) Meta · Ahora · Camino      — lo que toca hoy
 //   ?vista=plan   plan completo, diagnóstico, comparación e historial
-//   ?vista=wizard el wizard de escoger meta (estado A)
+//   ?vista=wizard      el wizard de escoger meta (estado A)
+//   ?vista=plan-nuevo  pedirle otro plan a la Estratega, para esta misma meta
+//   ?vista=cambiar     cerrar esta meta y estrenar la proxima, de una
 $vista = $_GET['vista'] ?? '';
-if (!in_array($vista, ['plan', 'wizard'], true)) $vista = 'ahora';
+if (!in_array($vista, ['plan', 'wizard', 'plan-nuevo', 'cambiar', 'ajustar', 'sustituir'], true)) $vista = 'ahora';
 if (!$meta && $vista === 'ahora' && !empty($_GET['nueva'])) $vista = 'wizard';
+//  Las dos delicadas piden una meta viva. Sin ella no hay nada que rehacer ni
+//  que cambiar, y mandar a un wizard vacio es como se llegaba antes a que el
+//  negocio se quedara sin norte: se vuelve a lo que toca ahora.
+if (!$meta && in_array($vista, ['plan-nuevo', 'cambiar', 'ajustar', 'sustituir'], true)) $vista = 'ahora';
+//  Y las dos de 7a solo salen si su esquema esta. Sin la migracion no se
+//  degrada la pantalla: la capacidad no existe y punto. Ver la matriz de
+//  compatibilidad en tests/test_meta_compatibilidad.php.
+if ($vista === 'ajustar'   && !meta_ajuste_disponible($pdo))      $vista = 'plan';
+if ($vista === 'sustituir' && !meta_sustitucion_disponible($pdo)) $vista = 'plan';
 
 /** Volver aquí desde donde sea que mande la acción dominante. */
 $mt_volver = MetaRetorno::marcador();
@@ -233,228 +423,394 @@ $mt_unidad = function (string $objetivo): array {
         default:               return ['resultados',   'registrados'];
     }
 };
+
+/** El mes de hoy, en castellano. La cuota se cuenta por mes natural. */
+$mt_mes = function (): string {
+    $m = ['enero','febrero','marzo','abril','mayo','junio','julio',
+          'agosto','septiembre','octubre','noviembre','diciembre'];
+    return $m[(int)date('n') - 1] ?? '';
+};
+
+/** Cuando vuelven las imagenes. La cuota lo trae en dd/mm; si viene vacio
+ *  -sin libro todavia- se calcula el dia 1 del mes que entra.            */
+$mt_reset = function (?array $cuota): string {
+    $r = trim((string)($cuota['reset'] ?? ''));
+    return $r !== '' ? $r : date('d/m', strtotime('first day of next month'));
+};
+
+/**  De donde sale el numero, en cristiano. La cifra NUNCA va sola: si no
+ *   dice de donde sale, el dueño entiende que Crecer cuenta todo lo suyo.  */
+$mt_fuente = function (string $objetivo, string $participio): string {
+    switch ($objetivo) {
+        case 'pedidos': case 'ventas':  return $participio . ' en Crecer';
+        case 'conversaciones':          return $participio . ' por los canales conectados';
+        default:                        return $participio . ' por Instagram y Facebook';
+    }
+};
+
+/**  LA FECHA, EN CRISTIANO. Vive aqui y no en el compositor porque dar
+ *   formato depende del reloj y de la zona, y el compositor tiene que dar
+ *   el mismo resultado en cualquier maquina con el mismo retrato.         */
+$mt_cuando = function (string $fecha): string {
+    $fecha = trim($fecha);
+    if ($fecha === '') return '';
+    $ts = strtotime($fecha);
+    if (!$ts) return '';
+    $dias = ['Sun'=>'domingo','Mon'=>'lunes','Tue'=>'martes','Wed'=>'miércoles',
+             'Thu'=>'jueves','Fri'=>'viernes','Sat'=>'sábado'];
+    $dia  = $dias[date('D', $ts)] ?? date('d/m', $ts);
+    $hora = ltrim(date('g:i', $ts), '0') . ' ' . date('a', $ts);
+    return $dia . ' ' . $hora;
+};
+
+/** El subtitulo del objeto: la red y cuando sale. */
+$mt_sub_obj = function (array $o) use (&$mt_cuando): string {
+    $partes = [];
+    if (trim((string)($o['red'] ?? '')) !== '')   $partes[] = trim((string)$o['red']);
+    $c = $mt_cuando((string)($o['fecha'] ?? ''));
+    if ($c !== '') $partes[] = $c;
+    return implode(' · ', $partes);
+};
+
+/** El icono del objeto, por tipo de pieza. */
+$mt_ico_obj = function (string $tipo): string {
+    switch ($tipo) {
+        case 'reel':     return 'bolt';
+        case 'carrusel': return 'list';
+        case 'historia': return 'camera';
+        default:         return 'image';
+    }
+};
+
+/** El icono de la accion, por lo que la accion hace. */
+$mt_ico_act = function (string $tipo): string {
+    switch ($tipo) {
+        case 'aprobacion': return 'check';
+        case 'material':   return 'upload';
+        case 'decision':   return 'target';
+        case 'informativa': return 'eye';
+        default:           return 'chev-der';
+    }
+};
+
+/**  «COMO VOY» SIN AFIRMAR LO QUE NO SE SABE.
+ *
+ *   Decia «vas en ritmo» y un porcentaje. Con cobertura parcial eso es una
+ *   afirmacion sin respaldo: Crecer cuenta lo que pasa por dentro, no lo que
+ *   el negocio cierra por WhatsApp. Asi que se dice el numero, de cuantos, y
+ *   de donde sale. El ritmo solo se menciona cuando el compositor certifica
+ *   que la cobertura es completa — y esa decision es suya, no de aqui.       */
+$mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fuente): string {
+    $num = fn($v) => rtrim(rtrim(number_format((float)$v, 2), '0'), '.');
+    [$sust, $part] = $uni;
+    $a = $snap['progreso']['actual'];
+    $c = $snap['meta']['cantidad'] ?? null;
+    $frases = [];
+    if ($a !== null && $c !== null) {
+        $frases[] = 'Llevas ' . $num($a) . ' ' . $sust . ' ' . $mt_fuente($obj, $part)
+                  . ', de los ' . $num($c) . ' de tu meta.';
+    } elseif ($a !== null) {
+        $frases[] = 'Llevas ' . $num($a) . ' ' . $sust . ' ' . $mt_fuente($obj, $part) . '.';
+    } else {
+        $frases[] = 'Todavía no tengo señal de esta meta.';
+    }
+    if ($E->puedeAfirmarProgreso() && !empty($snap['progreso']['ritmo_dia'])) {
+        $frases[] = 'Para llegar hacen falta como '
+                  . rtrim(rtrim(number_format((float)$snap['progreso']['ritmo_dia'], 1), '0'), '.')
+                  . ' al día de aquí a la fecha.';
+    } else {
+        $frases[] = $obj === 'pedidos' || $obj === 'ventas'
+            ? 'Solo cuento los que pasan por aquí: lo que cierras por WhatsApp no entra solo — dímelo y lo sumo.'
+            : ($obj === 'conversaciones'
+               ? 'Cuento los mensajes que llegaron por los canales conectados.'
+               : 'Instagram y Facebook reportan con retraso, así que este número va un día por detrás.');
+    }
+    return implode(' ', $frases);
+};
 ?>
 <style>
-  /* ══ LA META ══ el norte del negocio.
-     Desktop: el número grande a la izquierda respirando, las jugadas a la
-     derecha. Móvil: el número y cómo va caben antes del primer scroll. */
-  .mt-h1{font-family:var(--font-display,'Oswald',sans-serif);font-weight:700;font-size:24px;letter-spacing:.4px;color:var(--tinta);margin:0;line-height:1.05}
-  .mt-sub{font-size:13.5px;color:var(--muted);margin:5px 0 0;max-width:620px;line-height:1.5}
+  /* ══ CAPA 2 · EL PLAN COMPLETO ════════════════════════════════════════
+     Mismo sistema que la capa 1 — mismos tokens, mismo radio, misma escala.
+     Lo que cambia es la arquitectura de informacion:
 
-  /* ── El wizard ── */
-  .wz{max-width:860px}
-  .wz-bar{height:5px;border-radius:99px;background:var(--line);overflow:hidden;margin:16px 0 22px}
-  .wz-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--teal,#00A49F),var(--magenta,#EF4375));border-radius:99px;transition:width .35s cubic-bezier(.4,0,.2,1)}
-  .wz-paso{display:none;animation:wzin .28s ease both}
-  .wz-paso.on{display:block}
-  @keyframes wzin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-  .wz-q{font-family:var(--font-display,'Oswald',sans-serif);font-weight:700;font-size:26px;line-height:1.15;color:var(--tinta);margin:0 0 6px;letter-spacing:.3px}
-  .wz-ayuda{font-size:13.5px;color:var(--muted);line-height:1.5;margin:0 0 18px;max-width:560px}
+         resumen honesto  →  Ahora  →  Hecho  →  Despues
+                          →  diagnostico, comparacion, historial, opciones
+                             (todo plegado, y en ese orden)
 
-  /* Tarjetas de objetivo: el deseo grande, la jerga chiquita abajo */
-  .obj-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-  .obj{position:relative;text-align:left;background:var(--card,#fff);border:1.5px solid var(--line);border-radius:16px;padding:16px 16px 14px;cursor:pointer;font-family:inherit;transition:transform .13s,border-color .15s,box-shadow .15s;box-shadow:var(--shadow-sm)}
-  .obj:hover{border-color:var(--teal,#00A49F);transform:translateY(-2px);box-shadow:0 10px 22px -14px rgba(0,0,0,.35)}
-  .obj:active{transform:scale(.985)}
-  .obj.sel{border-color:var(--magenta,#EF4375);box-shadow:0 0 0 3px color-mix(in srgb,var(--magenta,#EF4375) 16%,transparent)}
-  .obj .ic{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:color-mix(in srgb,var(--teal,#00A49F) 12%,#fff);margin-bottom:9px}
-  .obj .ic svg{width:18px;height:18px;color:var(--teal,#00A49F)}
-  .obj b{display:block;font-size:15.5px;color:var(--tinta);line-height:1.25;margin-bottom:5px}
-  .obj p{font-size:12.5px;color:var(--muted);line-height:1.45;margin:0 0 9px}
-  .obj .jerga{display:block;font-size:11px;color:var(--muted);line-height:1.4;padding-top:8px;border-top:1px dashed var(--line);opacity:.85}
-  .obj .jerga b{display:inline;font-size:11px;color:var(--tinta)}
+     Los nombres de clase se conservan a proposito. El guion de esta pantalla
+     engancha por .jg-hacer, .jg-ok2, .hp-ev, #replan y #cerrar; renombrarlos
+     seria mover el riesgo a otro sitio sin ganar nada. Lo que se sustituye
+     son los ESTILOS, que es lo que hacia de esto un reguero.
 
-  /* Cantidad + fecha */
-  .mt-num{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-  .mt-num input{font-family:var(--font-display,'Oswald',sans-serif);font-size:38px;font-weight:700;width:190px;border:2px solid var(--line);border-radius:16px;padding:10px 16px;color:var(--tinta);background:var(--card,#fff);text-align:center}
-  .mt-num input:focus{outline:0;border-color:var(--magenta,#EF4375)}
-  .mt-unidad{font-size:15px;font-weight:700;color:var(--muted)}
-  .mt-nose{border:1.5px dashed var(--line);background:transparent;color:var(--tinta);font-family:inherit;font-weight:700;font-size:13px;padding:11px 15px;border-radius:13px;cursor:pointer}
-  .mt-nose:hover{border-color:var(--teal,#00A49F);color:var(--teal,#00A49F)}
-  .mt-tip{margin-top:14px;background:color-mix(in srgb,var(--teal,#00A49F) 9%,#fff);border:1px solid color-mix(in srgb,var(--teal,#00A49F) 28%,#fff);color:#0a6a5f;border-radius:13px;padding:11px 14px;font-size:13px;line-height:1.5;font-weight:600;display:none}
-  .mt-tip.on{display:block}
+     Y nada de contenido baja de 14px. */
+  .plan{
+    --tm-rosa:#EF4375; --tm-rosa-tx:#C81E52; --tm-rosa-bt:#D42A5C; --tm-rosa-bt-h:#B81F4C;
+    --tm-rosa-piel:#FDF0F4;
+    --tm-teal:#00A49F; --tm-teal-tx:#00726F; --tm-teal-piel:#EDF7F6;
+    --tm-aviso:#8A5310; --tm-aviso-piel:#FBF3E7;
+    --tm-r:12px; --tm-r-bt:10px;
+    max-width:680px;margin:0 auto;padding-bottom:var(--ah-zona,20px);
+  }
+  .plan h1{font-family:var(--font-display,'Poppins',sans-serif);font-weight:700;
+    font-size:26px;line-height:1.2;letter-spacing:-.022em;color:var(--tinta);margin:0}
+  .plan h2{font-family:var(--font-display,'Poppins',sans-serif);font-weight:700;
+    font-size:17px;line-height:1.3;color:var(--tinta);margin:0}
 
-  .chips{display:flex;gap:9px;flex-wrap:wrap;margin-top:6px}
-  .chip{border:1.5px solid var(--line);background:var(--card,#fff);color:var(--tinta);font-family:inherit;font-weight:700;font-size:13.5px;padding:11px 16px;border-radius:99px;cursor:pointer;transition:transform .12s,border-color .15s}
-  .chip:hover{border-color:var(--teal,#00A49F)}
-  .chip:active{transform:scale(.96)}
-  .chip.sel{border-color:var(--magenta,#EF4375);background:color-mix(in srgb,var(--magenta,#EF4375) 8%,#fff);color:var(--magenta,#EF4375)}
-  .chip small{display:block;font-weight:600;font-size:11px;color:var(--muted);margin-top:1px}
-  .chip.sel small{color:var(--magenta,#EF4375);opacity:.8}
+  /* — la salida, siempre visible y siempre primero — */
+  .plan-volver{display:inline-flex;align-items:center;gap:8px;min-height:44px;
+    font-size:16px;font-weight:600;color:var(--tinta);text-decoration:none;margin-bottom:6px}
+  .plan-volver .ic{width:17px;height:17px;stroke-width:2;transform:rotate(180deg)}
+  .plan-volver:hover{color:var(--tm-rosa-tx)}
+  .plan-volver:focus-visible{outline:2px solid var(--tinta);outline-offset:2px;border-radius:8px}
 
-  .mt-libre{width:100%;font-family:inherit;font-size:15px;border:1.5px solid var(--line);border-radius:14px;padding:13px 15px;background:var(--card,#fff);color:var(--tinta);resize:vertical;min-height:96px;line-height:1.5}
-  .mt-libre:focus{outline:0;border-color:var(--magenta,#EF4375)}
+  /* — RESUMEN HONESTO — el mismo contrato de cobertura que la capa 1 — */
+  .plan-res{border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:22px}
+  .plan-res .fila{display:flex;align-items:center;gap:7px;margin-top:12px}
+  .plan-res .fila .ic{width:15px;height:15px;flex:none;color:var(--muted);stroke-width:1.9}
+  .plan-res .obj{font-size:14px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .plan-res .dias{margin-left:auto;font-size:14px;color:var(--muted)}
+  .plan-res .cifra{display:flex;align-items:baseline;gap:6px;margin-top:7px;flex-wrap:wrap}
+  .plan-res .cifra b{font-size:26px;font-weight:700;color:var(--tinta);line-height:1.1;
+    font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .plan-res .cifra .et{font-size:14px;color:var(--ink,#4A434F);font-weight:500}
+  .plan-res .cifra .de{font-size:14px;color:var(--muted)}
+  .plan-res .nomed{font-size:14px;line-height:1.5;color:var(--muted);margin:10px 0 0}
+  .plan-res .nomed b{color:var(--tinta)}
+  /*  Barra, porcentaje y ritmo SOLO cuando el compositor certifica que se
+      puede afirmar. Es el MISMO puedeAfirmarProgreso() de la capa 1: no hay
+      una segunda interpretacion, hay un solo contrato. */
+  .plan-barra{display:block;height:4px;border-radius:99px;background:var(--line);
+    margin-top:10px;overflow:hidden}
+  .plan-barra i{display:block;height:100%;border-radius:99px;background:var(--tm-teal)}
+  .plan-ritmo{font-size:14px;line-height:1.5;color:var(--muted);margin:10px 0 0}
+  .plan-ritmo b{color:var(--tinta)}
 
-  .wz-nav{display:flex;gap:10px;align-items:center;margin-top:24px;flex-wrap:wrap}
-  .btn-p{border:0;cursor:pointer;background:linear-gradient(135deg,var(--coral,#FF6B3D),var(--magenta,#EF4375));color:#fff;font-weight:800;font-size:15px;padding:14px 24px;border-radius:14px;font-family:inherit;display:inline-flex;align-items:center;gap:8px;transition:transform .12s}
-  .btn-p:active{transform:scale(.97)}
-  .btn-p:disabled{opacity:.5;cursor:default}
-  .btn-s{border:1.5px solid var(--line);cursor:pointer;background:var(--card,#fff);color:var(--muted);font-weight:700;font-size:14px;padding:13px 18px;border-radius:14px;font-family:inherit}
-  .btn-s:hover{color:var(--tinta);border-color:var(--tinta)}
+  /* — los tres grupos — */
+  .plan-grupo{margin-top:22px}
+  .plan-gt{display:flex;align-items:center;gap:9px;margin-bottom:11px}
+  .plan-gt span{font-size:14px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--muted)}
+  .plan-gt u{flex:1;height:1px;background:var(--line);display:block}
+  .plan-gt .n{font-size:14px;color:var(--muted);font-weight:500;letter-spacing:0;text-transform:none}
 
-  /* ── La meta viva ── */
-  .mv{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:22px;align-items:start}
-  .card{background:var(--card,#fff);border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:var(--shadow-sm)}
-  .mv-num{font-family:var(--font-display,'Oswald',sans-serif);font-weight:700;font-size:54px;line-height:.95;color:var(--tinta);letter-spacing:-.5px}
-  .mv-de{font-size:14px;color:var(--muted);font-weight:600;margin-top:4px}
-  .mv-barra{height:11px;border-radius:99px;background:var(--crema-2,#f2efe9);overflow:hidden;margin:16px 0 8px;border:1px solid var(--line)}
-  .mv-barra i{display:block;height:100%;background:linear-gradient(90deg,var(--teal,#00A49F),var(--magenta,#EF4375));border-radius:99px;transition:width .6s cubic-bezier(.4,0,.2,1)}
-  .mv-pie{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);font-weight:600}
-  .mv-est{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:800;padding:6px 11px;border-radius:99px;margin-top:14px}
-  .mv-est.bien{background:color-mix(in srgb,var(--teal,#00A49F) 14%,#fff);color:#0a6a5f}
-  .mv-est.mal{background:#fdeeee;color:#b4232b}
-  .mv-est svg{width:13px;height:13px}
-  .mv-nomed{background:#fff8e6;border:1px solid #f2dfae;color:#7a5b12;border-radius:13px;padding:12px 14px;font-size:12.5px;line-height:1.5;margin-top:14px}
+  /* — una jugada — */
+  .jg{border:1px solid var(--line);border-radius:var(--tm-r);background:var(--card,#fff);
+    margin-bottom:10px;overflow:hidden}
+  .jg[open]{border-color:var(--raya-firme,#D8D3CC)}
+  .jg.turno{border-color:var(--tm-rosa);box-shadow:0 0 0 1px var(--tm-rosa)}
+  .jg.hecha{background:var(--crema,#FAF7F4)}
+  .jg-sum{list-style:none;display:flex;align-items:flex-start;gap:11px;
+    min-height:56px;padding:13px 15px;cursor:pointer}
+  .jg-sum::-webkit-details-marker{display:none}
+  .jg-sum:focus-visible{outline:2px solid var(--tinta);outline-offset:-2px}
+  .jg-tipo{display:none}                      /* el tipo ya lo dice el cuerpo */
+  .jg-t{flex:1;min-width:0;font-size:16px;font-weight:600;line-height:1.35;color:var(--tinta)}
+  .jg.hecha .jg-t{color:var(--muted)}
+  .jg-mini{font-size:14px;color:var(--muted);white-space:nowrap;padding-top:1px}
+  .jg-ahora{display:inline-flex;align-items:center;gap:7px;font-size:14px;font-weight:600;
+    color:var(--tm-rosa-tx);background:var(--tm-rosa-piel);border-radius:99px;
+    padding:5px 12px;margin:0 15px 12px}
+  .jg > *:not(.jg-sum):not(.jg-ahora){margin-left:15px;margin-right:15px}
+  .jg > *:last-child{margin-bottom:15px}
+  .jg-q{font-size:16px;line-height:1.5;color:var(--ink,#4A434F);margin:0 0 10px}
+  .jg-p, .jg-cta{font-size:14px;line-height:1.5;color:var(--muted);margin:0 0 10px}
+  .jg-p b, .jg-cta b{color:var(--tinta)}
 
-  .diag{background:linear-gradient(135deg,color-mix(in srgb,var(--teal,#00A49F) 10%,#fff),var(--card,#fff));border:1px solid color-mix(in srgb,var(--teal,#00A49F) 25%,#fff);border-radius:16px;padding:17px 18px;margin-bottom:16px}
-  .diag .qui{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:800;color:var(--teal,#00A49F);letter-spacing:.4px;text-transform:uppercase;margin-bottom:7px}
-  .diag .qui svg{width:15px;height:15px}
-  .diag p{margin:0;font-size:14.5px;line-height:1.6;color:var(--tinta)}
-  .vered{display:inline-block;font-size:11.5px;font-weight:800;padding:4px 10px;border-radius:99px;margin-top:11px}
-  .vered.alcanzable{background:#e6f7f0;color:#0a6a4a}
-  .vered.ambiciosa{background:#fff4e0;color:#8a5a10}
-  .vered.fuera_de_alcance{background:#fdeeee;color:#b4232b}
-
-  .jug{display:flex;flex-direction:column;gap:11px}
-  .jg{background:var(--card,#fff);border:1px solid var(--line);border-radius:15px;padding:0;box-shadow:var(--shadow-sm);transition:border-color .15s}
-  .jg:hover{border-color:var(--teal,#00A49F)}
-  .jg.hecha{opacity:.62}
-  .jg.hecha .jg-t{text-decoration:line-through}
-  /* Plegadas por defecto: la de turno abre sola. Seis jugadas abiertas en un
-     teléfono eran 8,000px sin jerarquía — no se sabía por dónde empezar. */
-  /* Dos líneas, siempre: arriba el tipo y el estado, abajo el título a ancho
-     completo. En una sola fila, el chip y el estado ahogaban el título y en
-     360px caía en cuatro líneas de dos palabras. */
-  .jg > summary{list-style:none;cursor:pointer;padding:13px 16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-  .jg > summary::-webkit-details-marker{display:none}
-  .jg > summary:hover{background:var(--crema-2,#faf8f5);border-radius:14px}
-  .jg[open] > summary{border-bottom:1px dashed var(--line);border-radius:14px 14px 0 0}
-  .jg > summary .jg-tipo{order:1}
-  .jg-mini{order:2;margin-left:auto;font-size:11.5px;font-weight:800;color:var(--muted);white-space:nowrap}
-  .jg > summary .jg-t{order:3;flex:0 0 100%;margin-top:3px;font-size:15px;line-height:1.3}
-  .jg.turno{border-color:var(--magenta,#EF4375);box-shadow:0 0 0 3px color-mix(in srgb,var(--magenta,#EF4375) 12%,transparent)}
-  .jg-ahora{background:var(--magenta,#EF4375);color:#fff;font-size:10.5px;font-weight:800;letter-spacing:.5px;
-    text-transform:uppercase;padding:5px 16px}
-  /* Todo lo que va dentro del pliegue respira igual que antes.
-     OJO: los hijos llevan margen lateral, así que los que iban a 100% de ancho
-     sumaban 32px de más y SE SALÍAN del card por la derecha (el botón aparecía
-     cortado). Con width:auto ocupan lo que queda, que es lo correcto. */
-  .jg > *:not(summary):not(.jg-ahora){margin-left:16px;margin-right:16px}
-  .jg > .jg-hacer, .jg > .jg-ver, .jg > .jg-ok2{width:calc(100% - 32px)}
-  .jg > .jg-meta:last-of-type,.jg > .jg-live{margin-bottom:14px}
-  .jg-top{display:flex;align-items:flex-start;gap:11px}
-  .jg-tipo{flex:none;font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:5px 9px;border-radius:8px;background:var(--crema-2,#f2efe9);color:var(--muted)}
-  .jg-tipo.pauta{background:#fff2e0;color:#a05a10}
-  .jg-tipo.contenido{background:color-mix(in srgb,var(--magenta,#EF4375) 11%,#fff);color:var(--magenta,#EF4375)}
-  .jg-tipo.oferta{background:#e9f6ee;color:#12734a}
-  .jg-t{font-size:15px;font-weight:800;color:var(--tinta);line-height:1.3;flex:1}
-  .jg-q{font-size:13.5px;color:var(--tinta);line-height:1.55;margin:9px 0 0}
-  .jg-p{font-size:12.5px;color:var(--muted);line-height:1.5;margin:7px 0 0;font-style:italic}
-  .jg-meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:11px;padding-top:11px;border-top:1px dashed var(--line)}
-  .jg-tag{font-size:11.5px;font-weight:700;color:var(--muted);background:var(--crema-2,#f2efe9);padding:5px 9px;border-radius:8px;display:inline-flex;align-items:center;gap:5px}
-  .jg-tag svg{width:12px;height:12px}
-  .jg-tag.corillo{background:color-mix(in srgb,var(--teal,#00A49F) 12%,#fff);color:#0a6a5f}
-  .jg-tag.dueno{background:#fff2e0;color:#a05a10}
-  .jg-cta{font-size:12.5px;color:var(--tinta);background:color-mix(in srgb,var(--magenta,#EF4375) 7%,#fff);border-left:3px solid var(--magenta,#EF4375);padding:8px 11px;border-radius:0 9px 9px 0;margin-top:10px;line-height:1.45}
-  .jg-ok{margin-left:auto;border:1.5px solid var(--line);background:transparent;color:var(--muted);font-family:inherit;font-weight:700;font-size:12px;padding:7px 12px;border-radius:9px;cursor:pointer;flex:none}
-  .jg-ok:hover{border-color:var(--teal,#00A49F);color:var(--teal,#00A49F)}
-  .jg.regla{background:var(--crema-2,#faf8f5);border-style:dashed}
-  .jg-tag.regla{background:#eef2ff;color:#4338ca}
-
-  /* El TRABAJO de la jugada: un punto por pieza. Vacío = por hacer,
-     relleno claro = lista esperando OK, relleno fuerte = publicada. */
-  .jg-trabajo{display:flex;align-items:center;gap:10px;margin-top:11px;flex-wrap:wrap}
+  /* — el trabajo real de la jugada — */
+  .jg-trabajo{display:flex;align-items:center;gap:11px;margin:0 0 12px;flex-wrap:wrap}
   .jg-puntos{display:flex;gap:5px}
-  .jg-puntos i{width:11px;height:11px;border-radius:50%;border:1.5px solid var(--line);background:transparent;display:block;transition:background .3s}
-  .jg-puntos i.lista{background:color-mix(in srgb,var(--teal,#00A49F) 35%,#fff);border-color:color-mix(in srgb,var(--teal,#00A49F) 45%,#fff)}
-  .jg-puntos i.pub{background:var(--teal,#00A49F);border-color:var(--teal,#00A49F)}
-  .jg-est{font-size:12px;color:var(--muted);font-weight:700}
+  .jg-puntos i{width:9px;height:9px;border-radius:50%;background:var(--line);display:block}
+  .jg-puntos i.lista{background:var(--tm-teal)}
+  .jg-puntos i.pub{background:var(--tm-teal-tx)}
+  .jg-est{font-size:14px;color:var(--muted)}
 
-  /* La acción del card — nunca decorativo */
-  .jg-hacer{width:100%;margin-top:12px;border:0;cursor:pointer;background:linear-gradient(135deg,var(--coral,#FF6B3D),var(--magenta,#EF4375));color:#fff;font-family:inherit;font-weight:800;font-size:14px;padding:12px 16px;border-radius:12px;display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .12s}
-  .jg-hacer:active{transform:scale(.98)}
-  .jg-hacer:disabled{opacity:.6;cursor:default}
-  .jg-hacer svg{width:16px;height:16px}
-  .jg-hacer.sec{background:transparent;border:1.5px solid var(--line);color:var(--muted);font-size:13px;margin-top:8px}
-  .jg-hacer.sec:hover{border-color:var(--magenta,#EF4375);color:var(--magenta,#EF4375)}
-  .jg-ver{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:12px;border:1.5px solid var(--line);background:var(--card,#fff);color:var(--tinta);text-decoration:none;font-weight:800;font-size:13.5px;padding:11px 16px;border-radius:12px}
-  .jg-ver:hover{border-color:var(--teal,#00A49F);color:var(--teal,#00A49F)}
-  .jg-ver svg{width:15px;height:15px}
-  .jg-ok2{width:100%;margin-top:12px;border:1.5px solid var(--teal,#00A49F);background:transparent;color:var(--teal,#00A49F);font-family:inherit;font-weight:800;font-size:13.5px;padding:11px 16px;border-radius:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
-  .jg-ok2:hover{background:color-mix(in srgb,var(--teal,#00A49F) 8%,#fff)}
-  .jg-ok2 svg{width:15px;height:15px}
-  .jg-live{font-size:12.5px;line-height:1.5;color:var(--muted);margin-top:9px;display:none}
+  /* — las puertas: cada pieza a SU pantalla — */
+  .jg-puertas{display:flex;flex-direction:column;gap:8px;margin:0 0 12px}
+  .pu{display:flex;align-items:center;gap:11px;min-height:56px;padding:9px 12px;
+    border:1px solid var(--line);border-radius:var(--tm-r-bt);text-decoration:none;
+    background:var(--card,#fff)}
+  .pu:hover{border-color:var(--tm-rosa);background:var(--crema,#FAF7F4)}
+  .pu:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
+  .pu.ok{background:var(--tm-teal-piel);border-color:transparent}
+  .pu-n{flex:none;min-width:44px;height:44px;border-radius:9px;display:flex;align-items:center;
+    justify-content:center;background:var(--crema,#FAF7F4);font-size:14px;font-weight:600;
+    color:var(--muted)}
+  .pu.ok .pu-n{background:transparent;color:var(--tm-teal-tx)}
+  .pu-n .ic{width:20px;height:20px;stroke-width:2}
+  .pu-t{flex:1;min-width:0}
+  .pu-t b{display:block;font-size:15px;font-weight:600;color:var(--tinta);line-height:1.3}
+  .pu-t small{display:block;font-size:14px;color:var(--muted);line-height:1.4;margin-top:2px}
+  .pu-go{flex:none;color:var(--muted)}
+  .pu-go .ic{width:16px;height:16px;stroke-width:2}
+
+  /* — la salida de la jugada imposible, y la marca de la que ya se fue — */
+  .jg-nopuedo{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;
+    border:1px solid var(--line);border-radius:var(--tm-r-bt);background:transparent;
+    font-size:15px;font-weight:600;color:var(--muted);text-decoration:none;margin:0 0 12px}
+  .jg-nopuedo:hover{border-color:var(--tm-aviso);color:var(--tm-aviso);background:var(--tm-aviso-piel)}
+  .jg-nopuedo:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
+  .jg-nopuedo .ic{width:16px;height:16px;stroke-width:2}
+  .jg-sust{display:flex;align-items:center;gap:7px;font-size:14px;font-weight:600;
+    color:var(--tm-aviso);background:var(--tm-aviso-piel);border-radius:99px;
+    padding:5px 12px;margin:0 15px 12px}
+  .jg-sust .ic{width:15px;height:15px;flex:none;stroke-width:2}
+  .jg-sust span{min-width:0}
+
+  .jg-video{font-size:14px;line-height:1.5;color:var(--ink,#4A434F);background:var(--tm-aviso-piel);
+    border-radius:var(--tm-r-bt);padding:12px 14px;margin:0 0 12px}
+  .jg-video b{display:block;color:var(--tm-aviso);font-size:15px;margin-bottom:3px}
+  .jg-video a{display:inline-flex;align-items:center;gap:7px;min-height:44px;margin-top:6px;
+    font-size:15px;font-weight:600;color:var(--tm-aviso);text-decoration:none}
+  .jg-video a .ic{width:17px;height:17px;stroke-width:2}
+
+  /* — quien hace que, en una fila de etiquetas — */
+  .jg-meta{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 12px}
+  .jg-tag{display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--muted);
+    background:var(--crema,#FAF7F4);border-radius:99px;padding:5px 11px}
+  .jg-tag .ic{width:15px;height:15px;stroke-width:1.9}
+  .jg-tag.corillo{color:var(--tm-teal-tx);background:var(--tm-teal-piel)}
+  .jg-tag.dueno{color:var(--tm-rosa-tx);background:var(--tm-rosa-piel)}
+  .jg-tag.regla{color:var(--tm-aviso);background:var(--tm-aviso-piel)}
+
+  /* — la accion de la jugada — */
+  .jg-hacer, .jg-ok2, .jg-ver{display:flex;align-items:center;justify-content:center;gap:9px;
+    width:auto;min-height:52px;border-radius:var(--tm-r-bt);font-family:inherit;font-size:16px;
+    font-weight:700;cursor:pointer;text-decoration:none;border:0;
+    transition:background .14s ease, transform .1s ease}
+  .jg-hacer, .jg-ok2{background:var(--tm-rosa-bt);color:#fff}
+  .jg-hacer:hover, .jg-ok2:hover{background:var(--tm-rosa-bt-h)}
+  .jg-hacer:active, .jg-ok2:active, .jg-ver:active{transform:translateY(1px)}
+  .jg-hacer:disabled{opacity:.55;cursor:default;transform:none}
+  .jg-hacer.sec{background:transparent;color:var(--tinta);border:1px solid var(--line)}
+  .jg-hacer.sec:hover{background:var(--crema,#FAF7F4)}
+  .jg-ver{background:transparent;color:var(--tinta);border:1px solid var(--line)}
+  .jg-ver:hover{background:var(--crema,#FAF7F4)}
+  .jg-hacer:focus-visible, .jg-ok2:focus-visible, .jg-ver:focus-visible{
+    outline:2px solid var(--tinta);outline-offset:2px}
+  .jg-hacer .ic, .jg-ok2 .ic, .jg-ver .ic{width:18px;height:18px;stroke-width:2}
+  .jg-live{font-size:14px;line-height:1.5;color:var(--muted);margin-top:9px;display:none}
   .jg-live.on{display:block}
-  .jg-live b{color:var(--tinta)}
-  .jg-live .pts span{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--magenta,#EF4375);margin:0 1px;animation:jgb 1s infinite}
-  .jg-live .pts span:nth-child(2){animation-delay:.15s}.jg-live .pts span:nth-child(3){animation-delay:.3s}
-  @keyframes jgb{0%,60%,100%{opacity:.3}30%{opacity:1}}
-  .jg-live.ok{color:#0a6a5f;background:color-mix(in srgb,var(--teal,#00A49F) 10%,#fff);border:1px solid color-mix(in srgb,var(--teal,#00A49F) 28%,#fff);border-radius:11px;padding:10px 12px}
 
-  /* Lo que solo el dueño puede dar: sus videos */
-  .jg-video{margin-top:11px;background:#fff8e6;border:1px solid #f2dfae;border-radius:12px;padding:12px 14px;font-size:12.5px;line-height:1.55;color:#7a5b12}
-  .jg-video b{display:block;color:#5c4409;font-size:13.5px;margin-bottom:3px}
-  .jg-video a{display:inline-flex;align-items:center;gap:7px;margin-top:10px;background:#5c4409;color:#fff;text-decoration:none;font-weight:800;font-size:13px;padding:9px 14px;border-radius:10px}
-  .jg-video a svg{width:14px;height:14px}
+  /* — las capas plegadas: diagnostico, comparacion, historial, opciones — */
+  .plan-capas{margin-top:26px;border-top:1px solid var(--line)}
+  .plan-ac{border-bottom:1px solid var(--line)}
+  .plan-ac > summary{list-style:none;display:flex;align-items:center;gap:10px;min-height:56px;
+    padding:0 2px;cursor:pointer;font-size:16px;font-weight:600;color:var(--tinta)}
+  .plan-ac > summary::-webkit-details-marker{display:none}
+  .plan-ac > summary:hover{color:var(--tm-rosa-tx)}
+  .plan-ac > summary:focus-visible{outline:2px solid var(--tinta);outline-offset:2px;border-radius:8px}
+  .plan-ac .cta{margin-left:auto;font-size:14px;color:var(--muted);font-weight:500}
+  .plan-ac .chev{width:16px;height:16px;flex:none;color:var(--muted);stroke-width:2;
+    transition:transform .18s ease}
+  .plan-ac[open] > summary .chev{transform:rotate(180deg)}
+  .plan-ac .dentro{padding:2px 2px 20px;animation:tmAbre .18s ease}
+  .plan-ac p{font-size:15px;line-height:1.55;color:var(--ink,#4A434F);margin:0 0 10px}
+  .plan-ac p:last-child{margin-bottom:0}
 
-  /* ── LAS PUERTAS DE LA JUGADA ──────────────────────────────────────────
-     Móvil: una fila por pieza, gorda, de borde a borde, pulgar abajo.
-     Desktop: las mismas filas pero con aire y el estado a la derecha, para
-     leer la secuencia completa de un vistazo. Misma pieza, dos densidades. */
-  .jg-puertas{margin-top:12px;display:flex;flex-direction:column;gap:8px}
-  .jg-puertas .pu{display:flex;align-items:center;gap:12px;text-decoration:none;
-    background:#fff;border:1.5px solid #e9e4dc;border-radius:14px;padding:13px 14px;color:inherit;
-    transition:transform .16s cubic-bezier(.22,1,.36,1),box-shadow .16s,border-color .16s}
-  .jg-puertas .pu:active{transform:scale(.985)}
-  .jg-puertas .pu-n{flex:none;min-width:44px;height:30px;display:inline-flex;align-items:center;justify-content:center;
-    background:#f4f1ec;color:#6b6560;border-radius:8px;font-size:11.5px;font-weight:800;letter-spacing:.02em}
-  .jg-puertas .pu-n svg{width:15px;height:15px}
-  .jg-puertas .pu-t{flex:1;min-width:0}
-  .jg-puertas .pu-t b{display:block;font-size:14.5px;line-height:1.25}
-  .jg-puertas .pu-t small{display:block;color:#6b6560;font-size:12px;line-height:1.45;margin-top:2px}
-  .jg-puertas .pu-go{flex:none;color:#b9b2a9}
-  .jg-puertas .pu-go svg{width:16px;height:16px;display:block}
-  /* La activa es la que manda: la única con color. */
-  .jg-puertas .pu.on{border-color:var(--magenta,#EF4375);box-shadow:0 10px 24px -18px rgba(239,67,117,.75)}
-  .jg-puertas .pu.on .pu-n{background:linear-gradient(135deg,#FF6B3D,#EF4375);color:#fff}
-  .jg-puertas .pu.on .pu-go{color:var(--magenta,#EF4375)}
-  .jg-puertas .pu.on:hover{transform:translateY(-1px);box-shadow:0 14px 30px -18px rgba(239,67,117,.85)}
-  /* Las que esperan turno no gritan. */
-  .jg-puertas .pu.esp{opacity:.62}
-  .jg-puertas .pu.ok{background:#f7fbf8;border-color:#d8ece0}
-  .jg-puertas .pu.ok .pu-n{background:#e6f7f0;color:#0a6a4a}
-  @media (min-width:820px){
-    .jg-puertas{gap:10px}
-    .jg-puertas .pu{padding:15px 18px;gap:14px}
-    .jg-puertas .pu-n{min-width:58px;height:34px;font-size:12px}
-    .jg-puertas .pu-t b{font-size:15.5px}
-    .jg-puertas .pu-t small{font-size:12.5px}
+  .diag .qui{display:inline-flex;align-items:center;gap:7px;font-size:14px;font-weight:600;
+    color:var(--tm-teal-tx);margin-bottom:8px}
+  .diag .qui .ic{width:16px;height:16px;stroke-width:1.9}
+  .vered{display:inline-flex;align-items:center;font-size:14px;font-weight:600;
+    border-radius:99px;padding:5px 12px;margin-top:8px;
+    color:var(--tm-teal-tx);background:var(--tm-teal-piel)}
+  .vered.ambiciosa{color:var(--tm-aviso);background:var(--tm-aviso-piel)}
+  .vered.dificil{color:var(--tm-rosa-tx);background:var(--tm-rosa-piel)}
+
+  /* — comparacion — */
+  .cmp{display:flex;flex-direction:column;gap:10px}
+  .cmp-p{border:1px solid var(--line);border-radius:var(--tm-r);padding:14px 15px}
+  .cmp-p.on{border-color:var(--tm-rosa)}
+  .cmp-h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .cmp-h b{font-size:16px;color:var(--tinta)}
+  .cmp-est{font-size:14px;font-weight:600;color:var(--muted);background:var(--crema,#FAF7F4);
+    border-radius:99px;padding:4px 10px}
+  .cmp-p.on .cmp-est{background:var(--tm-rosa-piel);color:var(--tm-rosa-tx)}
+  .cmp-d{font-size:14px;color:var(--muted);margin-left:auto}
+  .cmp-corto{margin:0 0 10px;font-size:14px;line-height:1.5;color:var(--tm-aviso);
+    background:var(--tm-aviso-piel);border-radius:9px;padding:9px 11px}
+  .cmp-nums{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}
+  .cmp-nums>div{background:var(--crema,#FAF7F4);border-radius:9px;padding:10px 11px;position:relative}
+  .cmp-nums b{display:block;font-size:19px;line-height:1.15;color:var(--tinta);
+    font-variant-numeric:tabular-nums;font-weight:700}
+  .cmp-nums span{display:block;font-size:14px;color:var(--muted);margin-top:2px}
+  .cmp-nums i{position:absolute;top:9px;right:10px;font-style:normal;font-size:14px;font-weight:600;
+    padding:2px 7px;border-radius:7px}
+  .cmp-nums i.up{background:var(--tm-teal-piel);color:var(--tm-teal-tx)}
+  .cmp-nums i.dn{background:var(--tm-rosa-piel);color:var(--tm-rosa-tx)}
+  .cmp-ritmo{margin:10px 0 0;font-size:14px;color:var(--ink,#4A434F);line-height:1.5}
+  .cmp-lec{margin:9px 0 0;font-size:14px;line-height:1.5;color:var(--ink,#4A434F);
+    border-left:2px solid var(--tm-teal);padding-left:11px}
+  .cmp-nota{font-size:14px;color:var(--muted);line-height:1.5;margin:10px 0 0}
+
+  /* — historial — */
+  .hplan{border:1px solid var(--line);border-radius:var(--tm-r);margin-bottom:9px;overflow:hidden}
+  .hp-s{list-style:none;display:flex;align-items:center;gap:10px;min-height:56px;
+    padding:12px 15px;cursor:pointer}
+  .hp-s::-webkit-details-marker{display:none}
+  .hp-v{font-size:15px;font-weight:600;color:var(--tinta)}
+  .hp-f, .hp-m, .hp-est{font-size:14px;color:var(--muted)}
+  .hp-est{margin-left:auto}
+  .hplan > *:not(.hp-s){margin-left:15px;margin-right:15px}
+  .hplan > *:last-child{margin-bottom:15px}
+  .hp-t{font-size:15px;font-weight:600;color:var(--tinta);margin:0 0 6px}
+  .hp-p, .hp-lec, .hp-movio, .hp-vale, .hp-ev{font-size:14px;line-height:1.5;color:var(--ink,#4A434F)}
+  .hp-lec{border-left:2px solid var(--tm-teal);padding-left:11px;margin:8px 0 0}
+  .hp-ev{display:inline-flex;align-items:center;justify-content:center;min-height:44px;
+    border:1px solid var(--line);background:transparent;color:var(--tinta);font-family:inherit;
+    font-weight:600;padding:0 15px;border-radius:var(--tm-r-bt);cursor:pointer;margin-top:10px}
+  .hp-ev:hover{border-color:var(--tm-rosa);color:var(--tm-rosa-tx)}
+  .hp-ev:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
+
+  /* — opciones delicadas, al final y plegadas — */
+  .plan-op{display:flex;flex-direction:column;gap:9px}
+  .plan-op a{display:flex;text-decoration:none;align-items:center;justify-content:center;gap:9px;min-height:52px;
+    border:1px solid var(--line);border-radius:var(--tm-r-bt);background:transparent;
+    color:var(--tinta);font-family:inherit;font-size:16px;font-weight:600;cursor:pointer}
+  .plan-op a:hover{border-color:var(--tm-rosa);color:var(--tm-rosa-tx)}
+  .plan-op a:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
+  .plan-op a .ic{width:18px;height:18px;stroke-width:2}
+  .plan-op p{font-size:14px;line-height:1.5;color:var(--muted);margin:2px 0 0}
+
+  .plan-obs{font-size:15px;line-height:1.55;color:var(--tm-teal-tx);background:var(--tm-teal-piel);
+    border-radius:var(--tm-r);padding:13px 15px;margin:0 0 14px}
+  .plan-obs b{color:var(--tm-teal-tx)}
+
+  @media (min-width:1000px){
+    .plan{max-width:760px}
+    .plan h1{font-size:34px}
+    .cmp{flex-direction:row;align-items:flex-start}
+    .cmp-p{flex:1;min-width:0}
   }
 
-  /* Encabezado del plan vigente + cumplimiento */
-  .plan-cab{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin:0 0 12px;flex-wrap:wrap}
-  .plan-cab h2{font-family:var(--font-display,'Oswald',sans-serif);font-size:17px;letter-spacing:.4px;color:var(--tinta);margin:0}
-  .plan-v{font-size:12px;color:var(--muted);font-weight:600}
-  .plan-prog{text-align:right;font-size:12.5px;color:var(--muted);font-weight:600;min-width:132px}
-  .plan-prog b{color:var(--tinta)}
-  .plan-barra{height:6px;border-radius:99px;background:var(--crema-2,#f2efe9);border:1px solid var(--line);overflow:hidden;margin-top:5px}
-  .plan-barra i{display:block;height:100%;background:linear-gradient(90deg,var(--teal,#00A49F),var(--magenta,#EF4375));border-radius:99px;transition:width .5s}
-  .plan-obs{background:color-mix(in srgb,var(--teal,#00A49F) 10%,#fff);border:1px solid color-mix(in srgb,var(--teal,#00A49F) 30%,#fff);color:#0a6a5f;border-radius:13px;padding:12px 14px;font-size:13px;line-height:1.55;margin:0 0 14px}
+  /* ══ CAPA 1 · TU META ═════════════════════════════════════════════════
+     El sistema de la lámina aprobada. Tres reglas lo gobiernan:
 
-  /* ══ CAPA 1 · META · AHORA · CAMINO ═══════════════════════════════════
-     Móvil 360 primero: las tres zonas caben antes del primer scroll. Nada de
-     texto por debajo de 14px, controles de 48px, y UNA sola acción primaria.
-     Desktop no añade decisiones: añade aire. */
-  /*  ZONA SEGURA, no relleno. La barra de abajo YA tiene su hueco reservado
-      (.content{padding-bottom:104px} en encuentralo-ui.css): volver a pedirlo
-      aqui era contarlo dos veces. Lo que de verdad tapaba el ultimo renglon no
-      era la barra sino Ayuda, que flota POR ENCIMA de ese hueco -y para eso
-      esta la regla de abajo, no 300px de nada-.
-      Lo que se reserva aqui es EL FALTANTE, que el guion del final calcula y
-      escribe en --ah-zona: cuanto le falta a la cola de la pantalla para
-      quedar por encima de lo fijo, contando lo que el contenedor ya reserva.
-      Casi siempre sale 0. Sin guion, 20px de margen y nada roto. */
-  .ah{max-width:560px;margin:0 auto;padding-bottom:var(--ah-zona, 20px)}
+       1. UNA sola voz grande por pantalla. La meta es un dato, no un titular.
+       2. El color contesta «¿me toca a mí?» antes de leer — pero NUNCA solo:
+          la pastilla lleva siempre la palabra, porque hay quien no distingue
+          el color y porque una pastilla muda no se puede leer en voz alta.
+       3. Nada de contenido por debajo de 14px.
+
+     Los tonos de marca se separan por CONTRASTE MEDIDO. Blanco sobre el rosa
+     #EF4375 da 3.66:1 y no llega al 4.5 de AA; el mismo rosa hondo da 4.90.
+     Asi que el rosa y el teal de marca se quedan para lo que NO lleva texto
+     -el punto, el icono, la barra- y para texto y botones entran sus versiones
+     hondas. Sigue siendo el color de Crecer, y se lee. */
+  .ah{
+    --tm-rosa:#EF4375;        /* marca · nunca detras de texto chico */
+    --tm-rosa-tx:#C81E52;     /* 5.50:1 sobre crema */
+    --tm-rosa-bt:#D42A5C;     /* 4.90:1 con texto blanco */
+    --tm-rosa-bt-h:#B81F4C;
+    --tm-rosa-piel:#FDF0F4;
+    --tm-teal:#00A49F;
+    --tm-teal-tx:#00726F;     /* 5.69:1 sobre crema */
+    --tm-teal-piel:#EDF7F6;
+    --tm-aviso:#8A5310;
+    --tm-aviso-piel:#FBF3E7;
+    --tm-r:12px;
+    --tm-r-bt:10px;
+    max-width:560px;margin:0 auto;padding-bottom:var(--ah-zona, 20px);
+  }
 
   /*  AYUDA SE APARTA CUANDO ASOMA LA COLA.
       El boton flota en la franja de 78-121px sobre el borde inferior, que es
@@ -462,500 +818,323 @@ $mt_unidad = function (string $objetivo): array {
       360x800 los tapaba y ya no quedaba scroll para moverlos: no habia forma
       de pulsarlos. Se aparta quien esta de mas, y vuelve solo al subir. */
   body .ay-fab{transition:transform .2s ease, opacity .2s ease}
-  /*  Tiene que salir DE LA PANTALLA, no posarse sobre la barra: con un 150%
-      se movia 64px y aterrizaba encima de la botnav, igual de presente. */
   body.ah-cola .ay-fab{transform:translateY(calc(100% + 96px));opacity:0;pointer-events:none}
-  .mt-volver{display:inline-block;font-size:14px;font-weight:700;color:var(--muted);
-    text-decoration:none;padding:10px 0;margin-bottom:6px;min-height:44px;line-height:24px}
+  /*  Aqui vivia `.mt-volver`, la salida de la capa 1 antes del rediseño. La
+      sustituyeron `.plan-volver` y `.wz-salir`, que ademas DICEN si lo escrito
+      se guarda. Se quita para que nadie la reviva creyendo que sigue viva. */
 
-  /* — meta, compacta — */
-  .ah-meta{border-bottom:1px solid var(--line);padding-bottom:13px;margin-bottom:18px}
-  .ah-meta b{display:block;font-family:var(--font-display,'Oswald',sans-serif);font-weight:700;
-    font-size:21px;letter-spacing:.2px;line-height:1.2;color:var(--tinta)}
-  .ah-meta span{display:block;font-size:14px;color:var(--muted);margin-top:3px}
-  .ah-cob{display:block;font-size:14px;line-height:1.45;color:var(--muted);margin-top:7px}
-  .ah-barra{display:block;height:6px;border-radius:99px;background:var(--line);margin-top:10px;overflow:hidden}
-  .ah-barra b{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#FF6B3D,#EF4375)}
+  /* — LA BARRA DE CONTEXTO · un dato, no un titular — */
+  .tm-meta{border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:20px}
+  .tm-meta-fila{display:flex;align-items:center;gap:7px}
+  .tm-meta-fila .ic{width:15px;height:15px;flex:none;color:var(--muted);stroke-width:1.9}
+  .tm-obj-nom{font-size:14px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--muted)}
+  .tm-dias{margin-left:auto;font-size:14px;color:var(--muted)}
+  /*  «REGISTRADOS» VIAJA PEGADO AL NUMERO.
+      Vivia tres renglones mas abajo, en un parrafo que nadie leia, y quien no
+      lo leia entendia que Crecer contaba TODOS sus pedidos. La palabra va aqui,
+      donde no se puede saltar. */
+  .tm-cifra{display:flex;align-items:baseline;gap:6px;margin-top:7px;flex-wrap:wrap}
+  .tm-cifra b{font-size:23px;font-weight:700;color:var(--tinta);line-height:1.1;
+    font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .tm-cifra .et{font-size:14px;color:var(--ink,#4A434F);font-weight:500}
+  .tm-cifra .de{font-size:14px;color:var(--muted)}
+  /*  LA BARRA SE QUEDA DEFINIDA Y CASI NUNCA SE PINTA, A PROPOSITO.
+      Una barra AFIRMA de un vistazo «vas por aqui de un total que conozco», y
+      con cobertura parcial Crecer no conoce el total: solo cuenta lo que pasa
+      por dentro. Quien decide si se puede afirmar es el compositor
+      (puedeAfirmarProgreso), no esta hoja. El dia que la cobertura sea
+      completa, la barra ya esta aqui. */
+  .tm-barra{display:block;height:4px;border-radius:99px;background:var(--line);
+    margin-top:10px;overflow:hidden}
+  .tm-barra b{display:block;height:100%;border-radius:99px;background:var(--tm-teal)}
+  .tm-lim{display:flex;gap:8px;align-items:center;font-size:14px;line-height:1.4;
+    color:var(--tm-aviso);background:var(--tm-aviso-piel);border-radius:9px;
+    padding:8px 10px;margin-top:10px}
+  .tm-lim .ic{width:15px;height:15px;flex:none;stroke-width:2}
 
-  /* — ahora, el bloque dominante — */
-  .ah-now{background:var(--card);border:1.5px solid var(--line);border-radius:18px;
-    padding:18px 17px;box-shadow:0 14px 34px -28px rgba(35,31,32,.5)}
-  .ah-now.quieto{background:#f7fbf8;border-color:#d8ece0;box-shadow:none}
-  .ah-kick{font-size:14px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;
-    color:var(--magenta,#EF4375);margin-bottom:8px}
-  .ah-kick.tranquilo{color:#0a6a4a}
-  .ah-tit{font-family:var(--font-display,'Oswald',sans-serif);font-weight:700;font-size:23px;
-    line-height:1.22;letter-spacing:.2px;margin:0 0 9px;color:var(--tinta)}
-  .ah-ins{font-size:16px;line-height:1.5;color:var(--ink,#4A434F);margin:0 0 15px}
-  /* La vuelta: acuse de recibo, no una alarma. Va arriba del todo porque es lo
-     primero que el dueño busca al regresar, y en 16px porque es texto de uso
-     normal (criterio 7 del contrato). */
-  .ah-hecho{display:flex;gap:10px;align-items:flex-start;margin:0 0 16px;padding:13px 15px;
-    border-radius:12px;background:#EAF7F5;color:#0A5B57;font-size:16px;line-height:1.45}
-  .ah-hecho b{font-weight:800}
-  .ah-hecho-ico{flex:none;display:inline-flex;width:22px;height:22px;margin-top:1px}
-  .ah-hecho-ico svg{width:22px;height:22px;stroke:#00827E;stroke-width:2.6}
-  .ah-btn{display:block;width:100%;min-height:48px;border:0;border-radius:14px;cursor:pointer;
-    text-decoration:none;text-align:center;line-height:48px;font-family:inherit;font-weight:800;
-    font-size:16px;color:#fff;background:linear-gradient(135deg,#FF6B3D,#EF4375);
-    box-shadow:0 12px 26px -14px rgba(239,67,117,.7)}
-  .ah-btn:disabled{opacity:.55;cursor:default}
-  .ah-como{margin:0}
-  .ah-como > summary{list-style:none;display:block}
-  .ah-como > summary::-webkit-details-marker{display:none}
-  .ah-pasos{margin-top:14px;border-top:1px solid var(--line);padding-top:13px}
+  /* — LA VUELTA · que paso con lo anterior — */
+  .tm-vuelta{display:flex;gap:9px;align-items:flex-start;background:var(--tm-teal-piel);
+    border-radius:var(--tm-r);padding:12px 14px;font-size:15px;line-height:1.45;
+    color:var(--tm-teal-tx);margin:0 0 18px}
+  .tm-vuelta .ic{width:18px;height:18px;flex:none;margin-top:1px;stroke-width:2}
+  .tm-vuelta b{color:var(--tm-teal-tx);font-weight:700}
+
+  /* — EL TURNO · se dice, no se grita —
+     Versalitas espaciadas es el tic de la interfaz corporativa. Esto va en caja
+     normal, como habla el corillo, dentro de una pastilla de su color. */
+  .tm-turno{display:inline-flex;align-items:center;gap:7px;font-size:14px;font-weight:600;
+    color:var(--tm-rosa-tx);background:var(--tm-rosa-piel);border-radius:99px;
+    padding:6px 13px 6px 11px;margin-bottom:12px}
+  .tm-turno u{width:7px;height:7px;border-radius:50%;background:var(--tm-rosa);
+    display:block;flex:none}
+  .tm-turno.mio{color:var(--tm-teal-tx);background:var(--tm-teal-piel)}
+  .tm-turno.mio u{background:var(--tm-teal)}
+  .tm-turno.limite{color:var(--tm-aviso);background:var(--tm-aviso-piel)}
+  .tm-turno.limite .ic{width:16px;height:16px;flex:none;stroke-width:2}
+
+  /* — LA FRASE · la unica voz grande — */
+  .tm-frase{font-family:var(--font-display,'Poppins',sans-serif);font-weight:700;
+    font-size:26px;line-height:1.22;letter-spacing:-.022em;color:var(--tinta);
+    margin:0;text-wrap:balance}
+  /*  Cuando el texto se alarga, la voz cede tamaño ANTES que empujar el boton
+      fuera de la pantalla. Lo pone el guion del final, medido. */
+  .ah.tm-largo .tm-frase{font-size:22px}
+
+  /* — EL OBJETO · la unica superficie enmarcada del centro — */
+  .tm-obj{margin-top:18px;border:1px solid var(--line);border-radius:var(--tm-r);
+    display:flex;gap:12px;align-items:center;padding:10px;background:var(--card,#fff)}
+  .tm-obj-ic{width:56px;height:56px;border-radius:9px;flex:none;background:#F1ECE6;
+    display:flex;align-items:center;justify-content:center;color:#A79C90}
+  .tm-obj-ic .ic{width:22px;height:22px;stroke-width:1.7}
+  .tm-obj-tx{min-width:0}
+  .tm-obj-tx b{display:block;font-size:15px;line-height:1.3;color:var(--tinta);font-weight:600;
+    overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .tm-obj-tx span{display:block;font-size:14px;line-height:1.4;color:var(--muted);margin-top:3px}
+
+  /* — LA ACCION · una sola, y se ve que se puede pulsar — */
+  .tm-btn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;
+    min-height:52px;border:0;border-radius:var(--tm-r-bt);background:var(--tm-rosa-bt);
+    color:#fff;font-family:inherit;font-size:17px;font-weight:700;letter-spacing:-.01em;
+    margin-top:18px;cursor:pointer;text-decoration:none;
+    transition:background .14s ease, transform .1s ease}
+  .tm-btn:hover{background:var(--tm-rosa-bt-h)}
+  .tm-btn:active{transform:translateY(1px)}
+  .tm-btn:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
+  .tm-btn:disabled{opacity:.55;cursor:default;transform:none}
+  .tm-btn .ic{width:18px;height:18px;flex:none;stroke-width:2}
+  .tm-btn.teal{background:var(--tm-teal-tx)}
+  .tm-btn.teal:hover{background:#005E5B}
+  /*  DE LINEA CUANDO NO HAY NADA QUE DECIDIR. No es una primaria mas floja:
+      es que mirar no es decidir, y el peso del boton lo tiene que decir. */
+  .tm-btn.linea{background:transparent;color:var(--tinta);border:1px solid var(--line)}
+  .tm-btn.linea:hover{background:var(--crema,#faf7f4)}
+  .tm-cons{font-size:15px;line-height:1.5;color:var(--muted);margin:11px 0 0}
+
+  /* — LAS CAPAS · siempre en el mismo sitio, siempre pulsables — */
+  .tm-capas{margin-top:24px;border-top:1px solid var(--line)}
+  .tm-ac{border-bottom:1px solid var(--line)}
+  .tm-ac:last-child{border-bottom:0}
+  .tm-ac > summary{list-style:none;display:flex;align-items:center;gap:10px;
+    min-height:56px;padding:0 2px;cursor:pointer;
+    font-size:16px;font-weight:600;color:var(--tinta)}
+  .tm-ac > summary::-webkit-details-marker{display:none}
+  .tm-ac > summary:hover{color:var(--tm-rosa-tx)}
+  .tm-ac > summary:focus-visible{outline:2px solid var(--tinta);outline-offset:2px;border-radius:8px}
+  .tm-ac .cta{margin-left:auto;font-size:14px;color:var(--muted);font-weight:500}
+  .tm-ac .chev{width:16px;height:16px;flex:none;color:var(--muted);stroke-width:2;
+    transition:transform .18s ease}
+  .tm-ac[open] > summary .chev{transform:rotate(180deg)}
+  .tm-ac .dentro{padding:2px 2px 18px;animation:tmAbre .18s ease}
+  @keyframes tmAbre{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+  .tm-ac p{font-size:15px;line-height:1.55;color:var(--muted);margin:0}
+  .tm-pasos{display:flex;flex-direction:column;gap:13px}
+  .tm-paso{display:flex;gap:10px;align-items:flex-start}
+  .tm-paso .ic{width:18px;height:18px;flex:none;margin-top:2px;stroke-width:1.9;
+    color:var(--tm-teal-tx)}
+  .tm-paso.tuyo .ic{color:var(--tm-rosa-tx)}
+  .tm-paso div{min-width:0}
+  .tm-paso b{display:block;font-size:15px;line-height:1.35;color:var(--tinta);font-weight:600}
+  .tm-paso span{display:block;font-size:14px;line-height:1.4;color:var(--muted);margin-top:2px}
+
+  /* — pasos de la inversion y confirmaciones (estados excepcionales) — */
+  .ah-cual{border:1px solid var(--line);border-radius:var(--tm-r-bt);padding:11px 13px;
+    margin:0 0 12px;background:var(--card,#fff)}
+  .ah-cual .et{display:block;font-size:14px;font-weight:600;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+  .ah-cual b{display:block;font-size:16px;line-height:1.4;color:var(--tinta);font-weight:600}
+  .ah-cual small{display:block;font-size:14px;line-height:1.45;color:var(--muted);margin-top:4px}
+  .ah-cual.sin{background:var(--tm-aviso-piel);border-color:transparent}
+  .ah-cual.sin b{color:var(--tm-aviso);font-weight:600}
+  .ah-cual.sin small{color:var(--tm-aviso)}
+  .ah-monto span{display:block;font-size:14px;line-height:1.45;color:var(--muted);
+    font-weight:400;margin-top:3px}
+  .ah-cierre{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+  .ah-nomarca{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;
+    border:1px solid var(--line);border-radius:var(--tm-r-bt);background:transparent;
+    font-family:inherit;font-size:15px;font-weight:600;color:var(--muted);cursor:pointer}
+  .ah-nomarca:hover{border-color:var(--raya-firme,#D8D3CC);color:var(--tinta)}
+  .ah-nomarca:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
+  .ah-nomarca .ic{width:16px;height:16px;stroke-width:2}
+  .ah-pasos{margin-top:16px;border-top:1px solid var(--line);padding-top:14px}
   .ah-monto{font-size:15px;margin:0 0 10px;color:var(--tinta)}
   .ah-pasos ol{margin:0 0 12px;padding-left:20px}
   .ah-pasos li{font-size:15px;line-height:1.5;color:var(--ink,#4A434F);margin-bottom:7px}
   .ah-aviso{font-size:14px;line-height:1.45;color:var(--muted);margin:0 0 14px}
-  .ah-btn2{display:block;width:100%;min-height:48px;border:1.5px solid var(--tinta);border-radius:14px;
-    cursor:pointer;background:#fff;color:var(--tinta);font-family:inherit;font-weight:800;font-size:16px}
-  .ah-btn2:disabled{opacity:.55;cursor:default}
-  .ah-cons{font-size:14px;line-height:1.45;color:var(--muted);margin:10px 0 0}
-  /*  El aviso de cuota trae su propio CSS (includes/cuota_aviso.php) para que
-      sea el mismo en todas las pantallas y no se diverja copiandolo. */
 
-  /* — el trato: lo que se enseña ANTES de que el dueño diga que sí —
-     Dos números y una frase. El plan entero vive en su vista; aquí lo que
-     decide es "de esto me encargo yo, esto te lo voy a pedir a ti". */
-  .ah-trato{margin:0 0 16px;padding:14px 15px;border-radius:14px;background:#FAF7F5;
-    border:1px solid var(--line)}
-  .ah-estr{font-size:16px;line-height:1.5;color:var(--tinta);margin:0 0 12px;font-weight:600}
-  .ah-reparto{display:flex;gap:10px}
-  .ah-reparto div{flex:1;min-width:0;background:#fff;border:1px solid var(--line);
-    border-radius:11px;padding:10px 11px}
-  .ah-reparto b{display:block;font-family:var(--font-display,'Oswald',sans-serif);
-    font-size:24px;line-height:1.1;color:var(--tinta)}
-  .ah-reparto span{display:block;font-size:14px;line-height:1.35;color:var(--muted);margin-top:2px}
-  .ah-reparto .mia b{color:var(--teal,#00A49F)}
-  .ah-reparto .tuya b{color:var(--magenta,#EF4375)}
-  .ah-pide{font-size:14px;line-height:1.5;color:var(--ink,#4A434F);margin:11px 0 0}
-  .ah-pide b{color:var(--tinta)}
-  .ah-guion{margin-top:14px;border-top:1px solid var(--line);padding-top:11px}
-  .ah-guion summary{font-size:14px;font-weight:700;color:var(--teal,#00A49F);cursor:pointer;
-    min-height:44px;line-height:44px;list-style:none}
-  .ah-guion summary::-webkit-details-marker{display:none}
-  .ah-guion p{font-size:14px;line-height:1.55;color:var(--ink,#4A434F);margin:0}
+  /* — el trato del plan nuevo — */
+  .tm-trato{margin:18px 0 0;padding:14px 15px;border-radius:var(--tm-r);
+    background:var(--crema,#FAF7F4);border:1px solid var(--line)}
+  .tm-estr{font-size:16px;line-height:1.5;color:var(--tinta);margin:0 0 12px;font-weight:600}
+  .tm-reparto{display:flex;gap:10px}
+  .tm-reparto div{flex:1;min-width:0;background:var(--card,#fff);border:1px solid var(--line);
+    border-radius:9px;padding:10px 11px}
+  .tm-reparto b{display:block;font-size:23px;line-height:1.1;color:var(--tinta);font-weight:700;
+    font-variant-numeric:tabular-nums}
+  .tm-reparto span{display:block;font-size:14px;line-height:1.35;color:var(--muted);margin-top:2px}
+  .tm-reparto .mia b{color:var(--tm-teal-tx)}
+  .tm-reparto .tuya b{color:var(--tm-rosa-tx)}
+  .tm-pide{font-size:14px;line-height:1.5;color:var(--ink,#4A434F);margin:11px 0 0}
+  .tm-pide b{color:var(--tinta)}
 
-  /* — camino, tres posiciones — */
-  .ah-cam{display:flex;align-items:center;gap:8px;margin-top:16px;font-size:14px;color:var(--muted)}
-  .ah-paso{flex:none}
-  .ah-paso.on{flex:1;min-width:0;color:var(--tinta);font-weight:700;
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-    border-left:1px solid var(--line);border-right:1px solid var(--line);padding:0 10px;text-align:center}
-  .ah-paso b{color:var(--tinta);font-weight:800}
+  /* — CAPA 3 · filas, no texto en negrita —
+     Eran dos lineas sin recuadro, sin subrayado y sin color de enlace: las
+     puertas al plan y al corillo no invitaban a nada. Ahora son filas
+     pulsables de 56px con su flecha, como los acordeones. */
+  .tm-mas{display:flex;flex-direction:column;margin-top:2px;border-top:1px solid var(--line)}
+  .tm-mas a{display:flex;align-items:center;gap:11px;min-height:56px;
+    text-decoration:none;color:var(--tinta);font-size:16px;font-weight:600;
+    border-bottom:1px solid var(--line);padding:0 2px}
+  .tm-mas a:last-child{border-bottom:0}
+  .tm-mas a:hover{color:var(--tm-rosa-tx)}
+  .tm-mas a:focus-visible{outline:2px solid var(--tinta);outline-offset:2px;border-radius:8px}
+  .tm-mas a .ic{width:18px;height:18px;flex:none;color:var(--muted);stroke-width:1.9}
+  .tm-mas a .ic:last-child{margin-left:auto;width:16px;height:16px}
 
-  .ah-mas{display:flex;flex-direction:column;gap:2px;margin-top:20px;
-    border-top:1px solid var(--line);padding-top:8px}
-  .ah-mas a{font-size:14px;font-weight:700;color:var(--muted);text-decoration:none;
-    min-height:44px;line-height:44px}
-  .ah-mas a:hover{color:var(--tinta)}
+  /* — la salida cuando la jugada que manda es imposible para el dueño — */
+  .tm-nopuedo{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;
+    margin-top:14px;border:1px solid var(--line);border-radius:var(--tm-r-bt);
+    background:transparent;font-size:15px;font-weight:600;color:var(--muted);
+    text-decoration:none}
+  .tm-nopuedo:hover{border-color:var(--tm-aviso);color:var(--tm-aviso);
+    background:var(--tm-aviso-piel)}
+  .tm-nopuedo:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
+  .tm-nopuedo .ic{width:16px;height:16px;stroke-width:2}
 
   .ah-toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);opacity:0;
     background:var(--tinta);color:#fff;font-size:14px;font-weight:700;padding:12px 18px;
     border-radius:12px;pointer-events:none;transition:.2s;z-index:80;max-width:92vw}
   .ah-toast.on{opacity:1;transform:translate(-50%,0)}
 
-  @media (min-width:720px){
-    .ah{max-width:620px}
-    .ah-now{padding:24px 24px}
-    .ah-tit{font-size:27px}
-    .ah-ins{font-size:17px}
-    .ah-btn{width:auto;min-width:260px;padding:0 30px}
-    .ah-mas{flex-direction:row;gap:22px}
+  /* ══ ESCRITORIO ══════════════════════════════════════════════════════
+     No es el movil estirado ni el movil pegado a la izquierda con un vacio
+     al lado: es la MISMA columna, CENTRADA en el espacio que deja la barra
+     lateral, y con la capa 2 abierta porque aqui hay alto para ella. */
+  @media (min-width:1000px){
+    .ah{max-width:680px}
+    .tm-frase{font-size:36px}
+    .tm-meta{border:1px solid var(--line);border-radius:var(--tm-r);
+      padding:14px 18px;margin-bottom:26px}
+    .tm-obj{padding:12px;gap:15px}
+    .tm-obj-ic{width:96px;height:96px}
+    .tm-obj-ic .ic{width:30px;height:30px}
+    .tm-obj-tx b{font-size:17px}
+    .tm-btn{max-width:340px;min-height:54px}
+    .tm-capas{margin-top:28px}
   }
 
-  /* ── PLAN CONTRA PLAN ──────────────────────────────────────────────────
-     Móvil: una tarjeta por plan, en columna, se lee deslizando el pulgar.
-     Desktop: lado a lado de verdad — que es el único sitio donde comparar
-     dos columnas con la vista funciona. */
-  .cmp{display:flex;flex-direction:column;gap:10px}
-  .cmp-p{background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:14px 15px}
-  .cmp-p.on{border-color:var(--magenta,#EF4375);box-shadow:0 12px 28px -22px rgba(239,67,117,.8)}
-  .cmp-h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-  .cmp-h b{font-size:16px}
-  .cmp-est{font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
-    color:#6b6560;background:#f4f1ec;border-radius:6px;padding:3px 7px}
-  .cmp-p.on .cmp-est{background:linear-gradient(135deg,#FF6B3D,#EF4375);color:#fff}
-  .cmp-d{font-size:12px;color:var(--muted);margin-left:auto}
-  .cmp-corto{margin:0 0 10px;font-size:12px;line-height:1.45;color:#8a6d1f;
-    background:#fff8e6;border:1px solid #f2dfae;border-radius:9px;padding:8px 10px}
-  .cmp-nums{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
-  .cmp-nums>div{background:#faf8f5;border-radius:11px;padding:10px 11px;position:relative}
-  .cmp-nums b{display:block;font-size:19px;line-height:1.15;font-variant-numeric:tabular-nums}
-  .cmp-nums span{display:block;font-size:11.5px;color:var(--muted);margin-top:2px}
-  .cmp-nums i{position:absolute;top:9px;right:10px;font-style:normal;font-size:11px;font-weight:800;
-    padding:2px 6px;border-radius:6px}
-  .cmp-nums i.up{background:#e6f7f0;color:#0a6a4a}
-  .cmp-nums i.dn{background:#fdeeee;color:#b4232b}
-  .cmp-ritmo{margin:10px 0 0;font-size:12.5px;color:var(--tinta);line-height:1.5}
-  .cmp-lec{margin:9px 0 0;font-size:12.5px;line-height:1.5;color:#4A434F;
-    border-left:3px solid var(--teal,#00A49F);padding-left:9px}
-  .cmp-nota{font-size:11.5px;color:var(--muted);line-height:1.5;margin:9px 2px 0}
-  @media (min-width:860px){
-    .cmp{flex-direction:row;align-items:flex-start}
-    .cmp-p{flex:1;min-width:0}
-    .cmp-nums{grid-template-columns:repeat(2,1fr)}
-  }
-
-  /* Historial de planes */
-  .hplan{background:var(--card,#fff);border:1px solid var(--line);border-radius:14px;margin-bottom:9px;overflow:hidden}
-  .hplan[open]{border-color:var(--teal,#00A49F)}
-  .hplan summary{cursor:pointer;list-style:none;padding:13px 15px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
-  .hplan summary::-webkit-details-marker{display:none}
-  .hplan summary:hover{background:var(--crema-2,#faf8f5)}
-  .hp-v{font-family:var(--font-display,'Oswald',sans-serif);font-size:15px;font-weight:700;color:var(--tinta);letter-spacing:.3px}
-  .hp-f{font-size:12px;color:var(--muted);font-weight:600}
-  .hp-est{margin-left:auto;font-size:11px;font-weight:800;padding:4px 9px;border-radius:99px;background:var(--crema-2,#f2efe9);color:var(--muted)}
-  .hp-est.ok{background:color-mix(in srgb,var(--teal,#00A49F) 14%,#fff);color:#0a6a5f}
-  .hp-vale{font-size:11px;font-weight:800;padding:4px 9px;border-radius:99px}
-  .hp-vale.si{background:#e6f7f0;color:#0a6a4a}
-  .hp-vale.no{background:#fdeeee;color:#b4232b}
-  .hp-vale.nd{background:#fff4e0;color:#8a5a10}
-  .hp-body{padding:0 15px 15px;border-top:1px dashed var(--line)}
-  .hp-nums{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:13px 0}
-  .hp-nums div{background:var(--crema-2,#faf8f5);border:1px solid var(--line);border-radius:11px;padding:9px 8px;text-align:center}
-  .hp-nums b{display:block;font-family:var(--font-display,'Oswald',sans-serif);font-size:19px;color:var(--tinta);line-height:1.1}
-  .hp-nums span{display:block;font-size:10.5px;color:var(--muted);line-height:1.25;margin-top:3px}
-  .hp-movio{font-size:13px;color:var(--tinta);line-height:1.5;margin:0 0 11px}
-  .hp-lec{background:color-mix(in srgb,var(--magenta,#EF4375) 7%,#fff);border-left:3px solid var(--magenta,#EF4375);border-radius:0 10px 10px 0;padding:11px 13px;font-size:13px;line-height:1.55;color:var(--tinta)}
-  .hp-lec.pend{background:var(--crema-2,#faf8f5);border-left-color:var(--line);color:var(--muted)}
-  .hp-ev{display:block;margin-top:9px;border:1.5px solid var(--line);background:#fff;color:var(--tinta);font-family:inherit;font-weight:700;font-size:12.5px;padding:8px 13px;border-radius:10px;cursor:pointer}
-  .hp-ev:hover{border-color:var(--teal,#00A49F);color:var(--teal,#00A49F)}
-  .hp-lista{margin-top:13px}
-  .hp-lista>b{display:block;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:7px}
-  .hp-t{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);padding:4px 0;line-height:1.4}
-  .hp-t.ok{color:var(--tinta)}
-  .hp-t svg{width:14px;height:14px;flex:none;color:var(--line)}
-  .hp-t.ok svg{color:var(--teal,#00A49F)}
-  .hp-p{display:flex;gap:10px;align-items:baseline;padding:5px 0;border-bottom:1px dashed var(--line);font-size:12.5px}
-  .hp-p:last-child{border-bottom:0}
-  .hp-cap{flex:1;color:var(--tinta);line-height:1.4}
-  .hp-m{flex:none;color:var(--muted);font-weight:700;font-size:11.5px}
-
-  .glos{margin-top:22px;border-top:1px solid var(--line);padding-top:16px}
-  .glos summary{cursor:pointer;font-size:13.5px;font-weight:700;color:var(--muted);list-style:none}
-  .glos summary::-webkit-details-marker{display:none}
-  .glos summary:hover{color:var(--tinta)}
-  .glos dl{margin:13px 0 0;display:grid;gap:10px}
-  .glos dt{font-size:13px;font-weight:800;color:var(--tinta)}
-  .glos dd{margin:2px 0 0;font-size:12.5px;color:var(--muted);line-height:1.5}
-
-  .mt-load{display:none;text-align:center;padding:44px 20px}
-  .mt-load.on{display:block}
-  .mt-load .sp{width:38px;height:38px;border:3px solid var(--line);border-top-color:var(--magenta,#EF4375);border-radius:50%;margin:0 auto 16px;animation:sp 1s linear infinite}
-  @keyframes sp{to{transform:rotate(360deg)}}
-  .mt-load b{display:block;font-size:16px;color:var(--tinta);margin-bottom:5px}
-  .mt-load span{font-size:13.5px;color:var(--muted);line-height:1.5}
-
-  /* ── DESKTOP: otra experiencia, no la misma estirada ──
-     En el teléfono el plegado es la solución correcta (poco scroll, una cosa a
-     la vez). Con pantalla grande sobra espacio: las jugadas se ven abiertas
-     para poder COMPARARLAS, y el número se queda pegado mientras se lee el
-     plan — así el "voy 0 de 25" nunca se pierde de vista. */
-  @media(min-width:901px){
-    .mv > div:first-child{position:sticky;top:18px}
-    .jg{margin-bottom:2px}
-  }
-  @media(max-width:900px){ .mv{grid-template-columns:1fr} }
+  /*  El bloque viejo de PLAN CONTRA PLAN y del HISTORIAL vivia aqui, DESPUES
+      del de la capa 1. En CSS gana el ultimo, asi que pisaba entero el
+      sistema nuevo. Sus estilos estan ahora arriba, con el resto del plan.
+      Los nombres de clase se conservan porque el guion engancha por ellos.
+   */
   @media(max-width:680px){
-    .obj-grid{grid-template-columns:1fr}
     /* Los 4 números del récord no caben en una fila de 360px: 2x2 y se leen. */
     .hp-nums{grid-template-columns:repeat(2,minmax(0,1fr))}
-    .plan-cab{align-items:flex-start}
-    .plan-prog{text-align:left;min-width:100%}
     .hplan summary{padding:12px 13px}
     .hp-est{margin-left:0}
-    .wz-q{font-size:22px}
-    .mv-num{font-size:46px}
-    .mt-num input{width:150px;font-size:32px}
-    .wz-nav .btn-p{flex:1;justify-content:center}
+    /*  Aqui vivian cuatro reglas sueltas del wizard (.obj-grid, .wz-q, .mt-num
+        y .wz-nav .btn-p). Su hoja se fue con el rediseno de la capa 2 y quedaron
+        huerfanas: dos apuntaban a clases que ya no existen y .wz-q peleaba con la
+        nueva. El wizard entero —marca, estilos y guion— vive en _meta_wizard.php. */
   }
 </style>
 
-<?php if (!$meta && $vista === 'wizard'): /* ══════════ WIZARD ══════════ */ ?>
+<?php if ($meta && $vista === 'ajustar'): /* ══════ AJUSTAR LA META ══════ */ ?>
 
-<div class="wz">
-  <h1 class="mt-h1">¿Qué quieres lograr?</h1>
-  <p class="mt-sub">Ponle un norte a tu negocio y el corillo trabaja para eso — no para llenar el calendario.
-     Son tres preguntas cortas.</p>
+<?php require __DIR__ . '/_meta_ajustar.php'; ?>
 
-  <div class="wz-bar"><i id="wz-bar" style="width:25%"></i></div>
+<?php elseif ($meta && $vista === 'sustituir'): /* ══════ SUSTITUIR UNA JUGADA ══════ */ ?>
 
-  <!-- PASO 1 · el deseo, en sus palabras -->
-  <section class="wz-paso on" data-paso="1">
-    <h2 class="wz-q">Dime qué te haría feliz este mes</h2>
-    <p class="wz-ayuda">Escoge lo que más falta te hace ahora mismo. Después lo puedes cambiar.</p>
-    <div class="obj-grid">
-      <?php foreach ($objetivos as $k => $o): ?>
-        <button type="button" class="obj" data-obj="<?= $h($k) ?>" data-unidad="<?= $h($o['unidad']) ?>"
-                data-pregunta="<?= $h($o['pregunta']) ?>" data-etiqueta="<?= $h($o['unidad']==='dolares' ? 'dólares' : $o['unidad']) ?>">
-          <span class="ic"><?= ico($o['ico']) ?></span>
-          <b><?= $h($o['titulo']) ?></b>
-          <p><?= $h($o['explicacion']) ?></p>
-          <span class="jerga"><?= $h($o['jerga']) ?></span>
-        </button>
-      <?php endforeach; ?>
-    </div>
-  </section>
+<?php require __DIR__ . '/_meta_sustituir.php'; ?>
 
-  <!-- PASO 2 · cuánto y para cuándo -->
-  <section class="wz-paso" data-paso="2">
-    <h2 class="wz-q" id="q2">¿Cuánto quieres lograr?</h2>
-    <p class="wz-ayuda">Un número te deja saber si vas bien o si hay que apretar. Si no sabes cuál poner,
-       yo te lo digo mirando tus propios números.</p>
-    <div class="mt-num">
-      <input type="number" id="cantidad" min="1" step="1" placeholder="25" inputmode="numeric">
-      <span class="mt-unidad" id="unidad">pedidos</span>
-      <button type="button" class="mt-nose" id="nose">No sé — dime tú</button>
-    </div>
-    <div class="mt-tip" id="tip-num"></div>
+<?php elseif ($meta && in_array($vista, ['plan-nuevo', 'cambiar'], true)):
+        /* ══════ LAS DOS DELICADAS · wizards propios, no un confirm() ══════ */ ?>
 
-    <p class="wz-ayuda" style="margin:22px 0 8px"><b style="color:var(--tinta)">¿Para cuándo?</b></p>
-    <div class="chips" id="chips-fecha">
-      <button type="button" class="chip" data-dias="14">En 2 semanas</button>
-      <button type="button" class="chip sel" data-dias="30">En un mes</button>
-      <button type="button" class="chip" data-dias="60">En 2 meses</button>
-      <button type="button" class="chip" data-dias="90">En 3 meses</button>
-    </div>
-  </section>
+<?php require __DIR__ . '/_meta_opciones.php'; ?>
 
-  <!-- PASO 3 · presupuesto + contexto -->
-  <section class="wz-paso" data-paso="3">
-    <h2 class="wz-q">¿Puedes invertir algo en anuncios?</h2>
-    <p class="wz-ayuda">Pagarle a Instagram o Facebook para que le enseñen tu post a más gente del área
-       — a eso le dicen <b>boost</b> o <b>pauta</b>. Con $10 o $20 ya se nota. Si ahora no puedes, no hay
-       problema: el corillo trabaja sin pagar anuncios y no te lo va a recomendar.</p>
-    <div class="chips" id="chips-pauta">
-      <button type="button" class="chip sel" data-pauta="0">Nada por ahora<small>Todo sin pagar anuncios</small></button>
-      <button type="button" class="chip" data-pauta="20">$20 al mes<small>Para empujar 1 o 2 posts</small></button>
-      <button type="button" class="chip" data-pauta="50">$50 al mes<small>Alcance serio en tu área</small></button>
-      <button type="button" class="chip" data-pauta="100">$100 o más<small>Campaña de verdad</small></button>
-    </div>
+<?php elseif (!$meta && $vista === 'wizard'): /* ══════════ WIZARD ══════════ */ ?>
 
-    <p class="wz-ayuda" style="margin:24px 0 8px"><b style="color:var(--tinta)">¿Con qué cuentas?</b>
-       Cuéntame si tienes una oferta, un producto que quieres empujar, una fecha especial o un evento.
-       Mientras más me digas, mejor el plan. (Opcional)</p>
-    <textarea class="mt-libre" id="contexto" maxlength="600"
-      placeholder="Ej: Tengo el combo de brazo gitano a $18 y en agosto son las fiestas del pueblo."></textarea>
-  </section>
+<?php require __DIR__ . '/_meta_wizard.php'; ?>
 
-  <div class="wz-nav" id="wz-nav">
-    <button type="button" class="btn-s" id="atras" style="display:none">Atrás</button>
-    <button type="button" class="btn-p" id="sigue" disabled>Siguiente</button>
-  </div>
-
-  <div class="mt-load" id="cargando">
-    <div class="sp"></div>
-    <b>La Estratega está armando tu plan</b>
-    <span>Está mirando tu negocio, tus números y el calendario para decidir las jugadas.<br>Dale unos segundos.</span>
-  </div>
-
-  <details class="glos">
-    <summary>¿Qué significan las palabras raras del mercadeo?</summary>
-    <dl>
-      <?php foreach ($glosario as $t => $d): ?>
-        <dt><?= $h(ucfirst($t)) ?></dt><dd><?= $h($d) ?></dd>
-      <?php endforeach; ?>
-    </dl>
-  </details>
-</div>
-
-<script>
-(function(){
-  var CSRF=<?= json_encode(csrf_token()) ?>, MARCA=<?= (int)$marca_id ?>;
-  var paso=1, datos={objetivo:'',cantidad:'',dias:30,pauta:0,contexto:''};
-  var bar=document.getElementById('wz-bar'), sigue=document.getElementById('sigue'), atras=document.getElementById('atras');
-
-  function ver(n){
-    paso=n;
-    document.querySelectorAll('.wz-paso').forEach(function(s){ s.classList.toggle('on', +s.dataset.paso===n); });
-    bar.style.width=(n*25+ (n===3?25:0))+'%';
-    atras.style.display = n>1 ? '' : 'none';
-    sigue.textContent = n===3 ? 'Armar mi plan' : 'Siguiente';
-    revisar();
-    window.scrollTo({top:0,behavior:'smooth'});
-  }
-  function revisar(){
-    if(paso===1) sigue.disabled = !datos.objetivo;
-    else if(paso===2) sigue.disabled = !(datos.cantidad && +datos.cantidad>0);
-    else sigue.disabled=false;
-  }
-
-  // Paso 1 — escoger objetivo
-  document.querySelectorAll('.obj').forEach(function(b){
-    b.addEventListener('click', function(){
-      document.querySelectorAll('.obj').forEach(function(x){x.classList.remove('sel');});
-      b.classList.add('sel');
-      datos.objetivo=b.dataset.obj;
-      // La pregunta viene ESCRITA por objetivo (antes se armaba pegando la unidad
-      // y salía "¿Cuántos interacciones quieres?" — mal dicho y mal visto).
-      document.getElementById('unidad').textContent = b.dataset.etiqueta;
-      document.getElementById('q2').textContent = b.dataset.pregunta;
-      document.getElementById('tip-num').classList.remove('on');
-      revisar();
-    });
-  });
-
-  // Paso 2 — cantidad y fecha
-  var cant=document.getElementById('cantidad');
-  cant.addEventListener('input', function(){ datos.cantidad=cant.value; revisar(); });
-  document.getElementById('chips-fecha').addEventListener('click', function(e){
-    var c=e.target.closest('.chip'); if(!c) return;
-    this.querySelectorAll('.chip').forEach(function(x){x.classList.remove('sel');});
-    c.classList.add('sel'); datos.dias=+c.dataset.dias;
-  });
-  document.getElementById('nose').addEventListener('click', function(){
-    var tip=document.getElementById('tip-num');
-    tip.textContent='Mirando tus números…'; tip.classList.add('on');
-    var fd=new FormData(); fd.append('csrf',CSRF); fd.append('accion','sugerir');
-    fd.append('objetivo',datos.objetivo); fd.append('dias',datos.dias);
-    fetch(location.pathname+'?marca='+MARCA,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
-      if(d.ok && d.sugerido){ cant.value=d.sugerido; datos.cantidad=String(d.sugerido); tip.textContent=d.razon; revisar(); }
-      else { tip.textContent = (d && d.razon) ? d.razon : 'Todavía no tengo con qué compararte. Pon el número que te haga sentido.'; }
-    }).catch(function(){ tip.textContent='No pude mirar tus números ahora. Pon el que te haga sentido.'; });
-  });
-
-  // Paso 3 — pauta
-  document.getElementById('chips-pauta').addEventListener('click', function(e){
-    var c=e.target.closest('.chip'); if(!c) return;
-    this.querySelectorAll('.chip').forEach(function(x){x.classList.remove('sel');});
-    c.classList.add('sel'); datos.pauta=+c.dataset.pauta;
-  });
-
-  atras.addEventListener('click', function(){ if(paso>1) ver(paso-1); });
-  sigue.addEventListener('click', function(){
-    if(paso<3){ ver(paso+1); return; }
-    datos.contexto=document.getElementById('contexto').value;
-    // Armar el plan
-    document.querySelectorAll('.wz-paso').forEach(function(s){s.classList.remove('on');});
-    document.getElementById('wz-nav').style.display='none';
-    document.getElementById('cargando').classList.add('on');
-    bar.style.width='100%';
-    var f=new Date(); f.setDate(f.getDate()+datos.dias);
-    // La fecha se arma con la hora LOCAL, no con toISOString(): en Puerto Rico
-    // (UTC-4) a partir de las 8 de la noche toISOString ya devuelve el día
-    // siguiente, así que la meta salía con un día de más.
-    var fLocal = f.getFullYear() + '-' +
-                 String(f.getMonth()+1).padStart(2,'0') + '-' +
-                 String(f.getDate()).padStart(2,'0');
-    var fd=new FormData();
-    fd.append('csrf',CSRF); fd.append('accion','crear');
-    fd.append('objetivo',datos.objetivo); fd.append('cantidad',datos.cantidad);
-    fd.append('fecha_limite', fLocal);
-    fd.append('presupuesto',datos.pauta); fd.append('contexto',datos.contexto);
-    fetch(location.pathname+'?marca='+MARCA,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
-      if(d.ok){ location.href=location.pathname+'?marca='+MARCA; return; }
-      document.getElementById('cargando').classList.remove('on');
-      document.getElementById('wz-nav').style.display='';
-      alert(d.err||'No pude armar el plan. Intenta otra vez.');
-      ver(3);
-    }).catch(function(){
-      document.getElementById('cargando').classList.remove('on');
-      document.getElementById('wz-nav').style.display='';
-      alert('Se cayó la conexión. Intenta otra vez.'); ver(3);
-    });
-  });
-  ver(1);
-})();
-</script>
-
-<?php elseif ($meta && $vista === 'plan'): /* ══════ SEGUNDA CAPA · EL PLAN COMPLETO ══════ */
+<?php elseif ($meta && $vista === 'plan'): /* ══════ CAPA 2 · EL PLAN COMPLETO ══════ */
   $def = meta_objetivo_def((string)$meta['objetivo']);
-  $pct = $prog['pct'] !== null ? (int)$prog['pct'] : 0;
+  //  EL MISMO CONTRATO DE COBERTURA QUE LA CAPA 1, y literalmente el mismo
+  //  objeto: $mt_estado ya está compuesto arriba, antes de las vistas. Aquí
+  //  no hay una segunda interpretación de si se puede afirmar el progreso —
+  //  hay una sola, y vive en el compositor.
+  //
+  //  Antes esta vista pintaba barra, «% logrado», «Vas en ritmo», «Vas
+  //  atrasado» y el ritmo diario SIN preguntar nada. La capa 1 respetaba el
+  //  contrato y la capa 2 lo rompía en la misma pantalla, a un toque.
+  $puede_afirmar = $mt_estado->puedeAfirmarProgreso();
+  [$sust_p, $part_p] = $mt_unidad((string)$meta['objetivo']);
+  $numf = fn($v) => rtrim(rtrim(number_format((float)$v, 2), '0'), '.');
 ?>
-<a href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>" class="mt-volver">&larr; Volver a lo que toca ahora</a>
+<div class="plan">
 
-<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:18px">
-  <div>
-    <h1 class="mt-h1">Tu meta</h1>
-    <p class="mt-sub"><?= $h($def['titulo']) ?><?php if (!empty($meta['fecha_limite'])): ?>
-      · para el <?= $h(date('j/n/Y', strtotime((string)$meta['fecha_limite']))) ?><?php endif; ?></p>
-  </div>
-  <div style="display:flex;gap:9px">
-    <a href="<?= $BASE ?>/sala.php?marca=<?= $marca_id ?>" class="btn-s" style="text-decoration:none;display:inline-flex;align-items:center;gap:7px"><?= ico('chat') ?> Discutirla con el corillo</a>
-  </div>
-</div>
+  <?php /* LA SALIDA, PRIMERO Y VISIBLE. Una capa sin puerta de vuelta es una
+           capa donde el dueño se queda encerrado con el botón del navegador.
+           Y conserva la marca: volver no puede dejarte en otro negocio. */ ?>
+  <a href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>" class="plan-volver">
+    <?= ico('chev-der') ?>Volver a lo que toca ahora</a>
 
-<div class="mv">
-  <!-- Columna izquierda: el número -->
-  <div>
-    <div class="card">
-      <?php if ($prog['medible'] && $prog['actual'] !== null): ?>
-        <div class="mv-num"><?= $h(number_format((float)$prog['actual'], (string)$meta['objetivo']==='ventas' ? 0 : 0)) ?></div>
-        <div class="mv-de">de <?= $h(meta_fmt($meta['cantidad'] !== null ? (float)$meta['cantidad'] : null, (string)$meta['objetivo'])) ?> · <?= $h($def['verbo']) ?></div>
-        <div class="mv-barra"><i style="width:<?= max(2, min(100, $pct)) ?>%"></i></div>
-        <div class="mv-pie">
-          <span><?= $pct ?>% logrado</span>
-          <?php if ($prog['dias_rest'] !== null): ?>
-            <span><?= $prog['dias_rest'] > 0 ? 'quedan ' . (int)$prog['dias_rest'] . ' días' : 'se venció' ?></span>
-          <?php endif; ?>
-        </div>
-        <?php if ($prog['al_dia'] === true): ?>
-          <div class="mv-est bien"><?= ico('check-circle') ?> Vas en ritmo</div>
-        <?php elseif ($prog['al_dia'] === false): ?>
-          <div class="mv-est mal"><?= ico('bolt') ?> Vas atrasado — hay que apretar</div>
-        <?php endif; ?>
-        <?php if (!empty($prog['ritmo_dia'])): ?>
-          <p style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:12px 0 0">
-            Para llegar necesitas como <b style="color:var(--tinta)"><?= $h(number_format((float)$prog['ritmo_dia'], 1)) ?></b>
-            <?= $h($def['unidad']) ?> al día de aquí a la fecha.</p>
-        <?php endif; ?>
-      <?php else: ?>
-        <div class="mv-num"><?= $h(meta_fmt($meta['cantidad'] !== null ? (float)$meta['cantidad'] : null, (string)$meta['objetivo'])) ?></div>
-        <div class="mv-de"><?= $h($def['verbo']) ?></div>
-        <div class="mv-nomed">
-          <b>Todavía no puedo contarte esto solo.</b><br>
-          <?= $h($prog['como_medir'] !== '' ? $prog['como_medir'] : 'Cuando haya datos reales, aquí te muestro cómo vas. No te voy a inventar un número.') ?>
-        </div>
+  <h1>Tu plan</h1>
+
+  <?php /* ── RESUMEN HONESTO ─────────────────────────────────────────── */ ?>
+  <section class="plan-res">
+    <div class="fila">
+      <?= ico('compass') ?>
+      <span class="obj"><?= $h($sust_p) ?></span>
+      <?php if ($prog['dias_rest'] !== null): ?>
+        <span class="dias"><?= (int)$prog['dias_rest'] > 0
+            ? 'quedan ' . (int)$prog['dias_rest'] . ' días' : 'sin días por delante' ?></span>
       <?php endif; ?>
-
-      <?php if (trim((string)$meta['contexto']) !== ''): ?>
-        <p style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:14px 0 0;padding-top:13px;border-top:1px dashed var(--line)">
-          <b style="color:var(--tinta)">Lo que me contaste:</b><br><?= $h($meta['contexto']) ?></p>
-      <?php endif; ?>
-
-      <?php /* "Rehacer el plan" no decía qué hacía: el dueño no sabía si perdía
-               lo trabajado. Ahora dice lo que es —empezar un plan nuevo— y antes
-               de arrancar explica exactamente qué pasa con lo viejo. */ ?>
-      <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
-        <button type="button" class="btn-s" id="replan" style="flex:1"><?= ico('refresh') ?> Empezar un plan nuevo</button>
-        <button type="button" class="btn-s" id="cerrar" style="flex:1">Cambiar de meta</button>
-      </div>
-      <p style="margin:9px 2px 0;font-size:12px;line-height:1.5;color:var(--muted)">
-        Un plan nuevo son jugadas nuevas para esta misma meta. El plan de ahora pasa a
-        historial y lo que el corillo ya te hizo se queda en Tus Posts.</p>
     </div>
-  </div>
+    <div class="cifra">
+      <?php if ($prog['medible'] && $prog['actual'] !== null): ?>
+        <b><?= $h($numf($prog['actual'])) ?></b>
+        <span class="et"><?= $h($mt_fuente((string)$meta['objetivo'], $part_p)) ?></span>
+      <?php else: ?>
+        <span class="et">Sin señal todavía</span>
+      <?php endif; ?>
+      <?php if ($meta['cantidad'] !== null): ?>
+        <span class="de">· de <?= $h($numf($meta['cantidad'])) ?></span>
+      <?php endif; ?>
+    </div>
+
+    <?php /* Barra, porcentaje y ritmo SOLO si el compositor certifica que se
+             puede afirmar. Con cobertura parcial no se pintan — y no es que se
+             borren los textos: es que no se han ganado. */ ?>
+    <?php if ($puede_afirmar && $prog['pct'] !== null): ?>
+      <i class="plan-barra"><i style="width:<?= max(2, min(100, (int)$prog['pct'])) ?>%"></i></i>
+      <p class="plan-ritmo"><b><?= (int)$prog['pct'] ?>% logrado</b><?php
+        if ($prog['al_dia'] === true): ?> · vas en ritmo<?php
+        elseif ($prog['al_dia'] === false): ?> · vas atrasado<?php endif; ?><?php
+        if (!empty($prog['ritmo_dia'])): ?> · hacen falta como
+          <b><?= $h(number_format((float)$prog['ritmo_dia'], 1)) ?></b> al día<?php endif; ?></p>
+    <?php elseif (!$prog['medible']): ?>
+      <p class="nomed"><b>Todavía no puedo contarte esto solo.</b>
+        <?= $h($prog['como_medir'] !== '' ? $prog['como_medir']
+              : 'Cuando haya datos reales, aquí te muestro cómo vas. No te voy a inventar un número.') ?></p>
+    <?php else: ?>
+      <p class="nomed"><?= $h($mt_como_voy($mt_estado, $mt_snap, $mt_unidad((string)$meta['objetivo']), (string)$meta['objetivo'])) ?></p>
+    <?php endif; ?>
+  </section>
 
   <!-- Columna derecha: diagnóstico + jugadas -->
   <div>
-    <?php if (trim((string)$meta['diagnostico']) !== ''): ?>
-      <div class="diag">
-        <div class="qui"><?= ico('sparkles') ?> Lo que dice la Estratega</div>
-        <p><?= $h($meta['diagnostico']) ?></p>
-        <?php if (!empty($meta['veredicto'])): ?>
-          <span class="vered <?= $h($meta['veredicto']) ?>">
-            <?= $meta['veredicto']==='alcanzable' ? 'Se puede' : ($meta['veredicto']==='ambiciosa' ? 'Es ambiciosa, pero se pelea' : 'Muy cuesta arriba — mira lo que propongo') ?>
-          </span>
-        <?php endif; ?>
-      </div>
-    <?php endif; ?>
-
     <?php if ($tacticas): ?>
-      <div class="plan-cab">
-        <div>
-          <h2>Las jugadas para lograrlo</h2>
-          <?php if ($plan_act): ?>
-            <span class="plan-v">Plan #<?= (int)$plan_act['version'] ?> · desde el <?= $h(date('j/n', strtotime((string)$plan_act['inicio_at']))) ?></span>
-          <?php endif; ?>
-        </div>
+      <div class="plan-gt" style="margin-bottom:0">
+        <h2>Las jugadas para lograrlo</h2>
         <?php if ($prog_plan && $prog_plan['total'] > 0): ?>
-          <div class="plan-prog">
-            <b><?= (int)$prog_plan['hechas'] ?> de <?= (int)$prog_plan['total'] ?></b> hechas
-            <div class="plan-barra"><i style="width:<?= max(3, (int)$prog_plan['pct']) ?>%"></i></div>
-          </div>
+          <?php /*  Este SI se puede afirmar y no lleva barra a proposito: las
+                    jugadas hechas las contamos nosotros enteras, no dependen de
+                    lo que reporte nadie. Pero una barra aqui, tres dedos debajo
+                    de la de la meta, se leeria como si fuera la misma cosa. */ ?>
+          <span class="n"><?= (int)$prog_plan['hechas'] ?> de <?= (int)$prog_plan['total'] ?> hechas</span>
         <?php endif; ?>
+        <u></u>
       </div>
       <?php if ($prog_plan && $prog_plan['completo']): ?>
         <div class="plan-obs">
@@ -964,141 +1143,73 @@ $mt_unidad = function (string $objetivo): array {
           para no juzgar con datos que todavía no existen.
         </div>
       <?php endif; ?>
-      <div class="jug">
-        <?php
-        // La jugada de turno va ABIERTA y marcada; las demás plegadas. Seis
-        // jugadas abiertas eran 8,000px de scroll en un teléfono, todas con el
-        // mismo peso y sin señal de por dónde empezar.
-        $__turno = meta_tactica_de_turno($pdo, $meta);
-        $__turno_id = $__turno ? (int)$__turno['id'] : 0;
-        foreach ($tacticas as $t):
-          $tipo_lbl = ['contenido'=>'Contenido','distribucion'=>'Difusión','pauta'=>'Anuncio pagado',
-                       'oferta'=>'Oferta','alianza'=>'Alianza','operacion'=>'Cómo operar'][$t['tipo']] ?? $t['tipo'];
-          $clase = (string)($t['clase'] ?? 'produccion');
-          $jp    = jugada_progreso($pdo, $t);
-          $hecha = $t['estado'] === 'hecha';
-          $es_turno = ((int)$t['id'] === $__turno_id) && !$hecha;
-          // Resumen corto para cuando está plegada: que se entienda sin abrir.
-          if ($hecha)                       $mini = 'Hecha';
-          elseif ($clase === 'regla')       $mini = 'Siempre';
-          elseif ($clase === 'accion_dueno')$mini = 'La haces tú';
-          elseif ((int)$jp['espera_video'] > 0) $mini = 'Falta tu video';
-          elseif ((int)$jp['creadas'] === 0)   $mini = (int)$jp['meta'] . ($jp['meta'] == 1 ? ' pieza' : ' piezas');
-          else                              $mini = (int)$jp['publicadas'] . '/' . (int)$jp['meta'] . ' publicadas';
-        ?>
-          <details class="jg <?= $hecha?'hecha':'' ?> <?= $clase==='regla'?'regla':'' ?> <?= $es_turno?'turno':'' ?>"
-                   data-id="<?= (int)$t['id'] ?>" <?= $es_turno ? 'open' : '' ?>>
-            <summary class="jg-sum">
-              <span class="jg-tipo <?= $h($t['tipo']) ?>"><?= $h($tipo_lbl) ?></span>
-              <span class="jg-t"><?= $h($t['titulo']) ?></span>
-              <span class="jg-mini"><?= $h($mini) ?></span>
-            </summary>
-            <?php if ($es_turno): ?><div class="jg-ahora">Por aquí seguimos</div><?php endif; ?>
-            <?php if (trim((string)$t['que_hacer']) !== ''): ?>
-              <p class="jg-q"><?= $h($t['que_hacer']) ?></p><?php endif; ?>
-            <?php if (trim((string)$t['por_que']) !== ''): ?>
-              <p class="jg-p">Por qué: <?= $h($t['por_que']) ?></p><?php endif; ?>
-            <?php if (trim((string)$t['cta']) !== ''): ?>
-              <div class="jg-cta"><b>Lo que le pedimos a la gente:</b> <?= $h($t['cta']) ?></div><?php endif; ?>
 
-            <?php if ($clase === 'produccion' && (int)$jp['meta'] > 0): ?>
-              <?php /* EL TRABAJO REAL de la jugada: puntos que se van llenando
-                       según las piezas se crean y se publican. Nadie marca esto. */ ?>
-              <div class="jg-trabajo">
-                <div class="jg-puntos">
-                  <?php for ($i = 0; $i < (int)$jp['meta']; $i++): ?>
-                    <i class="<?= $i < (int)$jp['publicadas'] ? 'pub' : ($i < (int)$jp['creadas'] ? 'lista' : '') ?>"></i>
-                  <?php endfor; ?>
-                </div>
-                <span class="jg-est">
-                  <?php if ((int)$jp['creadas'] === 0): ?>
-                    <?= (int)$jp['meta'] ?> <?= (int)$jp['meta'] === 1 ? 'pieza' : 'piezas' ?> por hacer
-                  <?php elseif ((int)$jp['publicadas'] >= (int)$jp['meta']): ?>
-                    <?= (int)$jp['publicadas'] ?> publicadas — cumplida
-                  <?php else: ?>
-                    <?= (int)$jp['publicadas'] ?> publicadas · <?= (int)$jp['creadas'] - (int)$jp['publicadas'] ?> esperando tu OK
-                  <?php endif; ?>
-                </span>
-              </div>
+      <?php
+      /*  ── HECHO · AHORA · DESPUÉS ──────────────────────────────────────
+          Seis jugadas abiertas eran 8.000px de scroll en un teléfono, todas
+          con el mismo peso y sin señal de por dónde empezar. Ahora son tres
+          grupos y UNA sola abierta: la de turno.
 
-              <?php /* LAS PUERTAS — una cosa a la vez, y cada una abre DONDE se
-                       hace: el carrusel en su constructor, el reel en el estudio
-                       con su guion, el post en su preview. Nada de listas. */ ?>
-              <?php $puertas = jugada_puertas($pdo, $t, $marca_id, $BASE); ?>
-              <?php if ($puertas): ?>
-                <div class="jg-puertas">
-                  <?php foreach ($puertas as $pu): ?>
-                    <a class="pu<?= $pu['listo'] ? ' ok' : ($pu['activa'] ? ' on' : ' esp') ?>"
-                       href="<?= $h($pu['href']) ?>">
-                      <span class="pu-n"><?= $pu['listo'] ? ico('check-circle') : $pu['n'] . ' de ' . $pu['total'] ?></span>
-                      <span class="pu-t">
-                        <b><?= $h($pu['titulo']) ?></b>
-                        <small>
-                          <?php if ($pu['listo']): ?>
-                            <?= $pu['estado'] === 'publicado' ? 'Publicado' : 'Listo' ?><?= $pu['cuando'] !== '' ? ' · sale ' . $h($pu['cuando']) : '' ?>
-                          <?php elseif ($pu['tipo'] === 'reel'): ?>
-                            El guion está escrito — falta tu video
-                          <?php elseif ($pu['tipo'] === 'carrusel'): ?>
-                            La historia está escrita — faltan las imágenes
-                          <?php else: ?>
-                            Míralo y dale tu OK<?= $pu['cuando'] !== '' ? ' · sale ' . $h($pu['cuando']) : '' ?>
-                          <?php endif; ?>
-                        </small>
-                      </span>
-                      <span class="pu-go"><?= ico('send') ?></span>
-                    </a>
-                  <?php endforeach; ?>
-                </div>
-              <?php endif; ?>
+          Los tres salen de datos reales, no de un orden inventado:
+            hecha        → estado 'hecha'
+            ahora        → la que meta_tactica_de_turno() señala
+            después      → el resto de las abiertas, en su orden
 
-              <?php if ((int)$jp['espera_video'] > 0 && !$puertas): ?>
-                <?php /* Lo único que el corillo NO puede hacer solo: el video.
-                         Se dice claro y se le da el camino, en vez de fingir
-                         que la pieza está lista. */ ?>
-                <div class="jg-video">
-                  <b><?= (int)$jp['espera_video'] === 1 ? 'Te falta grabar 1 video' : 'Te faltan ' . (int)$jp['espera_video'] . ' videos' ?></b>
-                  Ya te escribí el guion — dice exactamente qué grabar, clip por clip, con el celular.
-                  Súbelos y yo los monto con música, textos y tu marca.
-                  <a href="<?= $BASE ?>/reels.php?marca=<?= $marca_id ?><?= !empty($jp['espera_video_id']) ? '&pieza=' . (int)$jp['espera_video_id'] : '' ?>"><?= ico('camera') ?> Subir mis videos</a>
-                </div>
-              <?php endif; ?>
-            <?php endif; ?>
+          Si no hay jugada de turno —todo hecho, o el plan recién nacido— el
+          grupo «Ahora» no se pinta. No se asciende una cualquiera a «ahora»
+          solo para que el hueco no se vea. */
+      $__turno = meta_tactica_de_turno($pdo, $meta);
+      $__turno_id = $__turno ? (int)$__turno['id'] : 0;
 
-            <div class="jg-meta">
-              <?php if ($clase === 'regla'): ?>
-                <span class="jg-tag regla"><?= ico('bookmark') ?> Regla del negocio</span>
-              <?php else: ?>
-                <span class="jg-tag <?= $clase==='accion_dueno'?'dueno':'corillo' ?>">
-                  <?= $clase==='accion_dueno' ? ico('users') . ' Lo haces tú' : ico('sparkles') . ' Lo hace el corillo' ?>
-                </span>
-              <?php endif; ?>
-              <?php if ($t['inversion'] !== null): ?>
-                <span class="jg-tag"><?= ico('dollar') ?> $<?= $h(number_format((float)$t['inversion'], 0)) ?></span>
-              <?php endif; ?>
-              <span class="jg-tag"><?= ico('clock') ?> Semana <?= (int)$t['semana'] ?></span>
-            </div>
+      $g_ahora = []; $g_hecho = []; $g_despues = [];
+      foreach ($tacticas as $t) {
+          if ((string)$t['estado'] === 'hecha')            { $g_hecho[] = $t; continue; }
+          if ((int)$t['id'] === $__turno_id)               { $g_ahora[] = $t; continue; }
+          $g_despues[] = $t;
+      }
 
-            <?php /* LA ACCIÓN — el card nunca es decorativo: siempre hace algo */ ?>
-            <?php if (!$hecha && $clase === 'produccion'): ?>
-              <?php if ((int)$jp['creadas'] === 0): ?>
-                <button type="button" class="jg-hacer" data-id="<?= (int)$t['id'] ?>">
-                  <?= ico('sparkles') ?> Que lo haga el corillo</button>
-              <?php else: ?>
-                <a class="jg-ver" href="<?= $BASE ?>/propuestas.php?marca=<?= $marca_id ?>&jugada=<?= (int)$t['id'] ?>">
-                  <?= ico('list') ?> Ver <?= (int)$jp['creadas'] === 1 ? 'la pieza' : 'las ' . (int)$jp['creadas'] . ' piezas' ?> de esta jugada</a>
-                <?php if ((int)$jp['creadas'] < (int)$jp['meta']): ?>
-                  <button type="button" class="jg-hacer sec" data-id="<?= (int)$t['id'] ?>">
-                    Que haga <?= (int)$jp['meta'] - (int)$jp['creadas'] ?> más</button>
-                <?php endif; ?>
-              <?php endif; ?>
-            <?php elseif (!$hecha && $clase === 'accion_dueno'): ?>
-              <button type="button" class="jg-ok2" data-id="<?= (int)$t['id'] ?>">
-                <?= ico('check-circle') ?> Ya lo hice</button>
-            <?php endif; ?>
-            <div class="jg-live" data-for="<?= (int)$t['id'] ?>"></div>
-          </details>
-        <?php endforeach; ?>
-      </div>
+      /*  Pinta un grupo entero. La tarjeta es la misma en los tres —vive en
+          _meta_jugada.php— para que no se despeguen con el tiempo. */
+      $pintar = function (array $lista, bool $abierta) use ($pdo, $marca_id, $BASE, $h, $__turno_id) {
+          foreach ($lista as $t) {
+              $tipo_lbl = ['contenido'=>'Contenido','distribucion'=>'Difusión','pauta'=>'Anuncio pagado',
+                           'oferta'=>'Oferta','alianza'=>'Alianza','operacion'=>'Cómo operar'][$t['tipo']] ?? $t['tipo'];
+              $clase = (string)($t['clase'] ?? 'produccion');
+              $jp    = jugada_progreso($pdo, $t);
+              $hecha = $t['estado'] === 'hecha';
+              $es_turno = $abierta && ((int)$t['id'] === $__turno_id) && !$hecha;
+              //  Resumen corto para cuando está plegada: que se entienda sin abrir.
+              if ($hecha)                          $mini = 'Hecha';
+              elseif ($clase === 'regla')          $mini = 'Siempre';
+              elseif ($clase === 'accion_dueno')   $mini = 'La haces tú';
+              elseif ((int)$jp['espera_video'] > 0) $mini = 'Falta tu video';
+              elseif ((int)$jp['creadas'] === 0)   $mini = (int)$jp['meta'] . ($jp['meta'] == 1 ? ' pieza' : ' piezas');
+              else                                 $mini = (int)$jp['publicadas'] . '/' . (int)$jp['meta'] . ' publicadas';
+              require __DIR__ . '/_meta_jugada.php';
+          }
+      };
+      ?>
+
+      <?php if ($g_ahora): ?>
+        <section class="plan-grupo">
+          <div class="plan-gt"><span>Ahora</span><u></u></div>
+          <?php $pintar($g_ahora, true); ?>
+        </section>
+      <?php endif; ?>
+
+      <?php if ($g_hecho): ?>
+        <section class="plan-grupo">
+          <div class="plan-gt"><span>Hecho</span><span class="n"><?= count($g_hecho) ?></span><u></u></div>
+          <?php $pintar($g_hecho, false); ?>
+        </section>
+      <?php endif; ?>
+
+      <?php if ($g_despues): ?>
+        <section class="plan-grupo">
+          <div class="plan-gt"><span>Después</span><span class="n"><?= count($g_despues) ?></span><u></u></div>
+          <?php $pintar($g_despues, false); ?>
+        </section>
+      <?php endif; ?>
     <?php else: ?>
       <div class="card">
         <p style="margin:0;font-size:14px;color:var(--muted);line-height:1.55">
@@ -1106,73 +1217,119 @@ $mt_unidad = function (string $objetivo): array {
       </div>
     <?php endif; ?>
 
-    <?php /* ── COMPARAR PLANES ────────────────────────────────────────────
-         El historial ya guardaba el récord de cada plan, pero uno debajo del
-         otro. Aquí se ven juntos y con su delta, que es lo que contesta la
-         pregunta de verdad: ¿este plan lo está haciendo mejor que el anterior? */ ?>
-    <?php $comp = $meta ? meta_planes_comparar($pdo, (int)$meta['id']) : []; ?>
-    <?php if (count($comp) >= 2): ?>
-      <h2 style="font-family:var(--font-display,'Oswald',sans-serif);font-size:17px;letter-spacing:.4px;color:var(--tinta);margin:26px 0 4px">
-        Plan contra plan</h2>
-      <p style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 12px">
-        Cada plan medido en SU ventana, y el ritmo por semana para que ventanas
-        distintas se puedan comparar sin trampa.</p>
+    <?php /* ── LAS CAPAS PLEGADAS ─────────────────────────────────────────
+             Diagnóstico, comparación, aprendizaje, historial y las opciones
+             delicadas. Todo lo que NO es «qué toca en este plan» vive aquí,
+             plegado y en este orden. Nada de esto puede competir con la
+             jugada de ahora, y nada de esto se ha eliminado: se ha bajado
+             una capa.
 
-      <div class="cmp">
-        <?php foreach ($comp as $c): $ps = $c['por_semana']; ?>
-          <div class="cmp-p<?= $c['activo'] ? ' on' : '' ?>">
-            <div class="cmp-h">
-              <b>Plan #<?= $c['version'] ?></b>
-              <span class="cmp-est"><?= $c['activo'] ? 'en curso' : ($c['estado']==='completado'?'cumplido':'reemplazado') ?></span>
-              <span class="cmp-d"><?= $c['dias'] < 1 ? 'menos de un día' : (rtrim(rtrim(number_format($c['dias'],1),'0'),'.') . ($c['dias']==1?' día':' días')) ?></span>
-            </div>
-            <?php if ($c['corto']): ?>
-              <p class="cmp-corto">Ventana muy corta para juzgarla — no se compara.</p>
-            <?php endif; ?>
-            <div class="cmp-nums">
-              <div><b><?= $c['hechas'] ?>/<?= $c['jugadas'] ?></b><span>jugadas</span></div>
-              <div><b><?= $c['publicadas'] ?></b><span>publicadas</span>
-                <?php if (isset($c['delta']['publicadas'])): ?>
-                  <i class="<?= $c['delta']['publicadas'] >= 0 ? 'up':'dn' ?>"><?= ($c['delta']['publicadas']>=0?'+':'') . $c['delta']['publicadas'] ?>%</i>
-                <?php endif; ?>
-              </div>
-              <div><b><?= $c['alcance'] !== null ? number_format((float)$c['alcance']) : '—' ?></b><span>alcance</span>
-                <?php if (isset($c['delta']['alcance'])): ?>
-                  <i class="<?= $c['delta']['alcance'] >= 0 ? 'up':'dn' ?>"><?= ($c['delta']['alcance']>=0?'+':'') . $c['delta']['alcance'] ?>%</i>
-                <?php endif; ?>
-              </div>
-              <div><b><?= $c['movio'] !== null ? $h(meta_fmt((float)$c['movio'], (string)$c['objetivo'])) : '—' ?></b><span>movió la meta</span>
-                <?php if (isset($c['delta']['movio'])): ?>
-                  <i class="<?= $c['delta']['movio'] >= 0 ? 'up':'dn' ?>"><?= ($c['delta']['movio']>=0?'+':'') . $c['delta']['movio'] ?>%</i>
-                <?php endif; ?>
-              </div>
-            </div>
-            <?php if ($ps && !$c['corto']): ?>
-              <p class="cmp-ritmo">Ritmo: <b><?= $ps['publicadas'] ?></b> publicadas por semana<?php
-                if ($ps['movio'] !== null): ?> · <b><?= $h(meta_fmt((float)$ps['movio'], (string)$c['objetivo'])) ?></b> por semana<?php endif; ?></p>
-            <?php endif; ?>
-            <?php if ($c['leccion'] !== ''): ?>
-              <p class="cmp-lec"><?= $h($c['leccion']) ?></p>
+             Las opciones van LAS ÚLTIMAS y a propósito: «Empezar un plan
+             nuevo» y «Cambiar de meta» estaban pegadas al progreso, que es
+             justo donde el dedo va a mirar cómo va el mes. */ ?>
+    <div class="plan-capas">
+
+      <?php if (trim((string)$meta['diagnostico']) !== ''): ?>
+        <details class="plan-ac">
+          <summary>Lo que dice la Estratega<?= ico('chev-abajo') ?></summary>
+          <div class="dentro diag">
+            <div class="qui"><?= ico('sparkles') ?> Su lectura de tu negocio</div>
+            <p><?= $h($meta['diagnostico']) ?></p>
+            <?php if (!empty($meta['veredicto'])): ?>
+              <span class="vered <?= $h($meta['veredicto']) ?>">
+                <?= $meta['veredicto']==='alcanzable' ? 'Se puede'
+                    : ($meta['veredicto']==='ambiciosa' ? 'Es ambiciosa, pero se pelea'
+                    : 'Muy cuesta arriba — mira lo que propongo') ?>
+              </span>
             <?php endif; ?>
           </div>
-        <?php endforeach; ?>
-      </div>
-      <p class="cmp-nota">Una raya (—) quiere decir <b>sin dato todavía</b>, no cero: Instagram y Facebook
-        reportan con retraso. Los porcentajes comparan contra el plan anterior, por semana.</p>
-    <?php endif; ?>
+        </details>
+      <?php endif; ?>
 
-    <?php if ($historial): ?>
-      <h2 id="aprendizaje" style="font-family:var(--font-display,'Oswald',sans-serif);font-size:17px;letter-spacing:.4px;color:var(--tinta);margin:26px 0 4px;scroll-margin-top:16px">
-        Planes anteriores</h2>
-      <p style="font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 12px">
-        Cada plan guarda su propio récord: qué se hizo, qué se publicó y qué dejó. Ábrelos para ver los resultados.</p>
+      <?php if (trim((string)$meta['contexto']) !== ''): ?>
+        <details class="plan-ac">
+          <summary>Lo que me contaste<?= ico('chev-abajo') ?></summary>
+          <div class="dentro"><p><?= $h($meta['contexto']) ?></p></div>
+        </details>
+      <?php endif; ?>
+
+      <?php /* ── COMPARAR PLANES ──────────────────────────────────────────
+               El historial ya guardaba el récord de cada plan, pero uno debajo
+               del otro. Aquí se ven juntos y con su delta, que es lo que
+               contesta la pregunta de verdad: ¿este plan lo está haciendo
+               mejor que el anterior? Solo aparece con dos o más. */ ?>
+      <?php $comp = $meta ? meta_planes_comparar($pdo, (int)$meta['id']) : []; ?>
+      <?php if (count($comp) >= 2): ?>
+        <details class="plan-ac">
+          <summary>Plan contra plan <span class="cta"><?= count($comp) ?></span><?= ico('chev-abajo') ?></summary>
+          <div class="dentro">
+            <div class="cmp">
+              <?php foreach ($comp as $c): $ps = $c['por_semana'] ?? null; ?>
+                <div class="cmp-p<?= $c['activo'] ? ' on' : '' ?>">
+                  <div class="cmp-h">
+                    <b>Plan #<?= (int)$c['version'] ?></b>
+                    <span class="cmp-est"><?= $c['activo'] ? 'en curso' : ($c['estado']==='completado'?'cumplido':'reemplazado') ?></span>
+                    <span class="cmp-d"><?= $c['dias'] < 1 ? 'menos de un día' : (rtrim(rtrim(number_format($c['dias'],1),'0'),'.') . ($c['dias']==1?' día':' días')) ?></span>
+                  </div>
+                  <?php if ($c['corto']): ?>
+                    <p class="cmp-corto">Ventana muy corta para juzgarla — no se compara.</p>
+                  <?php endif; ?>
+                  <div class="cmp-nums">
+                    <div><b><?= $c['hechas'] ?>/<?= $c['jugadas'] ?></b><span>jugadas</span></div>
+                    <div><b><?= $c['publicadas'] ?></b><span>publicadas</span>
+                      <?php if (isset($c['delta']['publicadas'])): ?>
+                        <i class="<?= $c['delta']['publicadas'] >= 0 ? 'up' : 'dn' ?>"><?= $c['delta']['publicadas'] >= 0 ? '+' : '' ?><?= $c['delta']['publicadas'] ?></i>
+                      <?php endif; ?>
+                    </div>
+                    <div><b><?= $c['alcance'] !== null ? number_format((float)$c['alcance']) : '—' ?></b><span>alcance</span>
+                      <?php if (isset($c['delta']['alcance'])): ?>
+                        <i class="<?= $c['delta']['alcance'] >= 0 ? 'up' : 'dn' ?>"><?= $c['delta']['alcance'] >= 0 ? '+' : '' ?><?= number_format((float)$c['delta']['alcance']) ?></i>
+                      <?php endif; ?>
+                    </div>
+                    <div><b><?= $c['movio'] !== null ? $h(meta_fmt((float)$c['movio'], (string)$c['objetivo'])) : '—' ?></b><span>movió la meta</span>
+                      <?php if (isset($c['delta']['movio'])): ?>
+                        <i class="<?= $c['delta']['movio'] >= 0 ? 'up' : 'dn' ?>"><?= $c['delta']['movio'] >= 0 ? '+' : '' ?><?= $h(meta_fmt((float)$c['delta']['movio'], (string)$c['objetivo'])) ?></i>
+                      <?php endif; ?>
+                    </div>
+                  </div>
+                  <?php if ($ps && !$c['corto']): ?>
+                    <p class="cmp-ritmo">Ritmo: <b><?= $ps['publicadas'] ?></b> publicadas por semana<?php
+                      if ($ps['movio'] !== null): ?> · <b><?= $h(meta_fmt((float)$ps['movio'], (string)$c['objetivo'])) ?></b> por semana<?php endif; ?></p>
+                  <?php endif; ?>
+                  <?php if ($c['leccion'] !== ''): ?>
+                    <p class="cmp-lec"><?= $h($c['leccion']) ?></p>
+                  <?php endif; ?>
+                </div>
+              <?php endforeach; ?>
+            </div>
+            <p class="cmp-nota">Una raya (—) quiere decir <b>sin dato todavía</b>, no cero: Instagram y
+              Facebook reportan con retraso y no se juzga con números que aún no existen.</p>
+          </div>
+        </details>
+      <?php endif; ?>
+
+      <?php /*  EL ANCLA SE CONSERVA. El estado L enlaza a
+                meta.php?vista=plan#aprendizaje; si el ancla desaparece, ese
+                enlace cae en el vacio. Y se abre sola cuando se llega por el
+                salto: un acordeon cerrado al final de un ancla es una pantalla
+                muda. Lo hace el guion del final, mirando location.hash. */ ?>
+      <?php if ($historial): ?>
+        <details class="plan-ac" id="aprendizaje">
+          <summary>Planes anteriores <span class="cta"><?= count($historial) ?></span><?= ico('chev-abajo') ?></summary>
+          <div class="dentro">
+            <p>Cada plan guarda su propio récord: qué se hizo, qué se publicó y qué dejó.</p>
 
       <?php foreach ($historial as $hh):
         $p = $hh['plan']; $pr = $hh['prog']; $rs = $hh['res'];
         $vale = $p['funciono'] === null ? null : ((int)$p['funciono'] === 1);
       ?>
         <details class="hplan">
-          <summary>
+          <?php /*  La clase NO es decorativa: `.hp-s` es lo que le quita el
+                    triangulo del navegador, le da los 56px de objetivo y lo
+                    saca de los margenes de `.hplan > *:not(.hp-s)`. Sin ella
+                    el sumario del historial era el unico acordeon de Tu Meta
+                    que se pintaba distinto — y sin altura garantizada.  */ ?>
+          <summary class="hp-s">
             <span class="hp-v">Plan #<?= (int)$p['version'] ?></span>
             <span class="hp-f"><?= $h(date('j/n', strtotime((string)$p['inicio_at']))) ?>
               — <?= $h(!empty($p['cierre_at']) ? date('j/n', strtotime((string)$p['cierre_at'])) : 'abierto') ?></span>
@@ -1238,18 +1395,55 @@ $mt_unidad = function (string $objetivo): array {
           </div>
         </details>
       <?php endforeach; ?>
-    <?php endif; ?>
+          </div>
+        </details>
+      <?php endif; ?>
 
-    <details class="glos">
-      <summary>¿Qué significan las palabras raras del mercadeo?</summary>
-      <dl>
-        <?php foreach ($glosario as $t => $d): ?>
-          <dt><?= $h(ucfirst($t)) ?></dt><dd><?= $h($d) ?></dd>
-        <?php endforeach; ?>
-      </dl>
-    </details>
+      <details class="plan-ac">
+        <summary>¿Qué significan las palabras raras?<?= ico('chev-abajo') ?></summary>
+        <div class="dentro">
+          <?php foreach ($glosario as $gt => $gd): ?>
+            <p><b><?= $h(ucfirst($gt)) ?>:</b> <?= $h($gd) ?></p>
+          <?php endforeach; ?>
+        </div>
+      </details>
+
+      <?php /*  LA FECHA QUE PUEDE SERVIR.
+                Va DESPUES de las jugadas y ANTES de las opciones delicadas: es
+                una sugerencia, no una tarea, y ponerla arriba competiria con
+                lo que de verdad toca hoy. Se pinta sola solo si hay alguna y
+                si su esquema esta.  */ ?>
+      <?php if (efem_disponible($pdo)) require __DIR__ . '/_meta_oportunidad.php'; ?>
+
+      <?php /*  LAS OPCIONES DELICADAS, LAS ULTIMAS Y PLEGADAS.
+                Estaban pegadas al progreso —justo donde el dedo va a mirar como
+                va el mes— y son las dos cosas que mas asustan: rehacer el plan
+                y cambiar de meta.
+
+                Eran un confirm() del navegador. Ahora cada una abre SU wizard,
+                que ensena lo que se mueve antes de moverlo. Los ids se
+                conservan (#replan, #cerrar) porque la red de paridad engancha
+                por ellos, pero ya no disparan nada: son puertas. */ ?>
+      <details class="plan-ac">
+        <summary>Opciones del plan<?= ico('chev-abajo') ?></summary>
+        <div class="dentro">
+          <div class="plan-op">
+            <a id="replan" href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&amp;vista=plan-nuevo"><?= ico('refresh') ?> Empezar un plan nuevo</a>
+            <p>Jugadas nuevas para esta misma meta. Antes de cambiar nada te enseno que
+              se mueve y que se queda.</p>
+            <?php if (meta_ajuste_disponible($pdo)): ?>
+              <a id="ajustar" href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&amp;vista=ajustar"><?= ico('edit') ?> Ajustar esta meta</a>
+              <p>Cambiar el número, la fecha o la inversión sin empezar de cero. Lo hecho no se toca.</p>
+            <?php endif; ?>
+            <a id="cerrar" href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&amp;vista=cambiar"><?= ico('target') ?> Cambiar de meta</a>
+            <p>Escoges la proxima primero y despues cierro esta. Lo publicado no se toca.</p>
+          </div>
+        </div>
+      </details>
+    </div>
   </div>
 </div>
+<?php require __DIR__ . '/_meta_zona.php'; ?>
 
 <script>
 (function(){
@@ -1257,13 +1451,13 @@ $mt_unidad = function (string $objetivo): array {
   function post(d){ var fd=new FormData(); fd.append('csrf',CSRF); for(var k in d) fd.append(k,d[k]);
     return fetch(URL,{method:'POST',body:fd}).then(function(r){return r.json();}); }
 
-  // DESKTOP: las jugadas se abren todas. Plegarlas es la respuesta al scroll del
-  // teléfono; con pantalla grande, esconder información que cabe es quitarle al
-  // dueño la posibilidad de comparar su plan de un vistazo.
-  // (El dueño puede cerrarlas a mano si quiere; solo cambia el estado inicial.)
-  if (window.matchMedia('(min-width:901px)').matches) {
-    document.querySelectorAll('details.jg').forEach(function(d){ d.open = true; });
-  }
+  //  UNA SOLA JUGADA ABIERTA, TAMBIEN EN ESCRITORIO.
+  //  Aqui se abrian las SEIS con pantalla grande. Tenia sentido cuando el plan
+  //  era una lista plana: esconder lo que cabe parecia quitarle al dueño la
+  //  vista de conjunto. Ya no lo es — la vista de conjunto la dan los tres
+  //  grupos (Hecho, Ahora, Despues) y el resumen de cada jugada plegada.
+  //  Abrirlas todas devolvia el reguero, y ademas hacia de movil y escritorio
+  //  dos productos distintos: la misma jerarquia en los dos, dice la regla.
 
   // ── "Que lo haga el corillo": produce TODO el contenido de la jugada ──
   //  Va por cola (tarda minutos) y se sondea. El dueño puede irse: cuando
@@ -1348,20 +1542,26 @@ $mt_unidad = function (string $objetivo): array {
     });
   });
 
-  document.getElementById('replan').addEventListener('click', function(){
-    if(!confirm('¿Empezar un plan nuevo?\n\nLa Estratega arma jugadas nuevas para esta misma meta.\n\n· El plan de ahora pasa a historial.\n· Lo que el corillo ya te hizo se queda en Tus Posts.\n· Tu meta, tu marca y tu Genoma no se tocan.')) return;
-    var b=this, orig=b.innerHTML;
-    b.disabled=true; b.textContent='La Estratega está pensando…';
-    post({accion:'replan'}).then(function(d){
-      if(d.ok) location.reload();
-      else { b.disabled=false; b.innerHTML=orig; alert(d.err||'No pude armar el plan nuevo.'); }
-    }).catch(function(){ b.disabled=false; b.innerHTML=orig; });
-  });
+  //  AQUI VIVIAN LOS DOS confirm(). Ya no hay guion que enganchar: #replan y
+  //  #cerrar son enlaces a ?vista=plan-nuevo y ?vista=cambiar.
+  //
+  //  Un cuadro del navegador es la peor forma de pedir permiso para algo
+  //  grande: no cabe lo que va a pasar, no se lee con calma y no tiene vuelta
+  //  atras. Y el de cambiar de meta ademas MENTIA — decia «el corillo dejara
+  //  de perseguir esta» y lo que hacia era cerrarla y dejar al negocio sin
+  //  meta, esperando que el dueño llenara despues un wizard en blanco.
 
-  document.getElementById('cerrar').addEventListener('click', function(){
-    if(!confirm('¿Cambiar de meta? El corillo dejará de perseguir esta.')) return;
-    post({accion:'cerrar'}).then(function(){ location.reload(); });
-  });
+  //  EL ANCLA #aprendizaje ES AHORA UN ACORDEON. Llegando por el salto
+  //  -el estado L enlaza a meta.php?vista=plan#aprendizaje- tiene que abrirse
+  //  solo, o el dueño aterriza en una fila cerrada preguntandose que vino a
+  //  ver. Y se desplaza despues de abrir, que si no el salto cae corto.
+  (function(){
+    if (location.hash !== '#aprendizaje') return;
+    var d = document.getElementById('aprendizaje');
+    if (!d) return;
+    d.open = true;
+    setTimeout(function(){ d.scrollIntoView({block:'start'}); }, 60);
+  })();
 })();
 </script>
 
@@ -1380,13 +1580,19 @@ $mt_unidad = function (string $objetivo): array {
   //  lo que toca es aprobar, publicar o confirmar algo, el aviso va SIN boton y
   //  la accion normal se queda con el suyo: dos primarios compitiendo es el
   //  criterio 3 del contrato, y en esa pantalla el dueño ya no sabe que tocar.
+  //  QUIEN MANDA NO LO DECIDE LA LETRA DEL ESTADO.
+  //  Estaba escrito como «si es E o G, manda la cuota», y eso le quitaba a la
+  //  dueña la unica accion que SI podia hacer con el mes agotado: G le pide
+  //  material suyo -una foto, un video- y subirlo no gasta ni una imagen. Y E
+  //  cubre tanto un trabajo ya en marcha, que no se para, como uno que ni ha
+  //  empezado, que si. La regla vive ahora en MetaLimiteImagen y pregunta lo
+  //  que hay que preguntar: ¿lo proximo necesita PINTAR algo nuevo?
   require_once __DIR__ . '/../includes/cuota_aviso.php';
+  require_once __DIR__ . '/../core/Meta/MetaLimiteImagen.php';
   $mt_cuota = null; $mt_cuota_manda = false;
   try {
       $mt_cuota = img_cuota_estado($pdo, $marca_id, ($usuario['rol'] ?? '') === 'admin');
-      if (!empty($mt_cuota['lleno'])) {
-          $mt_cuota_manda = in_array($E->estado, [MetaState::E_CRECER_TRABAJA, MetaState::G_MATERIAL], true);
-      }
+      $mt_cuota_manda = MetaLimiteImagen::manda($E, $mt_cuota);
   } catch (Throwable $e) { $mt_cuota = null; }
   // El destino de la acción vuelve aquí cuando termine.
   // El destino sale del compositor; aquí solo se le añade el regreso y, para
@@ -1403,89 +1609,158 @@ $mt_unidad = function (string $objetivo): array {
 
 <div class="ah">
 
-  <?php /* ── LA VUELTA · lo que acaba de pasar, en un renglón ──────────
-           El estado ya viene recalculado: MetaSnapshotReader lee en cada carga,
-           así que al volver de aprobar una pieza el bloque Ahora YA muestra lo
-           siguiente. Falta solo decir qué pasó, porque si no el dueño vuelve a
-           una pantalla distinta sin saber si su acción sirvió.
-           El texto NO sale de la URL: la URL trae una llave y el texto vive en
-           MetaRetorno. Llave que no reconozca, no pinta nada. */ ?>
-  <?php if ($mt_confirma = MetaRetorno::confirmacion($_GET['hecho'] ?? null)): ?>
-    <div class="ah-hecho" role="status">
-      <span class="ah-hecho-ico" aria-hidden="true"><?= ico('check') ?></span>
-      <span><b><?= $h($mt_confirma[0]) ?></b> <?= $h($mt_confirma[1]) ?></span>
-    </div>
-  <?php endif; ?>
+  <?php /* ── BARRA DE CONTEXTO · un DATO, no un titular ────────────────
+           Era un encabezado de 21px que competia con el titulo del estado:
+           dos voces grandes, una encima de otra, y el ojo sin saber cual era
+           el asunto. Ahora es una tira: objetivo, cifra y dias.
 
-  <?php /* ── SIN IMAGENES ESTE MES · un limite, no una averia ──────────
-           Va arriba porque explica lo que el dueño esta a punto de ver: una
-           pantalla que no le va a dejar pedir arte nuevo. Enterarse despues de
-           intentarlo es lo que manda gente a soporte. */ ?>
-  <?php if ($mt_cuota && !empty($mt_cuota['lleno'])): ?>
-    <?= cuota_aviso_html($mt_cuota, $marca_id, $mt_cuota_manda, $BASE) ?>
-  <?php endif; ?>
-
-  <?php /* ── ZONA META · compacta, y honesta con lo que puede afirmar ── */ ?>
+           Y la cifra dice DE DONDE SALE en la misma linea. Antes «7 de 25» y,
+           tres renglones mas abajo, un parrafo explicando que lo de WhatsApp
+           no entraba. Quien no leia el parrafo entendia otra cosa. */ ?>
   <?php if ($mt_snap['meta']): ?>
     <?php
       [$sust, $part] = $uni;
       $num = fn($v) => rtrim(rtrim(number_format((float)$v, 2), '0'), '.');
-      $trozos = [];
-      if ($mt_snap['progreso']['actual'] !== null) {
-          $trozos[] = $num($mt_snap['progreso']['actual']) . ' ' . $part . ' hasta hoy';
-      } else {
-          $trozos[] = 'sin señal todavía';
-      }
+      $dias = '';
       if ($mt_snap['progreso']['dias_rest'] !== null) {
           $d = (int)$mt_snap['progreso']['dias_rest'];
-          $trozos[] = $d <= 0 ? 'sin días por delante' : ($d === 1 ? 'queda 1 día' : "quedan {$d} días");
+          $dias = $d <= 0 ? 'sin días por delante'
+                          : ($d === 1 ? 'queda 1 día' : "quedan {$d} días");
       }
+      $cerrada = $E->estado === MetaState::M_CERRADA;
+      $pct = $mt_snap['progreso']['pct'];
     ?>
-    <section class="ah-meta">
-      <b><?= $mt_snap['meta']['cantidad'] !== null
-            ? 'Meta: ' . $h($num($mt_snap['meta']['cantidad'])) . ' ' . $h($sust)
-            : 'Meta: ' . $h($sust) ?></b>
-      <span><?= $h(implode(' · ', $trozos)) ?></span>
-      <?php if ($E->puedeAfirmarProgreso() && $mt_snap['progreso']['pct'] !== null): ?>
-        <i class="ah-barra"><b style="width:<?= max(0, min(100, (int)$mt_snap['progreso']['pct'])) ?>%"></b></i>
-      <?php else: ?>
-        <?php /* Cobertura parcial: ni barra, ni %, ni ritmo, ni "faltan N".
-                 Se dice de dónde sale el número y se acabó. */ ?>
-        <small class="ah-cob"><?= $obj === 'pedidos' || $obj === 'ventas'
-          ? 'Cuenta lo registrado en Crecer. Lo que cierras por WhatsApp no entra solo.'
-          : ($obj === 'conversaciones'
-             ? 'Cuenta los mensajes que llegaron por los canales conectados.'
-             : 'Instagram y Facebook reportan con retraso.') ?></small>
+    <section class="tm-meta">
+      <div class="tm-meta-fila">
+        <?= ico($cerrada ? 'check-circle' : 'compass') ?>
+        <span class="tm-obj-nom"><?= $h($cerrada ? $sust . ' · cerrada' : $sust) ?></span>
+        <?php if ($dias !== ''): ?><span class="tm-dias"><?= $h($dias) ?></span><?php endif; ?>
+      </div>
+      <div class="tm-cifra">
+        <?php if ($mt_snap['progreso']['actual'] !== null): ?>
+          <b><?= $h($num($mt_snap['progreso']['actual'])) ?></b>
+          <span class="et"><?= $h($mt_fuente($obj, $part)) ?></span>
+        <?php else: ?>
+          <span class="et">Sin señal todavía</span>
+        <?php endif; ?>
+        <?php if ($mt_snap['meta']['cantidad'] !== null): ?>
+          <span class="de">· de <?= $h($num($mt_snap['meta']['cantidad'])) ?></span>
+        <?php endif; ?>
+      </div>
+      <?php /* La barra solo cuando el COMPOSITOR dice que se puede afirmar el
+               progreso. Con cobertura parcial no se pinta: una barra afirma
+               «vas por aqui de un total que conozco», y no lo conocemos. */ ?>
+      <?php if ($E->puedeAfirmarProgreso() && $pct !== null): ?>
+        <i class="tm-barra"><b style="width:<?= max(0, min(100, (int)$pct)) ?>%"></b></i>
+      <?php endif; ?>
+      <?php /* El limite de imagenes, cuando NO bloquea lo de hoy: un renglon
+               mas de contexto. Cuando bloquea se lleva la pantalla entera, y
+               eso lo decide el aviso de arriba, no esta tira. */ ?>
+      <?php if ($mt_cuota && !empty($mt_cuota['lleno']) && !$mt_cuota_manda): ?>
+        <div class="tm-lim"><?= ico('image') ?>
+          <span>Sin imágenes nuevas hasta el <?= $h($mt_reset($mt_cuota)) ?></span>
+        </div>
       <?php endif; ?>
     </section>
   <?php endif; ?>
 
-  <?php /* ── ZONA AHORA · el estado dominante, una sola acción ── */ ?>
-  <?php
-    // El rótulo no puede repetir el título. El compositor devuelve títulos que
-    // se explican solos ("Para seguir, necesito tu video") porque Home los usa
-    // sueltos; aquí, con el rótulo delante, se le quita el prefijo. Si al
-    // quitarlo no queda nada, se deja el título entero y se cae el rótulo.
-    $kick = '';
-    if ($E->pideAlgoAlDueno())   $kick = 'Para seguir, necesito';
-    elseif ($act === null)       $kick = 'Nada pendiente de ti';
-    $titulo = $E->titulo;
-    if ($kick !== '' && stripos($titulo, $kick) === 0) {
-        $resto = trim(mb_substr($titulo, mb_strlen($kick)));
-        if ($resto !== '') $titulo = mb_strtoupper(mb_substr($resto, 0, 1)) . mb_substr($resto, 1);
-        else               $kick = '';
-    } elseif ($kick !== '' && mb_strtolower(trim($titulo)) === mb_strtolower($kick)) {
-        $kick = '';
-    }
-  ?>
-  <section class="ah-now<?= $act === null ? ' quieto' : '' ?>">
-    <?php if ($kick !== ''): ?>
-      <div class="ah-kick<?= $act === null ? ' tranquilo' : '' ?>"><?= $h($kick) ?></div>
-    <?php endif; ?>
+  <?php /* ── LA VUELTA · qué pasó con lo anterior ───────────────────────
+           Va DESPUES de la meta y antes del turno: es el acuse de recibo de
+           lo que el dueño acaba de hacer, y lo primero que busca al volver.
+           El texto NO sale de la URL: la URL trae una llave y el texto vive
+           en MetaRetorno. Llave que no reconozca, no pinta nada. */ ?>
+  <?php if ($mt_confirma = MetaRetorno::confirmacion($_GET['hecho'] ?? null)): ?>
+    <div class="tm-vuelta" role="status">
+      <?= ico('check-circle') ?>
+      <span><b><?= $h($mt_confirma[0]) ?></b> <?= $h($mt_confirma[1]) ?></span>
+    </div>
+  <?php endif; ?>
 
-    <h1 class="ah-tit"><?= $h($titulo) ?></h1>
-    <?php if (trim($E->instruccion) !== ''): ?>
-      <p class="ah-ins"><?= $h($E->instruccion) ?></p>
+  <?php /* ── ZONA AHORA · el turno, una frase y UNA acción ─────────────
+           Quien decide el estado sigue siendo el compositor: aqui solo se
+           pregunta lo que el estado ya sabe de si mismo -si pide algo al
+           dueño, si tiene accion- y se pinta. Ninguna regla nueva. */ ?>
+  <?php
+    //  EL TURNO. Tres posibles, y siempre CON PALABRA: la regla de
+    //  accesibilidad dice que la informacion no puede viajar solo en el
+    //  color, porque hay quien no lo distingue y porque una pastilla muda
+    //  no se puede leer en voz alta.
+    //  Rosa = solo tu puedes hacerlo. Teal = ya esta hecho o corre solo.
+    $TUYAS = ['material', 'aprobacion', 'inversion', 'fisica', 'decision',
+              'reintento', 'reintento_job'];
+    $turno_cls = ''; $turno_txt = ''; $turno_ico = '';
+    if ($mt_cuota_manda) {
+        $turno_cls = 'limite'; $turno_txt = 'Sin imágenes este mes'; $turno_ico = 'image';
+    } elseif ($act !== null && in_array((string)($act['tipo'] ?? ''), $TUYAS, true)) {
+        $turno_cls = ''; $turno_txt = 'Te toca a ti';
+    } elseif ($act === null) {
+        $turno_cls = 'mio'; $turno_txt = 'Me toca a mí';
+    } else {
+        $turno_cls = 'mio'; $turno_txt = 'Ya está listo';
+    }
+
+    //  EL TITULO YA NO REPITE EL ROTULO. El compositor devuelve titulos que
+    //  se explican solos ("Para seguir, necesito tu video") porque Home los
+    //  usa sueltos; aqui, con el turno delante, sobra el prefijo.
+    $titulo = trim($E->titulo);
+    foreach (['Para seguir, necesito', 'Nada pendiente de ti'] as $pref) {
+        if (stripos($titulo, $pref) === 0) {
+            $resto = trim(mb_substr($titulo, mb_strlen($pref)));
+            if ($resto !== '') $titulo = mb_strtoupper(mb_substr($resto, 0, 1)) . mb_substr($resto, 1);
+            break;
+        }
+    }
+    //  CON EL LIMITE MANDANDO, LA PANTALLA DICE QUE PASA.
+    //  Cambiar solo la pastilla y dejar el titulo del estado normal era medio
+    //  aviso: la dueña leia «Me toca a mi» con una pastilla ambar al lado y
+    //  tenia que atar cabos. Se dice entero, con el numero y el mes.
+    if ($mt_cuota_manda) {
+        $lim = (int)($mt_cuota['limite'] ?? 0);
+        $titulo = $lim > 0
+            ? 'Usaste las ' . $lim . ' imágenes de ' . $mt_mes()
+            : 'Se acabaron las imágenes de ' . $mt_mes();
+    }
+    //  M · el cierre dice CON CUANTO, y siempre «registrados»: sin esa
+    //  palabra «18 pedidos» se lee como los pedidos del negocio, y Crecer
+    //  solo cuenta los que pasaron por aqui.
+    if ($E->estado === MetaState::M_CERRADA && $mt_snap['meta']
+        && $mt_snap['progreso']['actual'] !== null) {
+        [$sust_m, $part_m] = $uni;
+        $n_m = rtrim(rtrim(number_format((float)$mt_snap['progreso']['actual'], 2), '0'), '.');
+        $titulo = 'Cerraste con ' . $n_m . ' ' . $sust_m . ' ' . $part_m;
+    }
+    $objeto = (array)($E->evidencia['objeto'] ?? []);
+    //  El objeto pausado es el que el compositor eligio, no un ejemplo. Si el
+    //  estado no trae ninguno, la pantalla no se inventa uno.
+    $pausado = $mt_cuota_manda ? MetaLimiteImagen::objetoPausado($E) : [];
+    if ($pausado) $objeto = $pausado;
+  ?>
+  <section class="tm-ahora">
+    <span class="tm-turno <?= $h($turno_cls) ?>">
+      <?php if ($turno_ico !== ''): ?><?= ico($turno_ico) ?><?php else: ?><u></u><?php endif; ?>
+      <?= $h($turno_txt) ?>
+    </span>
+
+    <h1 class="tm-frase"><?= $h($titulo) ?></h1>
+
+    <?php /* EL OBJETO. La pantalla enseña de qué habla ANTES de que el dueño
+             pulse: hasta ahora habia que entrar al post para saber cual era.
+             Solo cuando el estado trae uno — si lo que falta es material, lo
+             que se pide es justo lo que NO hay, y enmarcar un hueco no dice
+             nada. */ ?>
+    <?php if ($objeto && trim((string)($objeto['titulo'] ?? '')) !== ''): ?>
+      <div class="tm-obj">
+        <span class="tm-obj-ic"><?= ico($mt_ico_obj((string)($objeto['tipo'] ?? 'post'))) ?></span>
+        <span class="tm-obj-tx">
+          <b><?= $h($objeto['titulo']) ?></b>
+          <?php $sub_obj = $mt_cuota_manda
+              ? 'en pausa · le falta la imagen'
+              : $mt_sub_obj($objeto); ?>
+          <?php if ($sub_obj !== ''): ?>
+            <span><?= $h($sub_obj) ?></span>
+          <?php endif; ?>
+        </span>
+      </div>
     <?php endif; ?>
 
     <?php if ($act): $tipo = (string)($act['tipo'] ?? ''); ?>
@@ -1495,24 +1770,60 @@ $mt_unidad = function (string $objetivo): array {
                  primaria ENSEÑA cómo hacerlo; confirmarlo es un paso aparte, y
                  solo esa confirmación cierra la jugada. */ ?>
         <details class="ah-como" id="ahComo">
-          <summary class="ah-btn"><?= $h($act['etiqueta']) ?></summary>
+          <summary class="tm-btn"><?= ico('dollar') ?><?= $h($act['etiqueta']) ?></summary>
           <div class="ah-pasos">
-            <p class="ah-monto">Presupuesto de esta jugada: <b><?= $h('$' . rtrim(rtrim(number_format((float)($E->evidencia['inversion'] ?? 0), 2), '0'), '.')) ?></b></p>
+            <?php
+              /*  CUAL PUBLICACION. Antes ponia «abre la publicación» a secas y el
+                  dueño tenia que adivinar cual de todas — con lo cual o promocionaba
+                  la equivocada o no promocionaba nada. El objeto sale de sus piezas
+                  PUBLICADAS de verdad (el compositor lo decide); si no hay ninguna,
+                  aqui se dice, no se inventa un post.  */
+              $inv_obj = $E->evidencia['objeto'] ?? null;
+              $inv_pub = (int)($E->evidencia['publicadas'] ?? 0);
+            ?>
+            <?php if (is_array($inv_obj)): ?>
+              <div class="ah-cual">
+                <span class="et">La publicación que se promociona</span>
+                <b><?= $h((string)($inv_obj['titulo'] ?? '')) ?></b>
+                <?php if (($inv_obj['red'] ?? '') !== ''): ?>
+                  <small><?= $h((string)$inv_obj['red']) ?><?= $inv_pub > 1 ? ' · es la última que publiqué de este plan, de ' . $inv_pub : '' ?></small>
+                <?php endif; ?>
+              </div>
+            <?php else: ?>
+              <div class="ah-cual sin">
+                <span class="et">Todavía no hay qué promocionar</span>
+                <b>De este plan no hay ninguna publicación tuya publicada todavía.</b>
+                <small>Promocionar empuja un post que ya está en la red. En cuanto salga el
+                  primero, esta jugada te dice cuál.</small>
+              </div>
+            <?php endif; ?>
+
+            <p class="ah-monto">Presupuesto de esta jugada: <b><?= $h('$' . rtrim(rtrim(number_format((float)($E->evidencia['inversion'] ?? 0), 2), '0'), '.')) ?></b>
+              <span>Lo pones tú en la app de Meta. Ese dinero no pasa por Crecer.</span></p>
             <ol>
-              <li>Abre la publicación en Instagram o Facebook desde tu teléfono.</li>
+              <li>Abre <?= is_array($inv_obj) ? 'esa publicación' : 'la publicación' ?> en
+                <?= is_array($inv_obj) && ($inv_obj['red'] ?? '') !== '' ? $h((string)$inv_obj['red']) : 'Instagram o Facebook' ?>
+                desde tu teléfono.</li>
               <li>Toca <b>Promocionar</b> (o <b>Impulsar publicación</b>).</li>
               <li>Escoge el público de tu zona y pon el presupuesto de arriba.</li>
               <li>Confirma el pago en la app de Meta — eso lo haces tú, no yo.</li>
             </ol>
-            <p class="ah-aviso">Yo no puedo promocionarlo por ti ni ver si el pago salió.
-              Cuando lo hayas hecho, dímelo aquí y lo doy por hecho.</p>
-            <button type="button" class="ah-btn2" id="ahConfirmar"
-                    data-jugada="<?= (int)($E->evidencia['tactica_id'] ?? 0) ?>">Confirmar que ya lo promocioné</button>
+            <p class="ah-aviso">Yo no puedo promocionarlo por ti, no pago el anuncio y no tengo
+              forma de ver si el cobro salió. Mirar estos pasos no marca nada: la jugada solo
+              se da por hecha cuando tú me lo confirmas.</p>
+            <div class="ah-cierre">
+              <button type="button" class="tm-btn linea" id="ahConfirmar"
+                      data-jugada="<?= (int)($E->evidencia['tactica_id'] ?? 0) ?>"><?= ico('check') ?>Confirmar que ya lo promocioné</button>
+              <?php /*  CANCELAR TAMPOCO MARCA. Cerrar el desplegable ya era la
+                        salida, pero solo lo sabia quien lo adivinaba: sin un
+                        control que lo diga, «abrir para mirar» da miedo.  */ ?>
+              <button type="button" class="ah-nomarca" id="ahLuego"><?= ico('x') ?>Todavía no — cerrar sin marcar</button>
+            </div>
           </div>
         </details>
       <?php elseif ($tipo === 'fisica'): ?>
-        <button type="button" class="ah-btn" id="ahConfirmar"
-                data-jugada="<?= (int)($E->evidencia['tactica_id'] ?? 0) ?>"><?= $h($act['etiqueta']) ?></button>
+        <button type="button" class="tm-btn" id="ahConfirmar"
+                data-jugada="<?= (int)($E->evidencia['tactica_id'] ?? 0) ?>"><?= ico('check') ?><?= $h($act['etiqueta']) ?></button>
       <?php elseif ($tipo === 'presentacion'): ?>
         <?php /* El contrato pide RESUMEN, no el plan entero (§C): la meta ya
                  está arriba, aquí va la estrategia en una frase y el reparto
@@ -1524,71 +1835,150 @@ $mt_unidad = function (string $objetivo): array {
           $ev_tuyo = (int)($E->evidencia['te_pido'] ?? 0);
           $ev_pide = (array)($E->evidencia['pide'] ?? []);
         ?>
-        <div class="ah-trato">
+        <div class="tm-trato">
           <?php if ($ev_est !== ''): ?>
-            <p class="ah-estr"><?= $h($ev_est) ?></p>
+            <p class="tm-estr"><?= $h($ev_est) ?></p>
           <?php endif; ?>
-          <div class="ah-reparto">
+          <div class="tm-reparto">
             <div class="mia"><b><?= $ev_mio ?></b><span><?= $ev_mio === 1 ? 'cosa la hago yo' : 'cosas las hago yo' ?></span></div>
             <div class="tuya"><b><?= $ev_tuyo ?></b><span><?= $ev_tuyo === 1 ? 'cosa te toca a ti' : 'cosas te tocan a ti' ?></span></div>
           </div>
           <?php if ($ev_pide): ?>
-            <p class="ah-pide"><b>Lo que te voy a pedir:</b>
+            <p class="tm-pide"><b>Lo que te voy a pedir:</b>
               <?= $h(implode(' · ', $ev_pide)) ?><?= $ev_tuyo > count($ev_pide) ? '…' : '' ?></p>
           <?php elseif ($ev_tuyo === 0): ?>
-            <p class="ah-pide">De este plan me encargo yo entero. Tú apruebas y ya.</p>
+            <p class="tm-pide">De este plan me encargo yo entero. Tú apruebas y ya.</p>
           <?php endif; ?>
         </div>
         <?php /* Botón, no enlace: esto ESCRIBE. Un <a> lo repetiría el
                  prefetch del navegador y lo guardaría el historial. */ ?>
-        <button type="button" class="ah-btn" id="ahEmpezar"
-                data-plan="<?= (int)($E->evidencia['plan_id'] ?? 0) ?>"><?= $h($act['etiqueta']) ?></button>
+        <button type="button" class="tm-btn teal" id="ahEmpezar"
+                data-plan="<?= (int)($E->evidencia['plan_id'] ?? 0) ?>"><?= ico('eye') ?><?= $h($act['etiqueta']) ?></button>
       <?php elseif ($tipo === 'reintento_job'): ?>
         <?php /* Reencola la jugada de verdad con la acción `ejecutar` que ya
                  existe. Un enlace aquí recargaría la pantalla dejando el fallo
                  igual de trabado. */ ?>
-        <button type="button" class="ah-btn" id="ahReintentar"
-                data-jugada="<?= (int)($E->evidencia['tactica_id'] ?? 0) ?>"><?= $h($act['etiqueta']) ?></button>
+        <button type="button" class="tm-btn" id="ahReintentar"
+                data-jugada="<?= (int)($E->evidencia['tactica_id'] ?? 0) ?>"><?= ico('refresh') ?><?= $h($act['etiqueta']) ?></button>
+      <?php elseif ($mt_cuota_manda): ?>
+        <?php /* SIN CUOTA Y LO DE HOY NECESITA PINTAR.
+                 La accion normal no puede completarse, asi que NO se enseña:
+                 dejarla ahi mandaria al dueño a un callejon. Lo unico cierto
+                 hoy es mirar lo que ya existe, y eso no es una decision — va
+                 en boton de linea. */ ?>
+        <a class="tm-btn linea" href="<?= $BASE ?>/propuestas.php?marca=<?= $marca_id ?>"><?= ico('eye') ?>Ver lo que ya está listo</a>
       <?php else: ?>
-        <?php /* Cuando el aviso de cuota se llevo el primario, esta accion baja
-                 a secundaria en vez de desaparecer: sigue siendo verdad que hay
-                 algo que hacer, solo que hoy no se puede completar pintando. */ ?>
-        <a class="<?= $mt_cuota_manda ? 'ah-btn2' : 'ah-btn' ?>" href="<?= $h($destino) ?>"><?= $h($act['etiqueta']) ?></a>
+        <a class="tm-btn<?= $turno_cls === 'mio' ? ' teal' : '' ?>" href="<?= $h($destino) ?>"><?= ico($mt_ico_act((string)$tipo)) ?><?= $h($act['etiqueta']) ?></a>
       <?php endif; ?>
-      <?php if (trim((string)$act['consecuencia']) !== ''): ?>
-        <p class="ah-cons"><?= $h($act['consecuencia']) ?></p>
+
+      <?php /* La consecuencia de pulsar. Cuando el limite manda, la de la
+               accion normal ya no es verdad: se dice lo que SI pasa. */ ?>
+      <?php if ($mt_cuota_manda): ?>
+        <p class="tm-cons">El resto del plan continúa. Lo que necesita imagen queda en pausa.</p>
+      <?php elseif (trim((string)$act['consecuencia']) !== ''): ?>
+        <p class="tm-cons"><?= $h($act['consecuencia']) ?></p>
       <?php endif; ?>
+    <?php else: ?>
+      <?php /* Sin accion del dueño: hay algo que MIRAR, nada que decidir, y el
+               peso del boton lo tiene que decir. */ ?>
+      <a class="tm-btn linea" href="<?= $BASE ?>/calendario.php?marca=<?= $marca_id ?>"><?= ico('calendar') ?>Ver el mes completo</a>
+      <p class="tm-cons">Te aviso en cuanto haya algo para tu OK.</p>
     <?php endif; ?>
 
     <?php if ($E->estado === MetaState::G_MATERIAL && trim((string)($E->evidencia['guion'] ?? '')) !== ''): ?>
-      <details class="ah-guion">
-        <summary>Ver qué grabar</summary>
-        <p><?= nl2br($h($E->evidencia['guion'])) ?></p>
+      <details class="tm-ac" style="border-top:1px solid var(--line);margin-top:18px">
+        <summary>Ver qué grabar<?= ico('chev-abajo') ?></summary>
+        <div class="dentro"><p><?= nl2br($h($E->evidencia['guion'])) ?></p></div>
       </details>
     <?php endif; ?>
   </section>
 
-  <?php /* ── ZONA CAMINO · tres posiciones, nunca el plan entero ── */ ?>
-  <?php $cm = $E->camino; if ($cm['ahora'] !== null || $cm['hecho'] > 0 || $cm['despues'] > 0): ?>
-    <section class="ah-cam">
-      <span class="ah-paso hecho"><b><?= (int)$cm['hecho'] ?></b> hecho<?= (int)$cm['hecho'] === 1 ? '' : 's' ?></span>
-      <span class="ah-paso on"><?= $cm['ahora'] !== null ? $h($cm['ahora']) : 'ahora' ?></span>
-      <span class="ah-paso"><b><?= (int)$cm['despues'] ?></b> después</span>
-    </section>
+  <?php /* ── CAPA 2 · el camino y la meta, plegados ─────────────────────
+           Nacen ABIERTOS solo cuando la pantalla no puede pedir la accion
+           normal del plan -no hay nada que decidir, o el limite lo impide-.
+           En el resto, cerrados: primero la decision, y quien quiera mas la
+           abre. */ ?>
+  <?php
+    $cm = $E->camino;
+    $abre = ($act === null) || $mt_cuota_manda;
+    $prox = (array)($cm['proximos'] ?? []);
+    //  EN LA PRESENTACION DEL PLAN, «Lo que sigue» SOBRA.
+    //  Esa pantalla ya ES el plan: el trato de arriba dice cuantas cosas hago
+    //  yo, cuantas te pido y cuales. Repetirlas debajo nombra casi todas las
+    //  jugadas, que es justo lo que el contrato §C no quiere en la capa 1.
+    if ($E->estado === MetaState::C_PLAN_POR_VER) $prox = [];
+  ?>
+  <div class="tm-capas">
+    <?php /*  LO QUE SIGUE PASANDO SALE DEL RETRATO, NO DE UNA LISTA FIJA.
+              Habia cuatro renglones iguales para todo el mundo: escribo,
+              publico, contesto mensajes y la fecha. Tres eran afirmaciones
+              sobre ESTA marca que nadie habia comprobado — si no tiene nada
+              aprobado no va a publicar, y si no tiene canales conectados no va
+              a contestar—. Prometerlo aqui es peor que callarlo: es el momento
+              en que la dueña decide si esto le sirve. */ ?>
+    <?php $sigue = $mt_cuota_manda
+        ? MetaLimiteImagen::sigueHaciendo($mt_snap, $mt_reset($mt_cuota)) : []; ?>
+    <?php if ($mt_cuota_manda && $sigue): ?>
+      <details class="tm-ac" open>
+        <summary>Qué sigue pasando <span class="cta"><?= count($sigue) ?></span><?= ico('chev-abajo') ?></summary>
+        <div class="dentro"><div class="tm-pasos">
+          <?php foreach ($sigue as $sg): ?>
+            <div class="tm-paso"><?= ico($sg['ico']) ?><div><b><?= $h($sg['titulo']) ?></b><span><?= $h($sg['pie']) ?></span></div></div>
+          <?php endforeach; ?>
+        </div></div>
+      </details>
+    <?php elseif ($prox): ?>
+      <details class="tm-ac"<?= $abre ? ' open' : '' ?>>
+        <summary>Lo que sigue <span class="cta"><?= count($prox) ?></span><?= ico('chev-abajo') ?></summary>
+        <div class="dentro"><div class="tm-pasos">
+          <?php foreach ($prox as $p): ?>
+            <div class="tm-paso<?= !empty($p['tuyo']) ? ' tuyo' : '' ?>">
+              <?= ico(!empty($p['tuyo']) ? 'camera' : 'bolt') ?>
+              <div><b><?= $h($p['titulo']) ?></b>
+                <span><?= $h((!empty($p['semana']) ? 'semana ' . (int)$p['semana'] . ' · ' : '')
+                         . (!empty($p['tuyo']) ? 'te la pido' : 'la hago yo')) ?></span></div>
+            </div>
+          <?php endforeach; ?>
+        </div></div>
+      </details>
+    <?php endif; ?>
+
+    <?php if ($mt_snap['meta']): ?>
+      <details class="tm-ac">
+        <summary>Cómo voy con la meta<?= ico('chev-abajo') ?></summary>
+        <div class="dentro"><p><?= $h($mt_como_voy($E, $mt_snap, $uni, $obj)) ?></p></div>
+      </details>
+    <?php endif; ?>
+  </div>
+
+  <?php /* ── CAPA 3 · otra pantalla, detras de un enlace ── */ ?>
+  <?php /*  LA SALIDA DE LA JUGADA IMPOSIBLE, TAMBIEN DESDE AQUI.
+            Cuando lo que manda la pantalla es material (G), inversion (H) o una
+            accion suya (I), el atasco esta justo delante. Mandar al dueño al
+            plan a buscar la jugada seria pedirle que se acuerde de donde
+            estaba. Va como enlace secundario: la primaria no se toca.  */ ?>
+  <?php
+    $mt_jug_atasco = (int)($E->evidencia['tactica_id'] ?? 0);
+    $mt_puede_sust = $mt_jug_atasco > 0 && meta_sustitucion_disponible($pdo)
+        && in_array((string)($act['tipo'] ?? ''), ['material', 'inversion', 'fisica'], true);
+  ?>
+  <?php if ($mt_puede_sust): ?>
+    <a class="tm-nopuedo" href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&amp;vista=sustituir&amp;jugada=<?= $mt_jug_atasco ?>&amp;desde=ahora">
+      <?= ico('refresh') ?>No puedo con esta — cámbiala por otra</a>
   <?php endif; ?>
 
-  <nav class="ah-mas">
+  <nav class="tm-mas">
     <?php if ($meta): ?>
-      <a href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&vista=plan">Ver el plan completo</a>
-      <a href="<?= $BASE ?>/sala.php?marca=<?= $marca_id ?>">Discutirla con el corillo</a>
+      <a href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&vista=plan"><?= ico('list') ?>Ver el plan completo<?= ico('chev-der') ?></a>
+      <a href="<?= $BASE ?>/sala.php?marca=<?= $marca_id ?>"><?= ico('chat') ?>Discutirla con el corillo<?= ico('chev-der') ?></a>
     <?php else: ?>
-      <a href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&vista=wizard">Escoger otra meta</a>
+      <a href="<?= $BASE ?>/sala.php?marca=<?= $marca_id ?>"><?= ico('chat') ?>Preguntarle al corillo<?= ico('chev-der') ?></a>
     <?php endif; ?>
   </nav>
 </div>
 
-<?= cuota_aviso_css() ?>
 <div class="ah-toast" id="ahToast"></div>
+<?php require __DIR__ . '/_meta_zona.php'; ?>
 
 <script>
 (function(){
@@ -1625,101 +2015,17 @@ $mt_unidad = function (string $objetivo): array {
            'Un momento…', 'No se pudo marcar.');
   });
 
-  //  OJO AL MOMENTO. La barra de abajo y el boton de Ayuda los pinta
-  //  _shell_foot.php, DESPUES de este bloque: preguntarlos ahora devuelve null
-  //  y las dos rutinas de abajo salen en vacio sin quejarse -que es justo lo
-  //  que pasaba: se apartaba Ayuda en el papel y nunca en la pantalla-.
-  var alCargar = function(fn){
-    if (document.readyState === 'complete') { fn(); return; }
-    window.addEventListener('load', fn);
-  };
-
-  //  LA ZONA SEGURA ES EL FALTANTE, Y SE MIDE.
-  //
-  //  Antes aqui habia 300px fijos. El numero salio de leer mal una medicion y
-  //  creo una pantalla de vacio en TODAS las vistas de Tu Meta. La cuenta de
-  //  verdad es corta: con la pagina al final del scroll, el ultimo control
-  //  tiene que quedar por encima de la barra fija.
-  //
-  //      doc >= ultimo_en_pagina + alto_de_lo_fijo + margen
-  //
-  //  Lo que falte para eso —y solo eso— es la zona segura. Como .content ya
-  //  reserva 104px para la barra, casi siempre sale 0: reservarlo otra vez
-  //  aqui seria contarlo dos veces, que es justo el error anterior.
-  (function(){
-    var ah = document.querySelector('.ah'); if (!ah) return;
-    var MARGEN = 20;
-    var ajustar = function(){
-      ah.style.setProperty('--ah-zona', '0px');          // medir sin lo puesto
-      var vp  = window.innerHeight;
-      var doc = document.documentElement.scrollHeight;
-
-      //  EL TECHO son las DOS capas de abajo, no solo la barra: Ayuda flota
-      //  POR ENCIMA del hueco que reserva .content, y es la que de verdad
-      //  tapaba el ultimo renglon. Se toma la mas alta de las dos, medida.
-      var techo = vp;
-      [].forEach.call(document.querySelectorAll('.botnav, .ay-fab'), function(c){
-        if (getComputedStyle(c).display === 'none') return;
-        var t = c.getBoundingClientRect().top;
-        if (t > vp * 0.5 && t < techo) techo = t;
-      });
-      var fijo = Math.round(vp - techo);
-
-      var ultimo = 0;
-      [].forEach.call(ah.querySelectorAll('a[href],button,summary'), function(e){
-        var r = e.getBoundingClientRect();
-        if (r.height < 4) return;
-        ultimo = Math.max(ultimo, Math.round(r.bottom + window.scrollY));
-      });
-      //  Con la pagina al final del scroll, lo ultimo tiene que caer por encima
-      //  del techo:  doc >= ultimo + fijo + margen.  Lo que falte, y solo eso.
-      var falta = Math.max(0, ultimo + fijo + MARGEN - doc);
-      ah.style.setProperty('--ah-zona', (falta || MARGEN) + 'px');
-    };
-    alCargar(ajustar); window.addEventListener('resize', ajustar);
-  })();
-
-  //  AYUDA SE APARTA DE CUALQUIER CONTROL PRINCIPAL, no solo de la cola.
-  //
-  //  La primera version solo vigilaba los enlaces del final. Con eso, el boton
-  //  primario del bloque Ahora podia quedar debajo de Ayuda y la regla no se
-  //  enteraba — y decir «se alcanza haciendo scroll» no vale para el boton mas
-  //  importante de la pantalla: es el que la duena va a tocar sin pensar.
-  //
-  //  Ahora se observan TODOS los controles principales (el primario, el
-  //  secundario, el desplegable del como y la cola). Si CUALQUIERA cae en la
-  //  franja del boton, Ayuda se aparta. Vuelve sola en cuanto deja de coincidir.
-  //
-  //  La banda es la franja del propio boton con 16px de aviso a cada lado: se
-  //  quita ANTES de rozar, no cuando ya tapa.
-  (function(){
-    var SEL = '.ah-btn, .ah-btn2, .ah-como > summary, .cq-btn, .ah-mas';
-    if (!('IntersectionObserver' in window)) return;
-    var ob = null, dentro = null;
-    var montar = function(){
-      if (ob) { ob.disconnect(); ob = null; }
-      dentro = new Set();
-      document.body.classList.remove('ah-cola');         // medir sin el efecto puesto
-      var fab = document.querySelector('.ay-fab');
-      var objetivos = document.querySelectorAll(SEL);
-      if (!fab || !objetivos.length) return;
-
-      var AVISO = 16, H = window.innerHeight;
-      var r = fab.getBoundingClientRect();
-      var arriba = Math.round(r.top - AVISO), abajo = Math.round(H - r.bottom - AVISO);
-      if (!(arriba > 0 && arriba < H)) return;           // sin FAB a la vista
-
-      ob = new IntersectionObserver(function(es){
-        es.forEach(function(e){
-          if (e.isIntersecting) dentro.add(e.target); else dentro.delete(e.target);
-        });
-        document.body.classList.toggle('ah-cola', dentro.size > 0);
-      }, { rootMargin: '-' + arriba + 'px 0px ' + (-abajo) + 'px 0px', threshold: 0 });
-      [].forEach.call(objetivos, function(o){ ob.observe(o); });
-    };
-    alCargar(montar);
-    window.addEventListener('resize', montar);
-  })();
+  //  «TODAVIA NO» cierra el desplegable y NO manda nada. Es la mitad que
+  //  faltaba del contrato de la inversion: abrir para mirar tiene que ser
+  //  gratis, y para que lo sea hay que DECIRLO con un control — no esperar a
+  //  que el dueño adivine que cerrar la capa no marca nada.
+  var noAun = document.getElementById('ahLuego');
+  if (noAun) noAun.addEventListener('click', function(){
+    var caja = document.getElementById('ahComo');
+    if (!caja) return;
+    caja.open = false;
+    var s = caja.querySelector('summary'); if (s) s.focus();
+  });
 
   // Aceptar el plan. Se sella una vez y la pantalla se recompone sola: al
   // recargar, el estado dominante ya es la primera tarea de verdad.

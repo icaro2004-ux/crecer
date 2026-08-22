@@ -409,7 +409,16 @@ function meta_crear(PDO $pdo, int $marca_id, array $d): int {
  *
  * @return array{ok:bool, diagnostico:string, veredicto:string, tacticas:array, err?:string}
  */
-function meta_plan_generar(PDO $pdo, int $marca_id, int $meta_id): array {
+/**
+ * Arma el plan de la meta.
+ *
+ * $motivo es lo que el dueño contesto a «¿por que quieres cambiarlo?» cuando
+ * pide un plan nuevo. NO se guarda en una columna —no hay, y no toca migrar—:
+ * entra en el prompt, que es donde de verdad sirve, y queda en crecer_ia_log
+ * con el resto de la llamada. Asi el plan nuevo responde a la queja concreta
+ * en vez de ser otra tirada de dados.
+ */
+function meta_plan_generar(PDO $pdo, int $marca_id, int $meta_id, string $motivo = ''): array {
     require_once __DIR__ . '/agentes.php';
     require_once __DIR__ . '/ia.php';
 
@@ -544,6 +553,19 @@ SYS;
         . ($meta['presupuesto_pauta'] === null || (float)$meta['presupuesto_pauta'] <= 0
             ? "- El dueño NO tiene presupuesto de pauta: NO incluyas tácticas de tipo 'pauta'.\n"
             : "- El presupuesto total de pauta es {$pauta} al mes: reparte, no lo gastes todo en una.\n");
+
+    //  LO QUE NO FUNCIONO, EN SUS PALABRAS. Va al final del prompt para que
+    //  pese: es la unica parte que distingue este plan del anterior.
+    $motivo = trim($motivo);
+    if ($motivo !== '') {
+        $prompt .= "
+
+EL DUEÑO PIDE UN PLAN NUEVO. Lo que dice del anterior: \""
+                 . mb_substr($motivo, 0, 500) . "\"
+"
+                 . "Haz un plan DISTINTO que responda a eso. No repitas las mismas jugadas.
+";
+    }
 
     $r = ia_ejecutar($pdo, 'estratega', 'Plan de la meta', $prompt, [
         'marca_id'        => $marca_id,
@@ -1343,6 +1365,79 @@ function meta_ajustar(PDO $pdo, int $meta_id, int $marca_id, array $campos): boo
         $q->execute($par);
         return true;
     } catch (Throwable $e) { return false; }
+}
+
+// ── CERRAR Y CAMBIAR DE META ─────────────────────────────────
+/**
+ * Cierra una meta de verdad: la meta Y su plan vivo.
+ *
+ * Antes «cerrar» era un UPDATE al estado de la meta y ya. El plan seguia
+ * marcado 'activo' para siempre, colgando de una meta que ya no existe: un
+ * huerfano que ensucia el historial y hace que meta_plan_activo() devuelva
+ * algo que no gobierna nada. Se cierra como 'abandonado', que para eso esta
+ * en el enum, y sus numeros quedan congelados igual que en un reemplazo.
+ *
+ * $cierre distingue lograda de cancelada. No es cosmetico: es el record del
+ * negocio y de ahi aprende el Optimizador.
+ */
+function meta_cerrar_meta(PDO $pdo, int $meta_id, int $marca_id, string $cierre = 'cancelada'): bool {
+    if (!in_array($cierre, ['lograda','cancelada','vencida','pausada'], true)) $cierre = 'cancelada';
+    $ok = meta_ajustar($pdo, $meta_id, $marca_id, ['estado' => $cierre]);
+    if (!$ok) return false;
+    try {
+        $plan = meta_plan_activo($pdo, $meta_id);
+        if ($plan) meta_plan_cerrar($pdo, (int)$plan['id'], 'abandonado');
+    } catch (Throwable $e) { error_log('meta_cerrar_meta (plan): ' . $e->getMessage()); }
+    return true;
+}
+
+/**
+ * CAMBIAR DE META EN UNA SOLA OPERACION.
+ *
+ * El camino viejo eran dos pasos sueltos: cerrar y, en otra pantalla, crear.
+ * Entre uno y otro el negocio se quedaba SIN META —y si el dueño cerraba la
+ * pestaña ahi, sin forma de volver a la anterior—. Aqui las dos escrituras van
+ * en la misma transaccion: o entran las dos o no entra ninguna.
+ *
+ * Lo que NO entra en la transaccion es el plan: es una llamada de red a la
+ * Estratega y tenerla dentro seria bloquear filas mientras se espera a un
+ * modelo. Si el plan falla, la meta nueva ya esta creada y Tu Meta ofrece
+ * reintentarlo — eso SI se recupera, y sin dejar al negocio sin norte.
+ *
+ * Devuelve el id de la meta nueva, o 0 si no se cambio nada.
+ */
+function meta_cambiar_meta(PDO $pdo, int $marca_id, int $meta_vieja,
+                           string $cierre, array $nueva): int {
+    $propia = false;
+    try {
+        if (!$pdo->inTransaction()) { $pdo->beginTransaction(); $propia = true; }
+
+        //  1 · se cierra la de ahora. Con esto deja de haber meta activa, asi
+        //     que meta_crear() no tiene a quien pausar y no inventa un estado.
+        if (!meta_ajustar($pdo, $meta_vieja, $marca_id, ['estado' => $cierre])) {
+            throw new RuntimeException('no pude cerrar la meta anterior');
+        }
+        //  2 · y nace la proxima, ya con todo lo que el dueño contesto.
+        $id = meta_crear($pdo, $marca_id, $nueva);
+        if ($id <= 0) throw new RuntimeException('no pude crear la meta nueva');
+
+        if ($propia) $pdo->commit();
+
+        //  El plan viejo se cierra DESPUES del commit, y a proposito: es
+        //  historial, no parte del cambio. Si fallara, la meta ya cambio bien y
+        //  lo unico que queda es una fila mal etiquetada — nunca un negocio sin
+        //  meta.
+        try {
+            $viejo = meta_plan_activo($pdo, $meta_vieja);
+            if ($viejo) meta_plan_cerrar($pdo, (int)$viejo['id'], 'abandonado');
+        } catch (Throwable $e) { error_log('meta_cambiar_meta (plan viejo): ' . $e->getMessage()); }
+
+        return $id;
+    } catch (Throwable $e) {
+        if ($propia && $pdo->inTransaction()) $pdo->rollBack();
+        error_log('meta_cambiar_meta: ' . $e->getMessage());
+        return 0;
+    }
 }
 
 /** Resumen de una línea para saludos/briefings ('' si no hay meta). */

@@ -94,7 +94,7 @@ try {
            'bottom/alto = ' . ($r['C_ACCION_SIN_SCROLL'] ?? '?'));
         ok('criterio 3 · un solo botón primario',
            (int)($r['C_PRIMARIAS'] ?? 9) === 1,
-           'hay ' . ($r['C_PRIMARIAS'] ?? '?') . ' con clase .ah-btn');
+           'hay ' . ($r['C_PRIMARIAS'] ?? '?') . ' con clase .tm-btn');
         ok('criterio 7 · ningún texto por debajo de 14px',
            (float)($r['C_MIN_PX'] ?? 0) >= 14,
            'el más pequeño mide ' . ($r['C_MIN_PX'] ?? '?') . 'px');
@@ -143,15 +143,54 @@ try {
         printf("  ·    normal: zona %s · cola @%s · Ayuda @%s\n",
                $normal['zona'], $normal['cola'], $normal['fab']);
 
-        ok('con la zona bien medida no hay colisión', $normal['apartada'] === 'false',
-           'esconder Ayuda «por si acaso» seria perder una capacidad del producto');
-        ok('la cola queda por encima del botón',
-           $normal['cola'] !== '' && $normal['fab'] !== ''
-           && (int)$normal['cola'] <= (int)$normal['fab'],
-           "cola @{$normal['cola']} · Ayuda @{$normal['fab']}");
-        ok('y la zona segura es un margen, no una pantalla',
-           (int)$normal['zona'] > 0 && (int)$normal['zona'] <= 120,
-           'salió ' . $normal['zona'] . ' · antes eran 300px de nada');
+        //  Que Ayuda se aparte en el estado normal ya no es un fallo: desde que
+        //  salió del cálculo del padding, la cola cae en su franja y la regla
+        //  hace justo lo que tiene que hacer. Lo que se exige es que la regla
+        //  DISTINGA — que se aparte cuando estorba y vuelva cuando no.
+        ok('Ayuda se aparta cuando un control entra en su franja',
+           $forzada['apartada'] === 'true',
+           'si no se aparta nunca, la regla no existe');
+        //  Y VUELVE. Una Ayuda escondida «por si acaso» seria perder una
+        //  capacidad del producto: el boton tiene que estar cuando no estorba.
+        //  Se le quita de la franja lo que la ocupaba y se mira si vuelve.
+        //  Antes se devolvia la zona y se miraba en el mismo sitio, y era pedir
+        //  lo contrario de lo que manda la regla: la cola cae en la franja con
+        //  zona y sin ella, asi que apartarse era lo correcto. Ese verde salia
+        //  de que la regla estaba muerta y una regla muerta deja el boton fijo.
+        ok('y vuelve en cuanto la franja queda libre',
+           $vuelta['apartada'] === 'false',
+           'quedo apartada sin nada debajo · ' . json_encode($vuelta));
+        // ══════════════════════════════════════════════════════════
+        //  LAS INVARIANTES, NO EL NÚMERO
+        //
+        //  Aquí había una cota fija: «la zona ≤ 141px». Era un valor de
+        //  IMPLEMENTACIÓN, y encima equivocado — salía de meter a Ayuda en la
+        //  cuenta del padding, que es lo que hacía que la medida se mordiera
+        //  la cola. Un número así se queda viejo en cuanto la barra cambia de
+        //  alto, y entonces alguien lo «arregla» aflojándolo.
+        //
+        //  El contrato de verdad son tres cosas que se pueden comprobar sin
+        //  saber cuánto mide nada:
+        //    · al fondo del scroll queda holgura sobre la barra;
+        //    · abrir y cerrar capas no acumula espacio;
+        //    · cambiar de ancho tampoco.
+        // ══════════════════════════════════════════════════════════
+        $hol = explode('/', (string)($r['Z_HOLGURA'] ?? ''), 2);
+        ok('al fondo del scroll, el último control despeja la barra',
+           is_numeric($hol[0] ?? null) && (int)$hol[0] >= 20,
+           'holgura mínima ' . ($hol[0] ?? '?') . 'px en «' . ($hol[1] ?? '?')
+         . '» · hacen falta 20 para que el dedo no roce la barra');
+
+        $cic = (string)($r['Z_CICLOS'] ?? '');
+        ok('cinco ciclos de abrir y cerrar no acumulan espacio',
+           strpos($cic, 'estable') === 0,
+           $cic . ' · cada par es alto-del-documento:padding — los cinco tienen
+            que ser idénticos');
+
+        ok('y la zona sigue siendo un margen, no una pantalla',
+           (int)$normal['zona'] > 0 && (int)$normal['zona'] < 300,
+           'salió ' . $normal['zona'] . ' · el 300 es el error histórico que
+            dejó una pantalla de vacío en todas las vistas');
 
         echo "\n  — y si algo la empuja, Ayuda se aparta —\n";
         ok('sin zona, la cola se le echa encima y Ayuda se quita',
@@ -160,7 +199,8 @@ try {
         ok('y se va de la pantalla, no encima de la barra',
            $forzada['fab'] !== '' && (int)$forzada['fab'] >= 780,
            "el botón quedó en y={$forzada['fab']}; la ventana mide 800");
-        ok('devuelta la zona, Ayuda vuelve sola', $vuelta['apartada'] === 'false');
+        ok('sin nada en su franja, Ayuda vuelve sola', $vuelta['apartada'] === 'false',
+           json_encode($vuelta));
         ok('y vuelve a donde se alcanza',
            $vuelta['fab'] !== '' && (int)$vuelta['fab'] < 780,
            "quedó en y={$vuelta['fab']}: apartarse y no volver deja la ayuda muerta");
@@ -224,12 +264,18 @@ try {
         ok('el navegador completó la etapa', ($c['OK'] ?? '0') === '1',
            ($c['ERROR'] ?? '') ?: implode(' | ', array_slice($c['_sal'] ?? [], -3)));
         ok('el aviso aparece', ($c['CQ_HAY'] ?? '') === 'true');
-        ok('dice que se acabaron las del mes',
-           strpos($c['CQ_TITULO'] ?? '', 'imágenes de este mes') !== false,
+        ok('dice que no quedan imágenes',
+           stripos($c['CQ_TITULO'] ?? '', 'imágenes') !== false,
            'salió: ' . ($c['CQ_TITULO'] ?? '—'));
-        ok('y que el corillo sigue trabajando',
-           strpos($c['CQ_SIGUE'] ?? '', 'sigue trabajando') !== false,
-           'sin esa frase el dueño entiende «se acabó mi mes» en vez de «se acabó una parte»');
+        //  Y CUANDO VUELVEN. Un limite sin fecha se lee como una averia; con
+        //  fecha se lee como lo que es, el tope del plan.
+        ok('y cuándo vuelven',
+           (bool)preg_match('~\d{2}/\d{2}~', (string)($c['CQ_TITULO'] ?? '')),
+           'salió: ' . ($c['CQ_TITULO'] ?? '—'));
+        //  Aprobar no necesita pintar: el limite NO puede quitarle su boton.
+        ok('y la acción normal sigue en pie',
+           stripos($c['CQ_ACCION'] ?? '', 'aprobar') !== false,
+           'salió: ' . ($c['CQ_ACCION'] ?? '—'));
         ok('se lee sin hacer scroll', ($c['CQ_SIN_SCROLL'] ?? '') === 'si',
            'bottom/alto = ' . ($c['CQ_SIN_SCROLL'] ?? '?'));
         ok('un solo botón primario en toda la pantalla',

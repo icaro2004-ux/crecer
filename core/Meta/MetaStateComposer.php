@@ -71,10 +71,11 @@ class MetaStateComposer
         if (!empty($s['meta'])) return null;
         return new MetaState(
             MetaState::A_SIN_META,
-            'Vamos a ponerle un número a esto',
-            'Escoge qué quieres lograr este mes y yo armo el camino.',
-            ['etiqueta' => 'Escoger mi meta', 'destino' => self::url($s, 'meta.php'),
-             'consecuencia' => 'Con eso preparo tu plan.', 'tipo' => 'decision'],
+            'Elige qué quieres lograr y cuánto',
+            'Escoges el objetivo y la cantidad, y te armo el camino para llegar.',
+            ['etiqueta' => 'Crear mi meta', 'destino' => self::url($s, 'meta.php'),
+             'consecuencia' => 'Son dos minutos. Puedes cambiarla cuando quieras.',
+             'tipo' => 'decision'],
             [], self::camino($s), 'sin_senal', 'sin_meta_activa');
     }
 
@@ -90,8 +91,12 @@ class MetaStateComposer
             MetaState::M_CERRADA,
             $estado_meta === 'lograda' ? 'Meta lograda' : 'Esta meta se cerró',
             'Mira lo que dejó y ponemos la próxima.',
-            ['etiqueta' => 'Preparar la próxima meta', 'destino' => self::url($s, 'meta.php'),
-             'consecuencia' => 'Empezamos un camino nuevo.', 'tipo' => 'decision'],
+            ['etiqueta' => 'Poner la próxima meta', 'destino' => self::url($s, 'meta.php'),
+             //  Lo que frena a la gente no es empezar: es creer que empezar
+             //  borra lo hecho. Se dice que no, y donde queda.
+             'consecuencia' => 'Nada se pierde: lo publicado se queda en Tus Posts, '
+                             . 'y arranco el mes nuevo con lo aprendido.',
+             'tipo' => 'decision'],
             ['meta_id' => (int)($s['meta']['id'] ?? 0)],
             self::camino($s), self::cobertura($s), $razon);
     }
@@ -242,16 +247,21 @@ class MetaStateComposer
 
             return new MetaState(
                 MetaState::G_MATERIAL,
-                $es_video ? 'Para seguir, necesito tu video' : 'Para seguir, necesito tu material',
+                //  FRASE ENTERA, NO UN TROZO. Con el turno delante, la pantalla
+                //  quitaba el «Para seguir, necesito» y quedaba «Tu material»,
+                //  que no es una frase: es una etiqueta. De qué material se
+                //  trata lo dice el objeto que va justo debajo.
+                $es_video ? 'Necesito un video tuyo' : 'Necesito una foto tuya',
                 $es_video
                     ? 'Un clip corto con el celular basta. Ya te dejé escrito qué grabar.'
-                    : 'Falta el material que solo tú puedes dar.',
+                    : 'Así mostramos tu producto real. La del celular sirve.',
                 ['etiqueta' => $es_video ? 'Grabar ahora' : 'Subirlo',
                  'destino' => $destino,
                  'consecuencia' => 'Al subirlo lo monto y queda listo para tu OK.',
                  'tipo' => 'material'],
                 ['contenido_id' => (int)$p['id'], 'tactica_id' => (int)($p['tactica_id'] ?? 0),
-                 'guion' => (string)($p['guion'] ?? '')],
+                 'guion' => (string)($p['guion'] ?? ''),
+                 'objeto' => self::objetoDePieza($s, $p)],
                 self::camino($s, (int)($p['tactica_id'] ?? 0)), self::cobertura($s), 'pieza_necesita_material');
         }
         return null;
@@ -277,7 +287,8 @@ class MetaStateComposer
                 ['etiqueta' => 'Revisar y aprobar', 'destino' => $destino,
                  'consecuencia' => 'Al aprobarlo, sale a la hora que mejor te funciona.',
                  'tipo' => 'aprobacion'],
-                ['contenido_id' => (int)$p['id'], 'tactica_id' => (int)($p['tactica_id'] ?? 0)],
+                ['contenido_id' => (int)$p['id'], 'tactica_id' => (int)($p['tactica_id'] ?? 0),
+                 'objeto' => self::objetoDePieza($s, $p)],
                 self::camino($s, (int)($p['tactica_id'] ?? 0)), self::cobertura($s), 'pieza_espera_aprobacion');
         }
         return null;
@@ -304,7 +315,14 @@ class MetaStateComposer
                  'consecuencia' => 'Cuando lo hagas, me lo confirmas y sigo con lo próximo.',
                  'tipo' => 'inversion'],
                 ['tactica_id' => (int)$t['id'], 'inversion' => (float)$t['inversion'],
-                 'que_hacer' => self::queHacer($t)],
+                 'que_hacer' => self::queHacer($t),
+                 //  QUE PUBLICACION SE PROMOCIONA. Sin esto la pantalla decia
+                 //  «abre la publicacion» y el dueño tenia que adivinar cual de
+                 //  todas. Sale de sus piezas publicadas de verdad; si no hay
+                 //  ninguna, el objeto es null y la vista lo dice — no se
+                 //  inventa un post que no existe.
+                 'objeto' => self::piezaAPromocionar($s),
+                 'publicadas' => count(self::piezasPublicadas($s))],
                 self::camino($s, (int)$t['id']), self::cobertura($s), 'jugada_requiere_inversion');
         }
         return null;
@@ -358,7 +376,14 @@ class MetaStateComposer
                 ? 'Tengo pendiente preparar: ' . (string)$primera['titulo']
                 : 'Tengo ' . $pendientes . ' cosas del plan por preparar.',
             null,
-            ['tactica_id' => (int)($primera['id'] ?? 0), 'pendientes' => $pendientes],
+            //  ¿ESTA JUGADA LLEGA A UN PROVEEDOR DE IMAGENES? Depende del
+            //  FORMATO, no de que sea produccion. Lo dice el ejecutor.
+            ['tactica_id' => (int)($primera['id'] ?? 0), 'pendientes' => $pendientes,
+             'formato' => (string)($primera['formato'] ?? 'post'),
+             'consume' => self::consumeDe((string)($primera['formato'] ?? 'post')),
+             'objeto' => ['titulo' => (string)($primera['titulo'] ?? ''),
+                          'red' => '', 'fecha' => '',
+                          'tipo' => (string)($primera['formato'] ?? 'post')]],
             self::camino($s, (int)($primera['id'] ?? 0)), self::cobertura($s), 'produccion_pendiente_sin_piezas');
     }
 
@@ -377,8 +402,10 @@ class MetaStateComposer
 
         return new MetaState(
             MetaState::J_PROGRAMADO,
-            'Nada pendiente de ti',
-            $futuras === 1 ? 'Queda 1 pieza programada.' : 'Quedan ' . $futuras . ' piezas programadas.',
+            'Tranqui, no tienes nada pendiente',
+            $futuras === 1
+                ? 'Tengo 1 pieza lista y programada. Sigo yo.'
+                : 'Tengo ' . $futuras . ' piezas listas y programadas. Sigo yo.',
             null,
             ['programadas' => $futuras, 'proxima_id' => (int)($proxima['id'] ?? 0),
              'proxima_fecha' => (string)($proxima['fecha_programada'] ?? '')],
@@ -536,7 +563,130 @@ class MetaStateComposer
         }
         if ($ahora === null && $abiertas) $ahora = (string)$abiertas[0]['titulo'];
         $despues = max(0, count($abiertas) - ($ahora === null ? 0 : 1));
-        return ['hecho' => $hecho, 'ahora' => $ahora, 'despues' => $despues];
+
+        //  LOS PROXIMOS, CON DUEÑO. Tres como mucho: mas alla de eso ya no es
+        //  «lo que sigue», es el plan entero — y el plan entero tiene su vista.
+        $proximos = [];
+        foreach ($abiertas as $t) {
+            if ($ahora !== null && (string)$t['titulo'] === $ahora) continue;
+            $proximos[] = [
+                'titulo' => (string)$t['titulo'],
+                'semana' => (int)($t['semana'] ?? 0),
+                'tuyo'   => (string)($t['clase'] ?? '') === 'accion_dueno',
+            ];
+            if (count($proximos) >= 3) break;
+        }
+        return ['hecho' => $hecho, 'ahora' => $ahora, 'despues' => $despues,
+                'proximos' => $proximos];
+    }
+
+    /**
+     * EL OBJETO DEL QUE HABLA LA PANTALLA.
+     *
+     * Un titulo y un subtitulo para la pieza que este estado ya eligio. El
+     * titulo sale de la jugada -«La historia del bizcocho»- porque es lo que
+     * el dueño reconoce; si no hay jugada, del caption. El subtitulo dice red
+     * y cuando, que es lo que decide si aprobar ahora o luego.
+     *
+     * Vive aqui y no en la vista para que la vista no tenga que saber de
+     * jugadas ni de captions: recibe dos cadenas y las pinta.
+     */
+    /**
+     * Las piezas del plan que YA estan publicadas — las unicas que se pueden
+     * promocionar. Un borrador no se puede impulsar: todavia no existe en la red.
+     */
+    private static function piezasPublicadas(array $s): array
+    {
+        $out = [];
+        foreach ((array)($s['piezas'] ?? []) as $p) {
+            if ((string)($p['estado'] ?? '') === 'publicado') $out[] = $p;
+        }
+        return $out;
+    }
+
+    /** La mas reciente de las publicadas, o null si todavia no hay ninguna. */
+    private static function piezaAPromocionar(array $s): ?array
+    {
+        $pub = self::piezasPublicadas($s);
+        if (!$pub) return null;
+        //  Sin reloj y sin ordenar por fecha real: se compara la cadena que ya
+        //  trae el lector, que en Y-m-d H:i:s es lexicografica y cronologica a la
+        //  vez. Este compositor es puro y tiene que seguir siendolo.
+        $mejor = $pub[0];
+        foreach ($pub as $p) {
+            if ((string)($p['publicado_at'] ?? '') > (string)($mejor['publicado_at'] ?? '')) $mejor = $p;
+        }
+        return self::objetoDePieza($s, $mejor);
+    }
+    private static function objetoDePieza(array $s, array $p): array
+    {
+        $t = self::jugada($s, (int)($p['tactica_id'] ?? 0));
+        $titulo = trim((string)($t['titulo'] ?? ''));
+        if ($titulo === '') {
+            $cap = trim((string)($p['caption'] ?? ''));
+            //  Del caption se toma la primera frase, no los primeros N
+            //  caracteres: cortar a ciegas parte palabras y queda a medias.
+            if ($cap !== '') {
+                $corte = preg_split('/(?<=[.!?\n])\s+/u', $cap, 2);
+                $titulo = trim($corte[0] ?? $cap);
+                if (mb_strlen($titulo) > 70) $titulo = rtrim(mb_substr($titulo, 0, 70)) . '…';
+            }
+        }
+        if ($titulo === '') $titulo = self::TIPOS[(string)($p['tipo'] ?? '')] ?? 'Una pieza de tu plan';
+
+        $red = trim((string)($p['plataforma'] ?? ''));
+        return [
+            'titulo' => $titulo,
+            'red'    => $red !== '' ? (self::REDES[mb_strtolower($red)] ?? ucfirst($red)) : '',
+            //  CRUDA. Ponerla en cristiano es cosa de la vista: dar formato a
+            //  una fecha depende del reloj y de la zona de la maquina, y este
+            //  objeto tiene que salir igual en cualquier sitio con el mismo
+            //  snapshot. La prueba de pureza escanea el fuente, asi que aqui
+            //  ni siquiera se nombra la funcion.
+            'fecha'  => trim((string)($p['fecha_programada'] ?? '')),
+            'tipo'   => (string)($p['tipo'] ?? 'post'),
+        ];
+    }
+
+    private const REDES = ['instagram' => 'Instagram', 'facebook' => 'Facebook',
+                           'ambas' => 'Instagram y Facebook', 'whatsapp' => 'WhatsApp'];
+    private const TIPOS = ['reel' => 'Un reel', 'carrusel' => 'Un carrusel',
+                           'post' => 'Un post', 'historia' => 'Una historia'];
+
+    /**
+     * QUÉ CONSUME PRODUCIR UNA JUGADA DE ESTE FORMATO.
+     *
+     * No se deduce de que la jugada sea «de producción»: se sigue lo que hace
+     * el ejecutor de verdad, en includes/meta_ejecutar.php, formato a formato.
+     *
+     *   post · historia · mixto
+     *       Escribe el caption y CAE a generar_grafica() — llega al proveedor
+     *       de imágenes. Con foto real del negocio también: realzarla con IA
+     *       cuenta una unidad. mixto entra aquí porque puede producir posts.
+     *
+     *   reel
+     *       Escribe el guion, marca la pieza «necesita_material=video» y hace
+     *       `continue` ANTES del arte. El comentario del ejecutor lo dice con
+     *       todas las letras: «NO se le genera arte: lo que falta es el video
+     *       del dueño». Un reel pendiente NO se para por falta de cuota.
+     *
+     *   carrusel
+     *       carrusel_generar() escribe el caption y las ideas de cada slide en
+     *       crecer_carrusel y devuelve. No toca ningún proveedor de imágenes —
+     *       el propio ejecutor lo anota: «la historia está escrita, faltan las
+     *       imágenes». Esas se piden después, desde la pantalla del carrusel.
+     *
+     * Si mañana el ejecutor cambia, esto tiene que cambiar con él: por eso la
+     * prueba va formato por formato y no por «es producción».
+     */
+    private static function consumeDe(string $formato): array
+    {
+        $pinta = ['post' => true, 'historia' => true, 'story' => true, 'mixto' => true,
+                  'reel' => false, 'carrusel' => false];
+        //  Un formato que no esté en la lista se trata como los que sí pintan:
+        //  es lo que hace el ejecutor —$permitidos cae a ['post']— y además es
+        //  el lado seguro para el tope del mes.
+        return ($pinta[mb_strtolower($formato)] ?? true) ? ['imagen'] : [];
     }
 
     /** ¿La jugada de esta pieza sigue viva? Lo hecho y lo descartado no pide nada. */

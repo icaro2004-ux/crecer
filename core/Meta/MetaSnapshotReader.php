@@ -177,7 +177,7 @@ class MetaSnapshotReader
         if ($plan_id <= 0) return $out;
         try {
             $sql = "SELECT c.id, c.tactica_id, c.tipo, c.estado, c.necesita_material, c.guion,
-                           c.fecha_programada, c.publicado_at,
+                           c.fecha_programada, c.publicado_at, c.plataforma, c.caption,
                            (SELECT COUNT(*) FROM crecer_metricas m WHERE m.contenido_id = c.id
                               AND (m.alcance IS NOT NULL OR m.interacciones IS NOT NULL)) AS con_metricas
                       FROM crecer_contenido c
@@ -190,6 +190,10 @@ class MetaSnapshotReader
                     'id'                => (int)$p['id'],
                     'tactica_id'        => $p['tactica_id'] !== null ? (int)$p['tactica_id'] : 0,
                     'tipo'              => (string)$p['tipo'],
+                    'plataforma'        => (string)($p['plataforma'] ?? ''),
+                    //  El caption entero no pinta en un retrato de estado: se
+                    //  guarda lo justo para poder titular la pieza.
+                    'caption'           => mb_substr(trim((string)($p['caption'] ?? '')), 0, 180),
                     'estado'            => (string)$p['estado'],
                     'necesita_material' => $p['necesita_material'] !== null ? (string)$p['necesita_material'] : null,
                     'guion'             => $p['guion'] !== null ? (string)$p['guion'] : null,

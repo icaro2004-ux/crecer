@@ -319,8 +319,13 @@ img.zoomable{cursor:zoom-in}
     justify-content:space-around;align-items:center;padding:8px 6px;
     padding-bottom:calc(8px + env(safe-area-inset-bottom));
     box-shadow:0 -6px 20px rgba(20,20,30,.06)}
+  /*  12px, no 10. El rotulo de una pestaña se lee de reojo y con el
+      pulgar encima: a 10px no se lee, se adivina. A 12 los cinco siguen
+      cabiendo en 360 -medido- bajando el peso de 800 a 700, que a este
+      tamaño ademas se lee mejor. */
   .botnav a{display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;
-    text-decoration:none;color:var(--muted);font-size:10px;font-weight:800;
+    text-decoration:none;color:var(--muted);font-size:12px;font-weight:700;
+    letter-spacing:-.012em;
     letter-spacing:.01em;transition:color .15s}
   .botnav a .ic{width:23px;height:23px;display:block}
   .botnav a.on{color:var(--terracota-700)}
