@@ -29,27 +29,27 @@ $notif_nl = function_exists('notif_no_leidas') ? notif_no_leidas($pdo, $marca_id
 //  cuando había 4 destinos y la barra los cubría todos. Con 9 destinos, Reels,
 //  Tu equipo, El Genoma y Calendario dejaron de existir en móvil.)
 $nav = [
-  ['key'=>'inicio',    'ic'=>'home',    'lb'=>'Inicio',     'bot'=>1, 'hr'=>"$BASE/index.php?marca=$marca_id"],
+  ['key'=>'inicio',    'ic'=>'home',    'lb'=>t('Inicio'),     'bot'=>1, 'hr'=>"$BASE/index.php?marca=$marca_id"],
   // LA META (2026-08-12): el norte del negocio. Va arriba porque gobierna todo
   // lo demás — el corillo trabaja PARA esto, no para llenar el calendario.
   // Tu Meta NO va en la barra del móvil (se pone una vez por semana; el
   // seguimiento diario vive en el card del Home). Por eso sin 'bot': tiene que
   // seguir visible en el drawer para que se pueda llegar desde el teléfono.
-  ['key'=>'meta',      'ic'=>'compass', 'lb'=>'Tu Meta',    'hr'=>"$BASE/meta.php?marca=$marca_id"],
-  ['key'=>'contenido', 'ic'=>'list', 'lb'=>'Tus Posts',  'bot'=>1, 'hr'=>"$BASE/propuestas.php?marca=$marca_id"],
-  ['key'=>'sala',      'ic'=>'sparkles','lb'=>'La Sala',    'bot'=>1, 'hr'=>"$BASE/sala.php?marca=$marca_id"],
-  ['key'=>'reels',     'ic'=>'camera',  'lb'=>'Reels',      'hr'=>"$BASE/reels.php?marca=$marca_id"],
-  ['key'=>'equipo',    'ic'=>'users',   'lb'=>'Tu equipo',  'hr'=>"$BASE/equipo.php?marca=$marca_id"],
-  ['key'=>'genoma',    'ic'=>'genoma',  'lb'=>'El Genoma',  'hr'=>"$BASE/genoma.php?marca=$marca_id"],
-  ['key'=>'resultados','ic'=>'chart',   'lb'=>'Resultados', 'bot'=>1, 'hr'=>"$BASE/resultados.php?marca=$marca_id"],
-  ['key'=>'biblioteca','ic'=>'image',   'lb'=>'Biblioteca', 'hr'=>"$BASE/biblioteca.php?marca=$marca_id"],
+  ['key'=>'meta',      'ic'=>'compass', 'lb'=>t('Tu Meta'),    'hr'=>"$BASE/meta.php?marca=$marca_id"],
+  ['key'=>'contenido', 'ic'=>'list', 'lb'=>t('Tus Posts'),  'bot'=>1, 'hr'=>"$BASE/propuestas.php?marca=$marca_id"],
+  ['key'=>'sala',      'ic'=>'sparkles','lb'=>t('La Sala'),    'bot'=>1, 'hr'=>"$BASE/sala.php?marca=$marca_id"],
+  ['key'=>'reels',     'ic'=>'camera',  'lb'=>t('Reels'),      'hr'=>"$BASE/reels.php?marca=$marca_id"],
+  ['key'=>'equipo',    'ic'=>'users',   'lb'=>t('Tu equipo'),  'hr'=>"$BASE/equipo.php?marca=$marca_id"],
+  ['key'=>'genoma',    'ic'=>'genoma',  'lb'=>t('El Genoma'),  'hr'=>"$BASE/genoma.php?marca=$marca_id"],
+  ['key'=>'resultados','ic'=>'chart',   'lb'=>t('Resultados'), 'bot'=>1, 'hr'=>"$BASE/resultados.php?marca=$marca_id"],
+  ['key'=>'biblioteca','ic'=>'image',   'lb'=>t('Biblioteca'), 'hr'=>"$BASE/biblioteca.php?marca=$marca_id"],
 ];
 // Perfil / ajustes (secundario, abajo): Mi marca (config de marca/voz), config, facturación, soporte.
 $nav_perfil = [
-  ['key'=>'marca',       'ic'=>'palette', 'lb'=>'Mi marca',     'hr'=>"$BASE/marca.php?marca=$marca_id"],
-  ['key'=>'config',      'ic'=>'settings','lb'=>'Configuración','hr'=>"$BASE/configuracion.php?marca=$marca_id"],
-  ['key'=>'facturacion', 'ic'=>'wallet',  'lb'=>'Facturación',  'hr'=>"$BASE/precios.php?marca=$marca_id"],
-  ['key'=>'soporte',     'ic'=>'chat',    'lb'=>'Soporte',      'hr'=>"$BASE/soporte.php?marca=$marca_id"],
+  ['key'=>'marca',       'ic'=>'palette', 'lb'=>t('Mi marca'),     'hr'=>"$BASE/marca.php?marca=$marca_id"],
+  ['key'=>'config',      'ic'=>'settings','lb'=>t('Configuración'),'hr'=>"$BASE/configuracion.php?marca=$marca_id"],
+  ['key'=>'facturacion', 'ic'=>'wallet',  'lb'=>t('Facturación'),  'hr'=>"$BASE/precios.php?marca=$marca_id"],
+  ['key'=>'soporte',     'ic'=>'chat',    'lb'=>t('Soporte'),      'hr'=>"$BASE/soporte.php?marca=$marca_id"],
 ];
 ?>
 <!DOCTYPE html>
@@ -90,7 +90,7 @@ $nav_perfil = [
 <body>
 <div class="layout">
   <aside class="side" id="side">
-    <a class="sbrand" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="text-decoration:none;color:inherit"><img src="/crecer/assets/brand/crecer-icon.png" alt="Inicio"><b style="display:inline-flex;flex-direction:column;line-height:1;gap:0"><span style="color:var(--teal)">Crecer</span><span style="font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.02em;margin-top:1px">by Encuéntralo</span></b></a>
+    <a class="sbrand" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="text-decoration:none;color:inherit"><img src="/crecer/assets/brand/crecer-icon.png" alt="<?= $h(t('Inicio')) ?>"><b style="display:inline-flex;flex-direction:column;line-height:1;gap:0"><span style="color:var(--teal)">Crecer</span><span style="font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.02em;margin-top:1px">by Encuéntralo</span></b></a>
     <?php
       // CREAR con paridad desktop: el móvil tiene su botón central en el bottom
       // nav; el sidebar tiene ESTE. Abre el wizard directo (?crear=1) donde toque
@@ -99,7 +99,7 @@ $nav_perfil = [
           ? "$BASE/propuestas.php?marca=$marca_id&crear=1"
           : "$BASE/aprobar2.php?marca=$marca_id&crear=1";
     ?>
-    <a href="<?= $crear_url_shell ?>" class="side-crear" style="display:flex;align-items:center;justify-content:center;gap:8px;margin:10px 0 6px;padding:12px 14px;border-radius:14px;text-decoration:none;color:#fff;font-weight:800;font-size:14.5px;background:linear-gradient(135deg,var(--teal),var(--teal-700,#00827e));box-shadow:0 8px 18px -8px rgba(0,164,159,.55)"><?= ico('pen') ?> Crear</a>
+    <a href="<?= $crear_url_shell ?>" class="side-crear" style="display:flex;align-items:center;justify-content:center;gap:8px;margin:10px 0 6px;padding:12px 14px;border-radius:14px;text-decoration:none;color:#fff;font-weight:800;font-size:14.5px;background:linear-gradient(135deg,var(--teal),var(--teal-700,#00827e));box-shadow:0 8px 18px -8px rgba(0,164,159,.55)"><?= ico('pen') ?> <?= $h(t('Crear')) ?></a>
     <nav>
       <?php foreach ($nav as $n): ?>
         <?php /* .dup = ya está en la barra de abajo → se esconde SOLO en móvil */ ?>
@@ -109,10 +109,10 @@ $nav_perfil = [
       <?php endforeach; ?>
       <?php /* .dup — el Calendario vive en la barra de abajo del móvil */ ?>
       <a href="<?= $BASE ?>/calendario.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='calendario'?'on ':'' ?>dup">
-        <?= ico('calendar') ?>Calendario
+        <?= ico('calendar') ?><?= $h(t('Calendario')) ?>
       </a>
       <a href="<?= $BASE ?>/ordenes.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='ordenes'?'on':'' ?>">
-        <?= ico('qr') ?>Órdenes
+        <?= ico('qr') ?><?= $h(t('Órdenes')) ?>
       </a>
       <?php if (defined('WHATSAPP_MARCA_ID') && (int)WHATSAPP_MARCA_ID === $marca_id): ?>
       <a href="<?= $BASE ?>/whatsapp.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='whatsapp'?'on':'' ?>">
@@ -120,10 +120,10 @@ $nav_perfil = [
       </a>
       <?php endif; ?>
       <a href="<?= $BASE ?>/finanzas.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='finanzas'?'on':'' ?>">
-        <?= ico('dollar') ?>Finanzas
+        <?= ico('dollar') ?><?= $h(t('Finanzas')) ?>
       </a>
       <a href="<?= $BASE ?>/notificaciones_centro.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='notif'?'on':'' ?>" style="position:relative">
-        <?= ico('bell-solid') ?>Notificaciones
+        <?= ico('bell-solid') ?><?= $h(t('Notificaciones')) ?>
         <?php if ($notif_nl > 0): ?><span style="position:absolute;top:50%;right:12px;transform:translateY(-50%);background:var(--magenta);color:#fff;font-size:11px;font-weight:800;min-width:19px;height:19px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px"><?= $notif_nl > 9 ? '9+' : $notif_nl ?></span><?php endif; ?>
       </a>
     </nav>
@@ -142,12 +142,12 @@ $nav_perfil = [
               <option value="<?= $mn['id'] ?>" <?= $mn['id']==$marca_id?'selected':'' ?>><?= $h($mn['nombre_negocio']) ?></option>
             <?php endforeach; ?>
           </select>
-          <?php if ($plan): ?><div class="tag"><?= ico('leaf') ?> <?= $h($plan_etq) ?> · cambia negocio ↑</div>
-          <?php else: ?><div class="tag"><a href="<?= $BASE ?>/precios.php?marca=<?= $marca_id ?>" style="color:#0d7a44;font-weight:700;text-decoration:none"><?= ico('bolt') ?> Activar plan</a> · cambia negocio ↑</div><?php endif; ?>
+          <?php if ($plan): ?><div class="tag"><?= ico('leaf') ?> <?= $h($plan_etq) ?> <?= $h(t('· cambia negocio ↑')) ?></div>
+          <?php else: ?><div class="tag"><a href="<?= $BASE ?>/precios.php?marca=<?= $marca_id ?>" style="color:#0d7a44;font-weight:700;text-decoration:none"><?= ico('bolt') ?> <?= $h(t('Activar plan')) ?></a> <?= $h(t('· cambia negocio ↑')) ?></div><?php endif; ?>
         <?php else: ?>
           <div class="nm"><?= $h($marca['nombre_negocio']) ?></div>
           <?php if ($plan): ?><div class="tag"><?= ico('leaf') ?> <?= $h($plan_etq) ?></div>
-          <?php else: ?><div class="tag"><a href="<?= $BASE ?>/precios.php?marca=<?= $marca_id ?>" style="color:#0d7a44;font-weight:700;text-decoration:none"><?= ico('bolt') ?> Activar plan</a></div><?php endif; ?>
+          <?php else: ?><div class="tag"><a href="<?= $BASE ?>/precios.php?marca=<?= $marca_id ?>" style="color:#0d7a44;font-weight:700;text-decoration:none"><?= ico('bolt') ?> <?= $h(t('Activar plan')) ?></a></div><?php endif; ?>
         <?php endif; ?>
       </div>
     </div>
@@ -159,22 +159,22 @@ $nav_perfil = [
       <?php endforeach; ?>
     </nav>
     <?php if ($es_admin): ?>
-      <a href="<?= $BASE ?>/admin.php" style="display:flex;align-items:center;gap:10px;padding:10px 12px;margin-top:6px;border-radius:12px;text-decoration:none;color:var(--tinta);background:var(--crema-2);border:1px solid var(--line);font-weight:700;font-size:13.5px"><?= ico('settings') ?> Centro de Operaciones</a>
+      <a href="<?= $BASE ?>/admin.php" style="display:flex;align-items:center;gap:10px;padding:10px 12px;margin-top:6px;border-radius:12px;text-decoration:none;color:var(--tinta);background:var(--crema-2);border:1px solid var(--line);font-weight:700;font-size:13.5px"><?= ico('settings') ?> <?= $h(t('Centro de Operaciones')) ?></a>
     <?php endif; ?>
-    <a href="/crecer/logout.php" style="display:flex;align-items:center;gap:10px;padding:9px 12px;margin-top:6px;border-radius:12px;text-decoration:none;color:var(--muted);font-weight:600;font-size:13.5px">Salir</a>
+    <a href="/crecer/logout.php" style="display:flex;align-items:center;gap:10px;padding:9px 12px;margin-top:6px;border-radius:12px;text-decoration:none;color:var(--muted);font-weight:600;font-size:13.5px"><?= $h(t('Salir')) ?></a>
     <?php /* Idioma de la interfaz. Va junto a lo legal, no en la barra de arriba:
              el dueño boricua lo cambia una vez o ninguna, y el espacio de arriba
              es del negocio. Lo que escribe la IA no cambia de idioma nunca. */ ?>
     <div class="side-lang" style="margin-top:10px;padding-left:12px;display:flex;align-items:center;gap:8px">
-      <span style="color:var(--muted);font-size:11.5px;font-weight:600">Idioma</span>
+      <span style="color:var(--muted);font-size:11.5px;font-weight:600"><?= $h(t('Idioma de Crecer')) ?></span>
       <?= i18n_toggle_html() ?>
     </div>
     <div class="side-legal" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:4px 12px;padding-left:12px;padding-right:12px">
-      <a href="/crecer/privacidad.php" style="color:var(--muted);font-size:12px;text-decoration:none">Privacidad</a>
-      <a href="/crecer/terminos.php" style="color:var(--muted);font-size:12px;text-decoration:none">Términos</a>
+      <a href="/crecer/privacidad.php" style="color:var(--muted);font-size:12px;text-decoration:none"><?= $h(t('Privacidad')) ?></a>
+      <a href="/crecer/terminos.php" style="color:var(--muted);font-size:12px;text-decoration:none"><?= $h(t('Términos')) ?></a>
       <!-- "Eliminar datos" a secas parecía un gatillo que te vuela la cuenta. Es una
            página que EXPLICA cómo pedirlo (Meta exige que esa URL sea visible). -->
-      <a href="/crecer/eliminar-datos.php" style="color:var(--muted);font-size:12px;text-decoration:none">Cómo eliminar mis datos</a>
+      <a href="/crecer/eliminar-datos.php" style="color:var(--muted);font-size:12px;text-decoration:none"><?= $h(t('Cómo eliminar mis datos')) ?></a>
       <span style="color:var(--muted);font-size:11.5px;width:100%;margin-top:4px">© Encuéntralo · Crecer</span>
     </div>
   </aside>
@@ -183,21 +183,21 @@ $nav_perfil = [
   <div class="main">
     <div class="ptop">
       <a href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit">
-        <img src="/crecer/assets/brand/crecer-icon.png" alt="Inicio"><b style="display:inline-flex;flex-direction:column;line-height:1;gap:0"><span style="color:var(--teal)">Crecer</span><span style="font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.02em;margin-top:1px">by Encuéntralo</span></b></a>
-      <a href="<?= $BASE ?>/finanzas.php?marca=<?= $marca_id ?>" aria-label="Finanzas" style="margin-left:auto;margin-right:16px;display:flex;align-items:center;text-decoration:none;font-size:22px;line-height:1;color:var(--teal)"><?= ico('dollar') ?></a>
-      <a href="<?= $BASE ?>/notificaciones_centro.php?marca=<?= $marca_id ?>" aria-label="Notificaciones" style="position:relative;margin-right:6px;display:flex;align-items:center;text-decoration:none;font-size:22px;line-height:1;color:var(--teal)"><?= ico('bell-solid') ?><?php if ($notif_nl > 0): ?><span style="position:absolute;top:-5px;right:-7px;background:var(--magenta);color:#fff;font-size:10px;font-weight:800;min-width:16px;height:16px;border-radius:999px;display:flex;align-items:center;justify-content:center;padding:0 4px"><?= $notif_nl > 9 ? '9+' : $notif_nl ?></span><?php endif; ?></a>
-      <button id="burger" class="ptop-menu" aria-label="Abrir menú">
+        <img src="/crecer/assets/brand/crecer-icon.png" alt="<?= $h(t('Inicio')) ?>"><b style="display:inline-flex;flex-direction:column;line-height:1;gap:0"><span style="color:var(--teal)">Crecer</span><span style="font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.02em;margin-top:1px">by Encuéntralo</span></b></a>
+      <a href="<?= $BASE ?>/finanzas.php?marca=<?= $marca_id ?>" aria-label="<?= $h(t('Finanzas')) ?>" style="margin-left:auto;margin-right:16px;display:flex;align-items:center;text-decoration:none;font-size:22px;line-height:1;color:var(--teal)"><?= ico('dollar') ?></a>
+      <a href="<?= $BASE ?>/notificaciones_centro.php?marca=<?= $marca_id ?>" aria-label="<?= $h(t('Notificaciones')) ?>" style="position:relative;margin-right:6px;display:flex;align-items:center;text-decoration:none;font-size:22px;line-height:1;color:var(--teal)"><?= ico('bell-solid') ?><?php if ($notif_nl > 0): ?><span style="position:absolute;top:-5px;right:-7px;background:var(--magenta);color:#fff;font-size:10px;font-weight:800;min-width:16px;height:16px;border-radius:999px;display:flex;align-items:center;justify-content:center;padding:0 4px"><?= $notif_nl > 9 ? '9+' : $notif_nl ?></span><?php endif; ?></a>
+      <button id="burger" class="ptop-menu" aria-label="<?= $h(t('Abrir menú')) ?>">
         <span class="bars" aria-hidden="true"><span></span><span></span><span></span></span>
         <span class="av"><?= $h(mb_strtoupper(mb_substr($marca['nombre_negocio'],0,1))) ?></span>
       </button>
     </div>
     <div class="content">
     <?php if (function_exists('activacion_de_prueba') && activacion_de_prueba($u_actual['email'] ?? null)): ?>
-      <div style="color:var(--muted);font-size:11.5px;margin-bottom:8px;letter-spacing:.02em">Modo prueba · cuenta activa sin cobro</div>
+      <div style="color:var(--muted);font-size:11.5px;margin-bottom:8px;letter-spacing:.02em"><?= $h(t('Modo prueba · cuenta activa sin cobro')) ?></div>
     <?php endif; ?>
     <?php if (!empty($viendo_como_admin)): ?>
       <div style="background:#140a16;color:#fff;padding:11px 16px;border-radius:12px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13.5px">
-        <?= ico('eye') ?> Estás viendo como <b>admin</b> el negocio de <b><?= $h($marca['nombre_negocio']) ?></b>
-        <a href="<?= $BASE ?>/admin.php" style="margin-left:auto;color:#ffcaa8;font-weight:800;text-decoration:none">← Volver a Operaciones</a>
+        <?= ico('eye') ?> <?= $h(t('Estás viendo como')) ?> <b>admin</b> <?= $h(t('el negocio de')) ?> <b><?= $h($marca['nombre_negocio']) ?></b>
+        <a href="<?= $BASE ?>/admin.php" style="margin-left:auto;color:#ffcaa8;font-weight:800;text-decoration:none"><?= $h(t('← Volver a Operaciones')) ?></a>
       </div>
     <?php endif; ?>

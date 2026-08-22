@@ -174,8 +174,8 @@ function esc_visibles(string $flujo, array $mapa): array {
             $cierra = stripos($flujo, '</' . $etq, $abre);
             $cuerpo = substr($flujo, $abre + 1, ($cierra === false ? $n : $cierra) - $abre - 1);
             if ($etq === 'script') {
-                foreach (esc_cadenas_js($cuerpo) as [$txt, $rel]) {
-                    $out[] = ['texto' => $txt, 'donde' => 'js',
+                foreach (esc_cadenas_js($cuerpo) as [$txt, $rel, $sink]) {
+                    $out[] = ['texto' => $txt, 'donde' => 'js', 'sink' => $sink,
                               'linea' => esc_linea($mapa, $abre + 1 + $rel, $flujo)];
                 }
             }
@@ -234,14 +234,38 @@ function esc_attrs(string $tag): array {
     return $out;
 }
 
-/** Literales de cadena dentro de un bloque de JavaScript, con su offset. */
+//  DÓNDE VA A PARAR UNA CADENA DE JAVASCRIPT.
+//
+//  Con el HTML basta la posición: estar fuera de una etiqueta ya significa
+//  «esto se lee». En JavaScript no: la inmensa mayoría de los literales son
+//  identificadores —'click', 'show', '#burger'— y exigir que pasen por el
+//  catálogo sería pedir que se traduzca el nombre de un evento.
+//
+//  Así que se mira A QUÉ SE LE ASIGNA. Lo que entra en textContent o en un
+//  alert() lo lee una persona; lo que entra en querySelector o addEventListener
+//  no lo lee nadie. Cuando el contexto no dice ni una cosa ni la otra, se cae
+//  al filtro de idioma — señal más débil, pero declarada como tal y no
+//  disimulada.
+const ESC_JS_VISIBLE = '/(?:\.(?:textContent|innerText|innerHTML|outerHTML|placeholder|title|alt|ariaLabel|label|value|caption)\s*=\s*|(?:alert|confirm|prompt)\s*\(\s*|insertAdjacentHTML\s*\([^,]*,\s*|\+\s*)$/i';
+const ESC_JS_INVISIBLE = '/(?:getElementById|querySelectorAll|querySelector|getElementsBy\w+|addEventListener|removeEventListener|classList\.\w+|setAttribute|getAttribute|removeAttribute|hasAttribute|createElement|closest|matches|localStorage\.\w+|sessionStorage\.\w+|dataset\.\w+\s*=|\.style\.\w+\s*=|typeof\s|===?\s*)\s*\(?\s*$/i';
+
+/**
+ * Literales de cadena dentro de un bloque de JavaScript, con su offset y con
+ * el destino que se les adivina: 'visible' | 'invisible' | 'incierto'.
+ */
 function esc_cadenas_js(string $js): array {
     $out = [];
     //  Comillas simples, dobles y plantillas. Sin escapes dentro: una cadena
     //  con \' es rara en copy y prefiero perderla a inventarme un parser.
     foreach (['/\'([^\'\\\\\n]{3,})\'/', '/"([^"\\\\\n]{3,})"/', '/`([^`\\\\]{3,})`/'] as $rx) {
         if (!preg_match_all($rx, $js, $mm, PREG_OFFSET_CAPTURE)) continue;
-        foreach ($mm[1] as [$v, $off]) $out[] = [trim($v), $off];
+        foreach ($mm[1] as [$v, $off]) {
+            $antes = substr($js, max(0, $off - 60), min(60, $off));
+            $sink  = 'incierto';
+            if (preg_match(ESC_JS_INVISIBLE, $antes))    $sink = 'invisible';
+            elseif (preg_match(ESC_JS_VISIBLE, $antes))  $sink = 'visible';
+            $out[] = [trim($v), $off, $sink];
+        }
     }
     return $out;
 }
@@ -261,6 +285,24 @@ function esc_literales_php(string $fuente): array {
     $tokens = @token_get_all($fuente);
     $out = [];
     $traductoras = ['t', 'tc', 'tj', 't_json'];
+
+    //  DÓNDE EMPIEZA Y ACABA CADA tj(...).
+    //  tj() no recibe la cadena como primer argumento sino dentro de un array:
+    //  tj(['guardando' => 'Guardando…']). Mirar solo el argumento inmediato
+    //  dejaría esas cadenas marcadas como escritas a mano, y la pantalla que
+    //  hiciera bien las cosas se quedaría en rojo por hacerlas bien.
+    $en_tj = [];
+    $prof = null;
+    $nivel = 0;
+    foreach ($tokens as $k => $tk) {
+        if ($tk === '(') { $nivel++; }
+        elseif ($tk === ')') { $nivel--; if ($prof !== null && $nivel < $prof) $prof = null; }
+        elseif ($prof === null && is_array($tk) && $tk[0] === T_STRING
+                && in_array(strtolower($tk[1]), ['tj', 't_json'], true)) {
+            $prof = $nivel + 1;   // se abre en el '(' que viene justo detrás
+        }
+        if ($prof !== null && $nivel >= $prof) $en_tj[$k] = true;
+    }
 
     foreach ($tokens as $k => $tk) {
         if (!is_array($tk) || $tk[0] !== T_CONSTANT_ENCAPSED_STRING) continue;
@@ -297,6 +339,13 @@ function esc_literales_php(string $fuente): array {
             if ($j >= 0 && is_array($tokens[$j]) && $tokens[$j][0] === T_CONSTANT_ENCAPSED_STRING) {
                 $clave = strtolower(trim(substr($tokens[$j][1], 1, -1)));
             }
+        }
+
+        //  Dentro de tj(): el VALOR es la clave de catálogo; la clave del array
+        //  es solo el nombre de la propiedad en JS y no la lee nadie.
+        if (isset($en_tj[$k])) {
+            if ($clave !== '') { $via = 'catalogo'; }
+            else { continue; }
         }
 
         $out[] = ['texto' => trim(preg_replace('/\s+/u', ' ', $txt) ?? ''),
@@ -356,8 +405,15 @@ function esc_archivo(string $ruta, string $modo = 'censo'): array {
         if ($c['via'] === 'catalogo') { $out[] = $c; continue; }
 
         if ($modo === 'exigido') {
+            //  JavaScript: manda el destino, no la posición. Ver ESC_JS_VISIBLE.
+            if ($c['donde'] === 'js') {
+                if (($c['sink'] ?? '') === 'invisible') continue;
+                if (($c['sink'] ?? '') === 'visible'
+                    && mb_strlen(preg_replace('/[^\p{L}]/u', '', $c['texto']) ?? '') >= 2) { $out[] = $c; continue; }
+                //  'incierto' cae al filtro de idioma, abajo.
+            }
             //  Plantilla: estar ahí ya significa que se lee. Sin filtro de idioma.
-            if ($c['donde'] !== 'php') {
+            elseif ($c['donde'] !== 'php') {
                 if (mb_strlen(preg_replace('/[^\p{L}]/u', '', $c['texto']) ?? '') >= 2) $out[] = $c;
                 continue;
             }

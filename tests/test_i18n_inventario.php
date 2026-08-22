@@ -31,6 +31,7 @@
 
 require_once __DIR__ . '/_i18n_escaner.php';
 require_once __DIR__ . '/i18n_superficies.php';
+require_once dirname(__DIR__) . '/core/I18n/Catalogo.php';
 
 $RAIZ = str_replace('\\', '/', dirname(__DIR__));
 $fallos = 0; $n = 0;
@@ -103,6 +104,23 @@ foreach ($censo as $clave => $c) {
        count($sin) . ' cadenas visibles escritas a mano:' . $muestra);
     ok("«{$clave}» sí usa el catálogo", $c['con'] > 0,
        'cero llamadas a t(): o no se migró, o se migró sin catálogo');
+
+    //  Y lo declarado tiene que EXISTIR en los dos idiomas. Pasar por t() no
+    //  traduce nada por sí solo: una clave que no está en lang/en sale en
+    //  español, en silencio y sin que nadie lo note. Esto es lo que convierte
+    //  «migrado» en «traducido», que no es lo mismo.
+    $faltan = [];
+    foreach ($c['archivos'] as $a) {
+        foreach (esc_archivo($a, 'exigido') as $x) {
+            if ($x['via'] !== 'catalogo') continue;
+            $k = $x['texto'];
+            if (!Catalogo::tiene('es', $k)) $faltan[] = "lang/es ← «{$k}»";
+            if (!Catalogo::tiene('en', $k)) $faltan[] = "lang/en ← «{$k}»";
+        }
+    }
+    $faltan = array_values(array_unique($faltan));
+    ok("«{$clave}»: lo declarado existe en es Y en en", $faltan === [],
+       count($faltan) . " sin declarar:\n           " . implode("\n           ", array_slice($faltan, 0, 10)));
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -184,7 +202,33 @@ ok('no toca lo que sale de un dato (el negocio, la IA, el dueño)', $r === [],
    count($r) . ' · marcar contenido como «falta traducir» obligaría a traducir '
  . 'el nombre del negocio de un cliente, que es justo lo que nunca se hace');
 
-//  e) SQL y CSS no son interfaz.
+//  e) JavaScript: manda el destino, no la posición.
+file_put_contents($tmp, "<?php ?>\n<script>\n"
+  . "document.getElementById('guiaBtn').addEventListener('click', f);\n"
+  . "el.classList.add('show');\n"
+  . "tx.textContent = 'Escoge un archivo';\n"
+  . "</script>\n");
+$r = esc_archivo($tmp, 'exigido');
+$js = array_column(array_filter($r, fn($c) => $c['donde'] === 'js'), 'texto');
+ok('en JS caza lo que se lee', in_array('Escoge un archivo', $js, true),
+   'una cadena que entra en textContent la lee una persona');
+ok('y no exige traducir un evento ni un id',
+   !array_intersect(['click', 'show', 'guiaBtn'], $js),
+   implode(', ', array_intersect(['click', 'show', 'guiaBtn'], $js))
+ . ' · si esto fallara, la prueba pediría traducir el nombre de un evento — '
+ . 'y una prueba con ruido se acaba desactivando');
+
+//  f) tj(): la cadena viaja dentro de un array, no como primer argumento.
+file_put_contents($tmp, "<?php \$x = tj(['escoge' => 'Escoge un archivo']);\n");
+$r = esc_archivo($tmp, 'exigido');
+$c = array_values(array_filter($r, fn($c) => $c['texto'] === 'Escoge un archivo'));
+ok('reconoce el catálogo dentro de tj()', count($c) === 1 && $c[0]['via'] === 'catalogo',
+   'si no, la pantalla que hiciera bien las cosas se quedaría en rojo por hacerlas bien');
+ok('y no confunde la propiedad de JS con texto',
+   count(array_filter($r, fn($c) => $c['texto'] === 'escoge')) === 0,
+   'la clave del array es el nombre de la propiedad; no la lee nadie');
+
+//  g) SQL y CSS no son interfaz.
 file_put_contents($tmp, "<?php \$q='SELECT id, nombre_negocio FROM crecer_marca WHERE id = ?';\n\$s='display:flex;gap:8px';\n");
 $r = esc_archivo($tmp, 'censo');
 ok('no confunde SQL ni CSS con copy', $r === [], count($r) . ' falsos positivos');
