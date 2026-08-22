@@ -296,6 +296,9 @@ try {
         //  7a · aditivas las dos, y el orden con el codigo da igual.
         '2026-08-22_crecer_meta_cambio.sql',
         '2026-08-22_crecer_tactica_sustitucion.sql',
+        //  7b · las fechas del calendario.
+        '2026-08-22_crecer_efemerides.sql',
+        '2026-08-22_crecer_efemeride_decision.sql',
     ];
     ok('declara exactamente las pendientes que hay', $decl === $esperadas,
        'declaradas: ' . implode(' · ', $decl));

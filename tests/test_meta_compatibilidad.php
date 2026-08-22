@@ -31,6 +31,7 @@ require_once __DIR__ . '/_fixture.php';
 require_once __DIR__ . '/_esquema_desechable.php';
 require_once __DIR__ . '/../core/Meta/MetaSnapshotReader.php';
 require_once __DIR__ . '/../core/Meta/MetaStateComposer.php';
+require_once __DIR__ . '/../includes/meta_oportunidad.php';
 if (is_file(__DIR__ . '/../includes/meta_cambio.php')) require_once __DIR__ . '/../includes/meta_cambio.php';
 
 $fallos = 0; $n = 0;
@@ -82,6 +83,10 @@ $sinEsquema = function (array $quitar, callable $fn) use ($pdo) {
                 //  reconoce la capacidad.
                 try { $copia->ejecutar("ALTER TABLE crecer_meta_tactica DROP COLUMN sustituida_at"); }
                 catch (Throwable $e) {}
+            } elseif ($q === 'M3') {
+                $copia->ejecutar("DROP TABLE IF EXISTS crecer_efemerides");
+            } elseif ($q === 'M4') {
+                $copia->ejecutar("DROP TABLE IF EXISTS crecer_efemeride_decision");
             }
         }
         //  El codigo recuerda si una tabla estaba, y con razon: preguntarlo en
@@ -221,6 +226,70 @@ try {
        preg_match('~meta_ajuste_disponible\(\$pdo\)\s*\):\s*\?>\s*\R\s*<a id="ajustar"~u', $src) === 1
        || strpos($src, "if (meta_ajuste_disponible(\$pdo)): ?>") !== false,
        'un control que lleva a una pantalla apagada es una promesa rota');
+
+    // ══════════════════════════════════════════════════════════
+    //  3b · SIN EL CATALOGO (M3) · DEGRADA, NO SE APAGA
+    //
+    //  Quedan las fechas del propio dueño. Es poco, pero es verdad: cero
+    //  invencion y cero pantalla rota.
+    // ══════════════════════════════════════════════════════════
+    echo "
+  — 3b · sin el catalogo de fechas —
+";
+    $sinEsquema(['M3'], function (PDO $cpdo) {
+        ok('las oportunidades siguen en pie', efem_disponible($cpdo),
+           'el catalogo es una FUENTE, no la capacidad');
+        ok('pero el catalogo no esta', !efem_hay_catalogo($cpdo));
+
+        $fv = Fixture::crear($cpdo, 'sinM3');
+        $mv = (int)$fv['marca_id'];
+        $cpdo->prepare("UPDATE crecer_contenido SET fecha_programada=DATE_ADD(NOW(), INTERVAL 200 DAY)
+                         WHERE marca_id=?")->execute([$mv]);
+        $cpdo->prepare("UPDATE crecer_meta SET fecha_limite=DATE_ADD(CURDATE(), INTERVAL 60 DAY)
+                         WHERE marca_id=?")->execute([$mv]);
+        $f = (new DateTimeImmutable('today'))->modify('+9 days');
+        $cpdo->prepare("INSERT INTO crecer_eventos (marca_id,titulo,nota,fecha) VALUES (?,?,?,?)")
+            ->execute([$mv, '[prueba] Fecha suya', '', $f->format('Y-m-d') . ' 10:00:00']);
+
+        $ops = efem_oportunidades($cpdo, $mv);
+        ok('y las fechas del dueño SI se ofrecen', count($ops) === 1
+            && ($ops[0]['origen'] ?? '') === 'evento',
+           json_encode($ops, JSON_UNESCAPED_UNICODE) . ' · sin catalogo queda lo suyo, que es poco pero es verdad');
+        Fixture::limpiar($cpdo, $mv);
+    });
+
+    // ══════════════════════════════════════════════════════════
+    //  3c · SIN LA MEMORIA (M4) · SE APAGA ENTERA
+    //
+    //  Una sugerencia que reaparece cada vez que se abre el plan, despues de
+    //  que el dueño ya dijo que no, es PEOR que no tener la capacidad.
+    // ══════════════════════════════════════════════════════════
+    echo "
+  — 3c · sin la memoria de lo contestado —
+";
+    $sinEsquema(['M4'], function (PDO $cpdo) {
+        ok('las oportunidades se apagan', !efem_disponible($cpdo),
+           'sin memoria, la misma fecha volveria a salir tras decir que no');
+
+        $fv = Fixture::crear($cpdo, 'sinM4');
+        $mv = (int)$fv['marca_id'];
+        $f = (new DateTimeImmutable('today'))->modify('+9 days');
+        $cpdo->prepare("INSERT INTO crecer_eventos (marca_id,titulo,nota,fecha) VALUES (?,?,?,?)")
+            ->execute([$mv, '[prueba] Fecha suya', '', $f->format('Y-m-d') . ' 10:00:00']);
+        ok('no se ofrece ninguna', efem_oportunidades($cpdo, $mv) === []);
+        $antes = (int)$cpdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$mv}")->fetchColumn();
+        $r = efem_anadir($cpdo, $mv, (int)$fv['usuario_id'], 'evento',
+            (int)$cpdo->query("SELECT id FROM crecer_eventos WHERE marca_id={$mv} LIMIT 1")->fetchColumn(),
+            $f->format('Y-m-d'));
+        ok('y añadir se niega en vez de escribir a ciegas', empty($r['ok']),
+           json_encode($r, JSON_UNESCAPED_UNICODE));
+        ok('sin crear ninguna pieza',
+           (int)$cpdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE marca_id={$mv}")->fetchColumn()
+           === $antes);
+        Fixture::limpiar($cpdo, $mv);
+    });
+    ok('repuestas las dos, las oportunidades vuelven',
+       efem_disponible($pdo) && efem_hay_catalogo($pdo));
 
     // ══════════════════════════════════════════════════════════
     //  4 · ESQUEMA NUEVO, CODIGO VIEJO

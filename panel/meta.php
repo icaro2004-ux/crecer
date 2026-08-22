@@ -27,6 +27,7 @@ require __DIR__ . '/../includes/suscripcion.php';
 require_once __DIR__ . '/../includes/iconos.php';
 require_once __DIR__ . '/../includes/meta_negocio.php';
 require_once __DIR__ . '/../includes/meta_cambio.php';
+require_once __DIR__ . '/../includes/meta_oportunidad.php';
 requiere_login();
 require_once __DIR__ . '/../includes/panel_guard.php';
 requiere_suscripcion($pdo, isset($_GET['marca']) ? (int)$_GET['marca'] : null);
@@ -297,6 +298,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $r = meta_sustituir_jugada($pdo, $marca_id, (int)($_POST['jugada'] ?? 0),
                 (int)$usuario['id'], (string)($_POST['motivo'] ?? ''),
                 (string)($_POST['nota'] ?? ''), $alt, (string)($_POST['token'] ?? ''));
+            echo json_encode($r, JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // (i) LAS FECHAS DEL CALENDARIO. Tres respuestas y ninguna toca la
+        //     meta, el plan ni el progreso — esa es la garantia de que son
+        //     sugerencias. Añadir inserta UNA pieza en borrador y nada mas.
+        if (in_array($accion, ['oport_add', 'oport_no', 'oport_luego'], true)) {
+            $org = (string)($_POST['origen'] ?? '');
+            $oid = (int)($_POST['oport'] ?? 0);
+            $ocu = (string)($_POST['fecha'] ?? '');
+            if ($accion === 'oport_add') {
+                $r = efem_anadir($pdo, $marca_id, (int)$usuario['id'], $org, $oid, $ocu);
+            } elseif ($accion === 'oport_no') {
+                $r = efem_descartar($pdo, $marca_id, (int)$usuario['id'], $org, $oid, $ocu,
+                                    (string)($_POST['motivo'] ?? ''));
+            } else {
+                $r = efem_posponer($pdo, $marca_id, (int)$usuario['id'], $org, $oid, $ocu);
+            }
             echo json_encode($r, JSON_UNESCAPED_UNICODE);
             exit;
         }
@@ -1386,6 +1406,13 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
           <?php endforeach; ?>
         </div>
       </details>
+
+      <?php /*  LA FECHA QUE PUEDE SERVIR.
+                Va DESPUES de las jugadas y ANTES de las opciones delicadas: es
+                una sugerencia, no una tarea, y ponerla arriba competiria con
+                lo que de verdad toca hoy. Se pinta sola solo si hay alguna y
+                si su esquema esta.  */ ?>
+      <?php if (efem_disponible($pdo)) require __DIR__ . '/_meta_oportunidad.php'; ?>
 
       <?php /*  LAS OPCIONES DELICADAS, LAS ULTIMAS Y PLEGADAS.
                 Estaban pegadas al progreso —justo donde el dedo va a mirar como

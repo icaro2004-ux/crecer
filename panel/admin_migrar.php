@@ -41,6 +41,11 @@ $MIGRACIONES = [
     //  capacidades no aparecen y Tu Meta sigue como estaba.
     '2026-08-22_crecer_meta_cambio.sql',       // 7a · el libro de cambios de la meta
     '2026-08-22_crecer_tactica_sustitucion.sql', // 7a · el sello de la sustitucion
+    //  7b · las fechas del calendario. Sin la de decisiones la capacidad se
+    //  apaga entera: una sugerencia que reaparece tras decir que no es peor
+    //  que no tenerla. El catalogo nace VACIO — sembrarlo es trabajo humano.
+    '2026-08-22_crecer_efemerides.sql',         // 7b · el catalogo curado (vacio)
+    '2026-08-22_crecer_efemeride_decision.sql', // 7b · la memoria de lo contestado
 ];
 $DIR = dirname(__DIR__) . '/migrations/';
 $PRESENTES = array_values(array_filter($MIGRACIONES, fn($m) => is_file($DIR . $m)));
@@ -58,6 +63,9 @@ $CREA = [
     '2026-08-22_crecer_tactica_sustitucion.sql'
                                             => [['crecer_meta_tactica', 'sustituida_at'],
                                                 ['crecer_meta_tactica', 'sustituida_por_id']],
+    '2026-08-22_crecer_efemerides.sql'       => [['crecer_efemerides', null]],
+    '2026-08-22_crecer_efemeride_decision.sql'
+                                            => [['crecer_efemeride_decision', null]],
     '2026-08-21_crecer_img_cuota.sql'       => [['crecer_img_cuota_cubo', null],
                                                 ['crecer_img_cuota_asiento', null]],
 ];
