@@ -120,4 +120,4 @@ try {
 //  queda idéntica. Solo con ?lang=en (o su cookie) se enciende la traducción.
 //  En CLI (los crons) tampoco corre.
 require_once __DIR__ . '/i18n.php';
-i18n_arrancar($pdo);
+i18n_arrancar();

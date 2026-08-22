@@ -109,43 +109,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $meta = meta_activa($pdo, $marca_id);
             if (!$meta) { echo json_encode(['ok'=>false,'err'=>'No tienes una meta activa.']); exit; }
 
-            //  UNA SOLICITUD, UN PLAN.
-            //  El wizard acuña un identificador al PINTARSE y lo manda con el
-            //  envio: es la intencion del dueño, no el instante del clic.
-            //  meta_plan_generar() lo mira ANTES de llamar a la Estratega, asi
-            //  que un reenvio no cuesta otra llamada al modelo, y la clave
-            //  unica de la base arbitra las carreras.
-            $solicitud = trim((string)($_POST['solicitud'] ?? ''));
-
-            //  EL CANDADO VIEJO SOLO SOBREVIVE SIN LA MIGRACION. Comparaba
-            //  contra el plan vigente, y eso frena el doble clic y nada mas:
-            //  en cuanto el wizard se vuelve a pintar el id ya es el nuevo,
-            //  cuadra, y nace otra version. Es lo que paso el 2026-08-22 con
-            //  las versiones 5 y 6, separadas por 61 segundos.
-            //  Con la columna puesta estorba: podria cortar un primer clic
-            //  legitimo si algo mas movio el plan mientras el dueño leia.
-            if ($solicitud === '' || !meta_plan_col_solicitud($pdo)) {
-                $vigente = meta_plan_activo($pdo, (int)$meta['id']);
-                $pedido  = (int)($_POST['plan_actual'] ?? 0);
-                if ($pedido > 0 && $vigente && (int)$vigente['id'] !== $pedido) {
-                    echo json_encode(['ok'=>true, 'repetido'=>true, 'plan'=>(int)$vigente['id'],
-                                      'version'=>(int)($vigente['version'] ?? 0)]);
-                    exit;
-                }
+            //  DOBLE CLIC, SIN RELOJ. El wizard manda el id del plan que CREE
+            //  estar reemplazando. Si ya no es el vigente, es que el primer
+            //  clic entro: se contesta con el que hay y NO se llama otra vez a
+            //  la Estratega —que cuesta dinero y deja un plan de mas en el
+            //  historial—. Es un compare-and-swap: no depende de cuantos
+            //  segundos pasaron ni de en que zona horaria esta el reloj.
+            $vigente = meta_plan_activo($pdo, (int)$meta['id']);
+            $pedido  = (int)($_POST['plan_actual'] ?? 0);
+            if ($pedido > 0 && $vigente && (int)$vigente['id'] !== $pedido) {
+                echo json_encode(['ok'=>true, 'repetido'=>true, 'plan'=>(int)$vigente['id']]);
+                exit;
             }
 
             $plan = meta_plan_generar($pdo, $marca_id, (int)$meta['id'],
-                                      (string)($_POST['motivo'] ?? ''), $solicitud);
-            //  `repetido` viaja SIEMPRE, y el wizard lo mira: sin el, el corte
-            //  por repeticion se leia igual que un exito nuevo y el dueño se
-            //  quedaba sin saber si su plan se habia creado o no.
-            echo json_encode([
-                'ok'       => !empty($plan['ok']),
-                'repetido' => !empty($plan['repetido']),
-                'plan'     => (int)($plan['plan_id'] ?? 0),
-                'version'  => (int)($plan['version'] ?? 0),
-                'err'      => $plan['err'] ?? null,
-            ], JSON_UNESCAPED_UNICODE);
+                                      (string)($_POST['motivo'] ?? ''));
+            echo json_encode(['ok'=>!empty($plan['ok']), 'err'=>$plan['err'] ?? null], JSON_UNESCAPED_UNICODE);
             exit;
         }
 
@@ -400,9 +379,6 @@ if ($meta) {
 require_once __DIR__ . '/../core/Meta/MetaStateComposer.php';
 require_once __DIR__ . '/../core/Meta/MetaSnapshotReader.php';
 require_once __DIR__ . '/../core/Meta/MetaRetorno.php';
-//  COMO se dice un estado vive en el presentador, no en esta vista: Home
-//  tiene que poder decir exactamente lo mismo sin copiar una linea.
-require_once __DIR__ . '/../core/Meta/MetaPresentador.php';
 $mt_snap   = MetaSnapshotReader::leer($pdo, $marca_id);
 $mt_estado = MetaStateComposer::componer($mt_snap);
 
@@ -848,21 +824,6 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
       se guarda. Se quita para que nadie la reviva creyendo que sigue viva. */
 
   /* — LA BARRA DE CONTEXTO · un dato, no un titular — */
-  /*  LA CONFIRMACION DEL PLAN NUEVO. Va arriba del todo y en teal —el color de
-      «esto lo hizo el corillo y salio bien»—, no en rosa: el rosa es de accion
-      y aqui no hay nada que hacer, solo algo que saber.
-      role="status" para que un lector de pantalla lo anuncie sin robar el foco. */
-  .tm-hecho{display:flex;gap:11px;align-items:flex-start;margin:0 0 18px;
-    padding:13px 15px;border-radius:var(--tm-r,14px);
-    background:rgba(0,164,159,.08);border:1px solid rgba(0,164,159,.3)}
-  .tm-hecho svg{flex:none;width:20px;height:20px;color:var(--teal);margin-top:1px}
-  .tm-hecho b{display:block;font-size:15.5px;color:var(--tinta);line-height:1.35}
-  .tm-hecho span{display:block;font-size:14px;color:var(--ink,#4A434F);margin-top:3px;line-height:1.5}
-  /*  «Ya estaba» no es un logro: se pinta neutro para que no se lea como si
-      acabara de crearse algo. Decirle «creado» a un reenvio seria mentirle. */
-  .tm-hecho-ya{background:var(--crema-2,#F7F5F3);border-color:var(--line)}
-  .tm-hecho-ya svg{color:var(--muted)}
-
   .tm-meta{border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:20px}
   .tm-meta-fila{display:flex;align-items:center;gap:7px}
   .tm-meta-fila .ic{width:15px;height:15px;flex:none;color:var(--muted);stroke-width:1.9}
@@ -1648,45 +1609,6 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
 
 <div class="ah">
 
-  <?php /* ══ «TU PLAN NUEVO ESTÁ AQUÍ» ══════════════════════════════════
-           Lo que faltaba el 2026-08-22. El dueño pidió un plan nuevo, se creó
-           bien, y volvió a una pantalla que se veía IGUAL — porque el plan
-           cambia pero la meta no, y la meta es lo que manda arriba. Concluyó
-           que no había funcionado y lo pidió otra vez: dos planes en 61
-           segundos, ninguno de los dos sobrante por culpa suya.
-
-           Por eso el aviso dice el NÚMERO DE VERSIÓN. «Listo» no distingue
-           nada; «Plan versión 6 creado» sí, y además le enseña que hay un
-           historial y que el anterior no se evaporó.
-
-           `ya=` es el mismo envío llegando dos veces. Se dice tal cual: no es
-           un plan nuevo, y presentarlo como tal sería mentirle. */ ?>
-  <?php
-    $tm_nuevo = isset($_GET['nuevo']) ? max(0, (int)$_GET['nuevo']) : null;
-    $tm_ya    = isset($_GET['ya'])    ? max(0, (int)$_GET['ya'])    : null;
-  ?>
-  <?php if ($tm_nuevo !== null || $tm_ya !== null): ?>
-    <section class="tm-hecho<?= $tm_ya !== null ? ' tm-hecho-ya' : '' ?>" role="status">
-      <?= ico($tm_ya !== null ? 'copy' : 'check-circle') ?>
-      <div>
-        <?php /*  Los datos van por %s y no concatenados: «'Plan versión ' . $n .
-                  ' creado'» son tres pedazos y ninguno es una frase. El
-                  catálogo no puede traducir media oración, y el inglés casi
-                  nunca deja el número en el mismo sitio.  */ ?>
-        <b><?php if ($tm_ya !== null): ?>
-             <?= $h($tm_ya > 0 ? t('Este plan ya estaba creado — es la versión %s', (int)$tm_ya)
-                               : t('Este plan ya estaba creado')) ?>
-           <?php else: ?>
-             <?= $h($tm_nuevo > 0 ? t('Plan versión %s creado', (int)$tm_nuevo)
-                                  : t('Plan nuevo creado')) ?>
-           <?php endif; ?></b>
-        <span><?= $h($tm_ya !== null
-                ? t('No se creó otro: tu petición ya se había atendido.')
-                : t('El anterior queda guardado en el historial. Esto es lo que hay ahora.')) ?></span>
-      </div>
-    </section>
-  <?php endif; ?>
-
   <?php /* ── BARRA DE CONTEXTO · un DATO, no un titular ────────────────
            Era un encabezado de 21px que competia con el titulo del estado:
            dos voces grandes, una encima de otra, y el ojo sin saber cual era
@@ -1777,18 +1699,41 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
         $turno_cls = 'mio'; $turno_txt = 'Ya está listo';
     }
 
-    //  EL TITULO SALE DEL PRESENTADOR, NO DE AQUI.
-    //  Las tres transformaciones —quitar el prefijo cuando el turno ya esta
-    //  delante, reescribirlo cuando manda el limite, y decir con cuanto se
-    //  cerro— vivian en esta vista, donde Home no podia alcanzarlas. Con la
-    //  regla aqui dentro, Home solo podia decir otra cosa o copiar el codigo:
-    //  las dos son la misma enfermedad.
-    //
-    //  `true` = esta pantalla YA enseña el turno encima. Home lo pinta suelto y
-    //  por eso conserva el prefijo: es la unica diferencia legitima entre las
-    //  dos, y esta declarada en un parametro en vez de escondida en un `if`.
-    $titulo = MetaPresentador::titulo($E, true, $mt_cuota ?: [], $mt_snap);
-    $objeto = MetaPresentador::objeto($E, $mt_cuota ?: []);
+    //  EL TITULO YA NO REPITE EL ROTULO. El compositor devuelve titulos que
+    //  se explican solos ("Para seguir, necesito tu video") porque Home los
+    //  usa sueltos; aqui, con el turno delante, sobra el prefijo.
+    $titulo = trim($E->titulo);
+    foreach (['Para seguir, necesito', 'Nada pendiente de ti'] as $pref) {
+        if (stripos($titulo, $pref) === 0) {
+            $resto = trim(mb_substr($titulo, mb_strlen($pref)));
+            if ($resto !== '') $titulo = mb_strtoupper(mb_substr($resto, 0, 1)) . mb_substr($resto, 1);
+            break;
+        }
+    }
+    //  CON EL LIMITE MANDANDO, LA PANTALLA DICE QUE PASA.
+    //  Cambiar solo la pastilla y dejar el titulo del estado normal era medio
+    //  aviso: la dueña leia «Me toca a mi» con una pastilla ambar al lado y
+    //  tenia que atar cabos. Se dice entero, con el numero y el mes.
+    if ($mt_cuota_manda) {
+        $lim = (int)($mt_cuota['limite'] ?? 0);
+        $titulo = $lim > 0
+            ? 'Usaste las ' . $lim . ' imágenes de ' . $mt_mes()
+            : 'Se acabaron las imágenes de ' . $mt_mes();
+    }
+    //  M · el cierre dice CON CUANTO, y siempre «registrados»: sin esa
+    //  palabra «18 pedidos» se lee como los pedidos del negocio, y Crecer
+    //  solo cuenta los que pasaron por aqui.
+    if ($E->estado === MetaState::M_CERRADA && $mt_snap['meta']
+        && $mt_snap['progreso']['actual'] !== null) {
+        [$sust_m, $part_m] = $uni;
+        $n_m = rtrim(rtrim(number_format((float)$mt_snap['progreso']['actual'], 2), '0'), '.');
+        $titulo = 'Cerraste con ' . $n_m . ' ' . $sust_m . ' ' . $part_m;
+    }
+    $objeto = (array)($E->evidencia['objeto'] ?? []);
+    //  El objeto pausado es el que el compositor eligio, no un ejemplo. Si el
+    //  estado no trae ninguno, la pantalla no se inventa uno.
+    $pausado = $mt_cuota_manda ? MetaLimiteImagen::objetoPausado($E) : [];
+    if ($pausado) $objeto = $pausado;
   ?>
   <section class="tm-ahora">
     <span class="tm-turno <?= $h($turno_cls) ?>">

@@ -37,12 +37,6 @@
 
 $op_cambiar = ($vista === 'cambiar');
 $op_plan    = meta_plan_activo($pdo, (int)$meta['id']);
-
-//  LA INTENCION DE ESTE DUEÑO, ACUÑADA AL PINTAR.
-//  Identifica la peticion, no el instante: llegue una vez o cinco, produce un
-//  solo plan. Es lo que faltaba el 2026-08-22, cuando dos envios separados por
-//  61 segundos crearon las versiones 5 y 6 de la misma meta.
-$op_solicitud = bin2hex(random_bytes(16));
 $op_def     = meta_objetivo_def((string)$meta['objetivo']);
 
 //  LO QUE HAY HOY, PARA PODER DECIR LA VERDAD DE QUE PASA CON ELLO.
@@ -351,16 +345,10 @@ $op_meta_txt = $meta['cantidad'] !== null
   var PASOS   = CAMBIAR ? 4 : 3;
   var VOLVER  = <?= json_encode($op_volver) ?>;
   var AHORA   = <?= json_encode($BASE . '/meta.php?marca=' . $marca_id) ?>;
-  //  LO QUE SE CREE ESTAR REEMPLAZANDO. Solo lo usa el servidor cuando falta
-  //  la migracion de idempotencia; con ella manda SOLICITUD.
+  //  LO QUE SE CREE ESTAR REEMPLAZANDO. El servidor compara: si ya no cuadra,
+  //  el primer clic entro y el segundo no vuelve a escribir ni a pagar otra
+  //  llamada a la Estratega.
   var PLAN_ACTUAL = <?= (int)($op_plan['id'] ?? 0) ?>;
-  //  LA INTENCION DE ESTE DUEÑO, ACUÑADA AL PINTAR LA PANTALLA.
-  //  Viaja con el envio y no cambia aunque el envio se repita: doble clic,
-  //  boton de reintentar, respuesta perdida por el camino. Una solicitud, un
-  //  plan. Se pinta una vez por render: volver a entrar al wizard SI es una
-  //  intencion nueva, y eso es correcto — lo que evita que el dueño quiera
-  //  entrar otra vez es la confirmacion clara al terminar.
-  var SOLICITUD = <?= json_encode($op_solicitud) ?>;
   var META_ACTUAL = <?= (int)$meta['id'] ?>;
 
   var d = { motivo:'', motivoTxt:'', detalle:'',
@@ -539,23 +527,12 @@ $op_meta_txt = $meta['cantidad'] !== null
           cierre: (d.motivo === 'lograda' ? 'lograda' : 'cancelada'),
           objetivo:d.obj, cantidad:d.cant, fecha_limite:fechaLimite().iso,
           presupuesto:d.pauta, contexto:d.ctx }
-      : { accion:'replan', plan_actual:PLAN_ACTUAL, solicitud:SOLICITUD, motivo:motivoEntero() };
+      : { accion:'replan', plan_actual:PLAN_ACTUAL, motivo:motivoEntero() };
 
     enviar(campos, function(j){
       //  Se vuelve SIEMPRE que la operacion entro, salga o no el plan: el
       //  compositor recalcula en Tu Meta y dice la verdad de lo que hay.
-      if (j && j.ok) {
-        if (CAMBIAR) { location.href = AHORA; return; }
-        //  SE VUELVE DICIENDO CUAL ES SU PLAN, Y SI ES NUEVO O YA ESTABA.
-        //  Antes se volvia a secas, y como los dos planes conservan la misma
-        //  meta, la pantalla parecia identica: el dueño creia que no habia
-        //  pasado nada y lo pedia otra vez. Asi nacieron las versiones 5 y 6
-        //  el 2026-08-22, con 61 segundos entre medias.
-        //  `repetido` significa que este envio ya se habia atendido — no es un
-        //  plan nuevo, y decirle que si lo es seria mentirle en la cara.
-        location.href = AHORA + (j.repetido ? '&ya=' : '&nuevo=') + (j.version || 0);
-        return;
-      }
+      if (j && j.ok) { location.href = CAMBIAR ? AHORA : VOLVER; return; }
       mostrarError((j && j.err) ? j.err
         : 'No pude hacerlo ahora mismo. Nada cambió — dale otra vez.');
     }).catch(function(){

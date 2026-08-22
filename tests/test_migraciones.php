@@ -242,10 +242,6 @@ $ESPERADAS = [
     '2026-08-20_crecer_plan_presentado.sql' => 2,   // ALTER + CREATE INDEX
     '2026-08-21_crecer_meta_autorun.sql'    => 1,   // CREATE TABLE
     '2026-08-21_crecer_img_cuota.sql'       => 2,   // dos CREATE TABLE
-    '2026-08-22_crecer_idioma_preferencia.sql' => 2,   // un ALTER por tabla
-    '2026-08-22_crecer_idioma_pieza.sql'       => 2,   // un ALTER por tabla
-    '2026-08-22_crecer_plan_solicitud.sql'     => 1,   // un ALTER
-    '2026-08-22_crecer_plan_solicitud_libro.sql' => 1,  // un CREATE TABLE
 ];
 foreach ($DECLARADAS as $m) {
     $sent = migracion_sentencias((string)file_get_contents($DIR . $m));

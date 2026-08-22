@@ -299,14 +299,6 @@ try {
         //  7b · las fechas del calendario.
         '2026-08-22_crecer_efemerides.sql',
         '2026-08-22_crecer_efemeride_decision.sql',
-        //  Idiomas · el idioma pasa a ser de alguien, y cada pieza dice en cual
-        //  esta. Las dos aditivas y NULL-ables: sin ellas todo sigue como hoy.
-        '2026-08-22_crecer_idioma_preferencia.sql',
-        '2026-08-22_crecer_idioma_pieza.sql',
-        //  Hotfix del replan · una solicitud, un plan. Sin ella el codigo cae
-        //  al candado viejo, que frena el doble clic y no el reenvio tardio.
-        '2026-08-22_crecer_plan_solicitud.sql',
-        '2026-08-22_crecer_plan_solicitud_libro.sql',
     ];
     ok('declara exactamente las pendientes que hay', $decl === $esperadas,
        'declaradas: ' . implode(' · ', $decl));
