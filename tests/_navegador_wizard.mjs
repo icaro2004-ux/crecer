@@ -27,7 +27,7 @@
 
 import { abrirChrome, cerrarRecibimiento, dormir } from './_chrome.mjs';
 
-const [sid, marca, escena, aS, hS, vistaArg] = process.argv.slice(2);
+const [sid, marca, escena, aS, hS, vistaArg, pasoArg] = process.argv.slice(2);
 const ancho = parseInt(aS || '360', 10), alto = parseInt(hS || '800', 10);
 const vista = vistaArg || 'wizard';
 const URL_PAGINA = `http://localhost/crecer/panel/meta.php?marca=${marca}&vista=${vista}`;
@@ -121,6 +121,176 @@ try {
     cerrar(); process.exit(0);
   }
 
+  // ══════════════════════════════════════════════════════════════
+  //  7a · AJUSTAR Y SUSTITUIR
+  //
+  //  Los dos comparten contrato —nada se escribe hasta el ultimo paso, atras
+  //  no pierde, el doble clic no repite— asi que comparten sonda. Lo que
+  //  cambia es que se contesta en cada paso.
+  // ══════════════════════════════════════════════════════════════
+  if (escena.indexOf('a7-') === 0) {
+    const flujo = await ev(`document.querySelector('.wz') ? document.querySelector('.wz').dataset.flujo : ''`);
+    if (flujo !== 'ajustar' && flujo !== 'sustituir') {
+      salir({ error: 'la pagina no trae el wizard de 7a', flujo,
+              url_final: await ev('location.href'),
+              pista: 'sin la migracion, ?vista=ajustar y ?vista=sustituir caen al plan' });
+      cerrar(); process.exit(1);
+    }
+
+    //  El csrf y la marca, para poder hacer de segunda pestaña mas abajo.
+    await ev(`window.__MARCA7A = ${JSON.stringify(marca)};
+      var __m = document.documentElement.innerHTML.match(/CSRF\s*=\s*"([a-f0-9]+)"/i);
+      window.__CSRF7A = __m ? __m[1] : '';`);
+
+    const mirar = () => ev(`JSON.stringify((function(){
+      var s=document.querySelector('.wz-p.on');
+      var el=document.querySelector('.aj-campo.sel') || document.querySelector('#suMot button.sel');
+      var er=document.getElementById('wzErr');
+      var c=document.getElementById('cantidad'), m=document.getElementById('ajMotivo');
+      var nt=document.getElementById('suNota');
+      var et=document.getElementById('wzEt'), eT=document.getElementById('wzErrT');
+      var eP=document.getElementById('wzErrP'), ld=document.getElementById('wzLoad');
+      //  Si ya no estamos en el wizard es que se confirmo y se navego. Eso no
+      //  es un error de la sonda: es el dato que hay que devolver.
+      if (!er) return { paso:0, fuera:true, url:location.href,
+                        alertas:+(sessionStorage.getItem('wzAlertas')||0) };
+      return {
+        paso: s ? +s.dataset.p : 0,
+        et: et ? (et.textContent||'').trim() : '',
+        eleccion: el ? (el.dataset.campo || el.dataset.motivo || '') : '',
+        cant: c ? c.value : '',
+        motivo: m ? m.value.slice(0,40) : (nt ? nt.value.slice(0,40) : ''),
+        err_visible: er.classList.contains('on'),
+        err_titulo: eT ? (eT.textContent||'').trim() : '',
+        err_txt: eP ? (eP.textContent||'').trim() : '',
+        cargando: ld ? ld.classList.contains('on') : false,
+        alertas: +(sessionStorage.getItem('wzAlertas') || 0),
+        url: location.href
+      };
+    })())`).then(JSON.parse);
+
+    //  Espera a que la Estratega conteste. Es red: se le da tiempo de verdad.
+    const esperarAlternativa = async () => {
+      for (let i = 0; i < 75; i++) {
+        if (await ev(`!document.getElementById('suPensando') ||
+                      document.getElementById('suPensando').hidden`)) return;
+        await dormir(400);
+      }
+    };
+
+    const contestar = async (hasta) => {
+      if (flujo === 'ajustar') {
+        await pulsa('.aj-campo[data-campo="cantidad"]', 200);
+        if (hasta < 2) return;
+        await pulsa('#sigue');
+        await escribir('cantidad', '33');
+        await escribir('ajMotivo', 'Me esta entrando mas de lo que pensaba.');
+        await dormir(140);
+        if (hasta < 3) return;
+        await pulsa('#sigue', 420);
+      } else {
+        await pulsa('#suMot button[data-motivo="sin_video"]', 200);
+        await escribir('suNota', 'La plaza esta en obra.');
+        await dormir(120);
+        if (hasta < 2) return;
+        await pulsa('#sigue');
+        await esperarAlternativa();
+        if (hasta < 3) return;
+        await pulsa('#sigue', 420);
+      }
+    };
+
+    if (escena === 'a7-salir') {
+      const desde = Math.min(3, Math.max(1, parseInt(pasoArg || '2', 10)));
+      await contestar(desde);
+      const antes = await mirar();
+      await ev(`document.getElementById('wzSalir').click()`);
+      for (let i = 0; i < 40; i++) {
+        if (!(await ev(`/vista=(ajustar|sustituir)/.test(location.href)`))) break;
+        await dormir(200);
+      }
+      salir({ escena, flujo, desde, antes, url: await ev('location.href') });
+      cerrar(); process.exit(0);
+    }
+
+    if (escena === 'a7-atras') {
+      await contestar(3);
+      const alFinal = await mirar();
+      await pulsa('#atras'); await pulsa('#atras');
+      const alPrincipio = await mirar();
+      await pulsa('#sigue');
+      if (flujo === 'sustituir') await esperarAlternativa();
+      await pulsa('#sigue', 420);
+      const deVuelta = await mirar();
+      salir({ escena, flujo, alFinal, alPrincipio, deVuelta });
+      cerrar(); process.exit(0);
+    }
+
+    //  EL TOKEN VIAJA DE VERDAD.
+    //
+    //  Con el wizard ya abierto y contestado, se simula OTRA PESTAÑA que
+    //  ajusta la misma meta. Se hace con un POST real desde la propia pagina
+    //  —misma sesion, mismo csrf— y sin token, que es la puerta que tienen los
+    //  llamadores internos. Eso mueve updated_at y deja caduco el token que el
+    //  wizard recogio al pintarse.
+    //
+    //  Si la pantalla NO mandara su token, el ajuste entraria pisando el
+    //  cambio ajeno — el fallo exacto que el bloqueo existe para evitar.
+    if (escena === 'a7-token') {
+      await contestar(3);
+      const antes = await mirar();
+
+      //  La otra pestaña ABRE LA PAGINA otra vez y usa SU token, que es lo que
+      //  haria una de verdad. Mandar el POST sin token seria colarse por la
+      //  puerta de los llamadores internos y no probaria nada de la pantalla.
+      const otra = await ev(`(function(){
+        return fetch(location.href).then(function(r){ return r.text(); }).then(function(html){
+          var t = html.match(/data-token="([a-f0-9]+)"/);
+          var fd = new FormData();
+          fd.append('csrf', window.__CSRF7A);
+          fd.append('accion', 'ajustar');
+          fd.append('cantidad', '77');
+          fd.append('token', t ? t[1] : '');
+          return fetch(location.pathname + '?marca=' + window.__MARCA7A,
+                       { method:'POST', body:fd }).then(function(r){ return r.text(); });
+        });
+      })()`);
+
+      //  Y ahora el dueño confirma lo suyo, con el token de antes.
+      await pulsa('#sigue', 1200);
+      const tras = await mirar();
+      salir({ escena, flujo, antes, otra: String(otra).slice(0, 200), tras });
+      cerrar(); process.exit(0);
+    }
+
+    if (escena === 'a7-guardar') {
+      await ev(`sessionStorage.setItem('wzPosts','0');
+        var real = window.fetch;
+        window.fetch = function(u, o){
+          var b = o && o.body, acc = (b && b.get) ? b.get('accion') : '';
+          if (acc === 'ajustar' || acc === 'sustituir')
+            sessionStorage.setItem('wzPosts', String(+sessionStorage.getItem('wzPosts') + 1));
+          return real.apply(window, arguments);
+        };`);
+      await contestar(3);
+      const antes = await mirar();
+      if (antes.paso !== 3) {
+        salir({ escena, flujo, error_suave: 'no se llego al repaso', antes,
+                posts: await contar('wzPosts'), alertas: await contar('wzAlertas'),
+                url: await ev('location.href') });
+        cerrar(); process.exit(0);
+      }
+      await ev(`(function(){var b=document.getElementById('sigue'); b.click(); b.click(); b.click();})()`);
+      await dormir(700);
+      for (let i = 0; i < 150; i++) {
+        if (!(await ev(`/vista=(ajustar|sustituir)/.test(location.href)`))) break;
+        await dormir(400);
+      }
+      salir({ escena, flujo, posts: await contar('wzPosts'), alertas: await contar('wzAlertas'),
+              url: await ev('location.href') });
+      cerrar(); process.exit(0);
+    }
+  }
   // ══════════════════════════════════════════════════════════════
   //  LOS DOS DELICADOS · plan nuevo y cambiar de meta
   //

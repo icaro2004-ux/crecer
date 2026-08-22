@@ -82,8 +82,21 @@
     }
 
     //  El último control de la página, en coordenadas de documento.
+    //
+    //  OJO CON LOS ACORDEONES CERRADOS. Este Chrome le da RECTÁNGULO DE VERDAD
+    //  al contenido de un <details> cerrado —medido: 627px de alto, con un
+    //  enlace en y=1608 y el acordeón sin abrir—, así que contarlos reservaba
+    //  sitio para controles que nadie puede tocar. Al añadir una opción más al
+    //  plan, eso infló la zona hasta 285px: una pantalla de vacío, que es
+    //  exactamente el error histórico que este cálculo existe para no repetir.
+    //
+    //  Lo que no se ve no necesita hueco. El summary SÍ se mide: esa es la
+    //  puerta que la dueña ve. Es la misma regla que ya aplicaba la sonda al
+    //  juzgar solapes; aquí faltaba.
     var ultimo = 0;
     [].forEach.call(ah.querySelectorAll('a[href],button,summary'), function (e) {
+      var d = e.closest('details');
+      if (d && !d.open && e.tagName !== 'SUMMARY') return;
       var b = e.getBoundingClientRect();
       if (b.height < 4) return;
       ultimo = Math.max(ultimo, Math.round(b.bottom + window.scrollY));

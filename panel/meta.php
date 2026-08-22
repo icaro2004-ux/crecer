@@ -26,6 +26,7 @@ require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/suscripcion.php';
 require_once __DIR__ . '/../includes/iconos.php';
 require_once __DIR__ . '/../includes/meta_negocio.php';
+require_once __DIR__ . '/../includes/meta_cambio.php';
 requiere_login();
 require_once __DIR__ . '/../includes/panel_guard.php';
 requiere_suscripcion($pdo, isset($_GET['marca']) ? (int)$_GET['marca'] : null);
@@ -240,6 +241,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
+        // (h) AJUSTAR LA META. El token viaja en el POST y el candado esta
+        //     dentro de meta_ajustar_trazado(): aqui no se vuelve a mirar.
+        if ($accion === 'ajustar') {
+            $meta = meta_activa($pdo, $marca_id);
+            if (!$meta) { echo json_encode(['ok'=>false,'err'=>'No tienes una meta activa.']); exit; }
+            $campos = [];
+            foreach (META_AJUSTABLES as $c) {
+                //  Solo lo que de verdad vino. Mandar todos los campos siempre
+                //  llenaria el historial de «cambios» que no cambian nada.
+                if (array_key_exists($c, $_POST)) $campos[$c] = (string)$_POST[$c];
+            }
+            //  POR LA WEB, EL TOKEN ES OBLIGATORIO. meta_ajustar_trazado() deja
+            //  pasar el token vacio a proposito —los llamadores internos no
+            //  tienen pantalla de la que sacarlo—, pero por aqui entra el
+            //  navegador: sin token, un POST viejo pisaria un cambio nuevo sin
+            //  que nadie se entere.
+            $tk = (string)($_POST['token'] ?? '');
+            if ($tk === '') {
+                echo json_encode(['ok'=>false, 'motivo'=>'sin_token',
+                    'err'=>'Recarga la pantalla y vuelve a intentarlo.']); exit;
+            }
+            $r = meta_ajustar_trazado($pdo, $marca_id, (int)$meta['id'], (int)$usuario['id'],
+                $campos, $tk, (string)($_POST['motivo'] ?? ''),
+                !empty($_POST['plan_nuevo']));
+            //  El token nuevo viaja de vuelta: si el dueño sigue en la pantalla
+            //  y ajusta otra cosa, no le rebota su propio cambio.
+            if (!empty($r['meta'])) $r['token'] = meta_token($r['meta']);
+            unset($r['meta']);
+            echo json_encode($r, JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // (h2) PEDIRLE A LA ESTRATEGA UNA ALTERNATIVA. NO escribe nada: la
+        //      propuesta se enseña y el dueño decide. La escritura es (h3).
+        if ($accion === 'alternativa') {
+            $t = $pdo->prepare("SELECT * FROM crecer_meta_tactica WHERE id=? AND marca_id=?");
+            $t->execute([(int)($_POST['jugada'] ?? 0), $marca_id]);
+            $orig = $t->fetch(PDO::FETCH_ASSOC);
+            if (!$orig) { echo json_encode(['ok'=>false,'err'=>'No encuentro esa jugada.']); exit; }
+            $mot = (string)($_POST['motivo'] ?? '');
+            if (!in_array($mot, META_MOTIVOS_SUST, true)) {
+                echo json_encode(['ok'=>false,'err'=>'Dime primero qué te frena.']); exit;
+            }
+            $r = meta_alternativa_jugada($pdo, $marca_id, $orig, $mot, (string)($_POST['nota'] ?? ''));
+            echo json_encode($r, JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // (h3) SUSTITUIR DE VERDAD. La alternativa llega ya aprobada por el
+        //      dueño; la Estratega ya se llamo en (h2), fuera de transaccion.
+        if ($accion === 'sustituir') {
+            $alt = json_decode((string)($_POST['alt'] ?? ''), true);
+            if (!is_array($alt)) { echo json_encode(['ok'=>false,'err'=>'Se perdió la alternativa. Vuelve a pedirla.']); exit; }
+            $r = meta_sustituir_jugada($pdo, $marca_id, (int)($_POST['jugada'] ?? 0),
+                (int)$usuario['id'], (string)($_POST['motivo'] ?? ''),
+                (string)($_POST['nota'] ?? ''), $alt, (string)($_POST['token'] ?? ''));
+            echo json_encode($r, JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
         // (g) EMPEZAR: el dueño vio el trato y dijo que sí. El sello va en un
         //     solo UPDATE que ya comprueba dueño, vigencia y que no estuviera
         //     puesto — ver meta_plan_presentar(). Aquí no se vuelve a mirar.
@@ -308,12 +369,17 @@ $mt_estado = MetaStateComposer::componer($mt_snap);
 //   ?vista=plan-nuevo  pedirle otro plan a la Estratega, para esta misma meta
 //   ?vista=cambiar     cerrar esta meta y estrenar la proxima, de una
 $vista = $_GET['vista'] ?? '';
-if (!in_array($vista, ['plan', 'wizard', 'plan-nuevo', 'cambiar'], true)) $vista = 'ahora';
+if (!in_array($vista, ['plan', 'wizard', 'plan-nuevo', 'cambiar', 'ajustar', 'sustituir'], true)) $vista = 'ahora';
 if (!$meta && $vista === 'ahora' && !empty($_GET['nueva'])) $vista = 'wizard';
 //  Las dos delicadas piden una meta viva. Sin ella no hay nada que rehacer ni
 //  que cambiar, y mandar a un wizard vacio es como se llegaba antes a que el
 //  negocio se quedara sin norte: se vuelve a lo que toca ahora.
-if (!$meta && in_array($vista, ['plan-nuevo', 'cambiar'], true)) $vista = 'ahora';
+if (!$meta && in_array($vista, ['plan-nuevo', 'cambiar', 'ajustar', 'sustituir'], true)) $vista = 'ahora';
+//  Y las dos de 7a solo salen si su esquema esta. Sin la migracion no se
+//  degrada la pantalla: la capacidad no existe y punto. Ver la matriz de
+//  compatibilidad en tests/test_meta_compatibilidad.php.
+if ($vista === 'ajustar'   && !meta_ajuste_disponible($pdo))      $vista = 'plan';
+if ($vista === 'sustituir' && !meta_sustitucion_disponible($pdo)) $vista = 'plan';
 
 /** Volver aquí desde donde sea que mande la acción dominante. */
 $mt_volver = MetaRetorno::marcador();
@@ -556,6 +622,19 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
   .pu-t small{display:block;font-size:14px;color:var(--muted);line-height:1.4;margin-top:2px}
   .pu-go{flex:none;color:var(--muted)}
   .pu-go .ic{width:16px;height:16px;stroke-width:2}
+
+  /* — la salida de la jugada imposible, y la marca de la que ya se fue — */
+  .jg-nopuedo{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;
+    border:1px solid var(--line);border-radius:var(--tm-r-bt);background:transparent;
+    font-size:15px;font-weight:600;color:var(--muted);text-decoration:none;margin:0 0 12px}
+  .jg-nopuedo:hover{border-color:var(--tm-aviso);color:var(--tm-aviso);background:var(--tm-aviso-piel)}
+  .jg-nopuedo:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
+  .jg-nopuedo .ic{width:16px;height:16px;stroke-width:2}
+  .jg-sust{display:flex;align-items:center;gap:7px;font-size:14px;font-weight:600;
+    color:var(--tm-aviso);background:var(--tm-aviso-piel);border-radius:99px;
+    padding:5px 12px;margin:0 15px 12px}
+  .jg-sust .ic{width:15px;height:15px;flex:none;stroke-width:2}
+  .jg-sust span{min-width:0}
 
   .jg-video{font-size:14px;line-height:1.5;color:var(--ink,#4A434F);background:var(--tm-aviso-piel);
     border-radius:var(--tm-r-bt);padding:12px 14px;margin:0 0 12px}
@@ -893,6 +972,16 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
   .tm-mas a .ic{width:18px;height:18px;flex:none;color:var(--muted);stroke-width:1.9}
   .tm-mas a .ic:last-child{margin-left:auto;width:16px;height:16px}
 
+  /* — la salida cuando la jugada que manda es imposible para el dueño — */
+  .tm-nopuedo{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;
+    margin-top:14px;border:1px solid var(--line);border-radius:var(--tm-r-bt);
+    background:transparent;font-size:15px;font-weight:600;color:var(--muted);
+    text-decoration:none}
+  .tm-nopuedo:hover{border-color:var(--tm-aviso);color:var(--tm-aviso);
+    background:var(--tm-aviso-piel)}
+  .tm-nopuedo:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
+  .tm-nopuedo .ic{width:16px;height:16px;stroke-width:2}
+
   .ah-toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);opacity:0;
     background:var(--tinta);color:#fff;font-size:14px;font-weight:700;padding:12px 18px;
     border-radius:12px;pointer-events:none;transition:.2s;z-index:80;max-width:92vw}
@@ -935,7 +1024,15 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
   }
 </style>
 
-<?php if ($meta && in_array($vista, ['plan-nuevo', 'cambiar'], true)):
+<?php if ($meta && $vista === 'ajustar'): /* ══════ AJUSTAR LA META ══════ */ ?>
+
+<?php require __DIR__ . '/_meta_ajustar.php'; ?>
+
+<?php elseif ($meta && $vista === 'sustituir'): /* ══════ SUSTITUIR UNA JUGADA ══════ */ ?>
+
+<?php require __DIR__ . '/_meta_sustituir.php'; ?>
+
+<?php elseif ($meta && in_array($vista, ['plan-nuevo', 'cambiar'], true)):
         /* ══════ LAS DOS DELICADAS · wizards propios, no un confirm() ══════ */ ?>
 
 <?php require __DIR__ . '/_meta_opciones.php'; ?>
@@ -1306,6 +1403,10 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
             <a id="replan" href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&amp;vista=plan-nuevo"><?= ico('refresh') ?> Empezar un plan nuevo</a>
             <p>Jugadas nuevas para esta misma meta. Antes de cambiar nada te enseno que
               se mueve y que se queda.</p>
+            <?php if (meta_ajuste_disponible($pdo)): ?>
+              <a id="ajustar" href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&amp;vista=ajustar"><?= ico('edit') ?> Ajustar esta meta</a>
+              <p>Cambiar el número, la fecha o la inversión sin empezar de cero. Lo hecho no se toca.</p>
+            <?php endif; ?>
             <a id="cerrar" href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&amp;vista=cambiar"><?= ico('target') ?> Cambiar de meta</a>
             <p>Escoges la proxima primero y despues cierro esta. Lo publicado no se toca.</p>
           </div>
@@ -1823,6 +1924,21 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
   </div>
 
   <?php /* ── CAPA 3 · otra pantalla, detras de un enlace ── */ ?>
+  <?php /*  LA SALIDA DE LA JUGADA IMPOSIBLE, TAMBIEN DESDE AQUI.
+            Cuando lo que manda la pantalla es material (G), inversion (H) o una
+            accion suya (I), el atasco esta justo delante. Mandar al dueño al
+            plan a buscar la jugada seria pedirle que se acuerde de donde
+            estaba. Va como enlace secundario: la primaria no se toca.  */ ?>
+  <?php
+    $mt_jug_atasco = (int)($E->evidencia['tactica_id'] ?? 0);
+    $mt_puede_sust = $mt_jug_atasco > 0 && meta_sustitucion_disponible($pdo)
+        && in_array((string)($act['tipo'] ?? ''), ['material', 'inversion', 'fisica'], true);
+  ?>
+  <?php if ($mt_puede_sust): ?>
+    <a class="tm-nopuedo" href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&amp;vista=sustituir&amp;jugada=<?= $mt_jug_atasco ?>&amp;desde=ahora">
+      <?= ico('refresh') ?>No puedo con esta — cámbiala por otra</a>
+  <?php endif; ?>
+
   <nav class="tm-mas">
     <?php if ($meta): ?>
       <a href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&vista=plan"><?= ico('list') ?>Ver el plan completo<?= ico('chev-der') ?></a>

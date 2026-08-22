@@ -36,6 +36,11 @@ $MIGRACIONES = [
     '2026-08-20_crecer_plan_presentado.sql',   // Fase 3B · el plan se presenta una vez
     '2026-08-21_crecer_meta_autorun.sql',      // Fase 3C · el libro de corridas
     '2026-08-21_crecer_img_cuota.sql',         // Fase 3C · el libro de la cuota
+    //  7a · ajustar la meta y sustituir una jugada. LAS DOS SON ADITIVAS y el
+    //  orden con el codigo da igual: ninguna toca un ENUM. Sin ellas, las dos
+    //  capacidades no aparecen y Tu Meta sigue como estaba.
+    '2026-08-22_crecer_meta_cambio.sql',       // 7a · el libro de cambios de la meta
+    '2026-08-22_crecer_tactica_sustitucion.sql', // 7a · el sello de la sustitucion
 ];
 $DIR = dirname(__DIR__) . '/migrations/';
 $PRESENTES = array_values(array_filter($MIGRACIONES, fn($m) => is_file($DIR . $m)));
@@ -49,6 +54,10 @@ $ARCHIVO   = $DIR . ($PRESENTES[0] ?? '');   // solo para el aviso de «¿hicist
 $CREA = [
     '2026-08-20_crecer_plan_presentado.sql' => [['crecer_meta_plan', 'presentado_at']],
     '2026-08-21_crecer_meta_autorun.sql'    => [['crecer_meta_autorun', null]],
+    '2026-08-22_crecer_meta_cambio.sql'      => [['crecer_meta_cambio', null]],
+    '2026-08-22_crecer_tactica_sustitucion.sql'
+                                            => [['crecer_meta_tactica', 'sustituida_at'],
+                                                ['crecer_meta_tactica', 'sustituida_por_id']],
     '2026-08-21_crecer_img_cuota.sql'       => [['crecer_img_cuota_cubo', null],
                                                 ['crecer_img_cuota_asiento', null]],
 ];

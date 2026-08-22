@@ -25,6 +25,24 @@
               <span class="jg-mini"><?= $h($mini) ?></span>
             </summary>
             <?php if ($es_turno): ?><div class="jg-ahora">Por aquí seguimos</div><?php endif; ?>
+            <?php /*  «SUSTITUIDA» ES EL SELLO, no el estado: en la base vive
+                      como 'descartada' —el valor que el compositor ya sabia
+                      ignorar— y lo que la distingue es sustituida_at. Sin
+                      decirlo aqui, el dueño veria una jugada apagada sin saber
+                      por que ni a donde fue.  */ ?>
+            <?php if (meta_fue_sustituida($t)): ?>
+              <div class="jg-sust">
+                <?= ico('refresh') ?>
+                <span>Sustituida<?php
+                  $__por = ['sin_video' => ' — no tenías video', 'sin_foto' => ' — no tenías fotos',
+                            'sin_presupuesto' => ' — sin presupuesto', 'sin_tiempo' => ' — sin tiempo',
+                            'otro' => ''][(string)($t['motivo_sustitucion'] ?? '')] ?? '';
+                  echo $h($__por);
+                  if (trim((string)($t['nota_sustitucion'] ?? '')) !== '')
+                      echo ' · «' . $h((string)$t['nota_sustitucion']) . '»';
+                ?></span>
+              </div>
+            <?php endif; ?>
             <?php if (trim((string)$t['que_hacer']) !== ''): ?>
               <p class="jg-q"><?= $h($t['que_hacer']) ?></p><?php endif; ?>
             <?php if (trim((string)$t['por_que']) !== ''): ?>
@@ -125,6 +143,18 @@
             <?php elseif (!$hecha && $clase === 'accion_dueno'): ?>
               <button type="button" class="jg-ok2" data-id="<?= (int)$t['id'] ?>">
                 <?= ico('check-circle') ?> Ya lo hice</button>
+            <?php endif; ?>
+
+            <?php /*  LA SALIDA DE LA JUGADA IMPOSIBLE.
+                      Antes de esto, una jugada que pedia algo que el dueño no
+                      tenia se quedaba pendiente para siempre, mandando la
+                      pantalla, y el mes se atascaba detras de ella. Va como
+                      accion SECUNDARIA: nunca compite con la primaria.  */ ?>
+            <?php if (!$hecha && !meta_fue_sustituida($t)
+                      && in_array((string)$t['estado'], ['pendiente', 'en_curso'], true)
+                      && meta_sustitucion_disponible($pdo)): ?>
+              <a class="jg-nopuedo" href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&amp;vista=sustituir&amp;jugada=<?= (int)$t['id'] ?>">
+                <?= ico('refresh') ?>No puedo con esta — cámbiala</a>
             <?php endif; ?>
             <div class="jg-live" data-for="<?= (int)$t['id'] ?>"></div>
           </details>

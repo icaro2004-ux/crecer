@@ -20,6 +20,18 @@
      Va al final de la hoja a proposito: en CSS gana el ultimo y asi nadie
      tiene que adivinar el orden. Solo toca .wz — las otras dos capas no
      usan ninguna de estas clases. */
+  /*  `hidden` TIENE QUE GANAR SIEMPRE.
+      El atributo hidden se aplica con una regla del navegador
+      (`[hidden]{display:none}`), y CUALQUIER regla nuestra que ponga display
+      la pisa — las del autor van por delante de las del navegador. Asi que un
+      `.su-pensando{display:flex}` dejaba el «Buscándote una alternativa»
+      puesto encima de la alternativa ya pintada, aunque el guion lo hubiera
+      escondido. Salio en una captura, no leyendo el codigo.
+
+      Se arregla aqui, para todos los wizards, y no parcheando cada clase que
+      un dia lleve display. */
+  .wz [hidden]{display:none !important}
+
   .wz{
     --tm-rosa:#EF4375; --tm-rosa-tx:#C81E52; --tm-rosa-bt:#D42A5C; --tm-rosa-bt-h:#B81F4C;
     --tm-rosa-piel:#FDF0F4;

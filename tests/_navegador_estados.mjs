@@ -95,9 +95,36 @@ try {
         await escribir('contexto', CTX_LARGO); await dormir(140);
         await pulsa('#sigue', 420);
       }
+    } else if (flujo === 'ajustar') {
+      //  Ajustar: se escoge QUE campo y se le pone un valor distinto al que
+      //  hay — con el mismo valor el boton no se habilita, y con razon: eso
+      //  no es un ajuste.
+      await pulsa('.aj-campo[data-campo="cantidad"]', 200);
+      await pulsa('#sigue');
+      if (pasoPedido > 2) {
+        await escribir('cantidad', '33');
+        await escribir('ajMotivo', 'Me esta entrando mas de lo que pensaba.');
+        await dormir(140);
+        await pulsa('#sigue', 420);
+      }
+    } else if (flujo === 'sustituir') {
+      //  Sustituir: el motivo, y despues la Estratega. Se le da tiempo de
+      //  verdad —hasta 30s— porque es una llamada de red; medir mientras
+      //  piensa mediria una pantalla a medio pintar.
+      await pulsa('#suMot button[data-motivo="sin_video"]', 200);
+      await pulsa('#sigue');
+      if (pasoPedido > 2) {
+        for (let i = 0; i < 75; i++) {
+          if (await ev(`!document.getElementById('suPensando') ||
+                        document.getElementById('suPensando').hidden`)) break;
+          await dormir(400);
+        }
+        await dormir(200);
+        await pulsa('#sigue', 420);
+      }
     } else {
-      //  Los dos delicados empiezan igual: el motivo. Despues, cambiar pide
-      //  meta nueva y numeros; plan-nuevo solo enseña lo que se mueve.
+      //  Los dos delicados del commit 6 empiezan igual: el motivo. Despues,
+      //  cambiar pide meta nueva y numeros; plan-nuevo solo enseña que se mueve.
       await pulsa('#opMotivo .wz-chip', 200);
       await escribir('opDetalle', CTX_LARGO);
       await dormir(120);

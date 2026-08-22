@@ -103,8 +103,37 @@ if ($copia === null) {
         //  La copia nace con el esquema de HOY, que ya tiene lo que estas
         //  migraciones crean. Se quita para que corran de verdad y no se
         //  limiten a decir «ya estaba», que no probaria nada.
-        foreach (['crecer_meta_autorun', 'crecer_img_cuota_cubo', 'crecer_img_cuota_asiento'] as $t) {
+        //  QUE SE QUITA SALE DEL MAPA $CREA de admin_migrar.php, no de una
+        //  lista a mano. Escrita a mano, cada migracion nueva rompia esta
+        //  prueba con un 1050/1060 que parecia un fallo del archivo y no lo
+        //  era — paso con las dos de 7a.
+        preg_match('/\$CREA = \[(.*?)\n\];/s',
+                   (string)file_get_contents(dirname(__DIR__) . '/panel/admin_migrar.php'), $cm);
+        preg_match_all("/\['([a-z_]+)',\s*(null|'([a-z_]+)')\]/", $cm[1] ?? '', $piezas,
+                       PREG_SET_ORDER);
+        $quitar_tabla = []; $quitar_col = [];
+        foreach ($piezas as $p) {
+            if (($p[2] ?? '') === 'null') $quitar_tabla[] = $p[1];
+            else $quitar_col[] = [$p[1], $p[3]];
+        }
+        ok('el mapa $CREA dice que crea cada migracion',
+           count($quitar_tabla) + count($quitar_col) > 0,
+           'sin el, esta prueba no sabe que limpiar y se felicita sola');
+        foreach ($quitar_tabla as $t) {
             try { $copia->ejecutar("DROP TABLE IF EXISTS `{$t}`"); } catch (Throwable $e) {}
+        }
+        foreach ($quitar_col as [$t, $c]) {
+            try { $copia->ejecutar("ALTER TABLE `{$t}` DROP COLUMN `{$c}`"); } catch (Throwable $e) {}
+        }
+        //  Y las columnas hermanas de la de 7a: el mapa solo nombra dos de las
+        //  cinco, porque para saber si la migracion entro basta con una.
+        foreach (['motivo_sustitucion', 'nota_sustitucion', 'sustituye_a_id'] as $c) {
+            try { $copia->ejecutar("ALTER TABLE crecer_meta_tactica DROP COLUMN `{$c}`"); }
+            catch (Throwable $e) {}
+        }
+        foreach (['idx_tac_sustituida', 'idx_tac_sustituye'] as $i) {
+            try { $copia->ejecutar("DROP INDEX `{$i}` ON crecer_meta_tactica"); }
+            catch (Throwable $e) {}
         }
         //  Y el INDICE tambien, a mano. CREATE TABLE ... LIKE copia los
         //  indices, y quitar presentado_at NO se lleva idx_plan_presentado: en
