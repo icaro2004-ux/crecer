@@ -299,6 +299,17 @@ try {
         //  7b · las fechas del calendario.
         '2026-08-22_crecer_efemerides.sql',
         '2026-08-22_crecer_efemeride_decision.sql',
+        //  ESQUEMA POR DELANTE DEL CODIGO. Estas cuatro se despliegan SIN el
+        //  codigo que las usa: columnas NULL-ables y una tabla que hoy no toca
+        //  nadie. Van primero porque el orden inverso es el que duele — con el
+        //  codigo dentro y el esquema fuera, cada pantalla falla hasta que
+        //  alguien corra la migracion.
+        '2026-08-22_crecer_idioma_preferencia.sql',
+        '2026-08-22_crecer_idioma_pieza.sql',
+        //  Las dos del replan van JUNTAS: la columna impide dos planes de una
+        //  intencion, el libro impide pagar dos veces por ella.
+        '2026-08-22_crecer_plan_solicitud.sql',
+        '2026-08-22_crecer_plan_solicitud_libro.sql',
     ];
     ok('declara exactamente las pendientes que hay', $decl === $esperadas,
        'declaradas: ' . implode(' · ', $decl));

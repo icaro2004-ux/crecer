@@ -46,6 +46,27 @@ $MIGRACIONES = [
     //  que no tenerla. El catalogo nace VACIO — sembrarlo es trabajo humano.
     '2026-08-22_crecer_efemerides.sql',         // 7b · el catalogo curado (vacio)
     '2026-08-22_crecer_efemeride_decision.sql', // 7b · la memoria de lo contestado
+    //  ── EL ESQUEMA VA DELANTE DEL CODIGO, A PROPOSITO ──────────────────
+    //  Estas cuatro entran SIN el codigo que las usa. Hoy no las lee nadie:
+    //  son columnas NULL-ables y una tabla que ningun camino toca todavia,
+    //  asi que el producto se comporta exactamente igual con ellas puestas.
+    //
+    //  Se despliegan primero porque el orden inverso es el que duele: con el
+    //  codigo dentro y el esquema fuera, cada pantalla que lo necesite falla
+    //  hasta que alguien corra la migracion. Asi, cuando el codigo vuelva, el
+    //  sitio donde escribir ya esta.
+    //
+    //  IDIOMAS · el idioma pasa a ser de alguien (del usuario la interfaz, de
+    //  la marca el contenido) y cada pieza dice en cual esta. Nada se rellena:
+    //  NULL significa «no lo se», que es la verdad de lo que ya existe.
+    '2026-08-22_crecer_idioma_preferencia.sql', // usuarios + crecer_marca
+    '2026-08-22_crecer_idioma_pieza.sql',       // crecer_contenido + crecer_carrusel
+    //  REPLAN · LAS DOS VAN JUNTAS. La columna impide que una intencion cree
+    //  dos planes; el libro cobra esa unicidad ANTES de llamar al modelo. Con
+    //  solo la primera, produccion tendria la garantia de los planes y no la
+    //  del gasto: dos peticiones a la vez pagarian dos veces.
+    '2026-08-22_crecer_plan_solicitud.sql',      // crecer_meta_plan.solicitud
+    '2026-08-22_crecer_plan_solicitud_libro.sql',// crecer_plan_solicitud
 ];
 $DIR = dirname(__DIR__) . '/migrations/';
 $PRESENTES = array_values(array_filter($MIGRACIONES, fn($m) => is_file($DIR . $m)));
@@ -68,6 +89,14 @@ $CREA = [
                                             => [['crecer_efemeride_decision', null]],
     '2026-08-21_crecer_img_cuota.sql'       => [['crecer_img_cuota_cubo', null],
                                                 ['crecer_img_cuota_asiento', null]],
+    '2026-08-22_crecer_idioma_preferencia.sql'
+                                            => [['usuarios', 'idioma_interfaz'],
+                                                ['crecer_marca', 'idioma_contenido']],
+    '2026-08-22_crecer_idioma_pieza.sql'    => [['crecer_contenido', 'idioma'],
+                                                ['crecer_carrusel', 'idioma']],
+    '2026-08-22_crecer_plan_solicitud.sql'   => [['crecer_meta_plan', 'solicitud']],
+    '2026-08-22_crecer_plan_solicitud_libro.sql'
+                                            => [['crecer_plan_solicitud', null]],
 ];
 $hay_pieza = function (string $tabla, ?string $col) use ($pdo): bool {
     try {
@@ -153,6 +182,16 @@ $piezas = [
     ['crecer_meta_autorun',    'tabla',  null],
     ['crecer_img_cuota_cubo',  'tabla',  null],
     ['crecer_img_cuota_asiento','tabla', null],
+    //  Las cuatro de esta tanda. Se verifican aunque todavia no las use nadie:
+    //  la pagina existe justamente para no tener que adivinar si una migracion
+    //  entro, y una que se corre pero no se comprueba es una que se da por
+    //  buena sin mirar.
+    ['usuarios',               'col',    'idioma_interfaz'],
+    ['crecer_marca',           'col',    'idioma_contenido'],
+    ['crecer_contenido',       'col',    'idioma'],
+    ['crecer_carrusel',        'col',    'idioma'],
+    ['crecer_meta_plan',       'col',    'solicitud'],
+    ['crecer_plan_solicitud',  'tabla',  null],
 ];
 $estado = [];
 foreach ($piezas as [$tabla, $tipo, $col]) {

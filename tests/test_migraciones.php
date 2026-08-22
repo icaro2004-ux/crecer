@@ -135,6 +135,20 @@ if ($copia === null) {
             try { $copia->ejecutar("DROP INDEX `{$i}` ON crecer_meta_tactica"); }
             catch (Throwable $e) {}
         }
+        //  Lo mismo con la de idiomas: $CREA nombra `idioma` y no `idioma_origen`
+        //  —basta una para saber si la migracion entro— asi que la hermana se
+        //  quedaba puesta y el ALTER moria con 1060 a mitad. El primer intento
+        //  de esta tanda se puso rojo justo ahi, y no era el archivo: era la
+        //  copia arrancando con media migracion dentro.
+        try { $copia->ejecutar("ALTER TABLE crecer_contenido DROP COLUMN idioma_origen"); }
+        catch (Throwable $e) {}
+        //  Y sus indices: quitar la columna de un indice de DOS no se lleva el
+        //  indice, se queda sobre la que sobrevive. Misma trampa que
+        //  idx_plan_presentado, abajo.
+        foreach ([['crecer_contenido', 'idx_cont_idioma'],
+                  ['crecer_meta_plan', 'uq_plan_solicitud']] as [$t, $i]) {
+            try { $copia->ejecutar("DROP INDEX `{$i}` ON `{$t}`"); } catch (Throwable $e) {}
+        }
         //  Y el INDICE tambien, a mano. CREATE TABLE ... LIKE copia los
         //  indices, y quitar presentado_at NO se lleva idx_plan_presentado: en
         //  MariaDB el indice se queda sobre las columnas que sobreviven. Sin
