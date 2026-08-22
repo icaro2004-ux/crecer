@@ -1664,6 +1664,12 @@ try {
             'core/Meta/MetaLimiteImagen.php'   => 'MetaLimiteImagen',
             'core/Meta/MetaSnapshotReader.php' => 'MetaSnapshotReader',
             'core/Meta/MetaStateComposer.php'  => 'MetaStateComposer',
+            //  La fundacion del idioma (lote 3A). Sube INERTE: nadie la llama
+            //  todavia. Se verifica aqui antes de conectar el motor en 3B,
+            //  porque conectar sin comprobar es exactamente lo que tumbo el
+            //  sitio el 22 de agosto.
+            'core/I18n/Locale.php'             => 'Locale',
+            'core/I18n/Catalogo.php'           => 'Catalogo',
         ];
         $todo = true;
         foreach ($piezas as $rel => $clase) {
@@ -1679,18 +1685,53 @@ try {
                    $carga ? 'carga · ' . number_format((int)filesize($p)) . ' bytes' : 'NO CARGA',
                    $err !== '' ? ' · ' . $err : '');
         }
-        //  Y el dato que decide si se puede seguir: ¿lo llama ya alguna pagina?
-        //  Mientras la respuesta sea «nadie», el archivo es inerte y desplegarlo
-        //  no puede romper nada. Cuando 1B lo conecte, aqui saldran los nombres.
-        $usos = [];
+        //  LOS CATALOGOS: «estar» no es «servir».
+        //  Un archivo de idioma con el `return` roto se incluye sin quejarse y
+        //  devuelve 1 en vez de un array — y eso se descubriria en pantalla, no
+        //  aqui. Se cargan de verdad y se cuentan las claves.
+        echo "\n  Catalogos de idioma\n";
+        if (!class_exists('Catalogo', false)) {
+            echo "  [!!] sin la clase Catalogo no se pueden leer\n";
+        } else {
+            Catalogo::usarRaiz(__DIR__ . '/lang');
+            foreach (['es', 'en'] as $__l) {
+                foreach (Catalogo::DOMINIOS as $__d) {
+                    $__p = __DIR__ . '/lang/' . $__l . '/' . $__d . '.php';
+                    if (!is_file($__p)) { $todo = false; printf("  [!!] %-36s NO ESTA\n", "lang/{$__l}/{$__d}.php"); continue; }
+                    $__ar = null; $__e2 = '';
+                    try { $__ar = require $__p; } catch (Throwable $e) { $__e2 = $e->getMessage(); }
+                    $__bien = is_array($__ar);
+                    if (!$__bien) $todo = false;
+                    printf("  [%s] %-36s %s%s\n", $__bien ? 'OK' : '!!', "lang/{$__l}/{$__d}.php",
+                           $__bien ? count($__ar) . ' claves' : 'NO DEVUELVE UN ARRAY',
+                           $__e2 !== '' ? ' · ' . $__e2 : '');
+                }
+            }
+            //  Y que cuadren: sin paridad, una clave que falta en ingles es
+            //  indistinguible de una que nunca se declaro.
+            $__es = Catalogo::mapa('es'); $__en = Catalogo::mapa('en');
+            $__d1 = array_diff(array_keys($__es), array_keys($__en));
+            $__d2 = array_diff(array_keys($__en), array_keys($__es));
+            $__par = ($__d1 === [] && $__d2 === []);
+            if (!$__par) $todo = false;
+            printf("  [%s] paridad es/en: %d y %d claves%s\n", $__par ? 'OK' : '!!',
+                   count($__es), count($__en),
+                   $__par ? '' : ' · descuadran ' . (count($__d1) + count($__d2)));
+        }
+
+        //  Y el dato que decide si se puede seguir: ¿los llama ya alguna pagina?
+        //  Mientras la respuesta sea «nadie», son inertes y desplegarlos no
+        //  puede romper nada. Cuando se conecten, aqui saldran los nombres.
+        $usos = []; $usos_i18n = [];
         foreach (array_merge(glob(__DIR__ . '/panel/*.php') ?: [],
                              glob(__DIR__ . '/includes/*.php') ?: []) as $f2) {
-            if (strpos((string)@file_get_contents($f2), 'MetaPresentador') !== false) {
-                $usos[] = basename($f2);
-            }
+            $__s2 = (string)@file_get_contents($f2);
+            if (strpos($__s2, 'MetaPresentador') !== false) $usos[] = basename($f2);
+            if (strpos($__s2, 'core/I18n') !== false)       $usos_i18n[] = basename($f2);
         }
-        echo "\n  Lo usa: " . ($usos ? implode(', ', $usos) : '(nadie todavia — sigue inerte)') . "\n";
-        echo "\n  " . ($todo ? 'FUNDACION COMPLETA · se puede conectar (lote 1B).'
+        echo "\n  MetaPresentador lo usa: " . ($usos ? implode(', ', $usos) : '(nadie — inerte)') . "\n";
+        echo "  core/I18n lo usa:       " . ($usos_i18n ? implode(', ', $usos_i18n) : '(nadie — inerte)') . "\n";
+        echo "\n  " . ($todo ? 'FUNDACION COMPLETA · se puede conectar.'
                              : 'FALTA ALGO · NO conectes nada hasta que esto salga limpio.') . "\n\n";
     }
 
