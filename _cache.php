@@ -1320,6 +1320,58 @@ try {
         echo "\n  --- que NO se hizo aqui ---\n";
         echo "  Cero llamadas a proveedor, ni de generacion ni de consulta.\n";
     }
+    // ¿LLEGO LA FUNDACION AL SERVIDOR?   &test=fundacion
+    //
+    //   Existe por la caida del 2026-08-22. Un despliegue dejo fuera un archivo
+    //   NUEVO, y el `require_once` que lo pedia vivia en db.php — el unico que
+    //   hace toda pagina del producto. Murio el sitio entero, publico y panel,
+    //   con sesion y sin ella, en todos los idiomas.
+    //
+    //   La leccion no fue «revisa mejor el deploy»: fue que un archivo nuevo se
+    //   sube SOLO, inerte, se comprueba que llego, y solo despues se conecta.
+    //   Sin una forma de comprobarlo EN PRODUCCION ese primer paso no vale de
+    //   nada — por eso esto es una herramienta y no una linea en un documento.
+    //
+    //   SOLO LECTURA: mira si el archivo esta, si la clase carga de verdad y si
+    //   sus dependencias tambien estan. No llama a nadie ni escribe una fila.
+    if ($__test === 'fundacion') {   // solo lectura · ya estás dentro como admin
+        echo "\n--- ¿ESTA LA FUNDACION EN ESTE SERVIDOR? ---\n";
+        $piezas = [
+            'core/Meta/MetaPresentador.php'    => 'MetaPresentador',
+            'core/Meta/MetaState.php'          => 'MetaState',
+            'core/Meta/MetaLimiteImagen.php'   => 'MetaLimiteImagen',
+            'core/Meta/MetaSnapshotReader.php' => 'MetaSnapshotReader',
+            'core/Meta/MetaStateComposer.php'  => 'MetaStateComposer',
+        ];
+        $todo = true;
+        foreach ($piezas as $rel => $clase) {
+            $p = __DIR__ . '/' . $rel;
+            if (!is_file($p)) { $todo = false; printf("  [!!] %-36s NO ESTA\n", $rel); continue; }
+            //  Estar no basta: un archivo truncado por un envio a medias existe
+            //  y revienta igual. Se carga de verdad.
+            $carga = false; $err = '';
+            try { require_once $p; $carga = class_exists($clase, false); }
+            catch (Throwable $e) { $err = $e->getMessage(); }
+            if (!$carga) $todo = false;
+            printf("  [%s] %-36s %s%s\n", $carga ? 'OK' : '!!', $rel,
+                   $carga ? 'carga · ' . number_format((int)filesize($p)) . ' bytes' : 'NO CARGA',
+                   $err !== '' ? ' · ' . $err : '');
+        }
+        //  Y el dato que decide si se puede seguir: ¿lo llama ya alguna pagina?
+        //  Mientras la respuesta sea «nadie», el archivo es inerte y desplegarlo
+        //  no puede romper nada. Cuando 1B lo conecte, aqui saldran los nombres.
+        $usos = [];
+        foreach (array_merge(glob(__DIR__ . '/panel/*.php') ?: [],
+                             glob(__DIR__ . '/includes/*.php') ?: []) as $f2) {
+            if (strpos((string)@file_get_contents($f2), 'MetaPresentador') !== false) {
+                $usos[] = basename($f2);
+            }
+        }
+        echo "\n  Lo usa: " . ($usos ? implode(', ', $usos) : '(nadie todavia — sigue inerte)') . "\n";
+        echo "\n  " . ($todo ? 'FUNDACION COMPLETA · se puede conectar (lote 1B).'
+                             : 'FALTA ALGO · NO conectes nada hasta que esto salga limpio.') . "\n\n";
+    }
+
     // ¿QUEDÓ ASENTADO EL HOTFIX DE SONDEO?   &test=sondeo
     //   Contesta de un tiro las cuatro preguntas del despliegue, sin gastar un
     //   centavo y sin generar nada: qué código corre de verdad, si la migración
