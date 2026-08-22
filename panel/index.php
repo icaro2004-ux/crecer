@@ -696,16 +696,19 @@ $credito  = $has_deck
   .norte{background:linear-gradient(135deg,color-mix(in srgb,var(--teal) 12%,#fff),var(--card));
     border:1px solid color-mix(in srgb,var(--teal) 30%,#fff);border-radius:20px;padding:18px 19px;margin-top:16px;
     box-shadow:0 10px 30px -18px rgba(0,120,115,.5)}
-  .n-eb{display:block;font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--teal-700,#00827e);margin-bottom:7px}
+  /*  14px es el suelo, tambien aqui. Esta tarjeta dice lo MISMO que Tu Meta,
+      y Tu Meta lo dice a 14: decirlo a 11 seria la misma frase con menos
+      derecho a leerse. Las versalitas se quedan — lo que sube es el cuerpo. */
+  .n-eb{display:block;font-size:14px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--teal-700,#00827e);margin-bottom:7px}
   .n-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
   .n-num b{font-family:'Oswald',var(--font-display,sans-serif);font-size:40px;line-height:.95;color:var(--tinta);letter-spacing:-.5px}
-  .n-num span{display:block;font-size:13px;color:var(--muted);font-weight:600;margin-top:3px}
+  .n-num span{display:block;font-size:14px;color:var(--muted);font-weight:600;margin-top:3px}
   .n-dias{text-align:center;background:#fff;border:1px solid var(--line);border-radius:13px;padding:8px 13px;flex:none}
   .n-dias b{display:block;font-family:'Oswald',var(--font-display,sans-serif);font-size:22px;line-height:1;color:var(--tinta)}
-  .n-dias span{font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+  .n-dias span{font-size:14px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
   .n-barra{height:9px;border-radius:99px;background:#fff;border:1px solid var(--line);overflow:hidden;margin:14px 0 8px}
   .n-barra i{display:block;height:100%;background:linear-gradient(90deg,var(--teal),var(--magenta));border-radius:99px;transition:width .6s cubic-bezier(.4,0,.2,1)}
-  .n-ritmo{font-size:12.5px;font-weight:700;margin:0}
+  .n-ritmo{font-size:14px;font-weight:600;margin:0}
   .n-ritmo.bien{color:#0a6a5f} .n-ritmo.mal{color:#b4232b}
   /* La victoria corta: lo que SÍ se movió esta semana, mientras el número
      grande madura. Va discreta — informa, no compite con la meta. */
@@ -714,9 +717,9 @@ $credito  = $has_deck
   .ns-t{font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);white-space:nowrap;flex:none}
   .ns-v{font-size:12.5px;font-weight:700;color:var(--teal-dark,#00827e);text-align:right}
   .n-jugada{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-top:14px}
-  .n-jl{display:block;font-size:10.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
-  .n-jugada b{display:block;font-size:15px;color:var(--tinta);line-height:1.3;margin-bottom:4px}
-  .n-jugada p{margin:0;font-size:13px;color:var(--muted);line-height:1.5}
+  .n-jl{display:block;font-size:14px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+  .n-jugada b{display:block;font-size:16px;color:var(--tinta);line-height:1.35;margin-bottom:4px}
+  .n-jugada p{margin:0;font-size:14px;color:var(--muted);line-height:1.5}
   .n-cta{display:inline-flex;align-items:center;justify-content:center;gap:8px;margin-top:15px;
     background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;text-decoration:none;
     font-weight:800;font-size:14.5px;padding:13px 20px;border-radius:13px;width:100%}
@@ -737,7 +740,7 @@ $credito  = $has_deck
   a.norte.viva:hover{transform:translateY(-2px);box-shadow:0 16px 38px -18px rgba(0,120,115,.55)}
   a.norte.viva:active{transform:scale(.995)}
   .n-ir{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:14px;
-    font-size:13.5px;font-weight:800;color:var(--teal-700,#00827e);
+    font-size:15px;font-weight:700;color:var(--teal-700,#00827e);min-height:44px;
     border-top:1px dashed color-mix(in srgb,var(--teal) 28%,#fff);padding-top:12px}
   .n-ir i{font-style:normal;transition:transform .18s}
   a.norte.viva:hover .n-ir i{transform:translateX(4px)}
@@ -908,137 +911,144 @@ $credito  = $has_deck
 
   <?php
   // ══════════════════════════════════════════════════════════════════════
-  //  EL NORTE — lo primero que se ve al entrar (2026-08-12).
+  //  EL NORTE — lo primero que se ve al entrar.
   //
-  //  La meta es el motor del producto: si no hay una, el Home no tiene por qué
-  //  enseñar actividad — tiene que hacer LA pregunta. Y si la hay, lo primero
-  //  es cómo vamos y qué toca ahora; todo lo demás (el turno, el relevo, la
-  //  idea del día) sigue igual debajo.
+  //  HASTA LA FASE 5, ESTA PANTALLA DECIDIA POR SU CUENTA. Leia meta_activa,
+  //  meta_progreso y meta_tactica_de_turno, y colapsaba los TRECE estados de Tu
+  //  Meta en tres suyos: ninguna / cerrada / activa. El resultado eran dos
+  //  pantallas contradiciendose sobre el mismo negocio en el mismo instante:
   //
-  //  Tres estados, tres caras:
-  //   · sin meta      → la pregunta, y nada compite con ella
-  //   · con meta      → el número, el ritmo y la jugada que toca
-  //   · meta cerrada  → lo que se logró y la invitación al mes siguiente
+  //    Tu Meta: «Tengo algo listo para tu OK»  → abre el post
+  //    Home:    «Tenemos que apretar un poco»  → abre Tu Meta
+  //
+  //  Y era peor de lo que parece: Home pintaba barra, porcentaje y ritmo SIN el
+  //  contrato de cobertura. Afirmaba «vamos en ritmo» contando solo lo que pasa
+  //  por Crecer — justo lo que se prohibio en Tu Meta, vivo en la primera
+  //  pantalla que ve el dueño. Y no sabia nada de la cuota: con el cubo lleno
+  //  seguia mandando a producir.
+  //
+  //  AHORA: el lector lee, el compositor decide, y Home consume su RESUMEN. La
+  //  regla vive en un sitio. Si un dia cambia, cambia para las dos.
   // ══════════════════════════════════════════════════════════════════════
-  $__meta = null; $__prog = null; $__jug = null; $__meta_estado = 'ninguna';
+  $__E = null; $__res = []; $__cuota = []; $__snap = [];
+  //  La bandera que el resto de Home todavia usa. Ya NO la decide Home: se
+  //  traduce del estado del compositor, en un solo sitio.
+  $__meta_activa = false;
   try {
       require_once __DIR__ . '/../includes/meta_negocio.php';
-      require_once __DIR__ . '/../includes/meta_ejecutar.php';
-      $__meta = meta_activa($pdo, $marca_id);
-      if ($__meta) {
-          $__prog = meta_progreso($pdo, $__meta);
-          $__jug  = meta_tactica_de_turno($pdo, $__meta);
-          $__meta_estado = 'activa';
-      } else {
-          // ¿Cerró una hace poco? Entonces se celebra y se invita a la próxima.
-          $q = $pdo->prepare("SELECT * FROM crecer_meta WHERE marca_id=? AND estado IN ('lograda','vencida')
-                               ORDER BY updated_at DESC LIMIT 1");
-          $q->execute([$marca_id]);
-          if ($__meta = $q->fetch(PDO::FETCH_ASSOC)) {
-              $__prog = meta_progreso($pdo, $__meta);
-              $__meta_estado = 'cerrada';
-          }
-      }
-  } catch (Throwable $e) { $__meta_estado = 'ninguna'; }   // sin migración: Home de siempre
+      require_once __DIR__ . '/../core/Meta/MetaSnapshotReader.php';
+      require_once __DIR__ . '/../core/Meta/MetaStateComposer.php';
+      require_once __DIR__ . '/../core/Meta/MetaLimiteImagen.php';
+      require_once __DIR__ . '/../core/Meta/MetaPresentador.php';
+
+      $__snap = MetaSnapshotReader::leer($pdo, $marca_id);
+      $__E    = MetaStateComposer::componer($__snap);
+      $__res  = $__E->resumen();
+
+      //  LA MISMA REGLA DE CUOTA QUE USA TU META. No una parecida: la misma
+      //  funcion, con el mismo estado de entrada.
+      try {
+          require_once __DIR__ . '/../includes/suscripcion.php';
+          $__cuota = img_cuota_estado($pdo, $marca_id);
+      } catch (Throwable $e) { $__cuota = []; }
+  } catch (Throwable $e) {
+      //  Sin las tablas de la meta, Home sigue siendo Home: se calla el norte y
+      //  pinta el resto. Una migracion que falta no puede tumbar la portada.
+      $__E = null;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  //  LA FRONTERA. Se cruza AQUI, una sola vez, y de aqui para abajo Home no
+  //  vuelve a ver el estado, la evidencia ni el snapshot: solo $__hm.
+  //
+  //  La primera version de esta fase calculaba el resumen y lo dejaba muerto,
+  //  y despues renderizaba leyendo $__E y $__snap igual que antes. Eso no es
+  //  una frontera: es un comentario. Con el estado completo a mano, basta que
+  //  alguien añada un `if` sobre la evidencia para volver a tener dos pantallas
+  //  decidiendo por su cuenta — que es de donde venimos.
+  //
+  //  Ahora lo que no esta en $__hm, Home no lo puede pintar. No porque este
+  //  prohibido: porque no lo tiene. Hay una prueba estructural que se pone roja
+  //  si esta frontera se vuelve a cruzar hacia abajo.
+  // ══════════════════════════════════════════════════════════════════════
+  $__hm = $__E
+      ? MetaPresentador::paraHome($__E, $__cuota ?: [], $__snap, $BASE, $marca_id)
+      : null;
+
+  //  La bandera que el resto de Home usa sale tambien del DTO, no del estado.
+  $__meta_activa = $__hm && !$__hm['sin_meta'] && !$__hm['cerrada'];
+  //  DOS COSAS DE FUERA DE LA TARJETA siguen necesitando datos del snapshot: el
+  //  aviso de «esta pieza nace de una jugada de tu plan» y el bloque de
+  //  analitica. Se sacan AQUI, con nombre y arriba de la frontera, para que no
+  //  parezca que la tarjeta los usa — la tarjeta no los ve.
+  $__meta = (array)($__snap['meta'] ?? []) ?: null;
+  $__prog = (array)($__snap['progreso'] ?? []);
+  unset($__E, $__snap, $__res);
   ?>
 
-  <?php if ($__meta_estado === 'ninguna'): ?>
+  <?php if (!$__hm || $__hm['sin_meta']): ?>
+    <?php /*  SIN META, LA PREGUNTA ES LA PANTALLA. Nada compite con ella: el
+              producto entero cuelga de que haya un norte.  */ ?>
     <section class="norte norte-vacio">
       <span class="n-eb">Empecemos por aquí</span>
       <h2>¿Qué quieres lograr este mes?</h2>
       <p>Dime el número que te haría feliz y el corillo arma el plan para llegar —
          y se pone a trabajar en él. Sin un norte, publicar es dar vueltas.</p>
-      <a class="n-cta" href="<?= $BASE ?>/meta.php?<?= $mid ?>"><?= ico('compass') ?> Ponerle meta a mi mes</a>
+      <a class="n-cta" href="<?= $BASE ?>/meta.php?<?= $mid ?>&amp;vista=wizard"><?= ico('compass') ?> Ponerle meta a mi mes</a>
     </section>
 
-  <?php elseif ($__meta_estado === 'cerrada'):
-    $__def = meta_objetivo_def((string)$__meta['objetivo']);
-    $__logro = ($__prog['medible'] && $__prog['actual'] !== null) ? (float)$__prog['actual'] : null;
-  ?>
-    <section class="norte norte-cerrada">
-      <span class="n-eb"><?= $__meta['estado'] === 'lograda' ? 'Meta lograda' : 'Se cerró el mes' ?></span>
-      <h2><?php if ($__logro !== null): ?>
-            Lograste <?= $h(meta_fmt($__logro, (string)$__meta['objetivo'])) ?>
-          <?php else: ?>Cerró tu meta<?php endif; ?></h2>
-      <p><?= $__meta['estado'] === 'lograda'
-            ? 'Llegaste. Vamos a poner la próxima con lo que el corillo aprendió este mes.'
-            : 'Se acabó el plazo. El corillo ya sabe qué funcionó y qué no — la próxima sale mejor.' ?></p>
-      <a class="n-cta" href="<?= $BASE ?>/meta.php?<?= $mid ?>"><?= ico('compass') ?> Poner la meta del mes nuevo</a>
-    </section>
-
-  <?php else:
-    $__def = meta_objetivo_def((string)$__meta['objetivo']);
-    $__pct = $__prog['pct'] !== null ? (int)$__prog['pct'] : 0;
-    // El COLOR informa, no decora: cálido = vas atrasado y hay que apretar.
-    // Así se lee el estado desde lejos, sin leer una palabra.
-    $__cls = $__prog['al_dia'] === false ? ' atrasado' : '';
-  ?>
-    <a class="norte viva<?= $__cls ?>" href="<?= $BASE ?>/meta.php?<?= $mid ?>">
+  <?php else: ?>
+    <?php /*  LA MISMA DECISIÓN QUE TU META, PALABRA POR PALABRA.
+              Todo lo que se pinta aquí sale de $__hm. Si esta tarjeta dijera
+              algo distinto de Tu Meta, sería porque alguien volvió a cruzar la
+              frontera de arriba.  */ ?>
+    <a class="norte viva<?= $__hm['cerrada'] ? ' norte-cerrada' : '' ?>" href="<?= $h($__hm['accion']['destino']) ?>">
       <div class="n-top">
         <div>
-          <span class="n-eb">Tu meta de este mes</span>
-          <div class="n-num">
-            <?php if ($__prog['medible'] && $__prog['actual'] !== null): ?>
-              <b data-cuenta="<?= (int)$__prog['actual'] ?>">0</b>
-              <span>de <?= $h(meta_fmt($__meta['cantidad'] !== null ? (float)$__meta['cantidad'] : null, (string)$__meta['objetivo'])) ?></span>
-            <?php else: ?>
-              <b><?= $h(meta_fmt($__meta['cantidad'] !== null ? (float)$__meta['cantidad'] : null, (string)$__meta['objetivo'])) ?></b>
-              <span><?= $h($__def['verbo']) ?></span>
-            <?php endif; ?>
-          </div>
+          <span class="n-eb"><?= $h($__hm['turno']['txt'] !== '' ? $__hm['turno']['txt'] : 'Tu meta de este mes') ?></span>
+          <?php if ($__hm['cifra']['grande'] !== ''): ?>
+            <div class="n-num">
+              <?php if ($__hm['cifra']['cuenta'] !== null): ?>
+                <b data-cuenta="<?= (int)$__hm['cifra']['cuenta'] ?>">0</b>
+              <?php else: ?>
+                <b><?= $h($__hm['cifra']['grande']) ?></b>
+              <?php endif; ?>
+              <span><?= $h($__hm['cifra']['pie']) ?></span>
+            </div>
+          <?php endif; ?>
         </div>
-        <?php /* Solo si quedan días DE VERDAD: una meta vencida que sigue activa
-                 mostraba "quedan -1 días" (dias_rest viene negativo a propósito
-                 para poder detectar el vencimiento). */ ?>
-        <?php if (($__prog['dias_rest'] ?? 0) > 0): ?>
-          <div class="n-dias"><b><?= (int)$__prog['dias_rest'] ?></b><span>días</span></div>
-        <?php elseif (!empty($__prog['vencida'])): ?>
-          <div class="n-dias" style="background:#fdeeee;border-color:#f0b4b8"><b style="font-size:15px;color:#b4232b">Se venció</b><span>el plazo</span></div>
+        <?php if ($__hm['dias'] !== null): ?>
+          <div class="n-dias"><b><?= (int)$__hm['dias'] ?></b><span>días</span></div>
         <?php endif; ?>
       </div>
 
-      <?php if ($__prog['medible'] && $__meta['cantidad'] !== null): ?>
-        <div class="n-barra"><i data-ancho="<?= max(2, min(100, $__pct)) ?>" style="width:0"></i></div>
-        <?php /* Lenguaje de EQUIPO, no de supervisor: "tenemos", no "vas". El
-                 dueño ya vive con presión; Crecer es su corillo, no su jefe. */ ?>
-        <?php if ($__prog['al_dia'] === false): ?>
-          <p class="n-ritmo mal">Tenemos que apretar un poco<?php if (!empty($__prog['falta']) && $__prog['dias_rest']): ?>:
-            faltan <?= $h(meta_fmt((float)$__prog['falta'], (string)$__meta['objetivo'])) ?>
-            y quedan <?= (int)$__prog['dias_rest'] ?> días<?php endif; ?>.</p>
-        <?php elseif ($__prog['al_dia'] === true): ?>
+      <?php /*  LA BARRA Y EL RITMO SOLO EXISTEN SI EL DTO LOS TRAE, y el DTO
+                solo los trae con cobertura completa. Antes se pintaban siempre:
+                una barra afirma «vas por aquí de un total que conozco», y con
+                cobertura parcial Crecer no conoce el total.  */ ?>
+      <?php if ($__hm['barra']): ?>
+        <div class="n-barra"><i data-ancho="<?= (int)$__hm['barra']['pct'] ?>" style="width:0"></i></div>
+        <?php if ($__hm['barra']['ritmo'] === 'mal'): ?>
+          <p class="n-ritmo mal">Tenemos que apretar un poco.</p>
+        <?php elseif ($__hm['barra']['ritmo'] === 'bien'): ?>
           <p class="n-ritmo bien">Vamos en ritmo.</p>
         <?php endif; ?>
       <?php endif; ?>
 
-      <?php
-      // LA VICTORIA CORTA. El número grande tarda en moverse y eso desespera:
-      // el dueño abre la app el día 3, ve "0 de 25" y siente que no pasa nada.
-      // Esto le enseña lo que SÍ pasó esta semana, que es real y es suyo.
-      $__sem = meta_avance_semana($pdo, $__meta);
-      if ($__sem['jugadas'] > 0 || $__sem['piezas'] > 0):
-      ?>
-        <div class="n-semana">
-          <span class="ns-t">Semana <?= (int)$__sem['semana'] ?><?= $__sem['semanas'] > 1 ? ' de ' . (int)$__sem['semanas'] : '' ?></span>
-          <span class="ns-v">
-            <?php if ($__sem['jugadas'] > 0): ?>
-              <?= (int)$__sem['hechas'] ?> de <?= (int)$__sem['jugadas'] ?> jugadas<?php endif; ?>
-            <?php if ($__sem['piezas'] > 0): ?>
-              <?= $__sem['jugadas'] > 0 ? ' · ' : '' ?><?= (int)$__sem['piezas'] ?> publicad<?= $__sem['piezas'] == 1 ? 'o' : 'os' ?><?php endif; ?>
-          </span>
-        </div>
-      <?php endif; ?>
+      <?php /*  LO QUE TOCA AHORA: el título del compositor, ya presentado.
+                Antes aquí salía la «jugada de turno», que era la regla de Tu
+                Meta reimplementada en esta pantalla con otro resultado.  */ ?>
+      <div class="n-jugada">
+        <span class="n-jl">Lo que toca ahora</span>
+        <b><?= $h($__hm['titulo']) ?></b>
+        <?php if ($__hm['objeto']['titulo'] !== ''): ?>
+          <p><?= $h($__hm['objeto']['titulo']) ?></p>
+        <?php endif; ?>
+      </div>
 
-      <?php if ($__jug): ?>
-        <div class="n-jugada">
-          <span class="n-jl">Lo que toca ahora</span>
-          <b><?= $h($__jug['titulo']) ?></b>
-          <p><?= $h(meta_recorte((string)$__jug['que_hacer'], 130)) ?></p>
-        </div>
-      <?php endif; ?>
-      <span class="n-ir">Ver el plan completo <i>→</i></span>
+      <span class="n-ir"><?= $h($__hm['accion']['etiqueta'] !== '' ? $__hm['accion']['etiqueta'] : 'Ver el plan completo') ?> <i>→</i></span>
     </a>
   <?php endif; ?>
-
   <?php if ($hz_post):
     $hz_g = (string)($hz_post['grafica_path'] ?? '');
     $hz_vid = $hz_g !== '' && preg_match('#\.(mp4|mov|m4v)$#i', $hz_g);
@@ -1048,7 +1058,7 @@ $credito  = $has_deck
   // ¿Esta pieza nació de una jugada del plan? Entonces se dice, porque cambia
   // el sentido de aprobarla: no es "un post más", es un paso hacia SU número.
   $hz_de_meta = '';
-  if (!empty($hz_post['tactica_id']) && $__meta_estado === 'activa' && $__meta) {
+  if (!empty($hz_post['tactica_id']) && $__meta_activa && $__meta) {
       try {
           $qd = $pdo->prepare("SELECT titulo FROM crecer_meta_tactica WHERE id=? AND marca_id=?");
           $qd->execute([(int)$hz_post['tactica_id'], $marca_id]);
@@ -1118,7 +1128,7 @@ $credito  = $has_deck
       <?php if (!empty($hz_analista['reco']) && !empty($hz_analista['lectura'])): ?>
         <div class="hz-reco"><?= ico('bolt') ?><span><?= $h($hz_analista['reco']) ?></span></div>
       <?php endif; ?>
-    <?php elseif ($__meta_estado === 'activa' && $__prog):
+    <?php elseif ($__meta_activa && $__prog):
       /* HABLA CONTRA LA META, NO AL AIRE. Decir "no cambiaría nada, sigue así"
          mientras arriba se lee "0 de 25 pedidos" es lo que hacía sentir el Home
          como piezas sueltas. Todo lo de abajo sale de $__prog, que ya está
@@ -1126,6 +1136,12 @@ $credito  = $has_deck
       $__falta = $__prog['falta'] ?? null;
       $__dias  = $__prog['dias_rest'] ?? null;
       $__unid  = meta_objetivo_def((string)$__meta['objetivo'])['unidad'];
+      /*  EL MISMO CONTRATO QUE LA TARJETA. Este bloque afirmaba «vamos cortos»
+          y «llevas X» sin preguntar si se puede afirmar. Con la tarjeta ya
+          honesta, dejarlo asi era mover la contradiccion una seccion mas abajo:
+          arriba «25 pedidos» sin barra, y aqui «llevas 0, vamos cortos». La
+          respuesta sale del MISMO booleano que gobierna la tarjeta.  */
+      $__afirmar = $__hm && $__hm['puede'];
     ?>
       <?php if (!$__prog['medible']): ?>
         <div class="an-ok"><?= ico('check-circle') ?> Estoy pendiente de tu meta.</div>
@@ -1138,23 +1154,31 @@ $credito  = $has_deck
         <div class="an-ok"><?= ico('clock') ?> Todavía no hay nada que medir de tu meta.</div>
         <p class="an-msg an-sub">Cuando salgan los primeros posts del plan y la gente empiece a moverse,
            aquí te digo qué está funcionando y qué hay que cambiar.</p>
-      <?php elseif ($__prog['al_dia'] === false): ?>
+      <?php elseif ($__afirmar && $__prog['al_dia'] === false): ?>
         <div class="an-ok" style="color:#b4232b"><?= ico('bolt') ?> Vamos cortos para la meta.</div>
         <p class="an-msg an-sub">Llevas <?= $h(meta_fmt((float)$__prog['actual'], (string)$__meta['objetivo'])) ?><?php
           if ($__falta !== null && $__dias !== null && $__dias > 0): ?> y faltan
           <?= $h(meta_fmt((float)$__falta, (string)$__meta['objetivo'])) ?> en <?= (int)$__dias ?> días<?php endif; ?>.
           Estoy mirando qué formatos y horarios te rinden más para apretar por ahí.</p>
-      <?php elseif ($__prog['al_dia'] === true): ?>
+      <?php elseif ($__afirmar && $__prog['al_dia'] === true): ?>
         <div class="an-ok"><?= ico('check-circle') ?> Vamos en ritmo para tu meta.</div>
         <p class="an-msg an-sub">Llevas <?= $h(meta_fmt((float)$__prog['actual'], (string)$__meta['objetivo'])) ?>
            <?php if ($__dias !== null && $__dias > 0): ?>con <?= (int)$__dias ?> días por delante<?php endif; ?>.
            Sigo pendiente de tu alcance y tus horarios por si aparece una oportunidad.</p>
-      <?php else: ?>
+      <?php elseif ($__afirmar): ?>
         <?php /* Hay avance pero todavía no se puede juzgar el ritmo (meta recién
                  puesta, o sin fecha límite): se dice lo que hay y nada más. */ ?>
         <div class="an-ok"><?= ico('check-circle') ?> Ya se está moviendo.</div>
         <p class="an-msg an-sub">Llevas <?= $h(meta_fmt((float)$__prog['actual'], (string)$__meta['objetivo'])) ?>.
            Déjame unos días más de datos y te digo si vamos al ritmo que hace falta.</p>
+      <?php else: ?>
+        <?php /* SIN COBERTURA COMPLETA no se dice cuánto lleva ni si va bien:
+                 Crecer solo cuenta lo que pasa por dentro, y presentarlo como
+                 el total del negocio seria inventarselo. Se dice lo que SI se
+                 sabe.  */ ?>
+        <div class="an-ok"><?= ico('check-circle') ?> Estoy pendiente de tu meta.</div>
+        <p class="an-msg an-sub">Solo cuento lo que pasa por Crecer, así que el número de tu meta
+           lo llevas tú. Lo que sí te puedo decir es a cuánta gente llegan tus posts y cuántos te escriben.</p>
       <?php endif; ?>
     <?php else: ?>
       <div class="an-ok"><?= ico('check-circle') ?> No cambiaría nada esta semana. Sigue así.</div>
@@ -1604,6 +1628,6 @@ require_once __DIR__ . '/../includes/tour.php';
 // si no, le dice por qué conviene ponerla.
 tour_montar($pdo, $marca_id, 'inicio', [
     'hay_post' => !empty($hz_post),
-    'hay_meta' => ($__meta_estado === 'activa'),
+    'hay_meta' => $__meta_activa,
 ]);
 require __DIR__ . '/_shell_foot.php'; ?>

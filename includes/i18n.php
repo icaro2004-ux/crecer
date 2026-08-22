@@ -43,43 +43,22 @@ function i18n_letras_propias(string $clave): int {
     return mb_strlen(preg_replace('/[^\p{L}\p{N}]/u', '', $sin) ?? '');
 }
 
+require_once dirname(__DIR__) . '/core/I18n/Locale.php';
+require_once dirname(__DIR__) . '/core/I18n/Catalogo.php';
+
 // ── El idioma de este request ───────────────────────────────
-//  Orden: ?lang= (y se recuerda) → sesión → cookie → español.
-//  Se recuerda en cookie de un año para que el juez no tenga que arrastrar el
-//  ?lang=en por toda la app.
-function i18n_idioma(): string {
-    static $lang = null;
-    if ($lang !== null) return $lang;
-
-    $validos = explode(',', I18N_IDIOMAS);
-    $pedido  = strtolower(trim((string)($_GET['lang'] ?? '')));
-
-    if ($pedido !== '' && in_array($pedido, $validos, true)) {
-        $lang = $pedido;
-        if (session_status() === PHP_SESSION_ACTIVE) $_SESSION['crecer_lang'] = $lang;
-        if (!headers_sent()) {
-            setcookie('crecer_lang', $lang, [
-                'expires'  => time() + 31536000,
-                'path'     => '/',
-                'secure'   => (($_SERVER['HTTPS'] ?? '') !== ''),
-                'httponly' => false,          // el front puede leerlo para el toggle
-                'samesite' => 'Lax',
-            ]);
-        }
-        return $lang;
-    }
-
-    $sesion = (session_status() === PHP_SESSION_ACTIVE) ? ($_SESSION['crecer_lang'] ?? '') : '';
-    if ($sesion !== '' && in_array($sesion, $validos, true)) return $lang = $sesion;
-
-    $cookie = strtolower(trim((string)($_COOKIE['crecer_lang'] ?? '')));
-    if ($cookie !== '' && in_array($cookie, $validos, true)) return $lang = $cookie;
-
-    return $lang = 'es';
-}
+//  YA NO SE DECIDE AQUÍ. Locale es la fuente única, y esto es su puerta para
+//  el código que ya la llamaba por este nombre.
+//
+//  Antes vivía aquí una precedencia propia (?lang → sesión → cookie → es) y
+//  la preferencia moría en el navegador: no cruzaba de un teléfono a otro ni
+//  sobrevivía a limpiar cookies. Ahora manda lo que el usuario guardó, y la
+//  cookie pasa a ser lo que siempre debió ser: el recuerdo de quien todavía
+//  no ha iniciado sesión.
+function i18n_idioma(): string { return Locale::interfaz(); }
 
 /** ¿Hay que traducir algo en este request? En español: no. */
-function i18n_activo(): bool { return i18n_idioma() !== 'es'; }
+function i18n_activo(): bool { return Locale::traduciendo(); }
 
 // ── La normalización ────────────────────────────────────────
 //  EL EXTRACTOR Y EL RUNTIME TIENEN QUE USAR ESTA MISMA FUNCIÓN, o las claves
@@ -141,16 +120,16 @@ function i18n_compilar(array $pares): array {
     return ['exactas' => $exactas, 'patrones' => $patrones];
 }
 
-function i18n_diccionario(): array {
-    static $cache = null;
-    if ($cache !== null) return $cache;
+function i18n_diccionario(?string $lang = null): array {
+    static $cache = [];
+    $lang = $lang ?? i18n_idioma();
+    if (isset($cache[$lang])) return $cache[$lang];
 
-    $lang = i18n_idioma();
     $ruta = dirname(__DIR__) . '/lang/' . preg_replace('/[^a-z]/', '', $lang) . '.php';
-    if ($lang === 'es' || !is_file($ruta)) return $cache = ['exactas' => [], 'patrones' => []];
+    if ($lang === 'es' || !is_file($ruta)) return $cache[$lang] = ['exactas' => [], 'patrones' => []];
 
     $cargado = require $ruta;
-    return $cache = i18n_compilar(is_array($cargado) ? $cargado : []);
+    return $cache[$lang] = i18n_compilar(is_array($cargado) ? $cargado : []);
 }
 
 /**
@@ -184,14 +163,80 @@ function i18n_buscar(string $clave, array $dic): ?string {
  * (mensajes de error, correos, títulos calculados).
  * Sin traducción → devuelve el español tal cual. Nunca falla.
  */
-function t(string $es): string {
-    if (!i18n_activo()) return $es;
-    $en = i18n_buscar(i18n_clave($es), i18n_diccionario());
-    if ($en === null) return $es;
+/**
+ * La traducción de una cadena de interfaz.
+ *
+ * Con datos en medio se escribe con %s y se pasan aparte:
+ *   t('Plan versión %s creado', $n)
+ * Nunca concatenando —«'Plan versión ' . $n . ' creado'»— porque eso son TRES
+ * pedazos y ninguno de los tres es una frase: el catálogo no puede traducir
+ * media oración, y el inglés casi nunca deja el dato en el mismo sitio.
+ */
+function t(string $es, ...$datos): string {
+    $tr = i18n_a(Locale::interfaz(), $es);
+    if (!$datos) return $tr;
+    //  Si la traducción no lleva tantos %s como datos, vsprintf lanza. Vale
+    //  más devolver la frase sin rellenar que tumbar la página por una
+    //  traducción mal escrita.
+    try { return vsprintf($tr, $datos); } catch (Throwable $e) { return $tr; }
+}
+
+/**
+ * Igual, pero en el idioma de CONTENIDO de una marca — no en el del usuario.
+ *
+ * Para lo poco que va fijo hacia el público de un negocio y no lo escribe la
+ * IA. La diferencia con t() no es de estilo: si esto usara el idioma de la
+ * interfaz, un admin revisando en inglés la cuenta de una repostería de
+ * Bayamón haría que el texto que ve su clientela saliera en inglés.
+ */
+function tc(?int $marca_id, string $es): string { return i18n_a(Locale::contenido($marca_id), $es); }
+
+/**
+ * El diccionario de una pantalla, serializado para su JavaScript.
+ *
+ *   <script>window.T = <?= tj(['guardando' => 'Guardando…']) ?>;</script>
+ *   boton.textContent = T.guardando;
+ *
+ * POR QUÉ ASÍ Y NO TRADUCIENDO EN EL NAVEGADOR: hoy hay 609 cadenas dentro de
+ * <script> que el filtro de salida no puede tocar —salta <script> a propósito,
+ * porque traducir código lo rompe—. La respuesta NO es un segundo diccionario
+ * en el cliente ni reemplazo de texto en el DOM: es que el JS deje de tener
+ * texto. El PHP traduce y el JS recibe.
+ *
+ * La clave corta es solo el nombre de la propiedad en JS; la clave de catálogo
+ * sigue siendo el español, igual que en t().
+ */
+function tj(array $pares): string {
+    $out = [];
+    foreach ($pares as $js => $es) $out[(string)$js] = t((string)$es);
+    //  JSON_HEX_TAG: un '<' dentro de una traducción no puede cerrar el
+    //  <script> que la contiene.
+    return json_encode($out, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?: '{}';
+}
+
+/**
+ * El motor de las tres. Catálogo primero, diccionario viejo después.
+ *
+ * Los dos conviven a propósito mientras dura la migración: lo ya migrado vive
+ * en lang/es|en/<dominio>.php, y lo que todavía no —el 95% de la app— sigue
+ * apoyado en las 749 entradas del diccionario plano. Quitarlo hoy dejaría en
+ * español lo poco que hoy sí se traduce.
+ */
+function i18n_a(string $lang, string $es): string {
+    $clave = i18n_clave($es);
+
+    $tr = Catalogo::buscar($lang, $clave);
+    if ($tr === null && $lang !== 'es') {
+        //  El puente al diccionario plano. Solo tiene inglés: en español no
+        //  hay nada que buscar, la clave YA es el español.
+        $tr = i18n_buscar($clave, i18n_diccionario($lang));
+    }
+    if ($tr === null) return $es;
+
     // Se respeta el espacio original de los bordes (importante dentro de <p>).
     preg_match('/^(\s*)/u', $es, $a);
     preg_match('/(\s*)$/u', $es, $b);
-    return ($a[1] ?? '') . $en . ($b[1] ?? '');
+    return ($a[1] ?? '') . $tr . ($b[1] ?? '');
 }
 
 // ── El filtro de salida ─────────────────────────────────────
@@ -296,14 +341,7 @@ function i18n_traducir_tag(string $tag, array $dic): string {
 
 // ── El interruptor ──────────────────────────────────────────
 /** La URL de ahora mismo con otro idioma (conserva el resto del query). */
-function i18n_url(string $lang): string {
-    $uri   = (string)($_SERVER['REQUEST_URI'] ?? '/crecer/');
-    $parte = explode('?', $uri, 2);
-    $qs    = [];
-    if (isset($parte[1])) parse_str($parte[1], $qs);
-    $qs['lang'] = $lang;
-    return $parte[0] . '?' . http_build_query($qs);
-}
+function i18n_url(string $lang): string { return Locale::url($lang); }
 
 /**
  * El interruptor ES | EN. Sin emojis y sin banderas —una bandera dice país, no
@@ -337,10 +375,24 @@ function i18n_toggle_html(): string {
  * En español no se abre buffer ninguno: cero sobrecarga, cero riesgo, la ruta
  * del cliente real intacta.
  */
-function i18n_arrancar(): void {
+function i18n_arrancar(?PDO $pdo = null): void {
     static $ya = false;
     if ($ya || PHP_SAPI === 'cli') return;
     $ya = true;
-    if (!i18n_activo()) return;
+    Locale::montar($pdo);
+
+    //  OJO CON EL ORDEN: aquí NO se puede preguntar el idioma. La sesión
+    //  todavía no está abierta (session_start() vive en auth.php, que se
+    //  incluye después de db.php), así que resolver ahora dejaría memorizado
+    //  un idioma decidido sin ver al usuario — y quien tuviera inglés guardado
+    //  leería el contenido en español con el menú en inglés. Justo la
+    //  incoherencia que se está corrigiendo.
+    //
+    //  Se pregunta lo único que se puede saber ya: si existe ALGUNA
+    //  posibilidad de que este request no sea español. Si la hay, se abre el
+    //  buffer y el idioma se decide al vaciarlo, al final del request, con la
+    //  sesión ya abierta. Un buffer abierto de más no traduce nada: el filtro
+    //  se sale en la primera línea.
+    if (!Locale::puedeNoSerDefecto()) return;
     ob_start('i18n_filtro');
 }

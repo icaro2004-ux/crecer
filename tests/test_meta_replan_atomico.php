@@ -1,0 +1,673 @@
+<?php
+// ============================================================
+//  CRECER — «EMPEZAR UN PLAN NUEVO» NO PUEDE MENTIR
+//  tests/test_meta_replan_atomico.php
+//
+//  LO QUE PASO EN PRODUCCION (2026-08-22)
+//  Se crearon dos planes de la misma meta en 61 segundos, v5 y v6. NO hubo
+//  corrupcion: v5 quedo 'reemplazado' y v6 activo, que es el contrato. El
+//  problema fue otro y peor de encontrar: el dueño pidio el segundo porque la
+//  pantalla no le confirmo el primero. Como los dos planes conservan la misma
+//  meta, y la meta es lo que manda arriba, Tu Meta se veia IGUAL. Concluyo que
+//  no habia funcionado.
+//
+//  De ahi salen las tres cosas que se arreglan, y estan en este orden a
+//  proposito — la tercera es la que de verdad origino el caso:
+//
+//    1. ATOMICIDAD. Cerrar el anterior, crear el nuevo y guardar sus jugadas
+//       son UNA operacion. O entra todo, o no entra nada y el anterior sigue
+//       vivo. Nunca dos activos, nunca cero, nunca ok:true sin haber escrito.
+//
+//    2. IDEMPOTENCIA DE VERDAD, Y ANTES DE GASTAR. El candado que habia
+//       comparaba contra el plan vigente: frena el doble clic y nada mas. En
+//       cuanto el wizard se vuelve a pintar, el id que manda ya es el nuevo,
+//       cuadra, y nace otra version. Un minuto le basta.
+//       Ahora el wizard acuña una SOLICITUD al pintarse. Y la unicidad se
+//       cobra en un LIBRO DE RECLAMACIONES, antes de llamar al modelo: la
+//       clave unica del plan impide que nazcan dos planes, pero se juega al
+//       INSERTAR, o sea despues de pagar. Dos peticiones a la vez preguntaban
+//       las dos, oian que no existia las dos, y LLAMABAN LAS DOS.
+//
+//    3. CLARIDAD. Al volver se dice «Plan version 6 creado», con su numero. Y
+//       si el envio era una repeticion, se dice eso y no otra cosa.
+//
+//  CERO GASTO Y CERO RED: sin credenciales, ia_ejecutar() cae al mock_texto que
+//  el propio meta_plan_generar() le pasa. Es el codigo de produccion.
+//
+//  LAS AVERIAS SE PROVOCAN SOBRE UNA COPIA DESECHABLE DEL ESQUEMA. Nunca DDL
+//  contra la base compartida: un ALTER hace COMMIT implicito y se llevaria por
+//  delante la transaccion que se esta probando. Y NADA toca produccion.
+// ============================================================
+
+require_once __DIR__ . '/_sin_gasto.php';
+require_once dirname(__DIR__) . '/includes/db.php';
+require_once dirname(__DIR__) . '/includes/meta_negocio.php';
+require_once dirname(__DIR__) . '/core/Meta/MetaSnapshotReader.php';
+require_once dirname(__DIR__) . '/core/Meta/MetaStateComposer.php';
+require_once dirname(__DIR__) . '/core/Meta/MetaState.php';
+require_once __DIR__ . '/_fixture.php';
+require_once __DIR__ . '/_esquema_desechable.php';
+
+$fallos = 0; $n = 0;
+function ok(string $que, bool $cond, string $detalle = ''): void {
+    global $fallos, $n; $n++;
+    if ($cond) { echo "  OK   $que\n"; return; }
+    $fallos++; echo "  FALLA $que" . ($detalle !== '' ? "\n         $detalle" : '') . "\n";
+}
+function activos(PDO $pdo, int $meta_id): array {
+    $q = $pdo->prepare("SELECT id, version, estado FROM crecer_meta_plan
+                         WHERE meta_id=? AND estado='activo' ORDER BY version");
+    $q->execute([$meta_id]);
+    return $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
+}
+function planes(PDO $pdo, int $meta_id): array {
+    $q = $pdo->prepare("SELECT id, version, estado, cierre_at FROM crecer_meta_plan
+                         WHERE meta_id=? ORDER BY version");
+    $q->execute([$meta_id]);
+    return $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
+}
+function pinta(array $ps): string {
+    $b = [];
+    foreach ($ps as $p) $b[] = '#' . $p['id'] . ' v' . $p['version'] . ' ' . $p['estado'];
+    return $b ? implode(' · ', $b) : '(ninguno)';
+}
+/** Una solicitud, como la acuña el wizard. */
+function sol(): string { return bin2hex(random_bytes(16)); }
+
+echo "\nEL REPLAN NO PUEDE MENTIR · el contrato entero\n" . str_repeat('=', 62) . "\n";
+
+$hay_sol = meta_plan_col_solicitud($pdo);
+echo "\n  columna `solicitud`: " . ($hay_sol ? 'puesta' : 'NO puesta (migracion pendiente)') . "\n";
+
+// ══════════════════════════════════════════════════════════════
+//  1 · EXITO VISIBLE
+// ══════════════════════════════════════════════════════════════
+echo "\n  — 1 · exito, y el dueño se entera —\n";
+$fx = Fixture::crear($pdo, 'replan-ok');
+try {
+    $meta_id  = (int)$fx['meta_id'];
+    $marca_id = (int)$fx['marca_id'];
+    $antes = activos($pdo, $meta_id);
+    ok('de partida hay exactamente un plan activo', count($antes) === 1, pinta($antes));
+    $v0 = (int)($antes[0]['version'] ?? 0);
+    $id0 = (int)($antes[0]['id'] ?? 0);
+
+    $s1 = sol();
+    $r = meta_plan_generar($pdo, $marca_id, $meta_id, 'el anterior no movio nada', $s1);
+    ok('meta_plan_generar dice ok', !empty($r['ok']), json_encode($r['err'] ?? null));
+    ok('y NO se marca como repetido', empty($r['repetido']),
+       'un plan nuevo marcado «repetido» le diria al dueño que ya lo tenia');
+
+    $desp = activos($pdo, $meta_id);
+    ok('queda EXACTAMENTE UNO activo', count($desp) === 1, pinta(planes($pdo, $meta_id)));
+    ok('y es uno NUEVO', count($desp) === 1 && (int)$desp[0]['id'] !== $id0, pinta($desp));
+    ok('con version mayor', count($desp) === 1 && (int)$desp[0]['version'] > $v0);
+
+    //  LO QUE HACE VISIBLE EL EXITO: la version viaja en la respuesta. Sin
+    //  ella el wizard solo puede decir «listo», que es justo lo que no
+    //  distinguio nada en produccion.
+    ok('la respuesta trae el NUMERO DE VERSION', (int)($r['version'] ?? 0) > $v0,
+       'version=' . (int)($r['version'] ?? 0) . ' · sin numero, «listo» no distingue un plan de otro');
+    ok('y el id del plan', (int)($r['plan_id'] ?? 0) === (int)$desp[0]['id']);
+
+    $ant = null;
+    foreach (planes($pdo, $meta_id) as $p) if ((int)$p['id'] === $id0) $ant = $p;
+    ok('el anterior quedo «reemplazado»', ($ant['estado'] ?? '') === 'reemplazado', $ant['estado'] ?? 'null');
+    ok('y con fecha de cierre', !empty($ant['cierre_at']));
+
+    // ── LA PRESENTACION SE ENCIENDE SOLA ──────────────────────
+    //  Un plan recien creado tiene presentado_at NULL, y la regla C del
+    //  compositor pregunta por eso. Si no disparara, el dueño volveria a una
+    //  pantalla que no le enseña lo que acaba de pedir.
+    echo "\n  — 1b · presentado_at NULL enciende la presentacion —\n";
+    $q = $pdo->prepare("SELECT presentado_at FROM crecer_meta_plan WHERE id=?");
+    $q->execute([(int)$desp[0]['id']]);
+    $pres = $q->fetch(PDO::FETCH_ASSOC);
+    ok('el plan nuevo nace SIN presentar', $pres && $pres['presentado_at'] === null,
+       'presentado_at=' . json_encode($pres['presentado_at'] ?? 'sin columna'));
+
+    $snap = MetaSnapshotReader::leer($pdo, $marca_id);
+    $E = MetaStateComposer::componer($snap);
+    ok('y el compositor manda la pantalla a la presentacion',
+       $E->estado === MetaState::C_PLAN_POR_VER,
+       'estado=' . $E->estado . ' · si no es C, el dueño no ve el plan que acaba de pedir');
+    ok('la presentacion apunta al plan nuevo',
+       (int)($E->evidencia['plan_id'] ?? 0) === (int)$desp[0]['id'],
+       'plan_id=' . (int)($E->evidencia['plan_id'] ?? 0));
+
+    //  Y tras presentarlo, deja de mandar: se ve una vez, no en cada visita.
+    ok('presentarlo lo apaga', meta_plan_presentar($pdo, (int)$desp[0]['id'], $marca_id));
+    $E2 = MetaStateComposer::componer(MetaSnapshotReader::leer($pdo, $marca_id));
+    ok('y ya no vuelve a mandar', $E2->estado !== MetaState::C_PLAN_POR_VER, 'estado=' . $E2->estado);
+
+} finally {
+    Fixture::limpiar($pdo, (int)$fx['marca_id']);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  2, 3 y 4 · LA IDEMPOTENCIA
+// ══════════════════════════════════════════════════════════════
+//  Van sobre una COPIA con la migracion ya aplicada, no sobre la base local.
+//  Dos motivos:
+//   · la prueba se sostiene sola en cualquier maquina, tenga o no la columna;
+//   · de paso, demuestra que el archivo de migracion hace lo que dice.
+echo "\n  — 2, 3 y 4 · una solicitud, un plan —\n";
+$cop1 = EsquemaDesechable::crear($pdo);
+if ($cop1 === null) {
+    echo "  (saltada: este usuario de base de datos no puede crear bases)\n";
+} else {
+    try {
+        $ipdo = $cop1->pdo();
+        meta_plan_olvidar_esquema();
+        //  Se aplica el archivo de verdad, con el separador de verdad.
+        require_once dirname(__DIR__) . '/includes/migrador.php';
+        foreach (['2026-08-22_crecer_plan_solicitud.sql',
+                  '2026-08-22_crecer_plan_solicitud_libro.sql'] as $mig) {
+            $sql = (string)file_get_contents(dirname(__DIR__) . '/migrations/' . $mig);
+            foreach (migracion_sentencias($sql) as $st) {
+                try { $cop1->ejecutar($st); } catch (Throwable $e) { /* 1060: ya estaba */ }
+            }
+        }
+        meta_plan_olvidar_esquema();
+        ok('la migracion deja puesta la columna', meta_plan_col_solicitud($ipdo),
+           'sin ella no hay idempotencia por solicitud y el resto no prueba nada');
+
+        $fi = Fixture::crear($ipdo, 'replan-idem');
+        $mi = (int)$fi['meta_id']; $ci = (int)$fi['marca_id'];
+        $s1 = sol();
+        $r1 = meta_plan_generar($ipdo, $ci, $mi, 'el anterior no movio nada', $s1);
+        ok('el primer envio crea el plan', !empty($r1['ok']) && empty($r1['repetido']));
+        $tras1 = count(planes($ipdo, $mi));
+
+        // ── 2 · DOBLE CLIC ────────────────────────────────────
+        $r2 = meta_plan_generar($ipdo, $ci, $mi, 'el anterior no movio nada', $s1);
+        ok('doble clic: contesta ok', !empty($r2['ok']));
+        ok('doble clic: lo marca REPETIDO', !empty($r2['repetido']),
+           'sin esta marca el wizard lo pinta como un plan nuevo y le miente al dueño');
+        ok('doble clic: devuelve el plan que ya existia',
+           (int)($r2['plan_id'] ?? 0) === (int)$r1['plan_id'],
+           '#' . (int)($r2['plan_id'] ?? 0) . ' en vez de #' . (int)$r1['plan_id']);
+        ok('doble clic: no nace ningun plan de mas', count(planes($ipdo, $mi)) === $tras1,
+           count(planes($ipdo, $mi)) . ' planes, habia ' . $tras1);
+
+        // ── 3 · REPETICION TARDIA (EL CASO DE PRODUCCION) ─────
+        //  No es un doble clic: es el mismo envio llegando un minuto despues,
+        //  cuando el plan vigente YA es otro. El candado viejo se lo tragaba
+        //  porque solo comparaba contra el plan vigente — y por eso nacieron
+        //  v5 y v6 con 61 segundos entre medias.
+        //  Se simula el minuto moviendo la FECHA del plan hacia atras, no
+        //  esperando: un reloj en una prueba la vuelve lenta y fragil.
+        $ipdo->prepare("UPDATE crecer_meta_plan SET created_at = DATE_SUB(created_at, INTERVAL 61 SECOND),
+                               inicio_at = DATE_SUB(inicio_at, INTERVAL 61 SECOND) WHERE meta_id=?")
+             ->execute([$mi]);
+        $tras2 = count(planes($ipdo, $mi));
+        $r3 = meta_plan_generar($ipdo, $ci, $mi, 'el anterior no movio nada', $s1);
+        ok('tardia: no crea otra version', count(planes($ipdo, $mi)) === $tras2,
+           count(planes($ipdo, $mi)) . ' planes, habia ' . $tras2
+         . ' · es exactamente lo que paso con v5 y v6');
+        ok('tardia: se identifica como repetido', !empty($r3['repetido']));
+        ok('tardia: sigue habiendo UN solo activo', count(activos($ipdo, $mi)) === 1,
+           pinta(planes($ipdo, $mi)));
+
+        // ── 4 · DOS SOLICITUDES DISTINTAS ─────────────────────
+        //  EL LIMITE HONESTO DE ESTO, dicho en una prueba y no en un comentario:
+        //  dos INTENCIONES distintas SI crean dos planes, y tiene que ser asi.
+        //  Un dueño que vuelve a entrar al wizard y lo completa otra vez esta
+        //  pidiendo otro plan de verdad; negarselo seria peor. Lo que evita que
+        //  QUIERA hacerlo es la confirmacion del escenario 1.
+        $tras3 = count(planes($ipdo, $mi));
+        $r4 = meta_plan_generar($ipdo, $ci, $mi, 'ahora quiero otra cosa', sol());
+        ok('otra intencion SI crea un plan nuevo', !empty($r4['ok']) && empty($r4['repetido']));
+        ok('y solo uno', count(planes($ipdo, $mi)) === $tras3 + 1,
+           count(planes($ipdo, $mi)) . ' planes, habia ' . $tras3);
+        ok('sigue habiendo UN solo activo', count(activos($ipdo, $mi)) === 1,
+           pinta(planes($ipdo, $mi)));
+        ok('y el nuevo es el de version mas alta',
+           (int)activos($ipdo, $mi)[0]['id'] === (int)$r4['plan_id'],
+           'si no, Tu Meta enseñaria un plan distinto del que se acaba de crear');
+
+        // ── 4b · LA CARRERA, CON DOS PROCESOS DE VERDAD ───────
+        //  LO QUE ESTO PRUEBA Y NO PROBABA NADA HASTA AHORA: la clave unica de
+        //  crecer_meta_plan.solicitud garantiza que no nazcan dos planes, pero
+        //  se cobra al INSERTAR — o sea, DESPUES de llamar al modelo. Dos
+        //  peticiones a la vez preguntaban las dos, oian que no existia las
+        //  dos, LLAMABAN LAS DOS, y chocaban al final. La base arbitraba el
+        //  plan y no arbitraba el gasto: dos facturas por una intencion.
+        //
+        //  Se hace con dos PROCESOS. Dos llamadas seguidas en el mismo proceso
+        //  comparten conexion, comparten los `static` del esquema y comparten
+        //  el orden: no hay carrera que medir. Y salen a la vez por una
+        //  barrera de reloj, o el primero termina antes de que el segundo
+        //  empiece.
+        echo "\n  — 4b · dos procesos a la vez: UNA sola llamada al modelo —\n";
+        ok('el libro de reclamaciones esta puesto', meta_hay_libro_solicitud($ipdo),
+           'sin el, la carrera se arbitra despues de pagar');
+
+        $fc = Fixture::crear($ipdo, 'replan-carrera');
+        $mc = (int)$fc['meta_id']; $cc = (int)$fc['marca_id'];
+        //  Se parte de cero para poder CONTAR las llamadas de esta carrera.
+        $ipdo->prepare("DELETE FROM crecer_ia_log WHERE marca_id=?")->execute([$cc]);
+        $planes_antes = count(planes($ipdo, $mc));
+        $sc = sol();
+
+        $arranque = microtime(true) + 1.2;    // margen para que arranque PHP
+        $procs = []; $tubos = [];
+        for ($i = 0; $i < 2; $i++) {
+            $cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/_replan_runner.php')
+                 . ' ' . escapeshellarg($cop1->nombre()) . ' ' . $cc . ' ' . $mc
+                 . ' ' . escapeshellarg($sc) . ' ' . sprintf('%.4f', $arranque);
+            $p = proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $t);
+            if (is_resource($p)) { $procs[] = $p; $tubos[] = $t; }
+        }
+        ok('arrancaron los dos procesos', count($procs) === 2, count($procs) . ' de 2');
+
+        $salidas = [];
+        foreach ($procs as $k => $p) {
+            $salidas[] = trim((string)stream_get_contents($tubos[$k][1]));
+            fclose($tubos[$k][1]); fclose($tubos[$k][2]);
+            proc_close($p);
+        }
+        $res = array_map(fn($s) => json_decode(trim(explode("\n", trim($s))[count(explode("\n", trim($s))) - 1]), true) ?: [], $salidas);
+        foreach ($res as $k => $x) {
+            printf("         proceso %d: ok=%s repetido=%s en_curso=%s plan=%s v=%s\n",
+                   $k + 1, json_encode($x['ok'] ?? null), json_encode($x['repetido'] ?? null),
+                   json_encode($x['en_curso'] ?? null), (string)($x['plan_id'] ?? '-'),
+                   (string)($x['version'] ?? '-'));
+        }
+
+        //  LA AFIRMACION QUE IMPORTA: una sola llamada al modelo.
+        $llamadas = (int)$ipdo->query("SELECT COUNT(*) FROM crecer_ia_log
+                                        WHERE marca_id={$cc} AND agente='estratega'")->fetchColumn();
+        ok('UNA sola llamada a la Estratega', $llamadas === 1,
+           "{$llamadas} llamadas · cada una es una factura y una entrada de "
+         . 'evidencia diciendo que el corillo penso dos veces lo mismo');
+
+        ok('y UN solo plan nuevo', count(planes($ipdo, $mc)) === $planes_antes + 1,
+           count(planes($ipdo, $mc)) . ' planes, habia ' . $planes_antes);
+        ok('con un solo activo', count(activos($ipdo, $mc)) === 1, pinta(planes($ipdo, $mc)));
+
+        $ganadores = array_values(array_filter($res, fn($x) => !empty($x['ok']) && empty($x['repetido'])));
+        $perdedores = array_values(array_filter($res, fn($x) => !empty($x['repetido'])));
+        ok('uno gano y creo el plan', count($ganadores) === 1,
+           count($ganadores) . ' se creyeron ganadores');
+        ok('y el otro contesto repetido o en curso', count($perdedores) === 1,
+           count($perdedores) . ' · el perdedor no puede recibir un error: '
+         . 'no fallo nada, es que su peticion ya estaba atendida');
+        ok('ninguno de los dos recibio un error', count(array_filter($res, fn($x) => empty($x['ok']))) === 0,
+           json_encode(array_column($res, 'err')));
+
+        //  Y la reclamacion queda cerrada, no colgada: si se quedara en
+        //  'reclamada', esa intencion no se podria reintentar en tres minutos.
+        $fila = meta_solicitud_leer($ipdo, $cc, $sc);
+        ok('la reclamacion quedo «hecha»', ($fila['estado'] ?? '') === 'hecha',
+           'estado=' . (string)($fila['estado'] ?? 'null'));
+        ok('apuntando al plan que se creo',
+           (int)($fila['plan_id'] ?? 0) === (int)($ganadores[0]['plan_id'] ?? -1),
+           'plan_id=' . (int)($fila['plan_id'] ?? 0));
+
+        // ── 4c · RECUPERAR UNA RECLAMACION HUERFANA ───────────
+        //  Si el ganador muere entre reclamar y terminar, la fila se queda en
+        //  'reclamada' para siempre y esa intencion no se podria reintentar
+        //  NUNCA. Se simula envejeciendo la fila, que es lo mismo que pasa
+        //  cuando el proceso no vuelve.
+        echo "\n  — 4c · una reclamacion huerfana se puede rescatar —\n";
+        $sh = sol();
+        $ipdo->prepare("INSERT INTO crecer_plan_solicitud (solicitud, marca_id, meta_id, estado)
+                        VALUES (?,?,?, 'reclamada')")->execute([$sh, $cc, $mc]);
+        $r_viva = meta_solicitud_reclamar($ipdo, $cc, $mc, $sh);
+        ok('recien reclamada, nadie mas se la queda', $r_viva['gane'] === false,
+           'si se la quedara, dos procesos normales llamarian los dos al modelo');
+        ok('y se sabe que esta en curso', ($r_viva['fila']['estado'] ?? '') === 'reclamada');
+
+        $ipdo->prepare("UPDATE crecer_plan_solicitud
+                           SET updated_at = DATE_SUB(NOW(), INTERVAL ? SECOND)
+                         WHERE solicitud=?")->execute([META_SOL_HUERFANA_SEG + 60, $sh]);
+        $r_huerf = meta_solicitud_reclamar($ipdo, $cc, $mc, $sh);
+        ok('pasada la espera, SI se rescata', $r_huerf['gane'] === true,
+           'sin rescate, un proceso muerto deja esa intencion bloqueada para siempre');
+        $fh = meta_solicitud_leer($ipdo, $cc, $sh);
+        ok('y queda constancia del reintento', (int)($fh['intentos'] ?? 0) === 2,
+           'intentos=' . (int)($fh['intentos'] ?? 0));
+
+        // ── 4d · TRAS UN FALLO SE REINTENTA YA, SIN ESPERAR ───
+        echo "\n  — 4d · tras un fallo se reintenta sin esperar —\n";
+        $sf = sol();
+        $ipdo->prepare("INSERT INTO crecer_plan_solicitud (solicitud, marca_id, meta_id, estado, error)
+                        VALUES (?,?,?, 'fallida', 'de mentira')")->execute([$sf, $cc, $mc]);
+        $r_fall = meta_solicitud_reclamar($ipdo, $cc, $mc, $sf);
+        ok('una fallida se reclama al momento', $r_fall['gane'] === true,
+           'la escritura se deshizo entera: no hay nada que duplicar, y obligar '
+         . 'a esperar tres minutos se lee como una caida');
+        $ff = meta_solicitud_leer($ipdo, $cc, $sf);
+        ok('y se limpia el error del intento anterior', ($ff['error'] ?? null) === null);
+
+        //  Y el camino completo: un replan que falla deja la solicitud FALLIDA,
+        //  no colgada. Se rompe el INSERT del plan para provocarlo.
+        $sg = sol();
+        $cop1->ejecutar("ALTER TABLE crecer_meta_plan CHANGE veredicto veredicto_zz VARCHAR(24) NULL");
+        $r_ko = meta_plan_generar($ipdo, $cc, $mc, 'va a fallar', $sg);
+        $cop1->ejecutar("ALTER TABLE crecer_meta_plan CHANGE veredicto_zz veredicto VARCHAR(24) NULL");
+        ok('un replan que falla devuelve ok:false', empty($r_ko['ok']));
+        $fg = meta_solicitud_leer($ipdo, $cc, $sg);
+        ok('y deja la solicitud FALLIDA, no colgada', ($fg['estado'] ?? '') === 'fallida',
+           'estado=' . (string)($fg['estado'] ?? 'null')
+         . ' · colgada obligaria a esperar el margen de huerfana para reintentar');
+        ok('con el motivo apuntado', !empty($fg['error']), (string)($fg['error'] ?? ''));
+
+        // ── 4e · EL HUECO ENTRE EL COMMIT Y LA MARCA ──────────
+        //  LA VENTANA MAS FINA DE TODAS, y la ultima que queda.
+        //
+        //  El plan se guarda y se confirma. Un instante despues se marca la
+        //  reclamacion como 'hecha'. Si el proceso muere JUSTO AHI —entre las
+        //  dos— queda un plan valido y confirmado con su solicitud todavia en
+        //  'reclamada'. Pasado el margen, otro proceso rescata la huerfana... y
+        //  si se pusiera a llamar a la Estratega, pagaria por un plan QUE YA
+        //  EXISTE y crearia una version de mas.
+        //
+        //  No se puede cerrar juntando las dos cosas en una transaccion: la
+        //  marca tiene que quedar fuera, o un rollback se la llevaria por
+        //  delante. Se cierra mirando: antes de gastar, se busca si esa
+        //  solicitud ya pario un plan.
+        echo "\n  — 4e · el proceso murio entre guardar y marcar —\n";
+        $fh2 = Fixture::crear($ipdo, 'replan-hueco');
+        $mh = (int)$fh2['meta_id']; $ch = (int)$fh2['marca_id'];
+        $ipdo->prepare("DELETE FROM crecer_ia_log WHERE marca_id=?")->execute([$ch]);
+
+        $sx = sol();
+        $rx = meta_plan_generar($ipdo, $ch, $mh, 'el que si se guardo', $sx);
+        ok('el plan se creo y quedo confirmado', !empty($rx['ok']) && (int)($rx['plan_id'] ?? 0) > 0);
+        $plan_x = (int)$rx['plan_id']; $ver_x = (int)$rx['version'];
+
+        //  SE SIMULA LA MUERTE: se deshace SOLO la marca, no el plan. Es
+        //  exactamente el estado que deja un proceso que revienta despues del
+        //  commit y antes del UPDATE de la reclamacion.
+        $ipdo->prepare("UPDATE crecer_plan_solicitud
+                           SET estado='reclamada', plan_id=NULL,
+                               updated_at=DATE_SUB(NOW(), INTERVAL ? SECOND)
+                         WHERE solicitud=?")->execute([META_SOL_HUERFANA_SEG + 60, $sx]);
+        $f0 = meta_solicitud_leer($ipdo, $ch, $sx);
+        ok('la reclamacion quedo colgada y vencida', ($f0['estado'] ?? '') === 'reclamada',
+           'si no, este escenario no reproduce nada');
+
+        $llam_antes = (int)$ipdo->query("SELECT COUNT(*) FROM crecer_ia_log
+                                          WHERE marca_id={$ch} AND agente='estratega'")->fetchColumn();
+        $planes_antes_x = count(planes($ipdo, $mh));
+
+        //  LLEGA EL REINTENTO.
+        $ry = meta_plan_generar($ipdo, $ch, $mh, 'el que si se guardo', $sx);
+
+        $llam_desp = (int)$ipdo->query("SELECT COUNT(*) FROM crecer_ia_log
+                                         WHERE marca_id={$ch} AND agente='estratega'")->fetchColumn();
+        ok('CERO llamadas nuevas a la Estratega', $llam_desp === $llam_antes,
+           ($llam_desp - $llam_antes) . ' llamadas de mas · el plan ya existia y se pagaria dos veces');
+        ok('devuelve EL MISMO plan', (int)($ry['plan_id'] ?? 0) === $plan_x,
+           '#' . (int)($ry['plan_id'] ?? 0) . ' en vez de #' . $plan_x);
+        ok('y la MISMA version', (int)($ry['version'] ?? 0) === $ver_x,
+           'v' . (int)($ry['version'] ?? 0) . ' en vez de v' . $ver_x);
+        ok('marcado como repetido', !empty($ry['repetido']));
+        ok('no nacio ninguna version de mas', count(planes($ipdo, $mh)) === $planes_antes_x,
+           count(planes($ipdo, $mh)) . ' planes, habia ' . $planes_antes_x);
+        ok('sigue habiendo UN solo activo', count(activos($ipdo, $mh)) === 1,
+           pinta(planes($ipdo, $mh)));
+
+        //  Y LA RECLAMACION SE RECONCILIA. Si se quedara en 'reclamada', la
+        //  fila seguiria colgada para siempre y cada visita volveria a pasar
+        //  por el rescate: se arregla el sintoma y se deja la causa.
+        $f1 = meta_solicitud_leer($ipdo, $ch, $sx);
+        ok('la reclamacion termina «hecha»', ($f1['estado'] ?? '') === 'hecha',
+           'estado=' . (string)($f1['estado'] ?? 'null')
+         . ' · dejarla colgada es arreglar el sintoma y no la causa');
+        ok('y apuntando al plan que si existia', (int)($f1['plan_id'] ?? 0) === $plan_x,
+           'plan_id=' . (int)($f1['plan_id'] ?? 0));
+
+        // ── 4f · EL MISMO HUECO, POR EL CAMINO DEL RESCATE ────
+        //  4e se resuelve en la primera mirada y nunca llega al rescate, asi
+        //  que la comprobacion que vive AHI se quedaria sin ejercitar — y una
+        //  proteccion que ninguna prueba recorre es decoracion.
+        //
+        //  Aqui se fuerza a pasar por ella: se borra la solicitud de la FILA
+        //  DEL PLAN (que es lo que pasaria si esa migracion no estuviera
+        //  aplicada) y se deja el rastro solo en el libro. La primera mirada
+        //  no encuentra nada, se rescata la huerfana, y es la segunda mirada
+        //  la que tiene que evitar el gasto.
+        echo "\n  — 4f · el mismo hueco, pero llegando por el rescate —\n";
+        $fr2 = Fixture::crear($ipdo, 'replan-rescate');
+        $mr = (int)$fr2['meta_id']; $cr = (int)$fr2['marca_id'];
+        $ipdo->prepare("DELETE FROM crecer_ia_log WHERE marca_id=?")->execute([$cr]);
+
+        $sz = sol();
+        $rz = meta_plan_generar($ipdo, $cr, $mr, 'el del rescate', $sz);
+        $plan_z = (int)($rz['plan_id'] ?? 0); $ver_z = (int)($rz['version'] ?? 0);
+        ok('el plan existe y esta confirmado', $plan_z > 0);
+
+        //  El plan pierde su marca de solicitud; el libro conserva el vinculo.
+        $ipdo->prepare("UPDATE crecer_meta_plan SET solicitud=NULL WHERE id=?")->execute([$plan_z]);
+        $ipdo->prepare("UPDATE crecer_plan_solicitud
+                           SET estado='reclamada',
+                               updated_at=DATE_SUB(NOW(), INTERVAL ? SECOND)
+                         WHERE solicitud=?")->execute([META_SOL_HUERFANA_SEG + 60, $sz]);
+        ok('la primera mirada ya NO lo encuentra',
+           meta_plan_por_solicitud($ipdo, $cr, $sz) === null,
+           'si lo encontrara, esta prueba no recorreria el camino que quiere probar');
+
+        $ll_a = (int)$ipdo->query("SELECT COUNT(*) FROM crecer_ia_log
+                                    WHERE marca_id={$cr} AND agente='estratega'")->fetchColumn();
+        $pl_a = count(planes($ipdo, $mr));
+        $rw = meta_plan_generar($ipdo, $cr, $mr, 'el del rescate', $sz);
+        $ll_d = (int)$ipdo->query("SELECT COUNT(*) FROM crecer_ia_log
+                                    WHERE marca_id={$cr} AND agente='estratega'")->fetchColumn();
+
+        ok('el rescate NO llama a la Estratega', $ll_d === $ll_a,
+           ($ll_d - $ll_a) . ' llamadas de mas · rescatar una huerfana cuyo plan ya '
+         . 'existe es pagar dos veces por lo mismo');
+        ok('y devuelve ese mismo plan', (int)($rw['plan_id'] ?? 0) === $plan_z,
+           '#' . (int)($rw['plan_id'] ?? 0) . ' en vez de #' . $plan_z);
+        ok('con la misma version', (int)($rw['version'] ?? 0) === $ver_z);
+        ok('sin crear ninguna version de mas', count(planes($ipdo, $mr)) === $pl_a,
+           count(planes($ipdo, $mr)) . ' planes, habia ' . $pl_a);
+        ok('y la reclamacion queda «hecha»',
+           (meta_solicitud_leer($ipdo, $cr, $sz)['estado'] ?? '') === 'hecha');
+
+        Fixture::limpiar($ipdo, $cr);
+        Fixture::limpiar($ipdo, $ch);
+        Fixture::limpiar($ipdo, $cc);
+        Fixture::limpiar($ipdo, $ci);
+    } finally {
+        $cop1->soltar($pdo);
+        meta_plan_olvidar_esquema();
+    }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  5, 6 y 7 · LAS DOS MITADES ROTAS, Y EL ROLLBACK
+// ══════════════════════════════════════════════════════════════
+//  Se rompe escondiendo una columna: eso falla en cualquier sql_mode, al
+//  contrario que meter un valor fuera de rango — este MySQL no es estricto y
+//  trunca en silencio.
+echo "\n  — 5, 6 y 7 · la escritura, rota a proposito —\n";
+$copia = EsquemaDesechable::crear($pdo);
+if ($copia === null) {
+    echo "  (saltada: este usuario de base de datos no puede crear bases)\n";
+} else {
+    try {
+        $cpdo = $copia->pdo();
+        //  La copia se hizo del esquema de hoy; se olvida lo memorizado o las
+        //  funciones contestarian con lo que vieron en la base compartida.
+        meta_plan_olvidar_esquema();
+
+        // ── 5 · FALLA EL CIERRE DEL ANTERIOR ──────────────────
+        $f2 = Fixture::crear($cpdo, 'replan-cierre');
+        $m2 = (int)$f2['meta_id'];
+        $id_ant = (int)(activos($cpdo, $m2)[0]['id'] ?? 0);
+        $tac2 = (int)$cpdo->query("SELECT COUNT(*) FROM crecer_meta_tactica WHERE meta_id={$m2}")->fetchColumn();
+
+        //  meta_plan_cerrar() escribe cierre_at. Sin esa columna su UPDATE
+        //  lanza, el catch de dentro lo traga y devuelve false — que es lo que
+        //  antes nadie miraba.
+        $copia->ejecutar("ALTER TABLE crecer_meta_plan CHANGE cierre_at cierre_at_zz DATETIME NULL");
+        $r5 = meta_plan_generar($cpdo, (int)$f2['marca_id'], $m2, 'no funciono', sol());
+        $copia->ejecutar("ALTER TABLE crecer_meta_plan CHANGE cierre_at_zz cierre_at DATETIME NULL");
+
+        $act5 = activos($cpdo, $m2);
+        echo "         estado tras el fallo: " . pinta(planes($cpdo, $m2)) . "\n";
+        ok('con el cierre roto NO quedan dos activos', count($act5) === 1, pinta($act5));
+        ok('y el que queda es EL ANTERIOR', (int)($act5[0]['id'] ?? 0) === $id_ant,
+           '#' . (int)($act5[0]['id'] ?? 0) . ' en vez de #' . $id_ant);
+        ok('el wizard recibe ok:false', empty($r5['ok']),
+           'dijo ok con la escritura deshecha: confirmacion falsa');
+        ok('con un mensaje que dice que nada cambio', !empty($r5['err']), (string)($r5['err'] ?? ''));
+
+        // ── 7 · EL ROLLBACK NO DEJA RASTRO ────────────────────
+        //  No basta con que el plan anterior siga activo: no puede haber
+        //  quedado media escritura por ahi — ni un plan huerfano ni jugadas
+        //  sueltas de un plan que no existe.
+        ok('no quedo ningun plan a medias', count(planes($cpdo, $m2)) === 1,
+           pinta(planes($cpdo, $m2)));
+        $tac5 = (int)$cpdo->query("SELECT COUNT(*) FROM crecer_meta_tactica WHERE meta_id={$m2}")->fetchColumn();
+        ok('ni ninguna jugada de mas', $tac5 === $tac2,
+           "{$tac5} jugadas, habia {$tac2}");
+        ok('NI SE BORRARON LAS QUE HABIA', $tac5 >= $tac2,
+           'el camino viejo hacia DELETE de las pendientes: una operacion que '
+         . 'falla no puede destruir el trabajo del plan que se queda');
+
+        // ── 6 · FALLA EL INSERT DEL NUEVO ─────────────────────
+        $f3 = Fixture::crear($cpdo, 'replan-insert');
+        $m3 = (int)$f3['meta_id'];
+        $id3 = (int)(activos($cpdo, $m3)[0]['id'] ?? 0);
+        $tac3 = (int)$cpdo->query("SELECT COUNT(*) FROM crecer_meta_tactica WHERE meta_id={$m3}")->fetchColumn();
+
+        //  El INSERT del plan nuevo nombra `veredicto`. Sin ella, lanza.
+        $copia->ejecutar("ALTER TABLE crecer_meta_plan CHANGE veredicto veredicto_zz VARCHAR(24) NULL");
+        $r6 = meta_plan_generar($cpdo, (int)$f3['marca_id'], $m3, 'otra vez no', sol());
+        $copia->ejecutar("ALTER TABLE crecer_meta_plan CHANGE veredicto_zz veredicto VARCHAR(24) NULL");
+
+        $act6 = activos($cpdo, $m3);
+        echo "         estado tras el fallo: " . pinta(planes($cpdo, $m3)) . "\n";
+        ok('con el INSERT roto el anterior SIGUE activo',
+           count($act6) === 1 && (int)$act6[0]['id'] === $id3, pinta($act6));
+        ok('el wizard recibe ok:false', empty($r6['ok']),
+           'dijo ok:true con ' . count($act6) . ' planes activos');
+        $tac6 = (int)$cpdo->query("SELECT COUNT(*) FROM crecer_meta_tactica WHERE meta_id={$m3}")->fetchColumn();
+        ok('y las jugadas del plan vivo estan intactas', $tac6 === $tac3,
+           "{$tac6} jugadas, habia {$tac3}");
+
+        // ── SIN LA TABLA DE PLANES: SE PARA, NO SE DESTRUYE ───
+        echo "\n  — sin la tabla de planes, se para y se dice —\n";
+        $f4 = Fixture::crear($cpdo, 'replan-sintabla');
+        $m4 = (int)$f4['meta_id'];
+        $tac4 = (int)$cpdo->query("SELECT COUNT(*) FROM crecer_meta_tactica WHERE meta_id={$m4}")->fetchColumn();
+        $copia->ejecutar("RENAME TABLE crecer_meta_plan TO crecer_meta_plan_zz");
+        meta_plan_olvidar_esquema();
+        $r7 = meta_plan_generar($cpdo, (int)$f4['marca_id'], $m4, 'sin tabla', sol());
+        $copia->ejecutar("RENAME TABLE crecer_meta_plan_zz TO crecer_meta_plan");
+        meta_plan_olvidar_esquema();
+
+        ok('devuelve ok:false', empty($r7['ok']),
+           'el camino viejo devolvia ok DESPUES de borrar las jugadas pendientes');
+        $tac7 = (int)$cpdo->query("SELECT COUNT(*) FROM crecer_meta_tactica WHERE meta_id={$m4}")->fetchColumn();
+        ok('y NO borro ni una jugada', $tac7 === $tac4, "{$tac7} jugadas, habia {$tac4}");
+
+        foreach ([$f2, $f3, $f4] as $ff) Fixture::limpiar($cpdo, (int)$ff['marca_id']);
+    } finally {
+        $copia->soltar($pdo);
+        meta_plan_olvidar_esquema();
+    }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  EL WIZARD Y EL HANDLER, LEIDOS EN EL FUENTE
+// ══════════════════════════════════════════════════════════════
+//  Lo de arriba prueba el dominio. Esto prueba que la pantalla lo USA: un
+//  contrato que nadie consume es un contrato decorativo, y de eso ya hubo uno
+//  en la Fase 5.
+echo "\n  — la pantalla usa lo que el dominio le da —\n";
+$wz  = (string)file_get_contents(dirname(__DIR__) . '/panel/_meta_opciones.php');
+$hnd = (string)file_get_contents(dirname(__DIR__) . '/panel/meta.php');
+
+ok('el wizard acuña una solicitud al pintarse', strpos($wz, '$op_solicitud = bin2hex') !== false);
+ok('y la manda con el envio', strpos($wz, 'solicitud:SOLICITUD') !== false);
+ok('el handler la lee', strpos($hnd, "\$_POST['solicitud']") !== false);
+//  `[^;]` y no `[^)]`: los argumentos llevan parentesis dentro —el
+//  (string)($_POST['motivo'] ?? '')— y con [^)] la busqueda se cortaba ahi y
+//  daba rojo con el codigo correcto delante. El limite de una llamada es el
+//  punto y coma, no el primer parentesis que aparezca.
+ok('y se la pasa a meta_plan_generar',
+   preg_match('/meta_plan_generar\([^;]{0,240}\$solicitud\s*\)/s', $hnd) === 1);
+ok('la respuesta lleva «repetido»', strpos($hnd, "'repetido' =>") !== false);
+ok('y lleva la version', strpos($hnd, "'version'  =>") !== false);
+ok('EL WIZARD DISTINGUE repetido DE UN EXITO NUEVO', strpos($wz, 'j.repetido') !== false,
+   'sin esto, el corte por repeticion se lee igual que un plan nuevo');
+ok('y vuelve diciendo cual es su plan',
+   strpos($wz, "'&ya=' : '&nuevo='") !== false,
+   'volver a secas fue lo que hizo que el dueño pidiera el plan dos veces');
+// ── Y LA CONFIRMACION, PEDIDA COMO LA PEDIRIA UN NAVEGADOR ──
+//  Buscar en el fuente solo demuestra que alguien escribio una linea. Esto
+//  demuestra que esa linea SE EJECUTA para una peticion concreta — que es la
+//  diferencia entre tener el aviso y que el dueño lo vea.
+echo "\n  — la confirmacion, renderizada de verdad —\n";
+$fr = Fixture::crear($pdo, 'replan-banner', true, 'admin');
+try {
+    $pedir = function (string $qs) use ($fr): string {
+        $cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/_render_runner.php')
+             . ' ' . (int)$fr['usuario_id'] . ' meta.php ' . escapeshellarg('marca=' . (int)$fr['marca_id'] . $qs);
+        return (string)shell_exec($cmd . ' 2>' . (stripos(PHP_OS, 'WIN') === 0 ? 'NUL' : '/dev/null'));
+    };
+    $html_nuevo = $pedir('&nuevo=6');
+    ok('con ?nuevo=6 sale el aviso', substr_count($html_nuevo, 'class="tm-hecho') === 1,
+       substr_count($html_nuevo, 'class="tm-hecho') . ' avisos');
+    ok('y dice el NUMERO DE VERSION', strpos($html_nuevo, 'Plan versión 6') !== false,
+       '«listo» no distingue un plan de otro; el numero si — y es lo que fallo '
+     . 'en produccion: el dueño volvio a una pantalla identica');
+    ok('y no se presenta como una repeticion', strpos($html_nuevo, 'tm-hecho-ya"') === false);
+
+    $html_ya = $pedir('&ya=6');
+    ok('con ?ya=6 sale el aviso neutro', strpos($html_ya, 'tm-hecho tm-hecho-ya') !== false
+       || strpos($html_ya, 'tm-hecho-ya') !== false);
+    ok('y dice que YA estaba, no que se creo',
+       strpos($html_ya, 'ya estaba creado') !== false && strpos($html_ya, 'Plan versión 6 creado') === false,
+       'decirle «creado» a un reenvio seria mentirle');
+
+    $html_sin = $pedir('');
+    ok('sin parametro no sale ningun aviso', strpos($html_sin, 'class="tm-hecho') === false,
+       'un aviso que sale siempre deja de avisar de nada');
+} finally {
+    Fixture::limpiar($pdo, (int)$fr['marca_id']);
+}
+
+// ── Que el camino viejo ya no existe ──
+echo "\n  — lo que se quito —\n";
+$dom = (string)file_get_contents(dirname(__DIR__) . '/includes/meta_negocio.php');
+ok('ya no hay DELETE de jugadas pendientes en el replan',
+   strpos($dom, "DELETE FROM crecer_meta_tactica WHERE meta_id=? AND estado='pendiente'") === false,
+   'seguia el camino que destruia trabajo y devolvia exito');
+ok('y el resultado de meta_plan_cerrar SI se mira',
+   preg_match('/!meta_plan_cerrar\(/', $dom) === 1,
+   'sin mirarlo, el INSERT entra aunque el cierre falle: dos planes activos');
+ok('la escritura va en transaccion',
+   strpos($dom, 'beginTransaction') !== false && strpos($dom, 'rollBack') !== false);
+ok('y el modelo se llama ANTES de abrirla',
+   strpos($dom, 'ia_ejecutar') < strpos($dom, '$pdo->beginTransaction'),
+   'con la llamada dentro, la transaccion queda abierta los segundos que tarda '
+ . 'el modelo y su registro en crecer_ia_log se perderia en el rollback — y ese '
+ . 'log es la evidencia del criterio #2');
+
+// ══════════════════════════════════════════════════════════════
+//  LO QUE ESTE DISEÑO NO CUBRE, DICHO EN VOZ ALTA
+// ══════════════════════════════════════════════════════════════
+//  Una suite que solo enseña lo que gana deja creer que no queda nada. Queda
+//  una ventana, es estrecha, y esta prueba se limita a comprobar que sigue
+//  ESCRITA donde tiene que estar: en el codigo, no en la memoria de nadie.
+echo "\n  — el limite, declarado —\n";
+$dom2 = (string)file_get_contents(dirname(__DIR__) . '/includes/meta_negocio.php');
+ok('el limite del gasto esta documentado junto al mecanismo',
+   strpos($dom2, 'DESPUÉS de recibir la respuesta del modelo y ANTES') !== false,
+   'si el proceso muere entre recibir la respuesta y guardar el plan, ese gasto '
+ . 'se repite. No se puede evitar sin persistir la respuesta del proveedor en '
+ . 'cuanto llega. NO se construye ahora: es una franja de milisegundos y '
+ . 'costaria una tabla mas con datos del negocio fuera de su sitio');
+
+echo "\n" . str_repeat('=', 62) . "\n";
+echo $fallos === 0
+    ? "  EL REPLAN CUMPLE EL CONTRATO · {$n} afirmaciones\n\n"
+    : "  {$fallos} de {$n} · el replan puede mentir\n\n";
+exit($fallos === 0 ? 0 : 1);

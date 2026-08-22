@@ -1320,6 +1320,252 @@ try {
         echo "\n  --- que NO se hizo aqui ---\n";
         echo "  Cero llamadas a proveedor, ni de generacion ni de consulta.\n";
     }
+    // ¿POR QUÉ SIGUE VIVO EL PLAN QUE REEMPLACÉ?   &test=plan&marca=N
+    //
+    //   SOLO LECTURA, Y ES LA CONDICIÓN, NO UN DETALLE: no escribe una fila, no
+    //   cierra un plan, no llama a la Estratega. Diagnosticar un replan
+    //   volviéndolo a correr destruye la escena — y encima cuesta dinero.
+    //
+    //   Lo que contesta, en orden:
+    //     1) la meta activa
+    //     2) TODOS sus planes con versión, estado y sus tres fechas
+    //     3) cuántos quedaron 'activo'  (>1 = escritura partida por la mitad)
+    //     4) las tácticas colgando de cada plan_id
+    //     5) qué plan_actual mandaría el wizard AHORA MISMO
+    //     6) qué contestaría accion=replan con eso, sin llegar a ejecutarlo
+    //     7) qué plan eligen meta_plan_activo() y MetaSnapshotReader
+    //
+    //   EL DISCRIMINADOR ESTÁ EN EL PASO 6. Hay dos averías posibles y se
+    //   parecen desde la pantalla:
+    //     · la escritura se partió → hay rastro de la Estratega en crecer_ia_log
+    //       pero falta el plan nuevo, o sobra un activo;
+    //     · el candado de doble clic disparó en el PRIMER clic → NO hay rastro
+    //       de la Estratega, porque el request se contestó ok:true y se dio la
+    //       vuelta antes de llamarla. Confirmación falsa: la pantalla dice que
+    //       sí y no pasó nada.
+    //   El log de la IA distingue una de otra sin lugar a dudas.
+    if ($__test === 'plan') {      // solo lectura · ya estás dentro como admin
+        require_once __DIR__ . '/includes/meta_negocio.php';
+        $mid = (int)($_GET['marca'] ?? 1);
+        echo "\n--- EL PLAN DE LA MARCA {$mid}: ESTADO EXACTO (solo lectura) ---\n";
+
+        $q = $pdo->prepare("SELECT nombre_negocio FROM crecer_marca WHERE id=?");
+        $q->execute([$mid]);
+        $nombre = (string)($q->fetchColumn() ?: '(no existe esa marca)');
+        echo "  marca {$mid} · {$nombre}\n";
+
+        // ── 0 · ¿ESTÁ PUESTO EL ESQUEMA? ────────────────────────
+        //   Se pregunta ANTES que nada porque, si falta la tabla de planes,
+        //   meta_plan_generar() se va por su catch: BORRA las jugadas
+        //   pendientes, guarda las nuevas con plan_id NULL... y DEVUELVE ok.
+        //   El wizard ve ok, se da la vuelta, y Tu Meta sigue enseñando lo
+        //   viejo porque no hay plan que leer. Explica el síntoma entero, así
+        //   que descartarlo primero ahorra buscar donde no es.
+        echo "\n  0) EL ESQUEMA\n";
+        $hay = function (string $t, ?string $c = null) use ($pdo): bool {
+            try {
+                if ($c === null) {
+                    $q = $pdo->prepare("SELECT COUNT(*) FROM information_schema.TABLES
+                                         WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?");
+                    $q->execute([$t]);
+                } else {
+                    $q = $pdo->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS
+                                         WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?");
+                    $q->execute([$t, $c]);
+                }
+                return (int)$q->fetchColumn() > 0;
+            } catch (Throwable $e) { return false; }
+        };
+        foreach ([['crecer_meta_plan', null], ['crecer_meta_plan', 'presentado_at'],
+                  ['crecer_meta_tactica', 'plan_id'], ['crecer_meta_tactica', 'clase'],
+                  ['crecer_contenido', 'plan_id']] as [$t, $c]) {
+            printf("     [%s] %s%s\n", $hay($t, $c) ? 'OK' : '!!', $t, $c ? ".{$c}" : '');
+        }
+        if (!$hay('crecer_meta_plan')) {
+            echo "     !! SIN LA TABLA DE PLANES el replan se va por su catch:\n";
+            echo "        borra las jugadas pendientes, guarda las nuevas sin plan\n";
+            echo "        y DEVUELVE ok. Es el sintoma exacto, y no hace falta\n";
+            echo "        mirar mas abajo: aplica la migracion.\n";
+        }
+
+        // ── 1 · LA META ACTIVA ──────────────────────────────────
+        echo "\n  1) LA META ACTIVA\n";
+        $meta = meta_activa($pdo, $mid);
+        if (!$meta) {
+            echo "     no hay meta activa. Sin meta no hay plan: el resto no aplica.\n";
+        } else {
+            printf("     meta #%d · %s · estado=%s\n", (int)$meta['id'],
+                   (string)$meta['objetivo'], (string)$meta['estado']);
+            printf("     cantidad=%s · limite=%s · updated_at=%s\n",
+                   $meta['cantidad'] ?? 'null', $meta['fecha_limite'] ?? 'null',
+                   $meta['updated_at'] ?? 'null');
+            //  Más de una meta activa sería la avería de al lado, y conviene
+            //  descartarla antes de mirar los planes.
+            $qm = $pdo->prepare("SELECT COUNT(*) FROM crecer_meta WHERE marca_id=? AND estado='activa'");
+            $qm->execute([$mid]);
+            $nmetas = (int)$qm->fetchColumn();
+            if ($nmetas > 1) echo "     !! {$nmetas} metas activas a la vez — eso ya es otra avería\n";
+        }
+
+        $meta_id = (int)($meta['id'] ?? 0);
+        if ($meta_id > 0) {
+            // ── 2 · TODOS LOS PLANES ────────────────────────────
+            echo "\n  2) TODOS LOS PLANES DE ESA META\n";
+            $qp = $pdo->prepare(
+                "SELECT id, version, estado, inicio_at, cierre_at, presentado_at,
+                        created_at, updated_at, ia_log_id, veredicto
+                   FROM crecer_meta_plan WHERE meta_id=? ORDER BY version ASC");
+            $qp->execute([$meta_id]);
+            $planes = $qp->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            if (!$planes) echo "     ninguno.\n";
+            printf("     %-6s %-4s %-13s %-19s %-19s %-19s %-8s\n",
+                   'id','ver','estado','inicio_at','cierre_at','presentado_at','ia_log');
+            foreach ($planes as $p) {
+                printf("     %-6d %-4d %-13s %-19s %-19s %-19s %-8s\n",
+                       (int)$p['id'], (int)$p['version'], (string)$p['estado'],
+                       (string)($p['inicio_at'] ?? '—'), (string)($p['cierre_at'] ?? '—'),
+                       (string)($p['presentado_at'] ?? '—'), (string)($p['ia_log_id'] ?? '—'));
+            }
+
+            // ── 3 · ¿CUÁNTOS ACTIVOS? ───────────────────────────
+            echo "\n  3) ¿CUÁNTOS QUEDARON 'activo'?\n";
+            $act = array_values(array_filter($planes, fn($p) => $p['estado'] === 'activo'));
+            printf("     %d\n", count($act));
+            if (count($act) === 0) {
+                echo "     !! CERO. El anterior se cerró y el nuevo no llegó a nacer.\n";
+                echo "        Desde el hotfix del 2026-08-22 el replan NO puede dejar\n";
+                echo "        esto: va en transacción. Si sale, viene de antes del\n";
+                echo "        arreglo, o lo cerró otro camino.\n";
+            } elseif (count($act) > 1) {
+                echo "     !! MÁS DE UNO. Desde el hotfix del 2026-08-22 el replan no\n";
+                echo "        puede dejar dos: mira lo que devuelve meta_plan_cerrar()\n";
+                echo "        y va en transacción. Si salen dos, vienen de antes o de\n";
+                echo "        otro camino. Ids activos: "
+                     . implode(', ', array_column($act, 'id')) . "\n";
+            }
+
+            // ── 4 · LAS TÁCTICAS DE CADA PLAN ───────────────────
+            echo "\n  4) TÁCTICAS POR PLAN\n";
+            $qt = $pdo->prepare(
+                "SELECT plan_id, estado, COUNT(*) c
+                   FROM crecer_meta_tactica WHERE meta_id=?
+                  GROUP BY plan_id, estado ORDER BY plan_id, estado");
+            $qt->execute([$meta_id]);
+            $filas = $qt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            if (!$filas) echo "     ninguna.\n";
+            $por_plan = [];
+            foreach ($filas as $f) $por_plan[(string)($f['plan_id'] ?? 'NULL')][(string)$f['estado']] = (int)$f['c'];
+            foreach ($por_plan as $pid => $est) {
+                $bits = [];
+                foreach ($est as $e => $c) $bits[] = "{$e}={$c}";
+                $etq = ($pid === 'NULL') ? 'plan_id NULL' : "plan #{$pid}";
+                //  Una jugada pendiente colgando de un plan ya cerrado es la
+                //  huella de que el reemplazo dejó basura viva.
+                $p = null; foreach ($planes as $pp) if ((int)$pp['id'] === (int)$pid) $p = $pp;
+                $aviso = '';
+                if ($pid === 'NULL') {
+                    $aviso = '  !! sin plan: nacieron cuando la tabla de planes no existía';
+                } elseif ($p && $p['estado'] !== 'activo' && (($est['pendiente'] ?? 0) + ($est['en_curso'] ?? 0)) > 0) {
+                    $aviso = '  !! pendientes colgando de un plan ' . $p['estado'];
+                }
+                printf("     %-14s %s%s\n", $etq, implode(' · ', $bits), $aviso);
+            }
+
+            // ── 5 · QUÉ MANDARÍA EL WIZARD ──────────────────────
+            echo "\n  5) QUÉ plan_actual MANDARÍA EL WIZARD AHORA\n";
+            //  Es literalmente la misma línea de _meta_opciones.php:39 y :351.
+            $op_plan = meta_plan_activo($pdo, $meta_id);
+            $PLAN_ACTUAL = (int)($op_plan['id'] ?? 0);
+            printf("     PLAN_ACTUAL = %d   (de _meta_opciones.php:351)\n", $PLAN_ACTUAL);
+            if ($PLAN_ACTUAL === 0) {
+                echo "     ojo: con 0 el candado de doble clic NO se aplica (pide >0),\n";
+                echo "     así que un segundo clic SÍ llamaría otra vez a la Estratega.\n";
+            }
+
+            // ── 6 · QUÉ CONTESTARÍA accion=replan ───────────────
+            echo "\n  6) QUÉ CONTESTARÍA accion=replan CON ESE VALOR\n";
+            //  Se reproduce la decisión de panel/meta.php:118-123 SIN ejecutarla.
+            $vigente = meta_plan_activo($pdo, $meta_id);
+            $vig_id  = (int)($vigente['id'] ?? 0);
+            printf("     vigente segun el servidor = %d · pedido = %d\n", $vig_id, $PLAN_ACTUAL);
+            if ($PLAN_ACTUAL > 0 && $vigente && $vig_id !== $PLAN_ACTUAL) {
+                echo "     -> CORTA por el candado de doble clic:\n";
+                echo "        {\"ok\":true,\"repetido\":true,\"plan\":{$vig_id}}\n";
+                echo "     !! ok:true SIN haber hecho nada. El wizard ve ok y se da la\n";
+                echo "        vuelta a Tu Meta, donde sigue el plan viejo. Es\n";
+                echo "        exactamente el sintoma reportado.\n";
+            } else {
+                echo "     -> SIGUE y llamaria a la Estratega (aqui NO se llama).\n";
+            }
+
+            // ── EL DISCRIMINADOR: ¿corrió la Estratega? ─────────
+            echo "\n     RASTRO DE LA ESTRATEGA (crecer_ia_log)\n";
+            $qi = $pdo->prepare(
+                "SELECT id, estado, created_at, tokens_out, costo_usd, LEFT(COALESCE(error_msg,''),60) err
+                   FROM crecer_ia_log
+                  WHERE marca_id=? AND agente='estratega'
+                  ORDER BY id DESC LIMIT 8");
+            $qi->execute([$mid]);
+            $logs = $qi->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            if (!$logs) {
+                echo "     ninguna llamada nunca. Si acabas de pedir un plan nuevo,\n";
+                echo "     esto SOLO puede significar que el request se contesto antes\n";
+                echo "     de llegar a ella: confirmacion falsa.\n";
+            }
+            foreach ($logs as $l) {
+                printf("     ia_log #%-6d %-10s %-19s out=%-6s \$%-8s %s\n",
+                       (int)$l['id'], (string)$l['estado'], (string)$l['created_at'],
+                       (string)$l['tokens_out'], (string)$l['costo_usd'], (string)$l['err']);
+            }
+            //  La pregunta que resuelve el caso: ¿hay una llamada MÁS NUEVA que
+            //  el plan más nuevo? Si la hay, la Estratega corrió y lo que se
+            //  perdió fue la escritura.
+            $ult_log  = $logs ? (string)$logs[0]['created_at'] : '';
+            $ult_plan = '';
+            foreach ($planes as $p) if ((string)$p['created_at'] > $ult_plan) $ult_plan = (string)$p['created_at'];
+            if ($ult_log !== '') {
+                echo "\n     ultima llamada: {$ult_log}   ·   ultimo plan creado: "
+                     . ($ult_plan !== '' ? $ult_plan : '(ninguno)') . "\n";
+                if ($ult_plan === '' || $ult_log > $ult_plan) {
+                    echo "     !! LA ESTRATEGA CORRIO DESPUES DEL ULTIMO PLAN GUARDADO.\n";
+                    echo "        Se pago la llamada y el plan no quedo: la escritura\n";
+                    echo "        se perdio despues del modelo.\n";
+                } else {
+                    echo "     ok: el ultimo plan es posterior o igual a la ultima llamada.\n";
+                }
+            }
+
+            // ── 7 · QUÉ LEE CADA UNO ────────────────────────────
+            echo "\n  7) QUE PLAN ELIGE CADA LECTOR\n";
+            printf("     meta_plan_activo()   -> %s\n",
+                   $vig_id > 0 ? ('#' . $vig_id . ' (v' . (int)$vigente['version'] . ')') : 'null');
+            $snap = null;
+            try {
+                require_once __DIR__ . '/core/Meta/MetaSnapshotReader.php';
+                $snap = MetaSnapshotReader::leer($pdo, $mid);
+            } catch (Throwable $e) { echo "     MetaSnapshotReader: " . $e->getMessage() . "\n"; }
+            if (is_array($snap)) {
+                $sp = (array)($snap['plan'] ?? []);
+                printf("     MetaSnapshotReader   -> %s\n",
+                       !empty($sp['id']) ? ('#' . (int)$sp['id'] . ' (v' . (int)($sp['version'] ?? 0) . ')') : 'null');
+                $jg = (array)($snap['jugadas'] ?? []);
+                printf("     jugadas que ve       -> %d\n", count($jg));
+                //  Sin la columna plan_id: el lector YA filtró por plan, así que
+                //  pintarla vacía haría pensar que las jugadas quedaron huérfanas.
+                //  El reparto real por plan_id está arriba, en el punto 4.
+                foreach (array_slice($jg, 0, 6) as $j) {
+                    printf("        #%-5d %-10s %s\n", (int)$j['id'],
+                           (string)$j['estado'], mb_substr((string)$j['titulo'], 0, 44));
+                }
+                if ($vig_id > 0 && !empty($sp['id']) && (int)$sp['id'] !== $vig_id) {
+                    echo "     !! LOS DOS LECTORES NO COINCIDEN. Tu Meta y el wizard\n";
+                    echo "        estarian mirando planes distintos.\n";
+                }
+            }
+            echo "\n  (nada de esto escribio una sola fila)\n";
+        }
+        echo "\n";
+    }
     // ¿QUEDÓ ASENTADO EL HOTFIX DE SONDEO?   &test=sondeo
     //   Contesta de un tiro las cuatro preguntas del despliegue, sin gastar un
     //   centavo y sin generar nada: qué código corre de verdad, si la migración
