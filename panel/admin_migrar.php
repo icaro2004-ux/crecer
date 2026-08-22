@@ -54,6 +54,9 @@ $MIGRACIONES = [
     //  HOTFIX del replan: una solicitud, un plan. Sin ella el codigo cae al
     //  candado viejo (frena el doble clic, no el reenvio tardio).
     '2026-08-22_crecer_plan_solicitud.sql',     // idempotencia real del replan
+    //  Y el libro que cobra esa unicidad ANTES de llamar al modelo: sin el,
+    //  dos peticiones a la vez pagan dos veces aunque solo nazca un plan.
+    '2026-08-22_crecer_plan_solicitud_libro.sql', // la carrera, antes del gasto
 ];
 $DIR = dirname(__DIR__) . '/migrations/';
 $PRESENTES = array_values(array_filter($MIGRACIONES, fn($m) => is_file($DIR . $m)));
@@ -80,6 +83,8 @@ $CREA = [
                                             => [['usuarios', 'idioma_interfaz'],
                                                 ['crecer_marca', 'idioma_contenido']],
     '2026-08-22_crecer_plan_solicitud.sql'   => [['crecer_meta_plan', 'solicitud']],
+    '2026-08-22_crecer_plan_solicitud_libro.sql'
+                                            => [['crecer_plan_solicitud', null]],
     '2026-08-22_crecer_idioma_pieza.sql'    => [['crecer_contenido', 'idioma'],
                                                 ['crecer_carrusel', 'idioma']],
 ];

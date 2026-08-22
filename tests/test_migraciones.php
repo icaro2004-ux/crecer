@@ -245,6 +245,7 @@ $ESPERADAS = [
     '2026-08-22_crecer_idioma_preferencia.sql' => 2,   // un ALTER por tabla
     '2026-08-22_crecer_idioma_pieza.sql'       => 2,   // un ALTER por tabla
     '2026-08-22_crecer_plan_solicitud.sql'     => 1,   // un ALTER
+    '2026-08-22_crecer_plan_solicitud_libro.sql' => 1,  // un CREATE TABLE
 ];
 foreach ($DECLARADAS as $m) {
     $sent = migracion_sentencias((string)file_get_contents($DIR . $m));

@@ -163,7 +163,23 @@ function i18n_buscar(string $clave, array $dic): ?string {
  * (mensajes de error, correos, títulos calculados).
  * Sin traducción → devuelve el español tal cual. Nunca falla.
  */
-function t(string $es): string { return i18n_a(Locale::interfaz(), $es); }
+/**
+ * La traducción de una cadena de interfaz.
+ *
+ * Con datos en medio se escribe con %s y se pasan aparte:
+ *   t('Plan versión %s creado', $n)
+ * Nunca concatenando —«'Plan versión ' . $n . ' creado'»— porque eso son TRES
+ * pedazos y ninguno de los tres es una frase: el catálogo no puede traducir
+ * media oración, y el inglés casi nunca deja el dato en el mismo sitio.
+ */
+function t(string $es, ...$datos): string {
+    $tr = i18n_a(Locale::interfaz(), $es);
+    if (!$datos) return $tr;
+    //  Si la traducción no lleva tantos %s como datos, vsprintf lanza. Vale
+    //  más devolver la frase sin rellenar que tumbar la página por una
+    //  traducción mal escrita.
+    try { return vsprintf($tr, $datos); } catch (Throwable $e) { return $tr; }
+}
 
 /**
  * Igual, pero en el idioma de CONTENIDO de una marca — no en el del usuario.

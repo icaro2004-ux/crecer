@@ -14,4 +14,12 @@
 // ============================================================
 
 return [
+    // ── El replan (hotfix del 2026-08-22) ──
+    //  Son los DOS que lee el dueño. Los mensajes de las excepciones de
+    //  ese mismo camino NO estan aqui a proposito: van al log del
+    //  servidor, los lee quien depura, y traducirlos ensucia el rastro.
+    'Falta la tabla de planes en la base de datos. No toqué nada: tu plan de ahora sigue igual.'
+        => 'Falta la tabla de planes en la base de datos. No toqué nada: tu plan de ahora sigue igual.',
+    'No pude guardar el plan nuevo. Tu plan de ahora sigue en pie, tal como estaba — dale otra vez.'
+        => 'No pude guardar el plan nuevo. Tu plan de ahora sigue en pie, tal como estaba — dale otra vez.',
 ];

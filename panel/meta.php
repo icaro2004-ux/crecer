@@ -1669,16 +1669,20 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
     <section class="tm-hecho<?= $tm_ya !== null ? ' tm-hecho-ya' : '' ?>" role="status">
       <?= ico($tm_ya !== null ? 'copy' : 'check-circle') ?>
       <div>
+        <?php /*  Los datos van por %s y no concatenados: «'Plan versión ' . $n .
+                  ' creado'» son tres pedazos y ninguno es una frase. El
+                  catálogo no puede traducir media oración, y el inglés casi
+                  nunca deja el número en el mismo sitio.  */ ?>
         <b><?php if ($tm_ya !== null): ?>
-             Este plan ya estaba creado<?= $tm_ya > 0 ? ' — es la versión ' . (int)$tm_ya : '' ?>
+             <?= $h($tm_ya > 0 ? t('Este plan ya estaba creado — es la versión %s', (int)$tm_ya)
+                               : t('Este plan ya estaba creado')) ?>
            <?php else: ?>
-             <?= $tm_nuevo > 0 ? 'Plan versión ' . (int)$tm_nuevo . ' creado' : 'Plan nuevo creado' ?>
+             <?= $h($tm_nuevo > 0 ? t('Plan versión %s creado', (int)$tm_nuevo)
+                                  : t('Plan nuevo creado')) ?>
            <?php endif; ?></b>
-        <span><?php if ($tm_ya !== null): ?>
-                No se creó otro: tu petición ya se había atendido.
-              <?php else: ?>
-                El anterior queda guardado en el historial. Esto es lo que hay ahora.
-              <?php endif; ?></span>
+        <span><?= $h($tm_ya !== null
+                ? t('No se creó otro: tu petición ya se había atendido.')
+                : t('El anterior queda guardado en el historial. Esto es lo que hay ahora.')) ?></span>
       </div>
     </section>
   <?php endif; ?>

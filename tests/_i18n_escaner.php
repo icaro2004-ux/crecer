@@ -311,6 +311,20 @@ function esc_literales_php(string $fuente): array {
         $txt   = str_replace(["\\'", '\\"', '\\\\'], ["'", '"', '\\'], $txt);
         if (trim($txt) === '') continue;
 
+        //  ¿ES UN MENSAJE PARA EL LOG, NO PARA UNA PERSONA?
+        //  Lo que va a error_log() o dentro de una excepción lo lee quien
+        //  depura, en el servidor, y nunca sale a pantalla: traducirlo no
+        //  ayuda a nadie y encima ensucia el rastro cuando hay que leerlo.
+        //  Va aquí y no en una exclusión por archivo porque no es una
+        //  excepción de conveniencia: es que esas cadenas NO son interfaz.
+        $ant = '';
+        for ($j = max(0, $k - 8); $j < $k; $j++) {
+            $ant .= is_array($tokens[$j]) ? $tokens[$j][1] : $tokens[$j];
+        }
+        if (preg_match('/(?:error_log|trigger_error|new\s+\w*(?:Exception|Error)|assert)\s*\(\s*$/i', $ant)) {
+            continue;
+        }
+
         //  ¿Es el primer argumento de una función traductora?
         //  Se mira hacia atrás saltando espacios: ... T_STRING '(' AQUÍ
         $via = 'ninguna';

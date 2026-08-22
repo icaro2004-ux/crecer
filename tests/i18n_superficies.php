@@ -166,16 +166,32 @@ function i18n_rel(string $abs, string $raiz): string {
 //  Bajarlo es un cambio deliberado y se ve en el diff, que es justo lo que
 //  tiene que pasar cuando se gana terreno. Subirlo, también — y ahí hay que
 //  explicar por qué se añadió texto a mano en vez de migrar la pantalla.
-//  SUBIR UN TOPE ES UNA DECISION, Y ASI QUEDA ESCRITA.
-//  2026-08-22 · +5 en `panel` y +5 en `dominio`, del hotfix del replan: el
-//  aviso «Plan versión N creado» en meta.php y los mensajes de error del
-//  camino atomico en meta_negocio.php. La regla dice «migra esas pantallas, no
-//  subas el numero», y aqui no se pudo: la familia `panel` son 2.500 cadenas y
-//  la fase de idiomas estaba en pausa por este mismo defecto. Se sube a
-//  proposito, con nombre y fecha, y esas diez cadenas entran en el trabajo de
-//  L-4 como cualquier otra.
+//  ─────────────────────────────────────────────────────────────
+//  2026-08-22 · el hotfix del replan pasó por aquí, y conviene que quede
+//  escrito CÓMO, porque el primer intento fue el equivocado.
+//
+//  El hotfix estrenó diez cadenas a mano y la primera reacción fue subir el
+//  tope de 2532 a 2537. Eso es exactamente lo que esta regla existe para
+//  impedir: convertir el límite en la solución. Subirlo no arregla nada, solo
+//  deja de mirar.
+//
+//  Lo que se hizo en su lugar, y por eso los números BAJAN:
+//
+//   · Las 8 cadenas que lee el dueño —el aviso «Plan versión N creado» y los
+//     dos errores del camino atómico— se incorporaron al catálogo. Los datos
+//     van por %s: «'Plan versión ' . $n . ' creado'» son tres pedazos y
+//     ninguno es una frase que se pueda traducir.
+//
+//   · Las 2 restantes eran mensajes de excepción. Esas NO son interfaz: van al
+//     log del servidor y las lee quien depura. El escáner ahora lo sabe
+//     (ver la guardia de error_log/Exception en _i18n_escaner.php), y al
+//     saberlo dejó de contar otras ~65 iguales por todo el repo — de ahí que
+//     `dominio` caiga de 1691 a 1630.
+//
+//  Cifras: panel 2532→2530 · publico 321→320 · dominio 1691→1630.
+//  ─────────────────────────────────────────────────────────────
 const I18N_TOPES = [
-    'panel'   => 2537,
-    'publico' =>  321,
-    'dominio' => 1696,
+    'panel'   => 2530,
+    'publico' =>  320,
+    'dominio' => 1630,
 ];

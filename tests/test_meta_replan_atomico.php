@@ -18,11 +18,15 @@
 //       son UNA operacion. O entra todo, o no entra nada y el anterior sigue
 //       vivo. Nunca dos activos, nunca cero, nunca ok:true sin haber escrito.
 //
-//    2. IDEMPOTENCIA DE VERDAD. El candado que habia comparaba contra el plan
-//       vigente: frena el doble clic y nada mas. En cuanto el wizard se vuelve
-//       a pintar, el id que manda ya es el nuevo, cuadra, y nace otra version.
-//       Un minuto le basta. Ahora el wizard acuña una SOLICITUD al pintarse y
-//       la clave unica de la base arbitra: una solicitud, un plan.
+//    2. IDEMPOTENCIA DE VERDAD, Y ANTES DE GASTAR. El candado que habia
+//       comparaba contra el plan vigente: frena el doble clic y nada mas. En
+//       cuanto el wizard se vuelve a pintar, el id que manda ya es el nuevo,
+//       cuadra, y nace otra version. Un minuto le basta.
+//       Ahora el wizard acuña una SOLICITUD al pintarse. Y la unicidad se
+//       cobra en un LIBRO DE RECLAMACIONES, antes de llamar al modelo: la
+//       clave unica del plan impide que nazcan dos planes, pero se juega al
+//       INSERTAR, o sea despues de pagar. Dos peticiones a la vez preguntaban
+//       las dos, oian que no existia las dos, y LLAMABAN LAS DOS.
 //
 //    3. CLARIDAD. Al volver se dice «Plan version 6 creado», con su numero. Y
 //       si el envio era una repeticion, se dice eso y no otra cosa.
@@ -70,7 +74,7 @@ function pinta(array $ps): string {
 /** Una solicitud, como la acuña el wizard. */
 function sol(): string { return bin2hex(random_bytes(16)); }
 
-echo "\nEL REPLAN NO PUEDE MENTIR · siete escenarios\n" . str_repeat('=', 62) . "\n";
+echo "\nEL REPLAN NO PUEDE MENTIR · el contrato entero\n" . str_repeat('=', 62) . "\n";
 
 $hay_sol = meta_plan_col_solicitud($pdo);
 echo "\n  columna `solicitud`: " . ($hay_sol ? 'puesta' : 'NO puesta (migracion pendiente)') . "\n";
@@ -157,9 +161,12 @@ if ($cop1 === null) {
         meta_plan_olvidar_esquema();
         //  Se aplica el archivo de verdad, con el separador de verdad.
         require_once dirname(__DIR__) . '/includes/migrador.php';
-        $sql = (string)file_get_contents(dirname(__DIR__) . '/migrations/2026-08-22_crecer_plan_solicitud.sql');
-        foreach (migracion_sentencias($sql) as $st) {
-            try { $cop1->ejecutar($st); } catch (Throwable $e) { /* 1060: ya estaba */ }
+        foreach (['2026-08-22_crecer_plan_solicitud.sql',
+                  '2026-08-22_crecer_plan_solicitud_libro.sql'] as $mig) {
+            $sql = (string)file_get_contents(dirname(__DIR__) . '/migrations/' . $mig);
+            foreach (migracion_sentencias($sql) as $st) {
+                try { $cop1->ejecutar($st); } catch (Throwable $e) { /* 1060: ya estaba */ }
+            }
         }
         meta_plan_olvidar_esquema();
         ok('la migracion deja puesta la columna', meta_plan_col_solicitud($ipdo),
@@ -219,6 +226,135 @@ if ($cop1 === null) {
            (int)activos($ipdo, $mi)[0]['id'] === (int)$r4['plan_id'],
            'si no, Tu Meta enseñaria un plan distinto del que se acaba de crear');
 
+        // ── 4b · LA CARRERA, CON DOS PROCESOS DE VERDAD ───────
+        //  LO QUE ESTO PRUEBA Y NO PROBABA NADA HASTA AHORA: la clave unica de
+        //  crecer_meta_plan.solicitud garantiza que no nazcan dos planes, pero
+        //  se cobra al INSERTAR — o sea, DESPUES de llamar al modelo. Dos
+        //  peticiones a la vez preguntaban las dos, oian que no existia las
+        //  dos, LLAMABAN LAS DOS, y chocaban al final. La base arbitraba el
+        //  plan y no arbitraba el gasto: dos facturas por una intencion.
+        //
+        //  Se hace con dos PROCESOS. Dos llamadas seguidas en el mismo proceso
+        //  comparten conexion, comparten los `static` del esquema y comparten
+        //  el orden: no hay carrera que medir. Y salen a la vez por una
+        //  barrera de reloj, o el primero termina antes de que el segundo
+        //  empiece.
+        echo "\n  — 4b · dos procesos a la vez: UNA sola llamada al modelo —\n";
+        ok('el libro de reclamaciones esta puesto', meta_hay_libro_solicitud($ipdo),
+           'sin el, la carrera se arbitra despues de pagar');
+
+        $fc = Fixture::crear($ipdo, 'replan-carrera');
+        $mc = (int)$fc['meta_id']; $cc = (int)$fc['marca_id'];
+        //  Se parte de cero para poder CONTAR las llamadas de esta carrera.
+        $ipdo->prepare("DELETE FROM crecer_ia_log WHERE marca_id=?")->execute([$cc]);
+        $planes_antes = count(planes($ipdo, $mc));
+        $sc = sol();
+
+        $arranque = microtime(true) + 1.2;    // margen para que arranque PHP
+        $procs = []; $tubos = [];
+        for ($i = 0; $i < 2; $i++) {
+            $cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/_replan_runner.php')
+                 . ' ' . escapeshellarg($cop1->nombre()) . ' ' . $cc . ' ' . $mc
+                 . ' ' . escapeshellarg($sc) . ' ' . sprintf('%.4f', $arranque);
+            $p = proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $t);
+            if (is_resource($p)) { $procs[] = $p; $tubos[] = $t; }
+        }
+        ok('arrancaron los dos procesos', count($procs) === 2, count($procs) . ' de 2');
+
+        $salidas = [];
+        foreach ($procs as $k => $p) {
+            $salidas[] = trim((string)stream_get_contents($tubos[$k][1]));
+            fclose($tubos[$k][1]); fclose($tubos[$k][2]);
+            proc_close($p);
+        }
+        $res = array_map(fn($s) => json_decode(trim(explode("\n", trim($s))[count(explode("\n", trim($s))) - 1]), true) ?: [], $salidas);
+        foreach ($res as $k => $x) {
+            printf("         proceso %d: ok=%s repetido=%s en_curso=%s plan=%s v=%s\n",
+                   $k + 1, json_encode($x['ok'] ?? null), json_encode($x['repetido'] ?? null),
+                   json_encode($x['en_curso'] ?? null), (string)($x['plan_id'] ?? '-'),
+                   (string)($x['version'] ?? '-'));
+        }
+
+        //  LA AFIRMACION QUE IMPORTA: una sola llamada al modelo.
+        $llamadas = (int)$ipdo->query("SELECT COUNT(*) FROM crecer_ia_log
+                                        WHERE marca_id={$cc} AND agente='estratega'")->fetchColumn();
+        ok('UNA sola llamada a la Estratega', $llamadas === 1,
+           "{$llamadas} llamadas · cada una es una factura y una entrada de "
+         . 'evidencia diciendo que el corillo penso dos veces lo mismo');
+
+        ok('y UN solo plan nuevo', count(planes($ipdo, $mc)) === $planes_antes + 1,
+           count(planes($ipdo, $mc)) . ' planes, habia ' . $planes_antes);
+        ok('con un solo activo', count(activos($ipdo, $mc)) === 1, pinta(planes($ipdo, $mc)));
+
+        $ganadores = array_values(array_filter($res, fn($x) => !empty($x['ok']) && empty($x['repetido'])));
+        $perdedores = array_values(array_filter($res, fn($x) => !empty($x['repetido'])));
+        ok('uno gano y creo el plan', count($ganadores) === 1,
+           count($ganadores) . ' se creyeron ganadores');
+        ok('y el otro contesto repetido o en curso', count($perdedores) === 1,
+           count($perdedores) . ' · el perdedor no puede recibir un error: '
+         . 'no fallo nada, es que su peticion ya estaba atendida');
+        ok('ninguno de los dos recibio un error', count(array_filter($res, fn($x) => empty($x['ok']))) === 0,
+           json_encode(array_column($res, 'err')));
+
+        //  Y la reclamacion queda cerrada, no colgada: si se quedara en
+        //  'reclamada', esa intencion no se podria reintentar en tres minutos.
+        $fila = meta_solicitud_leer($ipdo, $cc, $sc);
+        ok('la reclamacion quedo «hecha»', ($fila['estado'] ?? '') === 'hecha',
+           'estado=' . (string)($fila['estado'] ?? 'null'));
+        ok('apuntando al plan que se creo',
+           (int)($fila['plan_id'] ?? 0) === (int)($ganadores[0]['plan_id'] ?? -1),
+           'plan_id=' . (int)($fila['plan_id'] ?? 0));
+
+        // ── 4c · RECUPERAR UNA RECLAMACION HUERFANA ───────────
+        //  Si el ganador muere entre reclamar y terminar, la fila se queda en
+        //  'reclamada' para siempre y esa intencion no se podria reintentar
+        //  NUNCA. Se simula envejeciendo la fila, que es lo mismo que pasa
+        //  cuando el proceso no vuelve.
+        echo "\n  — 4c · una reclamacion huerfana se puede rescatar —\n";
+        $sh = sol();
+        $ipdo->prepare("INSERT INTO crecer_plan_solicitud (solicitud, marca_id, meta_id, estado)
+                        VALUES (?,?,?, 'reclamada')")->execute([$sh, $cc, $mc]);
+        $r_viva = meta_solicitud_reclamar($ipdo, $cc, $mc, $sh);
+        ok('recien reclamada, nadie mas se la queda', $r_viva['gane'] === false,
+           'si se la quedara, dos procesos normales llamarian los dos al modelo');
+        ok('y se sabe que esta en curso', ($r_viva['fila']['estado'] ?? '') === 'reclamada');
+
+        $ipdo->prepare("UPDATE crecer_plan_solicitud
+                           SET updated_at = DATE_SUB(NOW(), INTERVAL ? SECOND)
+                         WHERE solicitud=?")->execute([META_SOL_HUERFANA_SEG + 60, $sh]);
+        $r_huerf = meta_solicitud_reclamar($ipdo, $cc, $mc, $sh);
+        ok('pasada la espera, SI se rescata', $r_huerf['gane'] === true,
+           'sin rescate, un proceso muerto deja esa intencion bloqueada para siempre');
+        $fh = meta_solicitud_leer($ipdo, $cc, $sh);
+        ok('y queda constancia del reintento', (int)($fh['intentos'] ?? 0) === 2,
+           'intentos=' . (int)($fh['intentos'] ?? 0));
+
+        // ── 4d · TRAS UN FALLO SE REINTENTA YA, SIN ESPERAR ───
+        echo "\n  — 4d · tras un fallo se reintenta sin esperar —\n";
+        $sf = sol();
+        $ipdo->prepare("INSERT INTO crecer_plan_solicitud (solicitud, marca_id, meta_id, estado, error)
+                        VALUES (?,?,?, 'fallida', 'de mentira')")->execute([$sf, $cc, $mc]);
+        $r_fall = meta_solicitud_reclamar($ipdo, $cc, $mc, $sf);
+        ok('una fallida se reclama al momento', $r_fall['gane'] === true,
+           'la escritura se deshizo entera: no hay nada que duplicar, y obligar '
+         . 'a esperar tres minutos se lee como una caida');
+        $ff = meta_solicitud_leer($ipdo, $cc, $sf);
+        ok('y se limpia el error del intento anterior', ($ff['error'] ?? null) === null);
+
+        //  Y el camino completo: un replan que falla deja la solicitud FALLIDA,
+        //  no colgada. Se rompe el INSERT del plan para provocarlo.
+        $sg = sol();
+        $cop1->ejecutar("ALTER TABLE crecer_meta_plan CHANGE veredicto veredicto_zz VARCHAR(24) NULL");
+        $r_ko = meta_plan_generar($ipdo, $cc, $mc, 'va a fallar', $sg);
+        $cop1->ejecutar("ALTER TABLE crecer_meta_plan CHANGE veredicto_zz veredicto VARCHAR(24) NULL");
+        ok('un replan que falla devuelve ok:false', empty($r_ko['ok']));
+        $fg = meta_solicitud_leer($ipdo, $cc, $sg);
+        ok('y deja la solicitud FALLIDA, no colgada', ($fg['estado'] ?? '') === 'fallida',
+           'estado=' . (string)($fg['estado'] ?? 'null')
+         . ' · colgada obligaria a esperar el margen de huerfana para reintentar');
+        ok('con el motivo apuntado', !empty($fg['error']), (string)($fg['error'] ?? ''));
+
+        Fixture::limpiar($ipdo, $cc);
         Fixture::limpiar($ipdo, $ci);
     } finally {
         $cop1->soltar($pdo);

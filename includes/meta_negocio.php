@@ -444,13 +444,39 @@ function meta_plan_generar(PDO $pdo, int $marca_id, int $meta_id, string $motivo
     //  2026-08-22 con las versiones 5 y 6.
     // ══════════════════════════════════════════════════════════════════════
     $sol = trim($solicitud);
+    $devolver_ya = function (array $ya): array {
+        return ['ok' => true, 'repetido' => true, 'plan_id' => (int)$ya['id'],
+                'version' => (int)$ya['version'], 'diagnostico' => (string)$ya['diagnostico'],
+                'veredicto' => (string)$ya['veredicto'], 'tacticas' => []];
+    };
+
     if ($sol !== '') {
+        //  Lo barato primero: si el plan ya existe, ni siquiera hace falta
+        //  tocar el libro.
         $ya = meta_plan_por_solicitud($pdo, $marca_id, $sol);
-        if ($ya) {
-            return ['ok' => true, 'repetido' => true, 'plan_id' => (int)$ya['id'],
-                    'version' => (int)$ya['version'], 'diagnostico' => (string)$ya['diagnostico'],
-                    'veredicto' => (string)$ya['veredicto'], 'tacticas' => []];
+        if ($ya) return $devolver_ya($ya);
+
+        //  ── LA CARRERA SE GANA AQUI, ANTES DE LA RED ──────────────────
+        //  Preguntar «¿existe ya el plan?» no basta contra dos peticiones a la
+        //  vez: las dos preguntan, las dos oyen que no, LAS DOS LLAMAN AL
+        //  MODELO, y solo chocan al insertar. La clave unica arbitraba el plan
+        //  y no arbitraba el gasto.
+        $rec = meta_solicitud_reclamar($pdo, $marca_id, $meta_id, $sol);
+        if (!$rec['gane'] && $rec['fila'] !== null) {
+            $f = $rec['fila'];
+            if (($f['estado'] ?? '') === 'hecha' && !empty($f['plan_id'])) {
+                $ya = meta_plan_por_id($pdo, (int)$f['plan_id'], $marca_id);
+                if ($ya) return $devolver_ya($ya);
+            }
+            //  Otro la esta trabajando AHORA. No se llama al modelo y no se
+            //  miente: no hay plan todavia, pero tampoco hay error.
+            return ['ok' => true, 'repetido' => true, 'en_curso' => true,
+                    'plan_id' => (int)($f['plan_id'] ?? 0), 'version' => 0,
+                    'diagnostico' => '', 'veredicto' => '', 'tacticas' => []];
         }
+        //  Sin libro (migracion pendiente) se sigue de largo: la columna unica
+        //  del plan seguira impidiendo que nazcan dos, aunque se pague dos
+        //  veces. Peor que esto, igual que ayer.
     }
 
     $m   = leer_marca($pdo, $marca_id);
@@ -653,8 +679,8 @@ EL DUEÑO PIDE UN PLAN NUEVO. Lo que dice del anterior: \""
     if (!meta_hay_tabla_plan($pdo)) {
         return ['ok' => false, 'diagnostico' => $diagnostico, 'veredicto' => $veredicto,
                 'tacticas' => [], 'plan_id' => null,
-                'err' => 'Falta la tabla de planes en la base de datos. No toco nada: '
-                       . 'tu plan de ahora sigue igual.'];
+                'err' => t('Falta la tabla de planes en la base de datos. '
+                         . 'No toqué nada: tu plan de ahora sigue igual.')];
     }
 
     $plan_id = null;
@@ -698,9 +724,21 @@ EL DUEÑO PIDE UN PLAN NUEVO. Lo que dice del anterior: \""
         if (!$guardadas) throw new RuntimeException('el plan salio sin ninguna jugada usable');
 
         if ($propia) $pdo->commit();
+
+        //  LA RECLAMACION SE CIERRA FUERA DE LA TRANSACCION, y despues del
+        //  commit. Marcarla dentro haria que un rollback se llevara la marca
+        //  por delante y la dejara colgada como huerfana tres minutos, sin
+        //  motivo. Aqui ya no hay nada que deshacer.
+        if ($sol !== '') meta_solicitud_cerrar($pdo, $marca_id, $sol, 'hecha', $plan_id);
     } catch (Throwable $e) {
         if ($propia && $pdo->inTransaction()) $pdo->rollBack();
         error_log('meta_plan_generar: ' . $e->getMessage());
+
+        //  FALLIDA, no colgada. La escritura se deshizo entera, asi que no hay
+        //  nada que duplicar: quien reintente puede quedarsela YA, sin esperar
+        //  al margen de huerfana. Un fallo que obliga a esperar tres minutos
+        //  para reintentar es un fallo que se lee como una caida.
+        if ($sol !== '') meta_solicitud_cerrar($pdo, $marca_id, $sol, 'fallida', null, $e->getMessage());
 
         //  UNA SOLICITUD QUE CHOCA CON LA CLAVE UNICA NO ES UN FALLO: es el
         //  mismo envio llegando dos veces. Se devuelve el plan que ya existe.
@@ -717,8 +755,8 @@ EL DUEÑO PIDE UN PLAN NUEVO. Lo que dice del anterior: \""
 
         return ['ok' => false, 'diagnostico' => '', 'veredicto' => '', 'tacticas' => [],
                 'plan_id' => null,
-                'err' => 'No pude guardar el plan nuevo. Tu plan de ahora sigue en pie, '
-                       . 'tal como estaba — dale otra vez.'];
+                'err' => t('No pude guardar el plan nuevo. Tu plan de ahora sigue en pie, '
+                         . 'tal como estaba — dale otra vez.')];
     }
 
     return ['ok' => true, 'repetido' => false, 'diagnostico' => $diagnostico, 'veredicto' => $veredicto,
@@ -938,6 +976,137 @@ function meta_plan_olvidar_esquema(): void {
     $vacio = new PDO('sqlite::memory:');
     meta_hay_tabla_plan($vacio, true);
     meta_plan_col_solicitud($vacio, true);
+    meta_hay_libro_solicitud($vacio, true);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  EL LIBRO DE RECLAMACIONES — LA UNICIDAD SE COBRA ANTES DE GASTAR
+//
+//  La clave única de `crecer_meta_plan.solicitud` impide que nazcan dos planes
+//  de la misma intención, y eso es cierto. Pero llega TARDE PARA EL DINERO:
+//  dos peticiones simultáneas preguntan las dos, no la encuentran ninguna,
+//  LLAMAN LAS DOS a la Estratega, y solo chocan al insertar. La base arbitra
+//  el plan y no arbitra el gasto — dos facturas por una intención, y dos
+//  entradas en crecer_ia_log diciendo que el corillo pensó dos veces lo mismo.
+//
+//  Esto lo cierra: el INSERT de la reclamación se juega ANTES de la red.
+// ══════════════════════════════════════════════════════════════
+
+/** Cuánto puede llevar colgada una reclamación antes de darla por huérfana. */
+if (!defined('META_SOL_HUERFANA_SEG')) define('META_SOL_HUERFANA_SEG', 180);
+
+/** ¿Está el libro? Sin él se cae a la columna del plan: no roto, peor. */
+function meta_hay_libro_solicitud(PDO $pdo, bool $olvidar = false): bool {
+    static $hay = null;
+    if ($olvidar) { $hay = null; return false; }
+    if ($hay !== null) return $hay;
+    try {
+        $q = $pdo->query("SELECT COUNT(*) FROM information_schema.TABLES
+                           WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='crecer_plan_solicitud'");
+        return $hay = ((int)$q->fetchColumn() > 0);
+    } catch (Throwable $e) { return $hay = false; }
+}
+
+/**
+ * Intenta quedarse con una solicitud. Devuelve qué le tocó:
+ *
+ *   ['gane' => true]                    → llama al modelo. Es el ganador.
+ *   ['gane' => false, 'fila' => [...]]  → otro la tiene o ya la terminó.
+ *   ['gane' => false, 'fila' => null]   → sin libro: que decida quien llame.
+ *
+ * TRES CAMINOS PARA GANAR, y los tres son un compare-and-swap contra la base,
+ * nunca un «leo y luego escribo» —que deja la ventana por la que se colarían
+ * los dos—:
+ *
+ *   1. El INSERT. Gana quien lo mete primero; el otro choca con 1062.
+ *   2. Reclamar una FALLIDA. Un intento anterior se deshizo entero, así que
+ *      volver a intentarlo es legítimo y no duplica nada.
+ *   3. Rescatar una HUÉRFANA. Si el ganador murió entre reclamar y terminar,
+ *      la fila se quedaría en 'reclamada' para siempre y esa intención no se
+ *      podría reintentar nunca.
+ *
+ *  NO ABRE NINGUNA TRANSACCIÓN. Sería la solución fácil y es la peor:
+ *  mantenerla abierta los segundos que tarda un modelo bloquea filas y
+ *  convierte cualquier lentitud del proveedor en una caída del panel.
+ */
+function meta_solicitud_reclamar(PDO $pdo, int $marca_id, int $meta_id, string $solicitud): array {
+    if (!meta_hay_libro_solicitud($pdo) || $solicitud === '') {
+        return ['gane' => false, 'fila' => null];
+    }
+    //  1 · El INSERT desnudo. Es la carrera, y la arbitra la clave única.
+    try {
+        $pdo->prepare("INSERT INTO crecer_plan_solicitud (solicitud, marca_id, meta_id, estado)
+                       VALUES (?,?,?, 'reclamada')")
+            ->execute([$solicitud, $marca_id, $meta_id]);
+        return ['gane' => true, 'fila' => null];
+    } catch (Throwable $e) {
+        //  1062 = ya estaba. Cualquier otro error es de verdad y no se disimula.
+        if (strpos((string)$e->getCode(), '23') !== 0) {
+            error_log('meta_solicitud_reclamar: ' . $e->getMessage());
+            return ['gane' => false, 'fila' => null];
+        }
+    }
+
+    $fila = meta_solicitud_leer($pdo, $marca_id, $solicitud);
+    if (!$fila) return ['gane' => false, 'fila' => null];
+
+    //  2 · Una fallida se puede volver a intentar. Gana quien mueva la fila.
+    if ($fila['estado'] === 'fallida') {
+        $u = $pdo->prepare("UPDATE crecer_plan_solicitud
+                               SET estado='reclamada', intentos=intentos+1, error=NULL, updated_at=NOW()
+                             WHERE solicitud=? AND marca_id=? AND estado='fallida'");
+        $u->execute([$solicitud, $marca_id]);
+        if ($u->rowCount() === 1) return ['gane' => true, 'fila' => $fila];
+        return ['gane' => false, 'fila' => meta_solicitud_leer($pdo, $marca_id, $solicitud)];
+    }
+
+    //  3 · Huérfana: lleva colgada más de lo que puede tardar nadie.
+    //      AQUÍ EL RELOJ SÍ ES LA HERRAMIENTA CORRECTA, al revés que en la
+    //      idempotencia. Allí era una mala aproximación de «la misma
+    //      intención»; aquí la pregunta ES temporal: ¿sigue vivo quien la
+    //      reclamó? No hay forma de saberlo sin mirar cuánto lleva.
+    if ($fila['estado'] === 'reclamada') {
+        $u = $pdo->prepare("UPDATE crecer_plan_solicitud
+                               SET intentos=intentos+1, updated_at=NOW()
+                             WHERE solicitud=? AND marca_id=? AND estado='reclamada'
+                               AND updated_at < DATE_SUB(NOW(), INTERVAL ? SECOND)");
+        $u->execute([$solicitud, $marca_id, META_SOL_HUERFANA_SEG]);
+        if ($u->rowCount() === 1) return ['gane' => true, 'fila' => $fila];
+    }
+
+    return ['gane' => false, 'fila' => $fila];
+}
+
+function meta_solicitud_leer(PDO $pdo, int $marca_id, string $solicitud): ?array {
+    if (!meta_hay_libro_solicitud($pdo) || $solicitud === '') return null;
+    try {
+        $q = $pdo->prepare("SELECT * FROM crecer_plan_solicitud WHERE solicitud=? AND marca_id=? LIMIT 1");
+        $q->execute([$solicitud, $marca_id]);
+        return $q->fetch(PDO::FETCH_ASSOC) ?: null;
+    } catch (Throwable $e) { return null; }
+}
+
+/**
+ * Cierra la reclamación. `hecha` con el plan que salió, o `fallida` con el
+ * motivo — y fallida es lo que permite reintentar sin esperar al margen de
+ * huérfana: una escritura que se deshizo entera no deja nada que duplicar.
+ *
+ * Se llama SIEMPRE fuera de la transacción del plan. Si se marcara dentro, un
+ * rollback se llevaría la marca por delante y la reclamación quedaría colgada
+ * como huérfana durante tres minutos, sin motivo.
+ */
+function meta_solicitud_cerrar(PDO $pdo, int $marca_id, string $solicitud,
+                               string $estado, ?int $plan_id = null, string $error = ''): bool {
+    if (!meta_hay_libro_solicitud($pdo) || $solicitud === '') return false;
+    if (!in_array($estado, ['hecha', 'fallida'], true)) return false;
+    try {
+        $u = $pdo->prepare("UPDATE crecer_plan_solicitud
+                               SET estado=?, plan_id=?, error=?, updated_at=NOW()
+                             WHERE solicitud=? AND marca_id=?");
+        $u->execute([$estado, $plan_id, ($error !== '' ? mb_substr($error, 0, 190) : null),
+                     $solicitud, $marca_id]);
+        return $u->rowCount() > 0;
+    } catch (Throwable $e) { return false; }
 }
 
 /**

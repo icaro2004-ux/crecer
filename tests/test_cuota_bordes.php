@@ -306,6 +306,7 @@ try {
         //  Hotfix del replan · una solicitud, un plan. Sin ella el codigo cae
         //  al candado viejo, que frena el doble clic y no el reenvio tardio.
         '2026-08-22_crecer_plan_solicitud.sql',
+        '2026-08-22_crecer_plan_solicitud_libro.sql',
     ];
     ok('declara exactamente las pendientes que hay', $decl === $esperadas,
        'declaradas: ' . implode(' · ', $decl));

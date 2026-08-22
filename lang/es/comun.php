@@ -29,4 +29,13 @@ return [
     '¡Entendido!'               => '¡Entendido!',
     'No mostrar de nuevo'       => 'No mostrar de nuevo',
     'Escoge un archivo'         => 'Escoge un archivo',
+    // ── El plan nuevo, confirmado (hotfix del replan · 2026-08-22) ──
+    //  Los datos van por %s. «Plan versión » . $n . « creado» serian tres
+    //  pedazos y ninguno es una frase traducible.
+    'Plan versión %s creado'                                                => 'Plan versión %s creado',
+    'Plan nuevo creado'                                                      => 'Plan nuevo creado',
+    'Este plan ya estaba creado'                                             => 'Este plan ya estaba creado',
+    'Este plan ya estaba creado — es la versión %s'                       => 'Este plan ya estaba creado — es la versión %s',
+    'No se creó otro: tu petición ya se había atendido.'                  => 'No se creó otro: tu petición ya se había atendido.',
+    'El anterior queda guardado en el historial. Esto es lo que hay ahora.'  => 'El anterior queda guardado en el historial. Esto es lo que hay ahora.',
 ];
