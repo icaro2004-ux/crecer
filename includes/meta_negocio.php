@@ -418,12 +418,40 @@ function meta_crear(PDO $pdo, int $marca_id, array $d): int {
  * con el resto de la llamada. Asi el plan nuevo responde a la queja concreta
  * en vez de ser otra tirada de dados.
  */
-function meta_plan_generar(PDO $pdo, int $marca_id, int $meta_id, string $motivo = ''): array {
+function meta_plan_generar(PDO $pdo, int $marca_id, int $meta_id, string $motivo = '',
+                           string $solicitud = ''): array {
     require_once __DIR__ . '/agentes.php';
     require_once __DIR__ . '/ia.php';
 
     $meta = meta_por_id($pdo, $meta_id, $marca_id);
     if (!$meta) return ['ok' => false, 'err' => 'No encuentro esa meta.', 'diagnostico' => '', 'veredicto' => '', 'tacticas' => []];
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  UNA SOLICITUD, UN PLAN — Y SE PREGUNTA ANTES DE PAGAR
+    //
+    //  $solicitud es la INTENCION del dueño, acuñada cuando se pinta el wizard.
+    //  Si ya hay un plan con esa intencion, este envio es el mismo llegando
+    //  otra vez: doble clic, el boton de reintentar, una respuesta que se
+    //  perdio por el camino, o el dueño refrescando porque no vio confirmacion.
+    //  Se devuelve el plan que ya existe.
+    //
+    //  ESTO VA ANTES DE LLAMAR A LA ESTRATEGA, y por eso esta aqui arriba y no
+    //  abajo con el resto de la escritura: un reenvio no puede costar otra
+    //  llamada al modelo. El candado que habia —comparar contra el plan
+    //  vigente— solo frenaba el doble clic; en cuanto el wizard se volvia a
+    //  pintar, el id mandado ya era el nuevo, cuadraba, y nacia otra version.
+    //  Un minuto de diferencia le bastaba: es lo que paso en produccion el
+    //  2026-08-22 con las versiones 5 y 6.
+    // ══════════════════════════════════════════════════════════════════════
+    $sol = trim($solicitud);
+    if ($sol !== '') {
+        $ya = meta_plan_por_solicitud($pdo, $marca_id, $sol);
+        if ($ya) {
+            return ['ok' => true, 'repetido' => true, 'plan_id' => (int)$ya['id'],
+                    'version' => (int)$ya['version'], 'diagnostico' => (string)$ya['diagnostico'],
+                    'veredicto' => (string)$ya['veredicto'], 'tacticas' => []];
+        }
+    }
 
     $m   = leer_marca($pdo, $marca_id);
     $ctx = cerebro_negocio($pdo, $marca_id, $m);
@@ -592,28 +620,124 @@ EL DUEÑO PIDE UN PLAN NUEVO. Lo que dice del anterior: \""
     $pdo->prepare("UPDATE crecer_meta SET diagnostico=?, veredicto=?, ia_log_id=?, updated_at=NOW() WHERE id=? AND marca_id=?")
         ->execute([$diagnostico, $veredicto, $r['ia_log_id'] ?? null, $meta_id, $marca_id]);
 
-    // ── EL PLAN NUEVO ES UNA ENTIDAD, NO UN REEMPLAZO ──
-    //  Antes se borraban las tácticas pendientes y el plan anterior se evaporaba:
-    //  imposible saber después si sirvió. Ahora el anterior se CIERRA (y se mide
-    //  al vuelo con lo que dejó) y nace una versión nueva. Historial completo:
-    //  una semana puede tener 1 plan o 4, cada uno con su récord.
-    $plan_id = null;
-    try {
-        $ant = meta_plan_activo($pdo, $meta_id);
-        if ($ant) meta_plan_cerrar($pdo, (int)$ant['id'], 'reemplazado');
-        $ver = (int)$pdo->query("SELECT COALESCE(MAX(version),0)+1 FROM crecer_meta_plan WHERE meta_id={$meta_id}")->fetchColumn();
-        $pdo->prepare("INSERT INTO crecer_meta_plan (meta_id, marca_id, version, diagnostico, veredicto, estado, ia_log_id)
-                       VALUES (?,?,?,?,?, 'activo', ?)")
-            ->execute([$meta_id, $marca_id, $ver, $diagnostico, $veredicto, $r['ia_log_id'] ?? null]);
-        $plan_id = (int)$pdo->lastInsertId();
-    } catch (Throwable $e) {
-        // Sin la migración del plan, el comportamiento cae al de antes (sin
-        // historial): las tácticas viejas pendientes se retiran para no mezclar.
-        error_log('meta_plan_generar (sin tabla de planes): ' . $e->getMessage());
-        try { $pdo->prepare("DELETE FROM crecer_meta_tactica WHERE meta_id=? AND estado='pendiente'")->execute([$meta_id]); }
-        catch (Throwable $e2) {}
+    // ══════════════════════════════════════════════════════════════════════
+    //  LA ESCRITURA, DE UNA PIEZA
+    //
+    //  Cerrar el plan anterior, crear el nuevo y guardar sus jugadas son UNA
+    //  operacion. Antes eran tres sueltas dentro de un mismo try, y de ahi
+    //  salian las dos averias que se reprodujeron el 2026-08-22:
+    //
+    //    · si el cierre fallaba, el INSERT entraba igual y quedaban DOS planes
+    //      activos —porque nadie miraba lo que devolvia meta_plan_cerrar()—;
+    //    · si el INSERT fallaba, el anterior ya estaba cerrado y la meta se
+    //      quedaba SIN NINGUN plan vivo.
+    //
+    //  Y en los dos casos esta funcion devolvia ok:true. El wizard, que solo
+    //  mira j.ok, volvia a Tu Meta como si hubiera funcionado.
+    //
+    //  Ahora solo hay dos finales posibles: o entra todo, o no entra nada y el
+    //  plan anterior sigue vivo. No hay tercero.
+    //
+    //  LA LLAMADA AL MODELO YA OCURRIO, ARRIBA Y FUERA DE LA TRANSACCION. Es
+    //  deliberado por dos motivos: tenerla dentro mantendria abierta una
+    //  transaccion durante los segundos que tarda el modelo, y su registro en
+    //  crecer_ia_log —que es la evidencia del criterio #2 del concurso— tiene
+    //  que sobrevivir aunque la escritura se deshaga. Se gasto, y consta.
+    // ══════════════════════════════════════════════════════════════════════
+
+    //  SIN LA TABLA DE PLANES NO SE ESCRIBE NADA.
+    //  Antes esto caia a un camino que BORRABA las jugadas pendientes del
+    //  dueño, guardaba las nuevas sin plan y devolvia ok. Una operacion que
+    //  falla no puede destruir trabajo y encima decir que salio bien: es la
+    //  peor combinacion posible. Ahora se para y se dice por que.
+    if (!meta_hay_tabla_plan($pdo)) {
+        return ['ok' => false, 'diagnostico' => $diagnostico, 'veredicto' => $veredicto,
+                'tacticas' => [], 'plan_id' => null,
+                'err' => 'Falta la tabla de planes en la base de datos. No toco nada: '
+                       . 'tu plan de ahora sigue igual.'];
     }
 
+    $plan_id = null;
+    $guardadas = [];
+    $propia = false;
+    try {
+        if (!$pdo->inTransaction()) { $pdo->beginTransaction(); $propia = true; }
+
+        //  1 · EL ANTERIOR SE CIERRA, Y SI NO SE PUEDE, NO SEGUIMOS.
+        $ant = meta_plan_activo($pdo, $meta_id);
+        if ($ant && !meta_plan_cerrar($pdo, (int)$ant['id'], 'reemplazado')) {
+            throw new RuntimeException('no pude cerrar el plan anterior');
+        }
+
+        //  2 · EL DIAGNOSTICO DE LA META VA DENTRO. Es parte del mismo cambio:
+        //      si el plan no llega a existir, la meta no puede quedarse con el
+        //      veredicto de un plan que nunca nacio.
+        $u = $pdo->prepare("UPDATE crecer_meta SET diagnostico=?, veredicto=?, ia_log_id=?, updated_at=NOW()
+                             WHERE id=? AND marca_id=?");
+        $u->execute([$diagnostico, $veredicto, $r['ia_log_id'] ?? null, $meta_id, $marca_id]);
+
+        //  3 · EL PLAN NUEVO, CON LA SOLICITUD QUE LO PIDIO.
+        $ver = (int)$pdo->query("SELECT COALESCE(MAX(version),0)+1 FROM crecer_meta_plan WHERE meta_id={$meta_id}")->fetchColumn();
+        //  Sin la columna se inserta como siempre: la idempotencia queda en el
+        //  candado viejo del handler, que frena el doble clic y poco más.
+        //  Apagado, no roto.
+        if ($sol !== '' && meta_plan_col_solicitud($pdo)) {
+            $pdo->prepare("INSERT INTO crecer_meta_plan (meta_id, marca_id, version, diagnostico, veredicto, estado, ia_log_id, solicitud)
+                           VALUES (?,?,?,?,?, 'activo', ?, ?)")
+                ->execute([$meta_id, $marca_id, $ver, $diagnostico, $veredicto, $r['ia_log_id'] ?? null, $sol]);
+        } else {
+            $pdo->prepare("INSERT INTO crecer_meta_plan (meta_id, marca_id, version, diagnostico, veredicto, estado, ia_log_id)
+                           VALUES (?,?,?,?,?, 'activo', ?)")
+                ->execute([$meta_id, $marca_id, $ver, $diagnostico, $veredicto, $r['ia_log_id'] ?? null]);
+        }
+        $plan_id = (int)$pdo->lastInsertId();
+
+        //  4 · LAS JUGADAS. Tambien dentro: un plan sin jugadas es un plan que
+        //      no sirve, y dejarlo activo seria peor que no haberlo creado.
+        $guardadas = meta_plan_guardar_tacticas($pdo, $meta_id, $marca_id, $plan_id, $tacticas, $meta);
+        if (!$guardadas) throw new RuntimeException('el plan salio sin ninguna jugada usable');
+
+        if ($propia) $pdo->commit();
+    } catch (Throwable $e) {
+        if ($propia && $pdo->inTransaction()) $pdo->rollBack();
+        error_log('meta_plan_generar: ' . $e->getMessage());
+
+        //  UNA SOLICITUD QUE CHOCA CON LA CLAVE UNICA NO ES UN FALLO: es el
+        //  mismo envio llegando dos veces. Se devuelve el plan que ya existe.
+        //  Puede pasar aunque la comprobacion de arriba haya dicho que no
+        //  habia: entre aquella y esta cabe otra peticion identica.
+        if ($sol !== '') {
+            $ya = meta_plan_por_solicitud($pdo, $marca_id, $sol);
+            if ($ya) {
+                return ['ok' => true, 'repetido' => true, 'plan_id' => (int)$ya['id'],
+                        'version' => (int)$ya['version'], 'diagnostico' => (string)$ya['diagnostico'],
+                        'veredicto' => (string)$ya['veredicto'], 'tacticas' => []];
+            }
+        }
+
+        return ['ok' => false, 'diagnostico' => '', 'veredicto' => '', 'tacticas' => [],
+                'plan_id' => null,
+                'err' => 'No pude guardar el plan nuevo. Tu plan de ahora sigue en pie, '
+                       . 'tal como estaba — dale otra vez.'];
+    }
+
+    return ['ok' => true, 'repetido' => false, 'diagnostico' => $diagnostico, 'veredicto' => $veredicto,
+            'tacticas' => $guardadas, 'plan_id' => $plan_id, 'version' => $ver,
+            'ia_log_id' => $r['ia_log_id'] ?? null];
+}
+
+/**
+ * Las jugadas de un plan, ya validadas y guardadas. Vive aparte para que la
+ * transaccion de arriba se lea de un vistazo: cerrar, actualizar, insertar,
+ * guardar. Antes eran ochenta lineas en medio y no se veia donde empezaba ni
+ * donde acababa la operacion.
+ *
+ * Las compuertas son las mismas de siempre y siguen siendo duras: sin
+ * presupuesto declarado no entra pauta, al dueño no se le cargan mas de dos
+ * tareas propias ni mas de una regla.
+ */
+function meta_plan_guardar_tacticas(PDO $pdo, int $meta_id, int $marca_id, ?int $plan_id,
+                                    array $tacticas, array $meta): array {
     // El INSERT lleva el contrato de la jugada (clase/piezas/formato) si la
     // migración de ejecución ya corrió; si no, cae al INSERT de antes.
     $cols_ejec = false;
@@ -625,15 +749,11 @@ EL DUEÑO PIDE UN PLAN NUEVO. Lo que dice del anterior: \""
                (meta_id, marca_id, orden, semana, tipo, titulo, que_hacer, por_que, canal, cta, inversion, quien,
                 plan_id, clase, piezas_meta, formato)
              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-        : ($plan_id !== null
-            ? $pdo->prepare(
-                "INSERT INTO crecer_meta_tactica
-                   (meta_id, marca_id, orden, semana, tipo, titulo, que_hacer, por_que, canal, cta, inversion, quien, plan_id)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?, {$plan_id})")
-            : $pdo->prepare(
-                "INSERT INTO crecer_meta_tactica
-                   (meta_id, marca_id, orden, semana, tipo, titulo, que_hacer, por_que, canal, cta, inversion, quien)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"));
+        : $pdo->prepare(
+            "INSERT INTO crecer_meta_tactica
+               (meta_id, marca_id, orden, semana, tipo, titulo, que_hacer, por_que, canal, cta, inversion, quien, plan_id)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
+
     $tipos_ok  = ['contenido','distribucion','pauta','oferta','alianza','operacion'];
     $canales_ok= ['instagram','facebook','whatsapp','ambas','fisico'];
     $orden = 0; $guardadas = [];
@@ -682,7 +802,8 @@ EL DUEÑO PIDE UN PLAN NUEVO. Lo que dice del anterior: \""
         // Quien ejecuta se deriva de la clase (una sola verdad, sin contradicción).
         $fila[11] = $clase === 'produccion' ? 'corillo' : 'dueno';
 
-        if ($cols_ejec) { $fila[] = $plan_id; $fila[] = $clase; $fila[] = $piezas; $fila[] = $formato; }
+        $fila[] = $plan_id;
+        if ($cols_ejec) { $fila[] = $clase; $fila[] = $piezas; $fila[] = $formato; }
 
         $ins->execute($fila);
         $guardadas[] = ['id' => (int)$pdo->lastInsertId(), 'tipo' => $tipo, 'titulo' => $fila[5],
@@ -690,9 +811,7 @@ EL DUEÑO PIDE UN PLAN NUEVO. Lo que dice del anterior: \""
                         'cta' => $fila[9], 'inversion' => $fila[10], 'quien' => $fila[11], 'semana' => $fila[3],
                         'clase' => $clase, 'piezas_meta' => $piezas, 'formato' => $formato];
     }
-
-    return ['ok' => true, 'diagnostico' => $diagnostico, 'veredicto' => $veredicto,
-            'tacticas' => $guardadas, 'plan_id' => $plan_id, 'ia_log_id' => $r['ia_log_id'] ?? null];
+    return $guardadas;
 }
 
 // ── Las tácticas ─────────────────────────────────────────────
@@ -775,6 +894,66 @@ function meta_plan_presentar(PDO $pdo, int $plan_id, int $marca_id): bool {
         error_log('meta_plan_presentar: ' . $e->getMessage());
         return false;
     }
+}
+
+/**
+ * ¿Existe la tabla de planes? Se pregunta una vez por proceso.
+ *
+ * Importa porque sin ella meta_plan_generar() SE PARA. Antes caía a un camino
+ * que borraba las jugadas pendientes del dueño, guardaba las nuevas sin plan y
+ * devolvía ok: destruía trabajo y encima decía que había salido bien.
+ */
+function meta_hay_tabla_plan(PDO $pdo, bool $olvidar = false): bool {
+    static $hay = null;
+    if ($olvidar) { $hay = null; return false; }
+    if ($hay !== null) return $hay;
+    try {
+        $q = $pdo->query("SELECT COUNT(*) FROM information_schema.TABLES
+                           WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='crecer_meta_plan'");
+        return $hay = ((int)$q->fetchColumn() > 0);
+    } catch (Throwable $e) { return $hay = false; }
+}
+
+/** ¿Está puesta la columna de idempotencia? Sin ella se cae al candado viejo. */
+function meta_plan_col_solicitud(PDO $pdo, bool $olvidar = false): bool {
+    static $hay = null;
+    if ($olvidar) { $hay = null; return false; }
+    if ($hay !== null) return $hay;
+    try { $hay = (bool)$pdo->query("SHOW COLUMNS FROM crecer_meta_plan LIKE 'solicitud'")->fetch(); }
+    catch (Throwable $e) { $hay = false; }
+    return $hay;
+}
+
+/**
+ * Para las pruebas: VACÍA lo memorizado del esquema, no lo pone en falso.
+ *
+ * La diferencia no es de estilo. La primera versión «olvidaba» corriendo las
+ * funciones contra un PDO vacío, y eso dejaba la caché en `false` para siempre:
+ * a partir de ahí, una base que SÍ tenía la columna se comportaba como si no.
+ * Una prueba que cambia de esquema a media corrida —exactamente lo que hace la
+ * de abajo— habría medido el camino equivocado y salido verde por el motivo
+ * contrario al que dice.
+ */
+function meta_plan_olvidar_esquema(): void {
+    $vacio = new PDO('sqlite::memory:');
+    meta_hay_tabla_plan($vacio, true);
+    meta_plan_col_solicitud($vacio, true);
+}
+
+/**
+ * El plan que nació de una solicitud concreta, si ya existe.
+ *
+ * Se acota por marca: una solicitud es de un dueño, y sin ese filtro un
+ * identificador adivinado dejaría ver el plan de otro negocio.
+ */
+function meta_plan_por_solicitud(PDO $pdo, int $marca_id, string $solicitud): ?array {
+    if ($solicitud === '' || $marca_id <= 0) return null;
+    if (!meta_plan_col_solicitud($pdo)) return null;
+    try {
+        $q = $pdo->prepare("SELECT * FROM crecer_meta_plan WHERE marca_id=? AND solicitud=? LIMIT 1");
+        $q->execute([$marca_id, $solicitud]);
+        return $q->fetch(PDO::FETCH_ASSOC) ?: null;
+    } catch (Throwable $e) { return null; }
 }
 
 /** El plan vigente de una meta (null si no hay o si falta la migración). */

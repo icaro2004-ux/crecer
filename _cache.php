@@ -1432,13 +1432,15 @@ try {
             $act = array_values(array_filter($planes, fn($p) => $p['estado'] === 'activo'));
             printf("     %d\n", count($act));
             if (count($act) === 0) {
-                echo "     !! CERO. El anterior se cerró y el nuevo no llegó a nacer:\n";
-                echo "        la escritura se partió por la mitad (cerrar e insertar\n";
-                echo "        no están en una transacción).\n";
+                echo "     !! CERO. El anterior se cerró y el nuevo no llegó a nacer.\n";
+                echo "        Desde el hotfix del 2026-08-22 el replan NO puede dejar\n";
+                echo "        esto: va en transacción. Si sale, viene de antes del\n";
+                echo "        arreglo, o lo cerró otro camino.\n";
             } elseif (count($act) > 1) {
-                echo "     !! MÁS DE UNO. El cierre del anterior no surtió efecto y\n";
-                echo "        el nuevo entró igual: meta_plan_generar() ignora lo que\n";
-                echo "        devuelve meta_plan_cerrar(). Ids activos: "
+                echo "     !! MÁS DE UNO. Desde el hotfix del 2026-08-22 el replan no\n";
+                echo "        puede dejar dos: mira lo que devuelve meta_plan_cerrar()\n";
+                echo "        y va en transacción. Si salen dos, vienen de antes o de\n";
+                echo "        otro camino. Ids activos: "
                      . implode(', ', array_column($act, 'id')) . "\n";
             }
 

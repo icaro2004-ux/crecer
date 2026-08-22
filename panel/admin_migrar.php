@@ -51,6 +51,9 @@ $MIGRACIONES = [
     //  cookie y el contenido sale en español. El orden con el codigo da igual.
     '2026-08-22_crecer_idioma_preferencia.sql', // el idioma pasa a ser de alguien
     '2026-08-22_crecer_idioma_pieza.sql',       // en que idioma esta cada pieza
+    //  HOTFIX del replan: una solicitud, un plan. Sin ella el codigo cae al
+    //  candado viejo (frena el doble clic, no el reenvio tardio).
+    '2026-08-22_crecer_plan_solicitud.sql',     // idempotencia real del replan
 ];
 $DIR = dirname(__DIR__) . '/migrations/';
 $PRESENTES = array_values(array_filter($MIGRACIONES, fn($m) => is_file($DIR . $m)));
@@ -76,6 +79,7 @@ $CREA = [
     '2026-08-22_crecer_idioma_preferencia.sql'
                                             => [['usuarios', 'idioma_interfaz'],
                                                 ['crecer_marca', 'idioma_contenido']],
+    '2026-08-22_crecer_plan_solicitud.sql'   => [['crecer_meta_plan', 'solicitud']],
     '2026-08-22_crecer_idioma_pieza.sql'    => [['crecer_contenido', 'idioma'],
                                                 ['crecer_carrusel', 'idioma']],
 ];

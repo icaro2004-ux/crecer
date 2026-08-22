@@ -166,8 +166,16 @@ function i18n_rel(string $abs, string $raiz): string {
 //  Bajarlo es un cambio deliberado y se ve en el diff, que es justo lo que
 //  tiene que pasar cuando se gana terreno. Subirlo, también — y ahí hay que
 //  explicar por qué se añadió texto a mano en vez de migrar la pantalla.
+//  SUBIR UN TOPE ES UNA DECISION, Y ASI QUEDA ESCRITA.
+//  2026-08-22 · +5 en `panel` y +5 en `dominio`, del hotfix del replan: el
+//  aviso «Plan versión N creado» en meta.php y los mensajes de error del
+//  camino atomico en meta_negocio.php. La regla dice «migra esas pantallas, no
+//  subas el numero», y aqui no se pudo: la familia `panel` son 2.500 cadenas y
+//  la fase de idiomas estaba en pausa por este mismo defecto. Se sube a
+//  proposito, con nombre y fecha, y esas diez cadenas entran en el trabajo de
+//  L-4 como cualquier otra.
 const I18N_TOPES = [
-    'panel'   => 2532,
+    'panel'   => 2537,
     'publico' =>  321,
-    'dominio' => 1691,
+    'dominio' => 1696,
 ];
