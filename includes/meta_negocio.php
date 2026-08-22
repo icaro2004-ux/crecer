@@ -444,7 +444,27 @@ function meta_plan_generar(PDO $pdo, int $marca_id, int $meta_id, string $motivo
     //  2026-08-22 con las versiones 5 y 6.
     // ══════════════════════════════════════════════════════════════════════
     $sol = trim($solicitud);
-    $devolver_ya = function (array $ya): array {
+    //  DEVOLVER UN PLAN QUE YA EXISTIA — Y DEJAR EL LIBRO CUADRADO.
+    //
+    //  Lo segundo no es limpieza: es la ventana mas fina que queda. El plan se
+    //  confirma y un instante despues se marca la reclamacion 'hecha'. Si el
+    //  proceso muere JUSTO AHI queda un plan valido con su solicitud todavia
+    //  'reclamada'. El gasto ya esta protegido —esta funcion mira si existe el
+    //  plan antes de nada—, pero si la marca no se reconciliara, esa fila se
+    //  quedaria colgada para siempre: cada visita volveria a pasar por el
+    //  rescate de huerfana, y el diagnostico diria «alguien la esta
+    //  trabajando» de algo terminado hace semanas. Arreglar el sintoma y dejar
+    //  la causa.
+    //
+    //  No se puede cerrar metiendo la marca en la transaccion del plan: ahi un
+    //  rollback se la llevaria por delante. Se cierra mirando.
+    $devolver_ya = function (array $ya) use ($pdo, $marca_id, $sol): array {
+        if ($sol !== '') {
+            $f = meta_solicitud_leer($pdo, $marca_id, $sol);
+            if ($f && ($f['estado'] !== 'hecha' || (int)($f['plan_id'] ?? 0) !== (int)$ya['id'])) {
+                meta_solicitud_cerrar($pdo, $marca_id, $sol, 'hecha', (int)$ya['id']);
+            }
+        }
         return ['ok' => true, 'repetido' => true, 'plan_id' => (int)$ya['id'],
                 'version' => (int)$ya['version'], 'diagnostico' => (string)$ya['diagnostico'],
                 'veredicto' => (string)$ya['veredicto'], 'tacticas' => []];
@@ -473,6 +493,25 @@ function meta_plan_generar(PDO $pdo, int $marca_id, int $meta_id, string $motivo
             return ['ok' => true, 'repetido' => true, 'en_curso' => true,
                     'plan_id' => (int)($f['plan_id'] ?? 0), 'version' => 0,
                     'diagnostico' => '', 'veredicto' => '', 'tacticas' => []];
+        }
+        //  ── SE GANO LA RECLAMACION. UNA MIRADA MAS ANTES DE GASTAR ────
+        //  Ganar puede significar dos cosas muy distintas: que la solicitud
+        //  era nueva, o que se RESCATO una huerfana. En el segundo caso puede
+        //  existir ya un plan de esa intencion —el proceso anterior lo guardo
+        //  y murio antes de marcarlo—, y ponerse a llamar a la Estratega
+        //  seria pagar por algo que ya esta hecho y crear una version de mas.
+        //
+        //  La comprobacion de arriba cubre el caso normal. Esta cubre el
+        //  rescate y, de paso, cualquier plan que aparezca entre una y otra.
+        //  Se busca por los DOS caminos porque cada uno falla de una forma
+        //  distinta: la columna del plan no existe si falta esa migracion, y
+        //  el plan_id del libro es NULL si el que murio no llego a escribirlo.
+        if ($rec['gane']) {
+            $ya2 = meta_plan_por_solicitud($pdo, $marca_id, $sol);
+            if (!$ya2 && !empty($rec['fila']['plan_id'])) {
+                $ya2 = meta_plan_por_id($pdo, (int)$rec['fila']['plan_id'], $marca_id);
+            }
+            if ($ya2) return $devolver_ya($ya2);
         }
         //  Sin libro (migracion pendiente) se sigue de largo: la columna unica
         //  del plan seguira impidiendo que nazcan dos, aunque se pague dos
@@ -992,7 +1031,27 @@ function meta_plan_olvidar_esquema(): void {
 //  Esto lo cierra: el INSERT de la reclamación se juega ANTES de la red.
 // ══════════════════════════════════════════════════════════════
 
-/** Cuánto puede llevar colgada una reclamación antes de darla por huérfana. */
+//  ── EL LÍMITE HONESTO DE TODO ESTO ────────────────────────────
+//  Hay UNA ventana que este diseño no cierra, y conviene que esté escrita
+//  aquí y no en la cabeza de nadie:
+//
+//    Si el proceso muere DESPUÉS de recibir la respuesta del modelo y ANTES
+//    de guardar el plan, ese gasto se repite. No hay forma de evitarlo sin
+//    persistir la respuesta del proveedor en cuanto llega, antes incluso de
+//    saber si sirve.
+//
+//  Las otras dos ventanas sí están cerradas, y por eso esta es la que queda:
+//    · muerte antes de llamar al modelo  → la reclamación queda huérfana, se
+//      rescata, y no se ha gastado nada.
+//    · muerte entre el commit y la marca → el plan ya existe, se encuentra
+//      antes de gastar, y la reclamación se reconcilia (pruebas 4e y 4f).
+//
+//  NO SE CONSTRUYE AHORA. Guardar la respuesta cruda del modelo es una tabla
+//  más, un ciclo de vida más y datos del negocio duplicados fuera de su sitio,
+//  para cubrir una franja de milisegundos que solo se abre si el proceso
+//  revienta justo ahí. Cuando el volumen lo justifique, se mide primero.
+//
+//  Cuánto puede llevar colgada una reclamación antes de darla por huérfana.
 if (!defined('META_SOL_HUERFANA_SEG')) define('META_SOL_HUERFANA_SEG', 180);
 
 /** ¿Está el libro? Sin él se cae a la columna del plan: no roto, peor. */
