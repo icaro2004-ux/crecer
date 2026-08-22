@@ -1459,14 +1459,28 @@ try {
                 $bits = [];
                 foreach ($est as $e => $c) $bits[] = "{$e}={$c}";
                 $etq = ($pid === 'NULL') ? 'plan_id NULL' : "plan #{$pid}";
-                //  Una jugada pendiente colgando de un plan ya cerrado es la
-                //  huella de que el reemplazo dejó basura viva.
+                //  LAS JUGADAS DE UN PLAN CERRADO SON HISTORIA, NO BASURA.
+                //  Esto acusaba de «pendientes colgando» a toda jugada sin
+                //  terminar de un plan reemplazado — y eso es EL COMPORTAMIENTO
+                //  CORRECTO: reemplazar un plan no toca sus jugadas, se quedan
+                //  como registro de lo que no llegó a hacerse. El plan nuevo
+                //  trae las suyas. Un diagnóstico que llama defecto a lo normal
+                //  manda a buscar donde no hay nada.
+                //
+                //  Lo único que sí merece una nota es «en_curso» en un plan
+                //  cerrado: ahí puede quedar un worker produciendo contenido
+                //  para un plan que ya nadie sigue. Se dice como observación,
+                //  no como acusación — tampoco es corrupción.
                 $p = null; foreach ($planes as $pp) if ((int)$pp['id'] === (int)$pid) $p = $pp;
                 $aviso = '';
                 if ($pid === 'NULL') {
                     $aviso = '  !! sin plan: nacieron cuando la tabla de planes no existía';
-                } elseif ($p && $p['estado'] !== 'activo' && (($est['pendiente'] ?? 0) + ($est['en_curso'] ?? 0)) > 0) {
-                    $aviso = '  !! pendientes colgando de un plan ' . $p['estado'];
+                } elseif ($p && $p['estado'] !== 'activo') {
+                    $aviso = '  · histórico (plan ' . $p['estado'] . ')';
+                    if ((int)($est['en_curso'] ?? 0) > 0) {
+                        $aviso .= ' · ojo: ' . (int)$est['en_curso']
+                                . ' en_curso — puede haber trabajo en marcha de un plan que ya nadie sigue';
+                    }
                 }
                 printf("     %-14s %s%s\n", $etq, implode(' · ', $bits), $aviso);
             }
@@ -1508,31 +1522,93 @@ try {
             $qi->execute([$mid]);
             $logs = $qi->fetchAll(PDO::FETCH_ASSOC) ?: [];
             if (!$logs) {
-                echo "     ninguna llamada nunca. Si acabas de pedir un plan nuevo,\n";
-                echo "     esto SOLO puede significar que el request se contesto antes\n";
-                echo "     de llegar a ella: confirmacion falsa.\n";
+                //  Antes esto declaraba «confirmacion falsa» a secas. Es la
+                //  misma sobreafirmacion: no haber llamado nunca es lo normal
+                //  en una marca que no ha pedido plan. La conclusion depende de
+                //  si HUBO una solicitud, y eso se mira abajo, en 6c.
+                echo "     ninguna llamada registrada para esta marca.\n";
             }
             foreach ($logs as $l) {
                 printf("     ia_log #%-6d %-10s %-19s out=%-6s \$%-8s %s\n",
                        (int)$l['id'], (string)$l['estado'], (string)$l['created_at'],
                        (string)$l['tokens_out'], (string)$l['costo_usd'], (string)$l['err']);
             }
-            //  La pregunta que resuelve el caso: ¿hay una llamada MÁS NUEVA que
-            //  el plan más nuevo? Si la hay, la Estratega corrió y lo que se
-            //  perdió fue la escritura.
-            $ult_log  = $logs ? (string)$logs[0]['created_at'] : '';
-            $ult_plan = '';
-            foreach ($planes as $p) if ((string)$p['created_at'] > $ult_plan) $ult_plan = (string)$p['created_at'];
-            if ($ult_log !== '') {
-                echo "\n     ultima llamada: {$ult_log}   ·   ultimo plan creado: "
-                     . ($ult_plan !== '' ? $ult_plan : '(ninguno)') . "\n";
-                if ($ult_plan === '' || $ult_log > $ult_plan) {
-                    echo "     !! LA ESTRATEGA CORRIO DESPUES DEL ULTIMO PLAN GUARDADO.\n";
-                    echo "        Se pago la llamada y el plan no quedo: la escritura\n";
-                    echo "        se perdio despues del modelo.\n";
-                } else {
-                    echo "     ok: el ultimo plan es posterior o igual a la ultima llamada.\n";
+            //  ── QUE SE PUEDE AFIRMAR, Y QUE NO ────────────────────
+            //
+            //  ESTO DECIA «se pago la llamada y el plan no quedo» en cuanto
+            //  hubiera una llamada mas nueva que el ultimo plan. Es una
+            //  inferencia, no una prueba: `agente=estratega` cubre TAMBIEN la
+            //  creacion de la meta, el cambio de meta y el cron del corillo.
+            //  Una llamada reciente puede venir de cualquiera de esos caminos y
+            //  no significa que se perdiera nada.
+            //
+            //  Ahora se correlaciona. Una llamada es ATRIBUIBLE si su id
+            //  aparece en crecer_meta_plan.ia_log_id o en crecer_meta.ia_log_id
+            //  — es decir, si se sabe que produjo algo. Lo que no cuadre se
+            //  reporta como lo que es: no atribuible.
+            //
+            //  Y la afirmacion fuerte —«hubo un replan que no termino»— solo se
+            //  hace con la evidencia que la sostiene: una fila en
+            //  crecer_plan_solicitud fallida o reclamada sin terminar. Sin eso,
+            //  no se acusa.
+            $ids = array_map(fn($l) => (int)$l['id'], $logs);
+            $atrib = [];
+            if ($ids) {
+                $in = implode(',', array_fill(0, count($ids), '?'));
+                foreach ([['crecer_meta_plan', 'un plan'], ['crecer_meta', 'una meta']] as [$tab, $que]) {
+                    try {
+                        $qa = $pdo->prepare("SELECT ia_log_id FROM {$tab} WHERE ia_log_id IN ({$in})");
+                        $qa->execute($ids);
+                        foreach ($qa->fetchAll(PDO::FETCH_COLUMN) as $x) $atrib[(int)$x] = $que;
+                    } catch (Throwable $e) { /* la tabla puede no tener la columna */ }
                 }
+            }
+            $sueltas = array_values(array_filter($ids, fn($i) => !isset($atrib[$i])));
+
+            echo "\n     atribucion de esas llamadas\n";
+            foreach ($logs as $l) {
+                $i = (int)$l['id'];
+                printf("       #%-6d %s\n", $i,
+                       isset($atrib[$i]) ? 'produjo ' . $atrib[$i] : 'no atribuible');
+            }
+            if ($sueltas) {
+                echo "     · " . count($sueltas) . " llamadas posteriores no atribuibles: "
+                     . implode(', ', array_map(fn($i) => '#' . $i, $sueltas)) . "\n";
+                echo "       No dice que se perdiera nada. `estratega` cubre tambien la\n";
+                echo "       creacion de la meta, el cambio de meta y el cron del corillo.\n";
+            } elseif ($logs) {
+                echo "     · todas las llamadas recientes produjeron algo.\n";
+            } else {
+                //  Sin llamadas no hay nada que atribuir, y decir «todas
+                //  produjeron algo» de un conjunto vacio se lee como un visto
+                //  bueno que nadie ha dado.
+                echo "     · nada que atribuir.\n";
+            }
+
+            //  LA UNICA EVIDENCIA QUE SI PERMITE AFIRMAR QUE UN REPLAN NO TERMINO.
+            $rotas = [];
+            try {
+                $qs = $pdo->prepare(
+                    "SELECT solicitud, estado, intentos, plan_id, updated_at, LEFT(COALESCE(error,''),70) error
+                       FROM crecer_plan_solicitud
+                      WHERE marca_id=? AND (estado='fallida'
+                            OR (estado='reclamada' AND updated_at < DATE_SUB(NOW(), INTERVAL 180 SECOND)))
+                      ORDER BY id DESC LIMIT 5");
+                $qs->execute([$mid]);
+                $rotas = $qs->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            } catch (Throwable $e) { echo "     (sin libro de solicitudes: migracion pendiente)\n"; }
+
+            if ($rotas) {
+                echo "\n     !! SOLICITUDES DE REPLAN QUE NO TERMINARON\n";
+                foreach ($rotas as $r) {
+                    printf("       %s… %-10s intentos=%s plan=%s %s\n",
+                           substr((string)$r['solicitud'], 0, 12), (string)$r['estado'],
+                           (string)$r['intentos'], (string)($r['plan_id'] ?: '—'), (string)$r['error']);
+                }
+                echo "       Esto SI correlaciona: hubo una peticion de plan nuevo que no\n";
+                echo "       llego a producir uno. Una 'fallida' se reintenta al momento.\n";
+            } else {
+                echo "\n     ninguna solicitud de replan quedo sin terminar.\n";
             }
 
             // ── 7 · QUÉ LEE CADA UNO ────────────────────────────

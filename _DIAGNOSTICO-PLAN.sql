@@ -73,9 +73,14 @@ SELECT COUNT(*) AS activos,
  WHERE meta_id = @meta AND estado = 'activo';
 
 -- ── 4 · LAS TÁCTICAS DE CADA PLAN ────────────────────────────
---  Jugadas 'pendiente' o 'en_curso' colgando de un plan ya cerrado son la
---  huella de que el reemplazo dejó basura viva. plan_id NULL = nacieron
---  antes de que existiera la tabla de planes.
+--  LAS JUGADAS DE UN PLAN CERRADO SON HISTORIA, NO BASURA. Reemplazar un plan
+--  NO toca sus jugadas: se quedan como registro de lo que no llegó a hacerse,
+--  y el plan nuevo trae las suyas. Que un plan 'reemplazado' tenga pendientes
+--  es el comportamiento correcto.
+--  Lo único que merece una mirada es 'en_curso' en un plan cerrado: ahí puede
+--  quedar un worker produciendo para un plan que ya nadie sigue. Tampoco es
+--  corrupción.
+--  plan_id NULL = nacieron antes de que existiera la tabla de planes.
 SELECT '4 · TACTICAS POR PLAN' AS bloque;
 SELECT t.plan_id,
        COALESCE(p.estado, '(sin plan)') AS estado_del_plan,
@@ -118,22 +123,45 @@ SELECT id, estado, created_at, tokens_out, costo_usd, LEFT(COALESCE(error_msg,''
  ORDER BY id DESC
  LIMIT 10;
 
-SELECT '6b · LA COMPARACION QUE RESUELVE EL CASO' AS bloque;
-SELECT (SELECT MAX(created_at) FROM crecer_ia_log
-         WHERE marca_id = @marca AND agente = 'estratega')      AS ultima_llamada_ia,
-       (SELECT MAX(created_at) FROM crecer_meta_plan
-         WHERE meta_id = @meta)                                  AS ultimo_plan_creado,
+-- ── 6b · ATRIBUCION, NO INFERENCIA ───────────────────────────
+--  Aquí había un veredicto que decía «se perdió la escritura» en cuanto hubiera
+--  una llamada más nueva que el último plan. Es una inferencia, no una prueba:
+--  `agente='estratega'` cubre TAMBIÉN la creación de la meta, el cambio de meta
+--  y el cron del corillo. Una llamada reciente puede venir de cualquiera de
+--  esos caminos sin que se haya perdido nada.
+--
+--  Se correlaciona: una llamada es ATRIBUIBLE si su id aparece en
+--  crecer_meta_plan.ia_log_id o en crecer_meta.ia_log_id — o sea, si se sabe
+--  que produjo algo. Lo demás se reporta como lo que es.
+SELECT '6b · ATRIBUCION DE CADA LLAMADA' AS bloque;
+SELECT l.id, l.created_at, l.costo_usd,
        CASE
-         WHEN (SELECT MAX(created_at) FROM crecer_ia_log
-                WHERE marca_id = @marca AND agente='estratega') IS NULL
-           THEN 'la Estratega no corrio NUNCA -> confirmacion falsa'
-         WHEN (SELECT MAX(created_at) FROM crecer_meta_plan WHERE meta_id=@meta) IS NULL
-           OR (SELECT MAX(created_at) FROM crecer_ia_log
-                WHERE marca_id=@marca AND agente='estratega')
-              > (SELECT MAX(created_at) FROM crecer_meta_plan WHERE meta_id=@meta)
-           THEN 'la Estratega corrio DESPUES del ultimo plan -> se perdio la escritura'
-         ELSE 'el ultimo plan es posterior a la ultima llamada -> la escritura entro'
-       END AS veredicto;
+         WHEN EXISTS (SELECT 1 FROM crecer_meta_plan p WHERE p.ia_log_id = l.id)
+           THEN 'produjo un plan'
+         WHEN EXISTS (SELECT 1 FROM crecer_meta m WHERE m.ia_log_id = l.id)
+           THEN 'produjo una meta'
+         ELSE 'no atribuible'
+       END AS atribucion
+  FROM crecer_ia_log l
+ WHERE l.marca_id = @marca AND l.agente = 'estratega'
+ ORDER BY l.id DESC
+ LIMIT 10;
+
+-- ── 6c · LA UNICA EVIDENCIA QUE PERMITE AFIRMAR QUE ALGO SE PERDIO ──
+--  Una solicitud de replan que no llegó a producir un plan. Si esta consulta
+--  no devuelve filas, NO se puede decir que se pagó y se perdió: lo único
+--  honesto es «llamadas posteriores no atribuibles».
+--  'fallida'   → la escritura se revirtió entera. Se reintenta al momento.
+--  'reclamada' vencida → el proceso que la tomó no volvió.
+SELECT '6c · SOLICITUDES DE REPLAN SIN TERMINAR' AS bloque;
+SELECT solicitud, estado, intentos, plan_id, created_at, updated_at,
+       LEFT(COALESCE(error,''), 80) AS error
+  FROM crecer_plan_solicitud
+ WHERE marca_id = @marca
+   AND (estado = 'fallida'
+        OR (estado = 'reclamada' AND updated_at < DATE_SUB(NOW(), INTERVAL 180 SECOND)))
+ ORDER BY id DESC
+ LIMIT 10;
 
 -- ── 7 · POR SI ACASO: PIEZAS COLGADAS DE UN PLAN CERRADO ─────
 --  El contenido apunta al plan. Si hay piezas vivas de un plan cerrado, el
