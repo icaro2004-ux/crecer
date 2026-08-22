@@ -46,6 +46,11 @@ $MIGRACIONES = [
     //  que no tenerla. El catalogo nace VACIO — sembrarlo es trabajo humano.
     '2026-08-22_crecer_efemerides.sql',         // 7b · el catalogo curado (vacio)
     '2026-08-22_crecer_efemeride_decision.sql', // 7b · la memoria de lo contestado
+    //  IDIOMAS · las dos son aditivas y NULL-ables, y ninguna rellena nada. Sin
+    //  ellas el producto se comporta EXACTAMENTE como hoy: la interfaz cae a la
+    //  cookie y el contenido sale en español. El orden con el codigo da igual.
+    '2026-08-22_crecer_idioma_preferencia.sql', // el idioma pasa a ser de alguien
+    '2026-08-22_crecer_idioma_pieza.sql',       // en que idioma esta cada pieza
 ];
 $DIR = dirname(__DIR__) . '/migrations/';
 $PRESENTES = array_values(array_filter($MIGRACIONES, fn($m) => is_file($DIR . $m)));
@@ -68,6 +73,11 @@ $CREA = [
                                             => [['crecer_efemeride_decision', null]],
     '2026-08-21_crecer_img_cuota.sql'       => [['crecer_img_cuota_cubo', null],
                                                 ['crecer_img_cuota_asiento', null]],
+    '2026-08-22_crecer_idioma_preferencia.sql'
+                                            => [['usuarios', 'idioma_interfaz'],
+                                                ['crecer_marca', 'idioma_contenido']],
+    '2026-08-22_crecer_idioma_pieza.sql'    => [['crecer_contenido', 'idioma'],
+                                                ['crecer_carrusel', 'idioma']],
 ];
 $hay_pieza = function (string $tabla, ?string $col) use ($pdo): bool {
     try {
