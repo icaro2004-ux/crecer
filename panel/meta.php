@@ -774,8 +774,6 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
   .plan-obs{font-size:15px;line-height:1.55;color:var(--tm-teal-tx);background:var(--tm-teal-piel);
     border-radius:var(--tm-r);padding:13px 15px;margin:0 0 14px}
   .plan-obs b{color:var(--tm-teal-tx)}
-  .plan-vacio{border:1px solid var(--line);border-radius:var(--tm-r);padding:18px;
-    font-size:15px;line-height:1.55;color:var(--muted)}
 
   @media (min-width:1000px){
     .plan{max-width:760px}
@@ -821,8 +819,9 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
       de pulsarlos. Se aparta quien esta de mas, y vuelve solo al subir. */
   body .ay-fab{transition:transform .2s ease, opacity .2s ease}
   body.ah-cola .ay-fab{transform:translateY(calc(100% + 96px));opacity:0;pointer-events:none}
-  .mt-volver{display:inline-block;font-size:14px;font-weight:700;color:var(--muted);
-    text-decoration:none;padding:10px 0;margin-bottom:6px;min-height:44px;line-height:24px}
+  /*  Aqui vivia `.mt-volver`, la salida de la capa 1 antes del rediseño. La
+      sustituyeron `.plan-volver` y `.wz-salir`, que ademas DICEN si lo escrito
+      se guarda. Se quita para que nadie la reviva creyendo que sigue viva. */
 
   /* — LA BARRA DE CONTEXTO · un dato, no un titular — */
   .tm-meta{border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:20px}
@@ -1032,11 +1031,8 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
   @media(max-width:680px){
     /* Los 4 números del récord no caben en una fila de 360px: 2x2 y se leen. */
     .hp-nums{grid-template-columns:repeat(2,minmax(0,1fr))}
-    .plan-cab{align-items:flex-start}
-    .plan-prog{text-align:left;min-width:100%}
     .hplan summary{padding:12px 13px}
     .hp-est{margin-left:0}
-    .mv-num{font-size:46px}
     /*  Aqui vivian cuatro reglas sueltas del wizard (.obj-grid, .wz-q, .mt-num
         y .wz-nav .btn-p). Su hoja se fue con el rediseno de la capa 2 y quedaron
         huerfanas: dos apuntaban a clases que ya no existen y .wz-q peleaba con la
@@ -1328,7 +1324,12 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
         $vale = $p['funciono'] === null ? null : ((int)$p['funciono'] === 1);
       ?>
         <details class="hplan">
-          <summary>
+          <?php /*  La clase NO es decorativa: `.hp-s` es lo que le quita el
+                    triangulo del navegador, le da los 56px de objetivo y lo
+                    saca de los margenes de `.hplan > *:not(.hp-s)`. Sin ella
+                    el sumario del historial era el unico acordeon de Tu Meta
+                    que se pintaba distinto — y sin altura garantizada.  */ ?>
+          <summary class="hp-s">
             <span class="hp-v">Plan #<?= (int)$p['version'] ?></span>
             <span class="hp-f"><?= $h(date('j/n', strtotime((string)$p['inicio_at']))) ?>
               — <?= $h(!empty($p['cierre_at']) ? date('j/n', strtotime((string)$p['cierre_at'])) : 'abierto') ?></span>
