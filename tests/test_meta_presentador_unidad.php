@@ -187,13 +187,18 @@ ok('la cerrada se declara', $cer['cerrada'] === true);
 ok('y no se marca «sin meta»', $cer['sin_meta'] === false);
 
 // ══════════════════════════════════════════════════════════════
-//  6 · NINGUNA PAGINA LO LLAMA TODAVIA
+//  6 · QUIEN LO LLAMA, Y SOLO QUIEN DEBE
 // ══════════════════════════════════════════════════════════════
-//  ESTA ES LA AFIRMACION QUE DEFINE EL LOTE. Mientras sea inerte, desplegarlo
-//  no puede romper nada: si el archivo no llega, no lo echa de menos nadie.
-//  Cuando 1B lo conecte, esta prueba se pondra roja — y esa transicion es
-//  deliberada, no un descuido.
-echo "\n  — 6 · inerte: nadie lo llama —\n";
+//  EN 1A ESTA AFIRMACION DECIA «NADIE», y era la que definia aquel lote:
+//  mientras el archivo fuera inerte, desplegarlo no podia romper nada. Se dejo
+//  escrito que en 1B se pondria roja a proposito, y asi fue — cazo justo las
+//  dos paginas que 1B conecta.
+//
+//  Ahora dice otra cosa, y sigue siendo la misma vigilancia: LOS LLAMANTES SON
+//  EXACTAMENTE DOS. Si mañana una tercera pantalla empieza a presentar por su
+//  cuenta, esto se pone rojo antes de que dos superficies vuelvan a decir cosas
+//  distintas — que es de donde venimos.
+echo "\n  — 6 · lo llaman exactamente dos pantallas —\n";
 $raiz = dirname(__DIR__);
 //  UNA sola excepción, y con motivo: _cache.php es el panel de diagnóstico
 //  interno, y NOMBRA la clase justamente para comprobar si el archivo llegó al
@@ -208,7 +213,11 @@ foreach (array_merge(glob($raiz . '/panel/*.php'), glob($raiz . '/includes/*.php
                      glob($raiz . '/core/Meta/*.php'), glob($raiz . '/*.php')) as $f) {
     if (in_array(basename($f), $permitido, true)) continue;
     if (strpos((string)file_get_contents($f), 'MetaPresentador') !== false) {
-        $usos[] = str_replace($raiz . DIRECTORY_SEPARATOR, '', $f);
+        //  Windows devuelve la raiz con «\» y el resto con «/» en el mismo
+        //  string. Se normaliza a «/» en los dos lados o la comparacion falla
+        //  por el separador y no por lo que se esta midiendo.
+        $usos[] = ltrim(str_replace(str_replace('\\', '/', $raiz), '',
+                                    str_replace('\\', '/', $f)), '/');
     }
 }
 //  Y la excepción se comprueba: si _cache.php deja de nombrarla, este bloque
@@ -216,9 +225,24 @@ foreach (array_merge(glob($raiz . '/panel/*.php'), glob($raiz . '/includes/*.php
 ok('el diagnóstico sí la nombra (por eso está exceptuado)',
    strpos((string)file_get_contents($raiz . '/_cache.php'), 'MetaPresentador') !== false,
    'la excepción de _cache.php sobra: quítala en vez de dejarla tapando');
-ok('ninguna pagina del producto lo usa', $usos === [],
-   implode(' · ', $usos) . "\n         si algo lo usa, este lote ya NO es inerte y "
- . 'desplegarlo puede tumbar esa pagina — que es justo lo que estamos evitando');
+sort($usos);
+$esperados = ['panel/index.php', 'panel/meta.php'];
+sort($esperados);
+ok('lo usan Home y Tu Meta, y nadie mas', $usos === $esperados,
+   'usan: ' . (implode(' · ', $usos) ?: '(nadie)')
+ . "\n         esperado: " . implode(' · ', $esperados)
+ . "\n         una tercera pantalla presentando por su cuenta es como nacio la "
+ . 'incoherencia entre Home y Tu Meta');
+
+//  Y LO CONECTAN COMO SE DEBE: pidiendo el archivo. Una pagina que usa la clase
+//  sin requerirla funciona solo mientras otra la haya cargado antes — y el dia
+//  que cambie el orden de los includes, muere sin avisar.
+foreach ($esperados as $rel) {
+    $src2 = (string)file_get_contents($raiz . '/' . $rel);
+    ok($rel . ' requiere el archivo',
+       preg_match('/require(_once)?[^;]*MetaPresentador\.php/', $src2) === 1,
+       'usa la clase sin pedirla: depende de que otro la haya cargado antes');
+}
 
 echo "\n" . str_repeat('=', 58) . "\n";
 echo $fallos === 0

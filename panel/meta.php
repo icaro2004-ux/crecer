@@ -379,6 +379,9 @@ if ($meta) {
 require_once __DIR__ . '/../core/Meta/MetaStateComposer.php';
 require_once __DIR__ . '/../core/Meta/MetaSnapshotReader.php';
 require_once __DIR__ . '/../core/Meta/MetaRetorno.php';
+//  COMO se dice un estado vive en el presentador, no en esta vista: Home
+//  tiene que poder decir exactamente lo mismo sin copiar una linea.
+require_once __DIR__ . '/../core/Meta/MetaPresentador.php';
 $mt_snap   = MetaSnapshotReader::leer($pdo, $marca_id);
 $mt_estado = MetaStateComposer::componer($mt_snap);
 
@@ -1699,41 +1702,18 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
         $turno_cls = 'mio'; $turno_txt = 'Ya está listo';
     }
 
-    //  EL TITULO YA NO REPITE EL ROTULO. El compositor devuelve titulos que
-    //  se explican solos ("Para seguir, necesito tu video") porque Home los
-    //  usa sueltos; aqui, con el turno delante, sobra el prefijo.
-    $titulo = trim($E->titulo);
-    foreach (['Para seguir, necesito', 'Nada pendiente de ti'] as $pref) {
-        if (stripos($titulo, $pref) === 0) {
-            $resto = trim(mb_substr($titulo, mb_strlen($pref)));
-            if ($resto !== '') $titulo = mb_strtoupper(mb_substr($resto, 0, 1)) . mb_substr($resto, 1);
-            break;
-        }
-    }
-    //  CON EL LIMITE MANDANDO, LA PANTALLA DICE QUE PASA.
-    //  Cambiar solo la pastilla y dejar el titulo del estado normal era medio
-    //  aviso: la dueña leia «Me toca a mi» con una pastilla ambar al lado y
-    //  tenia que atar cabos. Se dice entero, con el numero y el mes.
-    if ($mt_cuota_manda) {
-        $lim = (int)($mt_cuota['limite'] ?? 0);
-        $titulo = $lim > 0
-            ? 'Usaste las ' . $lim . ' imágenes de ' . $mt_mes()
-            : 'Se acabaron las imágenes de ' . $mt_mes();
-    }
-    //  M · el cierre dice CON CUANTO, y siempre «registrados»: sin esa
-    //  palabra «18 pedidos» se lee como los pedidos del negocio, y Crecer
-    //  solo cuenta los que pasaron por aqui.
-    if ($E->estado === MetaState::M_CERRADA && $mt_snap['meta']
-        && $mt_snap['progreso']['actual'] !== null) {
-        [$sust_m, $part_m] = $uni;
-        $n_m = rtrim(rtrim(number_format((float)$mt_snap['progreso']['actual'], 2), '0'), '.');
-        $titulo = 'Cerraste con ' . $n_m . ' ' . $sust_m . ' ' . $part_m;
-    }
-    $objeto = (array)($E->evidencia['objeto'] ?? []);
-    //  El objeto pausado es el que el compositor eligio, no un ejemplo. Si el
-    //  estado no trae ninguno, la pantalla no se inventa uno.
-    $pausado = $mt_cuota_manda ? MetaLimiteImagen::objetoPausado($E) : [];
-    if ($pausado) $objeto = $pausado;
+    //  EL TITULO SALE DEL PRESENTADOR, NO DE AQUI.
+    //  Las tres transformaciones —quitar el prefijo cuando el turno ya esta
+    //  delante, reescribirlo cuando manda el limite, y decir con cuanto se
+    //  cerro— vivian en esta vista, donde Home no podia alcanzarlas. Con la
+    //  regla aqui dentro, Home solo podia decir otra cosa o copiar el codigo:
+    //  las dos son la misma enfermedad.
+    //
+    //  `true` = esta pantalla YA enseña el turno encima. Home lo pinta suelto y
+    //  por eso conserva el prefijo: es la unica diferencia legitima entre las
+    //  dos, y esta declarada en un parametro en vez de escondida en un `if`.
+    $titulo = MetaPresentador::titulo($E, true, $mt_cuota ?: [], $mt_snap);
+    $objeto = MetaPresentador::objeto($E, $mt_cuota ?: []);
   ?>
   <section class="tm-ahora">
     <span class="tm-turno <?= $h($turno_cls) ?>">
