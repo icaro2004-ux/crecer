@@ -1775,6 +1775,44 @@ try {
         }
         echo "\n  MetaPresentador lo usa: " . ($usos ? implode(', ', $usos) : '(nadie — inerte)') . "\n";
         echo "  core/I18n lo usa:       " . ($usos_i18n ? implode(', ', $usos_i18n) : '(nadie — inerte)') . "\n";
+
+        //  ── ¿ESTA CONECTADO 3B, Y QUE MOTOR CORRE DE VERDAD? ──────────
+        //  «Conectado» y «funcionando» son dos cosas distintas, y la diferencia
+        //  es justo la que este proyecto ha pagado dos veces. i18n.php puede
+        //  estar desplegado y aun asi correr en modo antiguo porque su guardia
+        //  no encontro las clases — y entonces la interfaz sale en español sin
+        //  que nadie lo note. Esta linea lo dice sin rodeos.
+        echo "\n  Idiomas (3B)\n";
+        $__i18n_php = __DIR__ . '/includes/i18n.php';
+        $__src_i18n = (string)@file_get_contents($__i18n_php);
+        $__conectado = (strpos($__src_i18n, 'I18N_MODERNO') !== false);
+        printf("  [%s] includes/i18n.php %s\n", $__conectado ? 'OK' : '··',
+               $__conectado ? 'trae la guardia de carga defensiva'
+                            : 'es la version ANTERIOR (3B sin desplegar)');
+        $__db = (string)@file_get_contents(__DIR__ . '/includes/db.php');
+        printf("  [%s] includes/db.php %s\n",
+               strpos($__db, 'i18n_arrancar($pdo)') !== false ? 'OK' : '··',
+               strpos($__db, 'i18n_arrancar($pdo)') !== false
+                   ? 'le pasa la conexion a Locale'
+                   : 'arranca sin conexion (3B sin desplegar)');
+
+        //  Y LO QUE DE VERDAD IMPORTA: que implementacion esta activa AHORA.
+        //  Se pregunta a la constante que fija la propia guardia, no al disco.
+        if (defined('I18N_MODERNO')) {
+            printf("  [%s] motor activo: %s\n", I18N_MODERNO ? 'OK' : '!!',
+                   I18N_MODERNO
+                       ? 'Crecer\\I18n (catalogos por dominio + preferencias)'
+                       : 'ANTIGUO — español fijo. La guardia no encontro las clases: '
+                       . 'mira el error_log, dice cual pieza falla');
+            if (!I18N_MODERNO) $todo = false;
+        } else {
+            echo "  [··] motor activo: no se puede saber (i18n.php no llego a correr aqui)\n";
+        }
+        printf("  ··   extension intl en este servidor: %s%s\n",
+               extension_loaded('intl') ? 'SI' : 'NO',
+               extension_loaded('intl')
+                   ? ' — declara una clase global Locale. Por eso las nuestras van en Crecer\\I18n'
+                   : '');
         echo "\n  " . ($todo ? 'FUNDACION COMPLETA · se puede conectar.'
                              : 'FALTA ALGO · NO conectes nada hasta que esto salga limpio.') . "\n\n";
     }

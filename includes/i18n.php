@@ -43,43 +43,99 @@ function i18n_letras_propias(string $clave): int {
     return mb_strlen(preg_replace('/[^\p{L}\p{N}]/u', '', $sin) ?? '');
 }
 
-// ── El idioma de este request ───────────────────────────────
-//  Orden: ?lang= (y se recuerda) → sesión → cookie → español.
-//  Se recuerda en cookie de un año para que el juez no tenga que arrastrar el
-//  ?lang=en por toda la app.
-function i18n_idioma(): string {
-    static $lang = null;
-    if ($lang !== null) return $lang;
-
-    $validos = explode(',', I18N_IDIOMAS);
-    $pedido  = strtolower(trim((string)($_GET['lang'] ?? '')));
-
-    if ($pedido !== '' && in_array($pedido, $validos, true)) {
-        $lang = $pedido;
-        if (session_status() === PHP_SESSION_ACTIVE) $_SESSION['crecer_lang'] = $lang;
-        if (!headers_sent()) {
-            setcookie('crecer_lang', $lang, [
-                'expires'  => time() + 31536000,
-                'path'     => '/',
-                'secure'   => (($_SERVER['HTTPS'] ?? '') !== ''),
-                'httponly' => false,          // el front puede leerlo para el toggle
-                'samesite' => 'Lax',
-            ]);
+// ══════════════════════════════════════════════════════════════
+//  CARGA DEFENSIVA — Y ESTE BLOQUE TIENE UNA FECHA
+//
+//  El 22 de agosto de 2026 aquí había dos `require_once` a secas. Los archivos
+//  no llegaron al servidor y PRODUCCIÓN ENTERA murió: público y panel, con
+//  sesión y sin ella, en todos los idiomas. Porque este archivo lo carga
+//  db.php, y db.php lo hace TODA página del producto. El error exacto fue
+//  «Failed opening required '.../core/I18n/Locale.php' in i18n.php:46».
+//
+//  El defecto no fue del despliegue. Fue de este archivo: puso el arranque de
+//  las 71 pantallas a depender de dos ficheros nuevos SIN NINGUNA RED. Un envío
+//  parcial pasó de «el toggle no traduce» a «el sitio no existe».
+//
+//  LA REGLA QUE SALE DE AHÍ: el idioma es una comodidad, no un órgano vital.
+//  Si su maquinaria no está, Crecer sigue funcionando en español —que es lo que
+//  hacía antes de que esto existiera— y deja constancia en el log. Nunca un
+//  fatal global. Nunca la página en blanco de un cliente por una traducción.
+//
+//  Y HUBO UNA SEGUNDA CAUSA, que solo aparecio al desplegar la fundacion sola:
+//  la extension `intl` declara una clase GLOBAL llamada Locale. Hostinger la
+//  tiene; el XAMPP de desarrollo no. Sin namespace, incluir el archivo daba
+//  «Cannot declare class Locale, because the name is already in use» — y ESO
+//  NO ES UN Throwable, es un E_ERROR de declaracion que ningun try/catch
+//  atrapa. Por eso las clases viven en Crecer\I18n\ y aqui se nombran
+//  completas: un `use` al principio del archivo tambien valdria, pero con dos
+//  nombres y este historial, verlas enteras en cada linea cuesta menos que
+//  volver a preguntarse cual es cual.
+//
+//  LOS CUATRO CASOS QUE ESTA GUARDIA CUBRE, y como:
+//
+//    archivo ausente   is_file() antes, y ademas el `require` lanzaria un
+//                      Error «Failed opening required» que se atrapa.
+//    archivo invalido  un fallo de sintaxis en un `require` lanza ParseError
+//                      en PHP 7+, y ParseError es Throwable. Se atrapa.
+//    clase ausente     el archivo existe y se carga, pero no declara lo que
+//                      dice declarar: class_exists() DESPUES del require.
+//    redeclaracion     la evita el namespace. No se puede atrapar, asi que la
+//                      unica defensa es no provocarla.
+//
+//  Se usa `is_file` + `class_exists` y NO un `@require`: silenciar el error
+//  ocultaria tambien el archivo a medias, que es el caso que mas engaña —
+//  existe, se carga, y revienta al primer uso.
+// ══════════════════════════════════════════════════════════════
+if (!defined('I18N_MODERNO')) {
+    $__i18n_ok = true;
+    $__i18n_por = '';
+    foreach (['Locale', 'Catalogo'] as $__c) {
+        $__p   = dirname(__DIR__) . '/core/I18n/' . $__c . '.php';
+        $__fqn = 'Crecer\\I18n\\' . $__c;
+        if (class_exists($__fqn, false)) continue;          // ya cargada
+        if (!is_file($__p)) { $__i18n_ok = false; $__i18n_por = 'falta ' . $__c . '.php'; break; }
+        try {
+            require_once $__p;
+        } catch (Throwable $__e) {
+            //  SOLO la clase del error y el archivo. NUNCA el mensaje entero ni
+            //  nada del request: este log lo puede leer quien administre el
+            //  servidor, y un volcado con datos de un cliente dentro es una
+            //  fuga que nadie pidio.
+            $__i18n_ok = false;
+            $__i18n_por = get_class($__e) . ' al cargar ' . $__c . '.php';
+            break;
         }
-        return $lang;
+        if (!class_exists($__fqn, false)) {
+            $__i18n_ok = false;
+            $__i18n_por = $__c . '.php no declara ' . $__fqn;
+            break;
+        }
     }
-
-    $sesion = (session_status() === PHP_SESSION_ACTIVE) ? ($_SESSION['crecer_lang'] ?? '') : '';
-    if ($sesion !== '' && in_array($sesion, $validos, true)) return $lang = $sesion;
-
-    $cookie = strtolower(trim((string)($_COOKIE['crecer_lang'] ?? '')));
-    if ($cookie !== '' && in_array($cookie, $validos, true)) return $lang = $cookie;
-
-    return $lang = 'es';
+    if (!$__i18n_ok) {
+        //  Una vez por proceso, no una por pagina: un log que se inunda es un
+        //  log que nadie lee. Y sin datos: solo QUE pieza falla y POR QUE.
+        error_log('i18n: maquinaria de idiomas no disponible (' . $__i18n_por
+                . ') — Crecer sigue en español. Revisa el despliegue.');
+    }
+    define('I18N_MODERNO', $__i18n_ok);
+    unset($__i18n_ok, $__i18n_por, $__c, $__p, $__fqn, $__e);
 }
 
+// ── El idioma de este request ───────────────────────────────
+//  YA NO SE DECIDE AQUÍ. Locale es la fuente única, y esto es su puerta para
+//  el código que ya la llamaba por este nombre.
+//
+//  Antes vivía aquí una precedencia propia (?lang → sesión → cookie → es) y
+//  la preferencia moría en el navegador: no cruzaba de un teléfono a otro ni
+//  sobrevivía a limpiar cookies. Ahora manda lo que el usuario guardó, y la
+//  cookie pasa a ser lo que siempre debió ser: el recuerdo de quien todavía
+//  no ha iniciado sesión.
+//  SIN LA MAQUINARIA, ESPAÑOL. Es el comportamiento que tenia Crecer antes de
+//  que el idioma existiera, y ninguna pantalla se entera.
+function i18n_idioma(): string { return I18N_MODERNO ? \Crecer\I18n\Locale::interfaz() : 'es'; }
+
 /** ¿Hay que traducir algo en este request? En español: no. */
-function i18n_activo(): bool { return i18n_idioma() !== 'es'; }
+function i18n_activo(): bool { return I18N_MODERNO && \Crecer\I18n\Locale::traduciendo(); }
 
 // ── La normalización ────────────────────────────────────────
 //  EL EXTRACTOR Y EL RUNTIME TIENEN QUE USAR ESTA MISMA FUNCIÓN, o las claves
@@ -141,16 +197,16 @@ function i18n_compilar(array $pares): array {
     return ['exactas' => $exactas, 'patrones' => $patrones];
 }
 
-function i18n_diccionario(): array {
-    static $cache = null;
-    if ($cache !== null) return $cache;
+function i18n_diccionario(?string $lang = null): array {
+    static $cache = [];
+    $lang = $lang ?? i18n_idioma();
+    if (isset($cache[$lang])) return $cache[$lang];
 
-    $lang = i18n_idioma();
     $ruta = dirname(__DIR__) . '/lang/' . preg_replace('/[^a-z]/', '', $lang) . '.php';
-    if ($lang === 'es' || !is_file($ruta)) return $cache = ['exactas' => [], 'patrones' => []];
+    if ($lang === 'es' || !is_file($ruta)) return $cache[$lang] = ['exactas' => [], 'patrones' => []];
 
     $cargado = require $ruta;
-    return $cache = i18n_compilar(is_array($cargado) ? $cargado : []);
+    return $cache[$lang] = i18n_compilar(is_array($cargado) ? $cargado : []);
 }
 
 /**
@@ -184,14 +240,84 @@ function i18n_buscar(string $clave, array $dic): ?string {
  * (mensajes de error, correos, títulos calculados).
  * Sin traducción → devuelve el español tal cual. Nunca falla.
  */
-function t(string $es): string {
-    if (!i18n_activo()) return $es;
-    $en = i18n_buscar(i18n_clave($es), i18n_diccionario());
-    if ($en === null) return $es;
+/**
+ * La traducción de una cadena de interfaz.
+ *
+ * Con datos en medio se escribe con %s y se pasan aparte:
+ *   t('Plan versión %s creado', $n)
+ * Nunca concatenando —«'Plan versión ' . $n . ' creado'»— porque eso son TRES
+ * pedazos y ninguno de los tres es una frase: el catálogo no puede traducir
+ * media oración, y el inglés casi nunca deja el dato en el mismo sitio.
+ */
+function t(string $es, ...$datos): string {
+    $tr = i18n_a(i18n_idioma(), $es);
+    if (!$datos) return $tr;
+    //  Si la traducción no lleva tantos %s como datos, vsprintf lanza. Vale
+    //  más devolver la frase sin rellenar que tumbar la página por una
+    //  traducción mal escrita.
+    try { return vsprintf($tr, $datos); } catch (Throwable $e) { return $tr; }
+}
+
+/**
+ * Igual, pero en el idioma de CONTENIDO de una marca — no en el del usuario.
+ *
+ * Para lo poco que va fijo hacia el público de un negocio y no lo escribe la
+ * IA. La diferencia con t() no es de estilo: si esto usara el idioma de la
+ * interfaz, un admin revisando en inglés la cuenta de una repostería de
+ * Bayamón haría que el texto que ve su clientela saliera en inglés.
+ */
+function tc(?int $marca_id, string $es): string {
+    return i18n_a(I18N_MODERNO ? \Crecer\I18n\Locale::contenido($marca_id) : 'es', $es);
+}
+
+/**
+ * El diccionario de una pantalla, serializado para su JavaScript.
+ *
+ *   <script>window.T = <?= tj(['guardando' => 'Guardando…']) ?>;</script>
+ *   boton.textContent = T.guardando;
+ *
+ * POR QUÉ ASÍ Y NO TRADUCIENDO EN EL NAVEGADOR: hoy hay 609 cadenas dentro de
+ * <script> que el filtro de salida no puede tocar —salta <script> a propósito,
+ * porque traducir código lo rompe—. La respuesta NO es un segundo diccionario
+ * en el cliente ni reemplazo de texto en el DOM: es que el JS deje de tener
+ * texto. El PHP traduce y el JS recibe.
+ *
+ * La clave corta es solo el nombre de la propiedad en JS; la clave de catálogo
+ * sigue siendo el español, igual que en t().
+ */
+function tj(array $pares): string {
+    $out = [];
+    foreach ($pares as $js => $es) $out[(string)$js] = t((string)$es);
+    //  JSON_HEX_TAG: un '<' dentro de una traducción no puede cerrar el
+    //  <script> que la contiene.
+    return json_encode($out, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?: '{}';
+}
+
+/**
+ * El motor de las tres. Catálogo primero, diccionario viejo después.
+ *
+ * Los dos conviven a propósito mientras dura la migración: lo ya migrado vive
+ * en lang/es|en/<dominio>.php, y lo que todavía no —el 95% de la app— sigue
+ * apoyado en las 749 entradas del diccionario plano. Quitarlo hoy dejaría en
+ * español lo poco que hoy sí se traduce.
+ */
+function i18n_a(string $lang, string $es): string {
+    $clave = i18n_clave($es);
+
+    //  Sin catalogos se cae al diccionario plano de siempre, que vive en
+    //  lang/en.php y lleva meses desplegado.
+    $tr = I18N_MODERNO ? \Crecer\I18n\Catalogo::buscar($lang, $clave) : null;
+    if ($tr === null && $lang !== 'es') {
+        //  El puente al diccionario plano. Solo tiene inglés: en español no
+        //  hay nada que buscar, la clave YA es el español.
+        $tr = i18n_buscar($clave, i18n_diccionario($lang));
+    }
+    if ($tr === null) return $es;
+
     // Se respeta el espacio original de los bordes (importante dentro de <p>).
     preg_match('/^(\s*)/u', $es, $a);
     preg_match('/(\s*)$/u', $es, $b);
-    return ($a[1] ?? '') . $en . ($b[1] ?? '');
+    return ($a[1] ?? '') . $tr . ($b[1] ?? '');
 }
 
 // ── El filtro de salida ─────────────────────────────────────
@@ -297,10 +423,11 @@ function i18n_traducir_tag(string $tag, array $dic): string {
 // ── El interruptor ──────────────────────────────────────────
 /** La URL de ahora mismo con otro idioma (conserva el resto del query). */
 function i18n_url(string $lang): string {
-    $uri   = (string)($_SERVER['REQUEST_URI'] ?? '/crecer/');
-    $parte = explode('?', $uri, 2);
-    $qs    = [];
-    if (isset($parte[1])) parse_str($parte[1], $qs);
+    if (I18N_MODERNO) return \Crecer\I18n\Locale::url($lang);
+    //  El interruptor sigue existiendo aunque el motor no: conserva el resto
+    //  del query, que es lo unico que de verdad hace falta.
+    $parte = explode('?', (string)($_SERVER['REQUEST_URI'] ?? '/crecer/'), 2);
+    $qs = []; if (isset($parte[1])) parse_str($parte[1], $qs);
     $qs['lang'] = $lang;
     return $parte[0] . '?' . http_build_query($qs);
 }
@@ -337,10 +464,27 @@ function i18n_toggle_html(): string {
  * En español no se abre buffer ninguno: cero sobrecarga, cero riesgo, la ruta
  * del cliente real intacta.
  */
-function i18n_arrancar(): void {
+function i18n_arrancar(?PDO $pdo = null): void {
     static $ya = false;
     if ($ya || PHP_SAPI === 'cli') return;
     $ya = true;
-    if (!i18n_activo()) return;
+    //  Sin maquinaria no hay nada que montar ni buffer que abrir: el filtro de
+    //  salida no existiria y la pagina sale en español, intacta.
+    if (!I18N_MODERNO) return;
+    \Crecer\I18n\Locale::montar($pdo);
+
+    //  OJO CON EL ORDEN: aquí NO se puede preguntar el idioma. La sesión
+    //  todavía no está abierta (session_start() vive en auth.php, que se
+    //  incluye después de db.php), así que resolver ahora dejaría memorizado
+    //  un idioma decidido sin ver al usuario — y quien tuviera inglés guardado
+    //  leería el contenido en español con el menú en inglés. Justo la
+    //  incoherencia que se está corrigiendo.
+    //
+    //  Se pregunta lo único que se puede saber ya: si existe ALGUNA
+    //  posibilidad de que este request no sea español. Si la hay, se abre el
+    //  buffer y el idioma se decide al vaciarlo, al final del request, con la
+    //  sesión ya abierta. Un buffer abierto de más no traduce nada: el filtro
+    //  se sale en la primera línea.
+    if (!\Crecer\I18n\Locale::puedeNoSerDefecto()) return;
     ob_start('i18n_filtro');
 }

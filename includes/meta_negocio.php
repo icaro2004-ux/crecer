@@ -718,8 +718,8 @@ EL DUEÑO PIDE UN PLAN NUEVO. Lo que dice del anterior: \""
     if (!meta_hay_tabla_plan($pdo)) {
         return ['ok' => false, 'diagnostico' => $diagnostico, 'veredicto' => $veredicto,
                 'tacticas' => [], 'plan_id' => null,
-                'err' => 'Falta la tabla de planes en la base de datos. '
-                       . 'No toqué nada: tu plan de ahora sigue igual.'];
+                'err' => t('Falta la tabla de planes en la base de datos. '
+                         . 'No toqué nada: tu plan de ahora sigue igual.')];
     }
 
     $plan_id = null;
@@ -794,8 +794,8 @@ EL DUEÑO PIDE UN PLAN NUEVO. Lo que dice del anterior: \""
 
         return ['ok' => false, 'diagnostico' => '', 'veredicto' => '', 'tacticas' => [],
                 'plan_id' => null,
-                'err' => 'No pude guardar el plan nuevo. Tu plan de ahora sigue en pie, '
-                       . 'tal como estaba — dale otra vez.'];
+                'err' => t('No pude guardar el plan nuevo. Tu plan de ahora sigue en pie, '
+                         . 'tal como estaba — dale otra vez.')];
     }
 
     return ['ok' => true, 'repetido' => false, 'diagnostico' => $diagnostico, 'veredicto' => $veredicto,

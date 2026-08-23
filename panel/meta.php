@@ -1669,21 +1669,22 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
     <section class="tm-hecho<?= $tm_ya !== null ? ' tm-hecho-ya' : '' ?>" role="status">
       <?= ico($tm_ya !== null ? 'copy' : 'check-circle') ?>
       <div>
-        <?php /*  En español liso, como el resto de esta pantalla. Cuando llegue
-                  la fase de idiomas, estas cuatro frases se pasan al catálogo
-                  CON %s y no concatenadas: «'Plan versión ' . $n . ' creado'»
-                  son tres pedazos y ninguno es una frase traducible. Hoy meterlo
-                  aquí solo traería el idioma a un lote que no es de idioma.  */ ?>
+        <?php /*  Al catálogo, y los datos por %s. En el lote 2 estas frases
+                  fueron a español liso porque el t() de entonces era de una
+                  sola variable y habría impreso el «%s» en pantalla. Ahora hay
+                  catálogo, y vuelven — con %s, no concatenadas: «'Plan versión '
+                  . $n . ' creado'» son tres pedazos y ninguno es una frase que
+                  se pueda traducir.  */ ?>
         <b><?php if ($tm_ya !== null): ?>
-             <?= $h($tm_ya > 0 ? 'Este plan ya estaba creado — es la versión ' . (int)$tm_ya
-                               : 'Este plan ya estaba creado') ?>
+             <?= $h($tm_ya > 0 ? t('Este plan ya estaba creado — es la versión %s', (int)$tm_ya)
+                               : t('Este plan ya estaba creado')) ?>
            <?php else: ?>
-             <?= $h($tm_nuevo > 0 ? 'Plan versión ' . (int)$tm_nuevo . ' creado'
-                                  : 'Plan nuevo creado') ?>
+             <?= $h($tm_nuevo > 0 ? t('Plan versión %s creado', (int)$tm_nuevo)
+                                  : t('Plan nuevo creado')) ?>
            <?php endif; ?></b>
         <span><?= $h($tm_ya !== null
-                ? 'No se creó otro: tu petición ya se había atendido.'
-                : 'El anterior queda guardado en el historial. Esto es lo que hay ahora.') ?></span>
+                ? t('No se creó otro: tu petición ya se había atendido.')
+                : t('El anterior queda guardado en el historial. Esto es lo que hay ahora.')) ?></span>
       </div>
     </section>
   <?php endif; ?>

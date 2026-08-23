@@ -16,17 +16,21 @@
 //  Asi que los archivos suben SOLOS, sin que nadie los llame, se comprueba en
 //  el servidor que llegaron y cargan, y solo entonces se conecta el motor (3B).
 //
-//  ESTA PRUEBA CUBRE LA MITAD QUE CORRESPONDE A 3A:
-//   · que las dos clases carguen por su cuenta y no arrastren nada al hacerlo;
-//   · que los catalogos existan, se lean y cuadren entre si;
-//   · que NADIE del producto los mencione todavia;
-//   · y —lo que de verdad importa hoy— que ESCONDERLOS NO ROMPA NADA, porque
-//     ninguna linea depende de ellos.
+//  Y AL DESPLEGAR 3A APARECIO LA CAUSA DE VERDAD: la extension `intl` declara
+//  una clase GLOBAL llamada Locale. Hostinger la tiene, este XAMPP no. «Cannot
+//  declare class Locale» NO es un Throwable —es un E_ERROR de declaracion— y
+//  ningun try/catch lo atrapa. De ahi el namespace Crecer\I18n.
 //
-//  LO QUE NO CUBRE, Y VA EN 3B: la guardia de carga defensiva dentro de
-//  i18n.php y sus tres casos (archivo ausente, clase ausente, archivo presente
-//  pero invalido). Esa guardia no existe todavia — aqui no hay nada que
-//  proteger porque no hay nada conectado.
+//  ESTA PRUEBA CUBRE LA FUNDACION EN SI:
+//   · que las dos clases carguen por su cuenta y no arrastren nada al hacerlo;
+//   · que NO choquen con una clase global del mismo nombre;
+//   · que los catalogos existan, se lean y cuadren entre si;
+//   · que SOLO i18n.php las use — una pantalla que llamara a Locale por su
+//     cuenta se saltaria la guardia de carga defensiva;
+//   · y que esconderlas devuelva el español de siempre, no una pagina rota.
+//
+//  La guardia en si y sus cuatro modos de fallo se prueban aparte, en
+//  tests/test_i18n_carga_defensiva.php.
 //
 //  CERO base de datos para lo de las clases, cero red.
 // ============================================================
@@ -49,7 +53,7 @@ $RAIZ    = str_replace('\\', '/', dirname(__DIR__));
 $DIR_I18N = $RAIZ . '/core/I18n';
 $DIR_LANG = $RAIZ . '/lang';
 
-echo "\nLA FUNDACION DEL IDIOMA, A SOLAS · 3A\n" . str_repeat('=', 58) . "\n";
+echo "\nLA FUNDACION DEL IDIOMA · 3A inerte, 3B conectada\n" . str_repeat('=', 58) . "\n";
 
 // ══════════════════════════════════════════════════════════════
 //  1 · LOS ARCHIVOS ESTAN Y CARGAN DE VERDAD
@@ -220,8 +224,17 @@ ok('y pone el idioma', strpos($u, 'lang=en') !== false, $u);
 //  ESTA ES LA AFIRMACION QUE DEFINE 3A. Mientras nadie los mencione,
 //  desplegarlos no puede romper nada — y por eso esconderlos, abajo, tampoco.
 //  En 3B se pondra roja a proposito: la conectara includes/i18n.php.
-echo "\n  — 4 · inertes: nadie los menciona —\n";
-$permitido = ['_cache.php'];   // el diagnostico los NOMBRA para verificarlos
+echo "\n  — 4 · quien los usa, y solo quien debe —\n";
+//  EN 3A ESTA AFIRMACION DECIA «NADIE», y era la que definia aquel lote. Quedo
+//  escrito que en 3B se pondria roja a proposito, y asi fue: cazo
+//  includes/i18n.php, que es justo quien tiene que conectarlos.
+//
+//  Ahora dice otra cosa y sigue siendo la misma vigilancia: EL UNICO QUE LOS
+//  TOCA ES i18n.php. Si mañana una pantalla llamara a Locale por su cuenta, se
+//  saltaria la guardia de carga defensiva — y volveriamos a tener una pagina
+//  que muere porque falta un archivo de idioma.
+$permitido = ['_cache.php',   // el diagnostico los NOMBRA para verificarlos
+              'i18n.php'];    // la unica puerta, y la que lleva la guardia
 $usos = [];
 foreach (array_merge(glob($RAIZ . '/panel/*.php') ?: [], glob($RAIZ . '/includes/*.php') ?: [],
                      glob($RAIZ . '/core/Meta/*.php') ?: [], glob($RAIZ . '/*.php') ?: [],
@@ -233,8 +246,11 @@ foreach (array_merge(glob($RAIZ . '/panel/*.php') ?: [], glob($RAIZ . '/includes
     }
 }
 sort($usos);
-ok('ningun archivo del producto los usa', $usos === [],
-   implode(' · ', $usos) . "\n         si algo los usa, 3A ya NO es inerte");
+ok('solo i18n.php los usa; ninguna pantalla por su cuenta', $usos === [],
+   implode(' · ', $usos) . "\n         una pantalla que llame a Locale directamente se salta la guardia");
+ok('y i18n.php si los usa: 3B esta conectado',
+   strpos((string)file_get_contents($RAIZ . '/includes/i18n.php'), 'Crecer\\I18n\\Locale::') !== false,
+   'si no, la maquinaria estaria desplegada y nadie la llamaria');
 ok('el diagnostico si los nombra (por eso esta exceptuado)',
    strpos((string)file_get_contents($RAIZ . '/_cache.php'), 'core/I18n') !== false,
    'la excepcion de _cache.php sobra: quitala en vez de dejarla tapando');
@@ -269,16 +285,27 @@ $pedir = function (string $pag, array $get = [], int $uid = 0, int $marca = 0) u
     $p = explode('|', trim($ls ? end($ls) : ''), 3);
     return ['bytes' => (int)($p[0] ?? 0), 'estado' => $p[1] ?? 'SIN-SALIDA', 'crudo' => $sal];
 };
-$PAGS = [['crecer.php', [], 0], ['login.php', [], 0],
-         ['crecer.php', ['lang' => 'en'], 0],
-         ['index.php', [], (int)$fx['usuario_id']],
-         ['meta.php', ['lang' => 'en'], (int)$fx['usuario_id']]];
+//  La ultima columna dice CONTRA QUE se compara cada fila, y no es un detalle:
+//  con la maquinaria puesta, «panel/meta.php ?lang=en» de verdad se traduce.
+//  Al esconderla cae a español y cambia de tamaño — que es el comportamiento
+//  correcto, no un defecto. Asi que su referencia es la version ESPAÑOLA de esa
+//  misma pagina, no la inglesa. Comparar cada fila consigo misma daba un rojo
+//  que no señalaba nada.
+$PAGS = [
+    ['crecer.php', [],               0, 'crecer.php[]'],
+    ['login.php',  [],               0, 'login.php[]'],
+    ['crecer.php', ['lang' => 'en'], 0, 'crecer.php[]'],
+    ['index.php',  [],               (int)$fx['usuario_id'], 'index.php[]'],
+    ['meta.php',   ['lang' => 'en'], (int)$fx['usuario_id'], 'meta.php[]'],
+];
 
 try {
+    //  La referencia se toma SIEMPRE en español: es lo que tiene que salir
+    //  cuando el idioma no esta disponible.
     $conEllos = [];
-    foreach ($PAGS as [$p, $g, $u]) {
-        $r = $pedir($p, $g, $u, (int)$fx['marca_id']);
-        $conEllos[$p . json_encode($g)] = $r['bytes'];
+    foreach ([['crecer.php', 0], ['login.php', 0], ['index.php', 1], ['meta.php', 1]] as [$p, $s]) {
+        $r = $pedir($p, [], $s ? (int)$fx['usuario_id'] : 0, (int)$fx['marca_id']);
+        $conEllos[$p . '[]'] = $r['bytes'];
     }
     ok('se pueden esconder los dos directorios',
        @rename($DIR_I18N, $OFF_I) && @rename($DIR_LANG, $OFF_L),
@@ -286,7 +313,7 @@ try {
     ok('y de verdad no estan', !is_dir($DIR_I18N) && !is_dir($DIR_LANG));
 
     $rotas = 0;
-    foreach ($PAGS as [$p, $g, $u]) {
+    foreach ($PAGS as [$p, $g, $u, $refKey]) {
         $r = $pedir($p, $g, $u, (int)$fx['marca_id']);
         $bien = ($r['bytes'] > 400 && $r['estado'] === 'limpio');
         if (!$bien) $rotas++;
@@ -294,8 +321,10 @@ try {
            $bien, $r['estado'] . ' · ' . mb_substr($r['crudo'], 0, 220));
         //  Y no solo «no revienta»: sale exactamente lo mismo. Cualquier
         //  diferencia significaria que la ausencia altera lo que ve el cliente.
-        ok('  y con los mismos bytes', $r['bytes'] === ($conEllos[$p . json_encode($g)] ?? -1),
-           $r['bytes'] . ' vs ' . ($conEllos[$p . json_encode($g)] ?? -1));
+        ok('  y sale la version española de siempre',
+           $r['bytes'] === ($conEllos[$refKey] ?? -1),
+           $r['bytes'] . ' vs ' . ($conEllos[$refKey] ?? -1)
+         . ' · el respaldo es el español que Crecer servia antes del idioma');
     }
     ok('NINGUNA pagina cayo', $rotas === 0,
        $rotas . ' de ' . count($PAGS) . ' · esto es lo que tumbo produccion');
@@ -312,6 +341,6 @@ ok('y no quedaron directorios de prueba', !is_dir($OFF_I) && !is_dir($OFF_L));
 
 echo "\n" . str_repeat('=', 58) . "\n";
 echo $fallos === 0
-    ? "  FUNDACION LISTA E INERTE · {$n} afirmaciones\n\n"
+    ? "  FUNDACION LISTA Y CONECTADA · {$n} afirmaciones\n\n"
     : "  {$fallos} de {$n}\n\n";
 exit($fallos === 0 ? 0 : 1);
