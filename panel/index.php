@@ -441,7 +441,12 @@ if (!$hz_post) foreach ($trabajo as $t) { if (($t['estado'] ?? '') === 'programa
 if (!$hz_post && !empty($trabajo)) { $hz_post = $trabajo[0]; $hz_post['modo'] = 'listo'; }
 
 $hz_pend = (int)($cuenta['borrador'] ?? 0);
-$hz_status = $hz_pend > 0 ? "Tienes {$hz_pend} post" . ($hz_pend==1?'':'s') . " esperando tu OK" : 'Todo listo para hoy';
+//  EL PLURAL ES UNA FRASE ENTERA, NO UNA «s» PEGADA. Concatenar la marca del
+//  plural funciona en español y se rompe en cuanto el idioma la pone en otro
+//  sitio; ademas deja tres pedazos que ningun catalogo puede traducir.
+$hz_status = $hz_pend > 0
+    ? t($hz_pend == 1 ? 'Tienes %s post esperando tu OK' : 'Tienes %s posts esperando tu OK', $hz_pend)
+    : t('Todo listo para hoy');
 
 // Semana actual (Lun→Dom) con lo que hay cada día
 $hz_week = [];
@@ -454,7 +459,7 @@ try {
     $ws->execute([$marca_id]);
     foreach ($ws->fetchAll(PDO::FETCH_ASSOC) as $r) { $hz_week[(int)$r['dw']][] = $r; }
 } catch (Throwable $e) {}
-$hz_mon = strtotime('monday this week'); $hz_lbl = ['LUN','MAR','MIÉ','JUE','VIE','SÁB','DOM']; $hz_dias = [];
+$hz_mon = strtotime('monday this week'); $hz_lbl = array_map('t', ['LUN','MAR','MIÉ','JUE','VIE','SÁB','DOM']); $hz_dias = [];
 for ($i=0;$i<7;$i++){ $ts=$hz_mon + $i*86400; $dw=(int)date('w',$ts)+1;
     $hz_dias[] = ['lbl'=>$hz_lbl[$i],'num'=>date('j',$ts),'hoy'=>date('Y-m-d',$ts)===date('Y-m-d'),'items'=>$hz_week[$dw] ?? []]; }
 
@@ -1040,7 +1045,13 @@ $credito  = $has_deck
                 Meta reimplementada en esta pantalla con otro resultado.  */ ?>
       <div class="n-jugada">
         <span class="n-jl">Lo que toca ahora</span>
-        <b><?= $h($__hm['titulo']) ?></b>
+        <?php /*  EL TITULO SE TRADUCE AQUI, EN LA PANTALLA, no en el compositor.
+                  MetaStateComposer es puro y tiene que seguir siendolo: mete
+                  t() ahi y el estado deja de ser el mismo objeto segun quien
+                  mire. Ademas Tu Meta comparte ese compositor y todavia no
+                  entra en la fase de idiomas — traducir en el origen la habria
+                  arrastrado sin querer.  */ ?>
+        <b><?= $h(t($__hm['titulo'])) ?></b>
         <?php if ($__hm['objeto']['titulo'] !== ''): ?>
           <p><?= $h($__hm['objeto']['titulo']) ?></p>
         <?php endif; ?>
@@ -1144,14 +1155,14 @@ $credito  = $has_deck
       $__afirmar = $__hm && $__hm['puede'];
     ?>
       <?php if (!$__prog['medible']): ?>
-        <div class="an-ok"><?= ico('check-circle') ?> Estoy pendiente de tu meta.</div>
+        <div class="an-ok"><?= ico('check-circle') ?> <?= $h(t('Estoy pendiente de tu meta.')) ?></div>
         <p class="an-msg an-sub">Este objetivo todavía no lo puedo medir solo, así que te aviso por lo que sí veo:
            cuánta gente alcanzan tus posts y cuántos te escriben.</p>
       <?php elseif ($__prog['actual'] === null || (float)$__prog['actual'] <= 0): ?>
         <?php /* `actual` en null = todavía no hay señal (Meta aún no reporta).
                  Antes caía al último caso y decía "Vamos en ritmo. Llevas 0
                  personas" debajo de un card que correctamente no enseña número. */ ?>
-        <div class="an-ok"><?= ico('clock') ?> Todavía no hay nada que medir de tu meta.</div>
+        <div class="an-ok"><?= ico('clock') ?> <?= $h(t('Todavía no hay nada que medir de tu meta.')) ?></div>
         <p class="an-msg an-sub">Cuando salgan los primeros posts del plan y la gente empiece a moverse,
            aquí te digo qué está funcionando y qué hay que cambiar.</p>
       <?php elseif ($__afirmar && $__prog['al_dia'] === false): ?>
@@ -1176,7 +1187,7 @@ $credito  = $has_deck
                  Crecer solo cuenta lo que pasa por dentro, y presentarlo como
                  el total del negocio seria inventarselo. Se dice lo que SI se
                  sabe.  */ ?>
-        <div class="an-ok"><?= ico('check-circle') ?> Estoy pendiente de tu meta.</div>
+        <div class="an-ok"><?= ico('check-circle') ?> <?= $h(t('Estoy pendiente de tu meta.')) ?></div>
         <p class="an-msg an-sub">Solo cuento lo que pasa por Crecer, así que el número de tu meta
            lo llevas tú. Lo que sí te puedo decir es a cuánta gente llegan tus posts y cuántos te escriben.</p>
       <?php endif; ?>
@@ -1203,7 +1214,7 @@ $credito  = $has_deck
       ?></div>
     <?php endif; ?>
 
-    <a class="an-ver" href="<?= $BASE ?>/resultados.php?<?= $mid ?>">Ver todos los resultados →</a>
+    <a class="an-ver" href="<?= $BASE ?>/resultados.php?<?= $mid ?>"><?= $h(t('Ver todos los resultados →')) ?></a>
   </section>
   <script>
   (function(){
@@ -1218,7 +1229,7 @@ $credito  = $has_deck
   </script>
 
   <section class="hz-card">
-    <div class="hz-ch"><b>Calendario</b><a href="<?= $BASE ?>/calendario.php?<?= $mid ?>">Ver todo →</a></div>
+    <div class="hz-ch"><b><?= $h(t('Calendario')) ?></b><a href="<?= $BASE ?>/calendario.php?<?= $mid ?>"><?= $h(t('Ver todo →')) ?></a></div>
     <div class="hz-week">
       <?php foreach ($hz_dias as $d): ?>
       <div class="hz-day<?= $d['hoy']?' on':'' ?>">
@@ -1250,6 +1261,21 @@ $credito  = $has_deck
 </main>
 
 <script>
+//  EL JAVASCRIPT NO TRADUCE: RECIBE.
+//  Estos textos solo salen si algo falla —una petición que se cae, un guardado
+//  que no entra— y por eso son los que más se olvidan: un barrido de la
+//  pantalla no los ve nunca. El PHP los traduce y los entrega ya hechos, que
+//  es lo contrario de reemplazar texto en el DOM desde el cliente.
+window.T = Object.assign(window.T || {}, <?= tj([
+  'no_pudo'       => 'No se pudo. Intenta otra vez.',
+  'sin_conexion'  => 'Se cayó la conexión. Intenta otra vez.',
+  'cayo'          => 'Se cayó la conexión.',
+  'no_guardo'     => 'No se pudo guardar.',
+  'guardar'       => 'Guardar',
+  'reescribiendo' => 'La IA está reescribiendo…',
+  'regen_plan'    => 'Regenerar es parte del plan. Actívalo para que la IA reescriba.',
+  'no_reescribio' => 'No se pudo reescribir. Intenta otra vez.',
+]) ?>);
 (function(){
   // ── Clima (Open-Meteo, sin key; cache 1h por pueblo) ──
   var box=document.getElementById('hzWx');
@@ -1471,9 +1497,9 @@ $credito  = $has_deck
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (d && d.ok) { setTimeout(function () { busy = false; advance(); }, 300); }
-        else { busy = false; card.classList.remove('fly-up', 'fly-down'); alert((d && d.err) || 'No se pudo. Intenta otra vez.'); }
+        else { busy = false; card.classList.remove('fly-up', 'fly-down'); alert((d && d.err) || T.no_pudo); }
       })
-      .catch(function () { busy = false; card.classList.remove('fly-up', 'fly-down'); alert('Se cayó la conexión. Intenta otra vez.'); });
+      .catch(function () { busy = false; card.classList.remove('fly-up', 'fly-down'); alert(T.sin_conexion); });
   }
 
   deck.addEventListener('click', function (e) {
@@ -1572,19 +1598,19 @@ $credito  = $has_deck
     if(!card) return; var txt=ta.value.trim(); if(!txt){ return; }
     save.disabled=true; save.textContent='Guardando…';
     post('editar',{caption:txt}).then(function(d){
-      save.disabled=false; save.textContent='Guardar';
+      save.disabled=false; save.textContent=T.guardar;
       if(d && d.ok){ var el=capEl(card); if(el){ el.textContent=d.caption||txt; el.dataset.full=d.caption||txt; } cerrar(); }
-      else { alert((d&&d.err)||'No se pudo guardar.'); }
-    }).catch(function(){ save.disabled=false; save.textContent='Guardar'; alert('Se cayó la conexión.'); });
+      else { alert((d&&d.err)||T.no_guardo); }
+    }).catch(function(){ save.disabled=false; save.textContent=T.guardar; alert(T.cayo); });
   });
   regen.addEventListener('click', function(){
-    if(!card) return; regen.disabled=true; var old=regen.innerHTML; regen.textContent='La IA está reescribiendo…';
+    if(!card) return; regen.disabled=true; var old=regen.innerHTML; regen.textContent=T.reescribiendo;
     post('regenerar',{}).then(function(d){
       regen.disabled=false; regen.innerHTML=old;
       if(d && d.ok && d.caption){ ta.value=d.caption; }
-      else if(d && d.paywall){ alert('Regenerar es parte del plan. Actívalo para que la IA reescriba.'); }
-      else { alert('No se pudo reescribir. Intenta otra vez.'); }
-    }).catch(function(){ regen.disabled=false; regen.innerHTML=old; alert('Se cayó la conexión.'); });
+      else if(d && d.paywall){ alert(T.regen_plan); }
+      else { alert(T.no_reescribio); }
+    }).catch(function(){ regen.disabled=false; regen.innerHTML=old; alert(T.cayo); });
   });
 })();
 </script>

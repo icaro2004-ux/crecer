@@ -22,34 +22,34 @@ if ($ay_marca_id <= 0 || !function_exists('csrf_token') || empty($_SESSION['usua
      email y texto. Backend: panel/ayudante.php · Motor: includes/ayudante.php
      Desktop = panel lateral (contexto al lado del trabajo).
      Móvil    = hoja que sube (una mano, pulgar, acción primaria arriba). -->
-<button class="ay-fab" id="ayFab" aria-label="Ayuda">
-  <?= ico('sparkles') ?><span>Ayuda</span>
+<button class="ay-fab" id="ayFab" aria-label="<?= $h(t('Ayuda')) ?>">
+  <?= ico('sparkles') ?><span><?= $h(t('Ayuda')) ?></span>
 </button>
 <div class="ay-bd" id="ayBd"></div>
 <aside class="ay-panel" id="ayPanel" aria-hidden="true">
   <header class="ay-head">
     <span class="ay-orb"><?= ico('sparkles') ?></span>
     <div class="ay-hx">
-      <b>Ayuda</b>
-      <span>Reviso, arreglo, y si no puedo lo reporto</span>
+      <b><?= $h(t('Ayuda')) ?></b>
+      <span><?= $h(t('Reviso, arreglo, y si no puedo lo reporto')) ?></span>
     </div>
-    <button class="ay-x" id="ayX" aria-label="Cerrar"><?= ico('x') ?></button>
+    <button class="ay-x" id="ayX" aria-label="<?= $h(t('Cerrar')) ?>"><?= ico('x') ?></button>
   </header>
 
   <div class="ay-body" id="ayBody">
     <div class="ay-msg ia" id="ayHola">
-      Dime qué está pasando y lo reviso. Si algo se trabó, lo arreglo yo mismo.
+      <?= $h(t('Dime qué está pasando y lo reviso. Si algo se trabó, lo arreglo yo mismo.')) ?>
     </div>
   </div>
 
   <div class="ay-quick">
-    <button class="ay-q primaria" id="ayRevisar"><?= ico('refresh') ?> Revisar y arreglar</button>
-    <button class="ay-q" id="ayReportar"><?= ico('bell') ?> Reportar</button>
+    <button class="ay-q primaria" id="ayRevisar"><?= ico('refresh') ?> <?= $h(t('Revisar y arreglar')) ?></button>
+    <button class="ay-q" id="ayReportar"><?= ico('bell') ?> <?= $h(t('Reportar')) ?></button>
   </div>
 
   <form class="ay-form" id="ayForm">
-    <input type="text" id="ayIn" placeholder="No me sube la foto…" autocomplete="off" maxlength="1200">
-    <button type="submit" id="aySend" aria-label="Enviar"><?= ico('send') ?></button>
+    <input type="text" id="ayIn" placeholder="<?= $h(t('No me sube la foto…')) ?>" autocomplete="off" maxlength="1200">
+    <button type="submit" id="aySend" aria-label="<?= $h(t('Enviar')) ?>"><?= ico('send') ?></button>
   </form>
 </aside>
 
@@ -137,6 +137,22 @@ if ($ay_marca_id <= 0 || !function_exists('csrf_token') || empty($_SESSION['usua
 </style>
 
 <script>
+//  EL JAVASCRIPT NO TRADUCE: RECIBE.
+//  Todo lo que el Ayudante dice cuando algo va mal —o cuando no va mal— lo
+//  escribe este guion. Nada de esto se ve en un barrido de la pantalla: sale
+//  solo al pulsar, al fallar o al recibir respuesta. El PHP lo traduce y lo
+//  entrega hecho.
+window.T = Object.assign(window.T || {}, <?= tj([
+  'ay_no_reviso'   => 'No pude revisar ahora mismo.',
+  'ay_todo_bien'   => 'Le di un vistazo a tu cuenta: todo corriendo, nada trabado.',
+  'ay_caso_abierto'=> 'abierto. El equipo ya recibió el aviso con la explicación.',
+  'ay_sin_red'     => 'Se cayó la conexión al revisar. Intenta otra vez.',
+  'ay_dime'        => 'Escríbeme en una línea qué pasó y lo reporto al equipo.',
+  'ay_no_reporto'  => 'No pude reportarlo.',
+  'ay_no_reporto2' => 'No pude reportarlo ahora. Intenta otra vez.',
+  'ay_no_contesto' => 'No pude contestarte ahora.',
+  'ay_cayo'        => 'Se cayó la conexión. Intenta otra vez.',
+]) ?>);
 (function(){
   var fab=document.getElementById('ayFab'), pan=document.getElementById('ayPanel'), bd=document.getElementById('ayBd'),
       body=document.getElementById('ayBody'), form=document.getElementById('ayForm'), input=document.getElementById('ayIn'),
@@ -181,12 +197,12 @@ if ($ay_marca_id <= 0 || !function_exists('csrf_token') || empty($_SESSION['usua
     var t=pensando();
     pedir({accion:'revisar'}).then(function(d){
       t.remove(); bloquear(false);
-      if(!d.ok){ msg(d.err||'No pude revisar ahora mismo.'); return; }
+      if(!d.ok){ msg(d.err||T.ay_no_reviso); return; }
       var nada=(!d.hallazgos||!d.hallazgos.length);
-      if(nada && silencioso){ msg('Le di un vistazo a tu cuenta: todo corriendo, nada trabado.'); return; }
+      if(nada && silencioso){ msg(T.ay_todo_bien); return; }
       msg(d.texto, nada?'ia':'arreglado');
       (d.escalados||[]).forEach(function(e){
-        if(e.id) msg('Caso #'+e.id+' abierto. El equipo ya recibió el aviso con la explicación.','caso');
+        if(e.id) msg('Caso #'+e.id+' '+T.ay_caso_abierto,'caso');
       });
       (d.arreglados||[]).forEach(function(a){
         if(a.requiere_dueno && a.link){
@@ -194,20 +210,20 @@ if ($ay_marca_id <= 0 || !function_exists('csrf_token') || empty($_SESSION['usua
           m.innerHTML=esc(a.msg)+'<br><a href="'+a.link+'">Ir a arreglarlo &rsaquo;</a>';
         }
       });
-    }).catch(function(){ t.remove(); bloquear(false); msg('Se cayó la conexión al revisar. Intenta otra vez.'); });
+    }).catch(function(){ t.remove(); bloquear(false); msg(T.ay_sin_red); });
   }
   bRev.addEventListener('click',function(){ revisar(false); });
 
   // Reportar: la queja queda escrita y el equipo recibe email + texto.
   bRep.addEventListener('click',function(){
     var t=(input.value||'').trim();
-    if(!t){ msg('Escríbeme en una línea qué pasó y lo reporto al equipo.'); input.focus(); return; }
+    if(!t){ msg(T.ay_dime); input.focus(); return; }
     input.value=''; msg(t,'yo'); bloquear(true);
     var p=pensando();
     pedir({accion:'reportar',texto:t}).then(function(d){
       p.remove(); bloquear(false);
-      msg(d.msg||d.err||'No pude reportarlo.', d.ok?'caso':'ia');
-    }).catch(function(){ p.remove(); bloquear(false); msg('No pude reportarlo ahora. Intenta otra vez.'); });
+      msg(d.msg||d.err||T.ay_no_reporto, d.ok?'caso':'ia');
+    }).catch(function(){ p.remove(); bloquear(false); msg(T.ay_no_reporto2); });
   });
 
   // Conversar: el Ayudante puede responder, arreglar o levantar el caso.
@@ -218,11 +234,11 @@ if ($ay_marca_id <= 0 || !function_exists('csrf_token') || empty($_SESSION['usua
     var p=pensando();
     pedir({accion:'chat',pregunta:t,historial:hist.slice(-6)}).then(function(d){
       p.remove(); bloquear(false);
-      if(!d.ok){ msg(d.err||'No pude contestarte ahora.'); return; }
+      if(!d.ok){ msg(d.err||T.ay_no_contesto); return; }
       var clase = d.caso ? 'caso' : (d.accion==='arreglar' ? 'arreglado' : 'ia');
       msg(d.respuesta, clase);
       hist.push({rol:'ia',texto:d.respuesta});
-    }).catch(function(){ p.remove(); bloquear(false); msg('Se cayó la conexión. Intenta otra vez.'); });
+    }).catch(function(){ p.remove(); bloquear(false); msg(T.ay_cayo); });
   });
 })();
 </script>

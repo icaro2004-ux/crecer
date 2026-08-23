@@ -52,7 +52,7 @@ namespace Crecer\I18n;
 final class Catalogo
 {
     /** Los dominios que existen. Añadir uno es crear los DOS archivos. */
-    public const DOMINIOS = ['navegacion', 'comun', 'errores'];
+    public const DOMINIOS = ['navegacion', 'comun', 'errores', 'home'];
 
     private static array $mapas = [];
     private static ?string $raiz = null;
