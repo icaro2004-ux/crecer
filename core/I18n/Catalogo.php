@@ -1,4 +1,27 @@
 <?php
+namespace Crecer\I18n;
+
+//  ══════════════════════════════════════════════════════════════
+//   POR QUE ESTE ARCHIVO VIVE EN UN NAMESPACE, Y NO ES ESTILO
+//
+//   La extension `intl` de PHP declara una clase GLOBAL llamada Locale.
+//   Hostinger la tiene cargada; el XAMPP de desarrollo no. Con una clase
+//   Locale global sin namespace, incluir este archivo en produccion daba:
+//
+//     Fatal error: Cannot declare class Locale, because the name is
+//     already in use in core/I18n/Locale.php
+//
+//   Y ESE FATAL NO SE PUEDE ATRAPAR: no es un Throwable, es un E_ERROR de
+//   declaracion. Un try/catch alrededor del require no sirve de nada — la
+//   pagina muere ahi, entera. Es lo que le paso al diagnostico, que se
+//   cortaba justo al llegar a esta linea despues de cargar bien toda la
+//   fundacion Meta.
+//
+//   Un namespace propio lo resuelve de raiz, y ademas es lo correcto:
+//   `Locale` y `Catalogo` son nombres que cualquier extension o libreria
+//   puede querer. Renombrar a algo como `CrecerLocale` habria esquivado
+//   este choque y dejado el siguiente al azar.
+//  ══════════════════════════════════════════════════════════════
 // ============================================================
 //  CRECER — LOS CATÁLOGOS  ·  core/I18n/Catalogo.php
 //

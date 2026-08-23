@@ -42,6 +42,9 @@ function ok(string $que, bool $cond, string $detalle = ''): void {
     $fallos++; echo "  FALLA $que" . ($detalle !== '' ? "\n         $detalle" : '') . "\n";
 }
 
+/** El namespace real. Ver la cabecera de core/I18n/Locale.php. */
+const NS = 'Crecer\\I18n\\';
+
 $RAIZ    = str_replace('\\', '/', dirname(__DIR__));
 $DIR_I18N = $RAIZ . '/core/I18n';
 $DIR_LANG = $RAIZ . '/lang';
@@ -56,7 +59,7 @@ foreach (['Locale', 'Catalogo'] as $c) {
     $p = $DIR_I18N . '/' . $c . '.php';
     ok("core/I18n/{$c}.php existe", is_file($p), $p);
     if (is_file($p)) require_once $p;
-    ok("la clase {$c} se declara", class_exists($c, false),
+    ok("la clase Crecer\\I18n\\{$c} se declara", class_exists(NS . $c, false),
        'si no carga aqui, no cargara en el servidor');
 }
 
@@ -83,13 +86,53 @@ foreach (['Locale', 'Catalogo'] as $c) {
 }
 
 // ══════════════════════════════════════════════════════════════
+//  1b · NO CHOCA CON UNA CLASE GLOBAL DEL MISMO NOMBRE
+// ══════════════════════════════════════════════════════════════
+//  ESTA ES LA PRUEBA QUE FALTABA EL 22 DE AGOSTO, y la que explica por que el
+//  archivo llegaba entero al servidor y aun asi la pagina moria al cargarlo.
+//
+//  La extension `intl` declara una clase GLOBAL llamada Locale. Hostinger la
+//  tiene cargada; este XAMPP no —por eso la matriz de arranque salia 24/24
+//  limpia en local mientras produccion se caia—. Sin namespace, incluir el
+//  archivo daba:
+//
+//    Fatal error: Cannot declare class Locale, because the name is already
+//    in use in core/I18n/Locale.php
+//
+//  Y ese fatal NO ES ATRAPABLE: es un E_ERROR de declaracion, no un Throwable.
+//  Por eso el runner va en su propio proceso: si chocara, el proceso muere y
+//  no llega a imprimir nada — que es exactamente la señal que se mide.
+echo "\n  — 1b · con una clase global Locale delante (como intl) —\n";
+ok('extension intl en esta maquina: ' . (extension_loaded('intl') ? 'SI' : 'NO'), true,
+   '');   // informativo: el runner simula intl declarando la clase a mano
+$sal = trim((string)shell_exec(
+    escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/_colision_runner.php')
+    . ' ' . escapeshellarg($RAIZ) . ' 2>&1'));
+$ult = trim(array_slice(array_filter(explode("\n", $sal), fn($l) => trim($l) !== ''), -1)[0] ?? '');
+ok('el proceso sobrevive a la colision', strpos($ult, 'OK|') === 0,
+   $sal . "\n         si muere sin imprimir, es «Cannot declare class» — el fatal "
+ . 'que ningun try/catch atrapa');
+ok('nuestras clases quedan declaradas', strpos($ult, 'declaradas=si') !== false, $ult);
+ok('y las globales siguen intactas', strpos($ult, 'globales_intactas=si') !== false,
+   $ult . ' · ocupar el nombre global romperia a intl en el resto de la app');
+ok('y las nuestras funcionan', strpos($ult, 'funcionan=si') !== false, $ult);
+
+//  Y que el namespace este declarado de verdad, no solo que no choque hoy.
+foreach (['Locale', 'Catalogo'] as $c) {
+    $src = (string)file_get_contents($DIR_I18N . '/' . $c . '.php');
+    ok("{$c}.php declara namespace Crecer\\I18n",
+       preg_match('/^\s*namespace\s+Crecer\\\\I18n\s*;/m', $src) === 1,
+       'sin namespace propio, el siguiente choque es cuestion de tiempo');
+}
+
+// ══════════════════════════════════════════════════════════════
 //  2 · LOS CATALOGOS SE LEEN Y CUADRAN
 // ══════════════════════════════════════════════════════════════
 //  «Cargan» no es «sirven». Un catalogo con un `return` roto se incluye sin
 //  quejarse y devuelve 1 en vez de un array — y eso se descubriria en pantalla.
 echo "\n  — 2 · los catalogos —\n";
-Catalogo::usarRaiz($DIR_LANG);
-$dom = Catalogo::DOMINIOS;
+\Crecer\I18n\Catalogo::usarRaiz($DIR_LANG);
+$dom = \Crecer\I18n\Catalogo::DOMINIOS;
 ok('hay dominios declarados', $dom !== [], json_encode($dom));
 
 foreach (['es', 'en'] as $l) {
@@ -103,8 +146,8 @@ foreach (['es', 'en'] as $l) {
     }
 }
 
-$es = Catalogo::mapa('es');
-$en = Catalogo::mapa('en');
+$es = \Crecer\I18n\Catalogo::mapa('es');
+$en = \Crecer\I18n\Catalogo::mapa('en');
 ok('el mapa español tiene claves', $es !== [], count($es) . ' claves');
 ok('el mapa ingles tiene claves',  $en !== [], count($en) . ' claves');
 
@@ -139,34 +182,34 @@ ok('los %s cuadran entre los dos idiomas', $desiguales === [],
 //  3 · LOCALE SE COMPORTA, SIN BASE Y SIN SESION
 // ══════════════════════════════════════════════════════════════
 echo "\n  — 3 · Locale a solas —\n";
-Locale::olvidar(); Locale::montar(null);
+\Crecer\I18n\Locale::olvidar(); \Crecer\I18n\Locale::montar(null);
 $_GET = []; $_COOKIE = [];
-ok('sin nada, el idioma es español', Locale::interfaz() === 'es');
-ok('y no se esta traduciendo', Locale::traduciendo() === false);
+ok('sin nada, el idioma es español', \Crecer\I18n\Locale::interfaz() === 'es');
+ok('y no se esta traduciendo', \Crecer\I18n\Locale::traduciendo() === false);
 
-Locale::olvidar(); $_GET = ['lang' => 'en'];
-ok('con ?lang=en, ingles', Locale::interfaz() === 'en');
-Locale::olvidar(); $_GET = ['lang' => 'klingon'];
-ok('un idioma inventado cae a español', Locale::interfaz() === 'es',
+\Crecer\I18n\Locale::olvidar(); $_GET = ['lang' => 'en'];
+ok('con ?lang=en, ingles', \Crecer\I18n\Locale::interfaz() === 'en');
+\Crecer\I18n\Locale::olvidar(); $_GET = ['lang' => 'klingon'];
+ok('un idioma inventado cae a español', \Crecer\I18n\Locale::interfaz() === 'es',
    'una url manipulada no puede dejar la interfaz en un idioma que no existe');
-Locale::olvidar(); $_GET = []; $_COOKIE = ['crecer_lang' => 'en'];
-ok('la cookie de quien no ha entrado sigue valiendo', Locale::interfaz() === 'en',
+\Crecer\I18n\Locale::olvidar(); $_GET = []; $_COOKIE = ['crecer_lang' => 'en'];
+ok('la cookie de quien no ha entrado sigue valiendo', \Crecer\I18n\Locale::interfaz() === 'en',
    'tirarla le cambiaria el idioma a quien ya lo habia puesto');
 
 //  EL CONTRATO QUE DE VERDAD IMPORTA: el idioma del CONTENIDO no mira el
 //  request. Si lo mirara, un admin entrando en ingles a revisar la cuenta de
 //  una reposteria de Bayamon haria que su proximo caption naciera en ingles.
-Locale::olvidar(); Locale::montar(null); $_GET = ['lang' => 'en']; $_COOKIE = ['crecer_lang' => 'en'];
-ok('el idioma de CONTENIDO ignora ?lang y la cookie', Locale::contenido(7) === 'es',
-   Locale::contenido(7) . ' · el contenido pertenece a la marca, no a quien mira');
-ok('y sin marca tampoco inventa', Locale::contenido(null) === 'es');
-$_GET = []; $_COOKIE = []; Locale::olvidar();
+\Crecer\I18n\Locale::olvidar(); \Crecer\I18n\Locale::montar(null); $_GET = ['lang' => 'en']; $_COOKIE = ['crecer_lang' => 'en'];
+ok('el idioma de CONTENIDO ignora ?lang y la cookie', \Crecer\I18n\Locale::contenido(7) === 'es',
+   \Crecer\I18n\Locale::contenido(7) . ' · el contenido pertenece a la marca, no a quien mira');
+ok('y sin marca tampoco inventa', \Crecer\I18n\Locale::contenido(null) === 'es');
+$_GET = []; $_COOKIE = []; \Crecer\I18n\Locale::olvidar();
 
-ok('normalizar acepta lo que existe', Locale::normalizar('EN') === 'en');
-ok('y rechaza lo que no', Locale::normalizar('xx') === null);
+ok('normalizar acepta lo que existe', \Crecer\I18n\Locale::normalizar('EN') === 'en');
+ok('y rechaza lo que no', \Crecer\I18n\Locale::normalizar('xx') === null);
 
 $_SERVER['REQUEST_URI'] = '/crecer/panel/meta.php?marca=7&vista=plan';
-$u = Locale::url('en');
+$u = \Crecer\I18n\Locale::url('en');
 ok('la url del interruptor conserva la marca', strpos($u, 'marca=7') !== false, $u);
 ok('y el resto del query', strpos($u, 'vista=plan') !== false, $u);
 ok('y pone el idioma', strpos($u, 'lang=en') !== false, $u);

@@ -1,4 +1,27 @@
 <?php
+namespace Crecer\I18n;
+
+//  ══════════════════════════════════════════════════════════════
+//   POR QUE ESTE ARCHIVO VIVE EN UN NAMESPACE, Y NO ES ESTILO
+//
+//   La extension `intl` de PHP declara una clase GLOBAL llamada Locale.
+//   Hostinger la tiene cargada; el XAMPP de desarrollo no. Con una clase
+//   Locale global sin namespace, incluir este archivo en produccion daba:
+//
+//     Fatal error: Cannot declare class Locale, because the name is
+//     already in use in core/I18n/Locale.php
+//
+//   Y ESE FATAL NO SE PUEDE ATRAPAR: no es un Throwable, es un E_ERROR de
+//   declaracion. Un try/catch alrededor del require no sirve de nada — la
+//   pagina muere ahi, entera. Es lo que le paso al diagnostico, que se
+//   cortaba justo al llegar a esta linea despues de cargar bien toda la
+//   fundacion Meta.
+//
+//   Un namespace propio lo resuelve de raiz, y ademas es lo correcto:
+//   `Locale` y `Catalogo` son nombres que cualquier extension o libreria
+//   puede querer. Renombrar a algo como `CrecerLocale` habria esquivado
+//   este choque y dejado el siguiente al azar.
+//  ══════════════════════════════════════════════════════════════
 // ============================================================
 //  CRECER — LA FUENTE ÚNICA DEL IDIOMA  ·  core/I18n/Locale.php
 //
@@ -46,14 +69,14 @@ final class Locale
     public const DEFECTO = 'es';
     public const COOKIE  = 'crecer_lang';
 
-    private static ?PDO   $pdo       = null;
+    private static ?\PDO  $pdo       = null;
     private static ?string $interfaz = null;
     private static array  $contenido = [];
     private static array  $columnas  = [];
     private static bool   $guardado  = false;
 
     /** db.php se la pasa al arrancar. Sin ella funciona: cae a la cookie. */
-    public static function montar(?PDO $pdo): void { self::$pdo = $pdo; }
+    public static function montar(?\PDO $pdo): void { self::$pdo = $pdo; }
 
     /** Para las pruebas: borra todo lo memorizado. */
     public static function olvidar(): void
@@ -144,7 +167,7 @@ final class Locale
                 $q = self::$pdo->prepare('SELECT idioma_contenido FROM crecer_marca WHERE id = ?');
                 $q->execute([$marca_id]);
                 $v = self::normalizar($q->fetchColumn());
-            } catch (Throwable $e) { $v = null; }
+            } catch (\Throwable $e) { $v = null; }
         }
         return self::$contenido[$marca_id] = ($v ?? self::DEFECTO);
     }
@@ -165,7 +188,7 @@ final class Locale
             $q->execute([$lang, $usuario_id]);
             self::$interfaz = $lang;
             return true;
-        } catch (Throwable $e) { return false; }
+        } catch (\Throwable $e) { return false; }
     }
 
     /**
@@ -184,7 +207,7 @@ final class Locale
             $q->execute([$lang, $marca_id]);
             self::$contenido[$marca_id] = $lang;
             return true;
-        } catch (Throwable $e) { return false; }
+        } catch (\Throwable $e) { return false; }
     }
 
     // ── LA URL Y EL INTERRUPTOR ──────────────────────────────
@@ -210,7 +233,7 @@ final class Locale
             $q = self::$pdo->prepare('SELECT idioma_interfaz FROM usuarios WHERE id = ?');
             $q->execute([$uid]);
             return self::normalizar($q->fetchColumn());
-        } catch (Throwable $e) { return null; }
+        } catch (\Throwable $e) { return null; }
     }
 
     private static function recordarEnUsuario(string $lang): void
@@ -251,6 +274,6 @@ final class Locale
                                        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?');
             $q->execute([$tabla, $col]);
             return self::$columnas[$k] = ((int)$q->fetchColumn() > 0);
-        } catch (Throwable $e) { return self::$columnas[$k] = false; }
+        } catch (\Throwable $e) { return self::$columnas[$k] = false; }
     }
 }

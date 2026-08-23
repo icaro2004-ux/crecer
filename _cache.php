@@ -1668,34 +1668,78 @@ try {
             //  todavia. Se verifica aqui antes de conectar el motor en 3B,
             //  porque conectar sin comprobar es exactamente lo que tumbo el
             //  sitio el 22 de agosto.
-            'core/I18n/Locale.php'             => 'Locale',
-            'core/I18n/Catalogo.php'           => 'Catalogo',
+            //  CON NAMESPACE, y no por estilo: la extension `intl` declara una
+            //  clase GLOBAL llamada Locale. Hostinger la tiene; el XAMPP de
+            //  desarrollo no. Sin namespace, incluir el archivo daba «Cannot
+            //  declare class Locale» — y ESO NO ES UN Throwable, es un E_ERROR
+            //  de declaracion que ningun try/catch atrapa. La pagina moria
+            //  justo aqui, que es lo que le paso a este mismo diagnostico.
+            'core/I18n/Locale.php'             => 'Crecer\\I18n\\Locale',
+            'core/I18n/Catalogo.php'           => 'Crecer\\I18n\\Catalogo',
         ];
+        //  UN GUARDIAN PARA LO QUE NO SE PUEDE ATRAPAR.
+        //  Este diagnostico murio en produccion sin decir nada: se cortaba al
+        //  incluir un archivo y la pagina quedaba a medias, sin una sola linea
+        //  de explicacion. Un try/catch no bastaba porque «Cannot declare
+        //  class» es E_ERROR, no Throwable. Esto lo recoge al morir y lo
+        //  imprime — con el archivo que se estaba cargando, que es el dato que
+        //  faltaba.
+        $__cargando = null;
+        register_shutdown_function(function () use (&$__cargando) {
+            $e = error_get_last();
+            if (!$e || !in_array($e['type'], [E_ERROR, E_PARSE, E_COMPILE_ERROR, E_CORE_ERROR], true)) return;
+            echo "\n  [!!] FATAL NO CAPTURABLE al cargar "
+               . ($__cargando ?? '(desconocido)') . "\n";
+            echo "       " . $e['message'] . "\n";
+            echo "       en " . $e['file'] . ':' . $e['line'] . "\n";
+            echo "\n  El resto del diagnostico NO llego a correr.\n\n";
+        });
+
         $todo = true;
         foreach ($piezas as $rel => $clase) {
             $p = __DIR__ . '/' . $rel;
             if (!is_file($p)) { $todo = false; printf("  [!!] %-36s NO ESTA\n", $rel); continue; }
+
+            //  ANTES DE INCLUIR: ¿ese nombre ya lo tiene alguien?
+            //  Es la comprobacion que faltaba. Incluir un archivo que redeclara
+            //  una clase existente mata la pagina sin remedio, asi que hay que
+            //  preguntarlo ANTES y no envolverlo en un try que no sirve.
+            if (class_exists($clase, false)) {
+                printf("  [OK] %-36s ya estaba cargada\n", $rel);
+                continue;
+            }
+            $corto = strpos($clase, '\\') !== false ? substr($clase, strrpos($clase, '\\') + 1) : $clase;
+            if ($corto !== $clase && class_exists($corto, false)) {
+                //  Existe la version GLOBAL del nombre. Con namespace esto ya no
+                //  estorba — y decirlo aqui es util: es la huella de intl.
+                printf("  ··   %-36s (existe una clase global «%s»: intl u otra extension)\n",
+                       '', $corto);
+            }
+
             //  Estar no basta: un archivo truncado por un envio a medias existe
             //  y revienta igual. Se carga de verdad.
             $carga = false; $err = '';
+            $__cargando = $rel;
             try { require_once $p; $carga = class_exists($clase, false); }
-            catch (Throwable $e) { $err = $e->getMessage(); }
+            catch (Throwable $e) { $err = get_class($e) . ': ' . $e->getMessage()
+                                        . ' (' . $e->getFile() . ':' . $e->getLine() . ')'; }
+            $__cargando = null;
             if (!$carga) $todo = false;
             printf("  [%s] %-36s %s%s\n", $carga ? 'OK' : '!!', $rel,
                    $carga ? 'carga · ' . number_format((int)filesize($p)) . ' bytes' : 'NO CARGA',
-                   $err !== '' ? ' · ' . $err : '');
+                   $err !== '' ? "\n       " . $err : '');
         }
         //  LOS CATALOGOS: «estar» no es «servir».
         //  Un archivo de idioma con el `return` roto se incluye sin quejarse y
         //  devuelve 1 en vez de un array — y eso se descubriria en pantalla, no
         //  aqui. Se cargan de verdad y se cuentan las claves.
         echo "\n  Catalogos de idioma\n";
-        if (!class_exists('Catalogo', false)) {
+        if (!class_exists('Crecer\I18n\Catalogo', false)) {
             echo "  [!!] sin la clase Catalogo no se pueden leer\n";
         } else {
-            Catalogo::usarRaiz(__DIR__ . '/lang');
+            \Crecer\I18n\Catalogo::usarRaiz(__DIR__ . '/lang');
             foreach (['es', 'en'] as $__l) {
-                foreach (Catalogo::DOMINIOS as $__d) {
+                foreach (\Crecer\I18n\Catalogo::DOMINIOS as $__d) {
                     $__p = __DIR__ . '/lang/' . $__l . '/' . $__d . '.php';
                     if (!is_file($__p)) { $todo = false; printf("  [!!] %-36s NO ESTA\n", "lang/{$__l}/{$__d}.php"); continue; }
                     $__ar = null; $__e2 = '';
@@ -1709,7 +1753,7 @@ try {
             }
             //  Y que cuadren: sin paridad, una clave que falta en ingles es
             //  indistinguible de una que nunca se declaro.
-            $__es = Catalogo::mapa('es'); $__en = Catalogo::mapa('en');
+            $__es = \Crecer\I18n\Catalogo::mapa('es'); $__en = \Crecer\I18n\Catalogo::mapa('en');
             $__d1 = array_diff(array_keys($__es), array_keys($__en));
             $__d2 = array_diff(array_keys($__en), array_keys($__es));
             $__par = ($__d1 === [] && $__d2 === []);
