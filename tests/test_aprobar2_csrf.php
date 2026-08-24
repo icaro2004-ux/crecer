@@ -20,9 +20,24 @@
 //  Retrato antes/despues en cada caso. Si una peticion sin token deja la fila
 //  igual, es que no escribio — y eso es lo unico que cuenta.
 //
-//  CERO PROVEEDORES: solo se ejercitan las mutaciones que no llaman a nadie
-//  (aprobar, rechazar, reabrir, editar, fecha, borrar). Generar arte llama al
-//  proveedor, asi que su token se comprueba por la puerta comun, no gastando.
+//  LO QUE ESTA SUITE LE CUESTA AL PROVEEDOR, dicho exacto. Yo habia escrito
+//  aqui que `editar` «no llama a nadie», y es FALSO: el handler, despues de
+//  guardar, llama a aprender_de_edicion(), que es una peticion de verdad a
+//  Gemini. Se ve en crecer_ia_log —«Aprender de edicion», gemini-2.5-flash—
+//  con la marca de la fixture.
+//
+//  Y no se puede evitar desde aqui. El aprendizaje se activa con
+//  `$pagado || rol admin || activacion_de_prueba()`, y en local
+//  CRECER_DEV_ACTIVAR hace que activacion_de_prueba() sea true para CUALQUIER
+//  cuenta: se probo bajando la fixture a rol proveedor y siguio llamando.
+//
+//  ASI QUE EL COSTO REAL DE ESTA SUITE ES: 2 llamadas de TEXTO a Gemini flash
+//  (las dos ediciones que ejercita), CERO imagenes y CERO asientos de cuota.
+//  Se comprueba al final contando crecer_ia_log antes y despues: si algun dia
+//  sube de dos, es que una mutacion nueva empezo a llamar a alguien.
+//
+//  Generar arte si llama al proveedor de imagen: su token se comprueba por la
+//  puerta comun -la misma linea que cubre a todas- y no ejercitandolo.
 // ============================================================
 
 require_once __DIR__ . '/../includes/db.php';
@@ -58,6 +73,10 @@ file_put_contents($ruta . DIRECTORY_SEPARATOR . 'sess_' . $sid,
     'usuario_id|i:' . (int)$fx['usuario_id'] . ';csrf|s:' . strlen($TOKEN) . ':"' . $TOKEN . '";');
 
 $URL = 'http://localhost/crecer/panel/aprobar2.php?marca=' . $M;
+
+//  El precio, medido y no prometido. Al final se compara.
+$ia_antes  = (int)$pdo->query("SELECT COUNT(*) FROM crecer_ia_log")->fetchColumn();
+$img_antes = (int)$pdo->query("SELECT COUNT(*) FROM crecer_img_cuota_asiento")->fetchColumn();
 
 /**
  * Un POST de verdad.
@@ -255,6 +274,20 @@ try {
        $pos_guarda !== false && $pos_primera !== false && $pos_guarda < $pos_primera,
        'una excepción por handler es una excepción que se olvida');
     ok('y dentro del bloque POST', strpos($src, "REQUEST_METHOD'] === 'POST'") < $pos_guarda);
+
+    // ══════════════════════════════════════════════════════════════
+    //  8 · LO QUE ESTA SUITE LE COSTO AL PROVEEDOR
+    // ══════════════════════════════════════════════════════════════
+    echo "
+  — el precio, contado y no prometido —
+";
+    $ia_despues  = (int)$pdo->query("SELECT COUNT(*) FROM crecer_ia_log")->fetchColumn();
+    $img_despues = (int)$pdo->query("SELECT COUNT(*) FROM crecer_img_cuota_asiento")->fetchColumn();
+    $gasto = $ia_despues - $ia_antes;
+    ok('no se generó ninguna imagen', $img_despues === $img_antes,
+       ($img_despues - $img_antes) . ' asientos nuevos');
+    ok('las llamadas de texto son las 2 esperadas', $gasto <= 2,
+       $gasto . ' llamadas — si sube, una mutación nueva empezó a llamar a alguien');
 
 } finally {
     Fixture::limpiar($pdo, $M);
