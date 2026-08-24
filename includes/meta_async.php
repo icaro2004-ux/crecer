@@ -25,7 +25,116 @@ function _mjob_set(PDO $pdo, int $id, array $f): void {
     try { $pdo->prepare("UPDATE crecer_meta_jobs SET " . implode(',', $set) . " WHERE id=?")->execute($vals); } catch (Throwable $e) {}
 }
 
-/** Encola la ejecución de una jugada → devuelve el job id. */
+// ── ENCOLADO UNICO (ATOMICO) ────────────────────────────────
+/**
+ * Encola la jugada UNA sola vez, aunque dos procesos lleguen a la vez.
+ *
+ * POR QUE HACE FALTA ESTO. El patron de antes era:
+ *
+ *     if (!meta_job_en_curso(...)) meta_job_encolar(...);
+ *
+ * y eso NO es un candado: es leer y despues insertar. Dos peticiones
+ * concurrentes leen las dos que no hay job, las dos pasan, las dos insertan,
+ * dos workers corren la misma jugada y el dueño paga dos veces la misma
+ * tanda de piezas. `crecer_meta_jobs` no tiene indice unico que arbitre esa
+ * carrera, asi que el arbitro hay que ponerlo aqui.
+ *
+ * COMO SE CIERRA SIN MIGRACION. Se bloquea la FILA DE LA JUGADA con
+ * `FOR UPDATE`. La jugada es la que se esta reservando, asi que es el sitio
+ * natural del candado: el segundo proceso se queda esperando en ese SELECT
+ * hasta que el primero confirma, y cuando entra ya ve el job del otro.
+ *
+ * EL BLOQUEO DURA LO MINIMO: pertenencia, comprobacion e insercion. Nada de
+ * proveedor, worker ni HTTP dentro. El disparo va DESPUES, y lo hace quien
+ * llama —no este helper— para que la transaccion nunca abarque una llamada
+ * de red.
+ *
+ * @return array{id:int, creado:bool, motivo:string}
+ */
+function meta_job_encolar_unico(PDO $pdo, int $marca_id, int $tactica_id, bool $forzar = false): array
+{
+    if ($marca_id <= 0 || $tactica_id <= 0) {
+        return ['id' => 0, 'creado' => false, 'motivo' => 'parametros'];
+    }
+
+    $propia = false;
+    try {
+        if (!$pdo->inTransaction()) { $pdo->beginTransaction(); $propia = true; }
+
+        //  1 · PERTENENCIA + CANDADO, en la misma consulta. Una marca no puede
+        //      encolar la jugada de otra: el WHERE lo impide y ademas es lo
+        //      que se bloquea.
+        $q = $pdo->prepare(
+            "SELECT id, marca_id, estado, piezas_meta, sustituida_at
+               FROM crecer_meta_tactica
+              WHERE id=? AND marca_id=?
+              FOR UPDATE");
+        $q->execute([$tactica_id, $marca_id]);
+        $t = $q->fetch(PDO::FETCH_ASSOC);
+
+        if (!$t) {
+            if ($propia) $pdo->rollBack();
+            return ['id' => 0, 'creado' => false, 'motivo' => 'no_tuya'];
+        }
+        //  Una jugada sustituida no vuelve a producir: su sitio lo ocupa la
+        //  alternativa, y generarle piezas seria gastar en trabajo muerto.
+        if (!empty($t['sustituida_at']) || (string)$t['estado'] === 'descartada') {
+            if ($propia) $pdo->rollBack();
+            return ['id' => 0, 'creado' => false, 'motivo' => 'descartada'];
+        }
+
+        //  2 · ¿YA HAY UNO VIVO? Con el candado tomado, esta lectura si es de
+        //      fiar: nadie puede insertar entre esta linea y el INSERT.
+        $j = $pdo->prepare(
+            "SELECT id FROM crecer_meta_jobs
+              WHERE tactica_id=? AND estado IN ('queued','working')
+              ORDER BY id DESC LIMIT 1");
+        $j->execute([$tactica_id]);
+        $ya = (int)($j->fetchColumn() ?: 0);
+        if ($ya > 0) {
+            if ($propia) $pdo->commit();
+            return ['id' => $ya, 'creado' => false, 'motivo' => 'ya_en_curso'];
+        }
+
+        //  3 · ¿YA PRODUJO LO SUYO? Que el job anterior terminase (`done`) no
+        //      autoriza otra tanda: si la jugada ya tiene sus piezas, repetir
+        //      seria duplicarlas. `$forzar` existe para el caso legitimo de
+        //      pedir mas, y aun asi respeta el tope de la jugada.
+        if (!$forzar && function_exists('jugada_progreso')) {
+            $p = jugada_progreso($pdo, $t);
+            if ((int)$p['meta'] > 0 && (int)$p['creadas'] >= (int)$p['meta']) {
+                if ($propia) $pdo->commit();
+                return ['id' => 0, 'creado' => false, 'motivo' => 'ya_completa'];
+            }
+        }
+
+        //  4 · NACE EL JOB.
+        $pdo->prepare("INSERT INTO crecer_meta_jobs (marca_id, tactica_id, estado) VALUES (?,?, 'queued')")
+            ->execute([$marca_id, $tactica_id]);
+        $id = (int)$pdo->lastInsertId();
+        if ($id <= 0) throw new RuntimeException('el job no nacio');
+
+        if ($propia) $pdo->commit();
+        return ['id' => $id, 'creado' => true, 'motivo' => 'creado'];
+
+    } catch (Throwable $e) {
+        //  Solo se deshace lo propio. Si la transaccion es del que llama, la
+        //  excepcion sube y decide el: revertir aqui seria tirarle abajo
+        //  escrituras que este helper no hizo.
+        if ($propia && $pdo->inTransaction()) { $pdo->rollBack(); }
+        error_log('meta_job_encolar_unico: ' . $e->getMessage());
+        if (!$propia) throw $e;
+        return ['id' => 0, 'creado' => false, 'motivo' => 'fallo'];
+    }
+}
+
+/**
+ * Encola la ejecución de una jugada → devuelve el job id.
+ *
+ * INSEGURA POR SI SOLA: no arbitra carreras. No la uses como puerta de
+ * entrada; usa `meta_job_encolar_unico()`. Se conserva porque es el INSERT
+ * que aquel usa por dentro y porque el worker la referencia.
+ */
 function meta_job_encolar(PDO $pdo, int $marca_id, int $tactica_id): int {
     $pdo->prepare("INSERT INTO crecer_meta_jobs (marca_id, tactica_id, estado) VALUES (?,?, 'queued')")
         ->execute([$marca_id, $tactica_id]);

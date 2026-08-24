@@ -17,6 +17,10 @@
 // ============================================================
 
 import { spawn } from 'node:child_process';
+//  El borrado del perfil NO se escribe aqui: se delega en el ayudante
+//  compartido, que mata el arbol de Chrome y reintenta. La version propia
+//  de este archivo mataba solo al padre y se tragaba el fallo.
+import { registrarPerfil, borrarPerfil } from './_chrome.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -35,6 +39,9 @@ const ch = spawn(CHROME, [
   '--font-render-hinting=none', '--disable-lcd-text',
   `--user-data-dir=${perfil}`, `--remote-debugging-port=${puerto}`, 'about:blank',
 ], { stdio: 'ignore' });
+//  En cuanto existe el proceso se ata al perfil: si esta prueba revienta
+//  sin llegar al finally, el respaldo del ayudante lo limpia igual.
+registrarPerfil(perfil, ch);
 
 let cdp = null, id = 0;
 const pend = new Map();
@@ -369,7 +376,8 @@ try {
   di('ERROR', e.message);
   di('OK', 0);
 } finally {
-  ch.kill();
-  await dormir(400);
-  try { fs.rmSync(perfil, { recursive: true, force: true }); } catch { /* Windows */ }
+  //  Mata el arbol entero y borra reintentando. `ch.kill()` a secas dejaba
+  //  vivos los renderers de Chrome, que siguen con el perfil abierto: el
+  //  rmSync fallaba por EPERM y el `catch {}` lo escondia.
+  borrarPerfil(perfil);
 }

@@ -43,7 +43,9 @@
     if (document.readyState === 'complete') { fn(); return; }
     window.addEventListener('load', fn);
   };
-  var caja = function () { return document.querySelector('.ah, .plan, .wz'); };
+  //  `.sm` es la revision de la semana: tambien tiene un ultimo control que
+  //  la barra de abajo puede tapar, asi que participa de la misma geometria.
+  var caja = function () { return document.querySelector('.ah, .plan, .wz, .sm'); };
 
   // ══════════════════════════════════════════════════════════════
   //  1 · LA ZONA SEGURA — solo contra .botnav
@@ -129,7 +131,17 @@
     //  dejarlo debajo de Ayuda seria tapar justo lo unico que esta pantalla
     //  existe para pulsar.
     '.wz-salir', '.wz-obj', '.wz-chip', '.wz-nose', '.wz-cambiar',
-    '.wz-atras', '.wz-err button', '.wz-glos > summary'
+    '.wz-atras', '.wz-err button', '.wz-glos > summary',
+    //  revisar mi semana. La lista es un permiso, no una regla general: lo que
+    //  no este aqui, Ayuda no lo esquiva. Sin estas lineas el FAB se sentaba
+    //  encima de «Dejar pendiente» — salio en la captura, no leyendo el codigo.
+    '.sm-atras', '.sm-bt', '.sm-nopuedo', '.sm-mas', '.sm-mas-nav a',
+    '.sm-li', '.sm-fila',
+    //  sustituir una jugada. Sus controles tienen clase propia (.su-*) y no la
+    //  heredan de .wz-*, asi que sin nombrarlos Ayuda se sentaba encima de
+    //  «Conservar esta publicacion» — que es media decision de las dos que
+    //  ofrece esa pantalla.
+    '.su-opt', '.su-mot button', '.su-otra', '.su-nada a'
   ].join(', ');
 
   var ob = null, dentro = null;

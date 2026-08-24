@@ -29,6 +29,19 @@ final class MetaRetorno
     public const DESDE    = 'meta';
 
     /**
+     * EL SITIO EXACTO de la revision semanal. «Volver a Tu Meta» no basta
+     * cuando el dueño estaba en la publicacion 2 de 3: devolverlo al principio
+     * le hace repasar dos veces lo que ya decidio, y a la tercera abandona.
+     *
+     * Es un ENTERO PEQUEÑO y nada mas. No es un destino ni un trozo de URL:
+     * la vuelta se sigue armando aqui con la marca. Un `pos` inventado no
+     * puede mandar a ningun sitio — como mucho, a una posicion que la vista
+     * recorta contra el total real que lee de la base.
+     */
+    public const POS     = 'pos';
+    public const POS_MAX = 200;
+
+    /**
      * Que paso, dicho como se le dice al dueño.
      *   llave => [confirmacion, que sigue]
      *
@@ -55,10 +68,40 @@ final class MetaRetorno
         return (string)($get[self::MARCADOR] ?? '') === self::DESDE;
     }
 
-    /** Lo que se le pega al destino en la IDA para que sepa volver. */
-    public static function marcador(): string
+    /**
+     * Lo que se le pega al destino en la IDA para que sepa volver.
+     *
+     * Sin `$pos` es exactamente lo de siempre —lo que esperan las pantallas
+     * que ya existen—. Con `$pos`, ademas dice de que publicacion salio.
+     */
+    public static function marcador(?int $pos = null): string
     {
-        return '&' . self::MARCADOR . '=' . self::DESDE;
+        $s = '&' . self::MARCADOR . '=' . self::DESDE;
+        if (self::posValida($pos)) $s .= '&' . self::POS . '=' . (int)$pos;
+        return $s;
+    }
+
+    /**
+     * La posicion que trae la peticion, ya saneada. null = no venia, o venia
+     * algo que no es una posicion.
+     *
+     * Se valida AQUI y no en cada pantalla: son cinco destinos y el que se
+     * olvide de comprobarlo pintaria en la URL de vuelta lo que le mandaran.
+     */
+    public static function posicion(array $get): ?int
+    {
+        $v = $get[self::POS] ?? null;
+        if (!is_scalar($v)) return null;
+        $s = trim((string)$v);
+        if ($s === '' || !ctype_digit($s)) return null;
+        $n = (int)$s;
+        return self::posValida($n) ? $n : null;
+    }
+
+    /** Un entero pequeño y positivo. Ni cero, ni negativo, ni una novela. */
+    private static function posValida(?int $pos): bool
+    {
+        return $pos !== null && $pos >= 1 && $pos <= self::POS_MAX;
     }
 
     /**
@@ -66,10 +109,13 @@ final class MetaRetorno
      * negocio hablamos y una cuenta con dos negocios aterriza en el que no era.
      *
      * @param string $hecho Llave de HECHOS. Vacia o desconocida = vuelve sin confirmar.
+     * @param int|null $pos Posicion de la revision semanal. Con ella, la vuelta
+     *        aterriza en la MISMA publicacion; sin ella, donde siempre.
      */
-    public static function url(int $marca_id, string $hecho = ''): string
+    public static function url(int $marca_id, string $hecho = '', ?int $pos = null): string
     {
         $q = ['marca' => $marca_id];
+        if (self::posValida($pos)) { $q['vista'] = 'semana'; $q['pos'] = (int)$pos; }
         if ($hecho !== '' && isset(self::HECHOS[$hecho])) $q['hecho'] = $hecho;
         return '/crecer/panel/meta.php?' . http_build_query($q);
     }

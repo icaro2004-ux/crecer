@@ -97,8 +97,15 @@ $eventos = [];
 // el calendario es donde el dueño ve "qué sale y cuándo", y saber que eso está
 // empujando su meta cambia lo que significa. Si la columna no existe todavía,
 // se cae a la consulta de siempre en vez de dejar el calendario vacío.
+//
+// Y SE TRAE calendario_id, que es lo que distingue el ORIGEN. `tactica_id` solo
+// no lo distingue: la meta puede ADOPTAR una pieza que el dueño creó a mano —le
+// pone tactica_id y sigue siendo suya—. Decirle "De tu Meta" a algo que escribió
+// él es quitarle su trabajo; decirle "Creado por ti" a lo que hizo el corillo es
+// atribuirle uno que no hizo. Las dos versiones eran mentira y salían de mirar
+// una sola columna.
 try {
-    $c = $pdo->prepare("SELECT id, plataforma, tipo, estado, caption, grafica_path, tactica_id, DATE_FORMAT(fecha_programada,'%Y-%m-%d') fk, TIME_FORMAT(fecha_programada,'%H:%i') hora FROM crecer_contenido WHERE marca_id=? AND estado<>'rechazado' AND DATE(fecha_programada) BETWEEN ? AND ?");
+    $c = $pdo->prepare("SELECT id, calendario_id, plataforma, tipo, estado, caption, grafica_path, tactica_id, DATE_FORMAT(fecha_programada,'%Y-%m-%d') fk, TIME_FORMAT(fecha_programada,'%H:%i') hora FROM crecer_contenido WHERE marca_id=? AND estado<>'rechazado' AND DATE(fecha_programada) BETWEEN ? AND ?");
     $c->execute([$marca_id,$rangoIni,$rangoFin]);
     $filas_cont = $c->fetchAll();
 } catch (Throwable $e) {
@@ -106,17 +113,44 @@ try {
     $c->execute([$marca_id,$rangoIni,$rangoFin]);
     $filas_cont = $c->fetchAll();
 }
-// Títulos de las jugadas, de una sola consulta (no una por pieza).
-$jugadas_tit = [];
+// Las jugadas, de una sola consulta (no una por pieza). Se trae también el
+// SELLO de sustitución: sin él, una jugada que el dueño ya dijo que no podía
+// hacer seguía poniendo su título junto a piezas que no van a salir.
+$jugadas = [];
 $ids_tac = array_values(array_unique(array_filter(array_column($filas_cont, 'tactica_id'))));
 if ($ids_tac) {
     try {
         $in = implode(',', array_map('intval', $ids_tac));
-        foreach ($pdo->query("SELECT id, titulo FROM crecer_meta_tactica WHERE id IN ({$in}) AND marca_id=" . (int)$marca_id) as $r) {
-            $jugadas_tit[(int)$r['id']] = (string)$r['titulo'];
+        foreach ($pdo->query("SELECT id, titulo, estado, sustituida_at FROM crecer_meta_tactica WHERE id IN ({$in}) AND marca_id=" . (int)$marca_id) as $r) {
+            $jugadas[(int)$r['id']] = ['titulo' => (string)$r['titulo'],
+                                       'estado' => (string)$r['estado'],
+                                       'sust'   => !empty($r['sustituida_at'])];
         }
     } catch (Throwable $e) {}
 }
+
+/*  LO QUE UNA JUGADA SUSTITUIDA DEJA ATRÁS.
+ *
+ *  Al sustituir, la jugada vieja queda `descartada` y su sustituta hereda
+ *  semana y orden — pero sus PIEZAS no se tocaban. El calendario las seguía
+ *  pintando como trabajo futuro válido, con el título de la jugada muerta al
+ *  lado. El dueño veía dos publicaciones el mismo día: la que descartó y la que
+ *  la reemplazó.
+ *
+ *  La regla es la misma de includes/meta_semana.php, y se decide EN LECTURA —
+ *  aquí no se escribe nada, que sería cancelar en silencio algo que el dueño
+ *  aprobó:
+ *    borrador / aprobado      fuera. Fue trabajo; ya no lo es.
+ *    programado               SE QUEDA, y se dice que pide decisión: quitarlo
+ *                             sin preguntar sería borrarle del calendario algo
+ *                             que él programó.
+ *    publicado / publicando   historial. No se toca nunca.
+ */
+$filas_cont = array_values(array_filter($filas_cont, function ($p) use ($jugadas) {
+    $tid = (int)($p['tactica_id'] ?? 0);
+    if ($tid === 0 || empty($jugadas[$tid]['sust'])) return true;
+    return in_array((string)$p['estado'], ['programado','publicado','publicando'], true);
+}));
 foreach ($filas_cont as $p) $eventos[$p['fk']][] = ['tipo'=>'contenido']+$p;
 $o = $pdo->prepare("SELECT id, cliente_nombre, descripcion, monto, estado, DATE_FORMAT(fecha_entrega,'%Y-%m-%d') fk, TIME_FORMAT(fecha_entrega,'%H:%i') hora FROM crecer_ordenes WHERE marca_id=? AND fecha_entrega IS NOT NULL AND DATE(fecha_entrega) BETWEEN ? AND ?");
 $o->execute([$marca_id,$rangoIni,$rangoFin]);
@@ -132,17 +166,39 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 $est_col =['borrador'=>'#9A6A0E','aprobado'=>'#0F7A45','rechazado'=>'#C23A2E','publicado'=>'#0A7886',
             'recibida'=>'#9A6A0E','en_proceso'=>'#0A7886','completada'=>'#0F7A45','cancelada'=>'#C23A2E'];
 
+/*  EL ORIGEN, EN TRES CASOS Y NO EN UNO.
+ *
+ *    calendario_id vacío  + jugada  → lo puso el corillo por la meta
+ *    calendario_id puesto + jugada  → lo creó el dueño y ADEMÁS empuja la meta
+ *    sin jugada                     → lo creó el dueño, y punto
+ *
+ *  `calendario_id` es la huella de haber nacido de una casilla del calendario
+ *  —el camino manual—; las piezas del plan las escribe el ejecutor sin ella.
+ */
+$origen_pieza = function($ev) use ($jugadas) {
+    $tid = (int)($ev['tactica_id'] ?? 0);
+    $jug = $tid > 0 ? ($jugadas[$tid] ?? null) : null;
+    if (!$jug)                        return 'Creado por ti';
+    if (!empty($ev['calendario_id']))  return 'Creado por ti · aporta a tu Meta: ' . $jug['titulo'];
+    return 'De tu Meta: ' . $jug['titulo'];
+};
+
 // Chip de evento reutilizable (todas las vistas)
-// $jugadas_tit entra por `use` — sin eso el closure no la ve y las piezas del
-// plan salían sin decir a qué meta pertenecen.
-$chip = function($ev, $showHora=false) use ($h,$est_col,$jugadas_tit) {
+// $jugadas y $origen_pieza entran por `use` — sin eso el closure no los ve y
+// las piezas del plan salían sin decir de dónde vienen.
+$chip = function($ev, $showHora=false) use ($h,$est_col,$jugadas,$origen_pieza) {
     if ($ev['tipo']==='contenido') {
         $col=$est_col[$ev['estado']]??'#888';
         $titulo=mb_substr($ev['caption'] ?: 'Contenido',0,22);
-        // Si la pieza salió de una jugada del plan, se dice aquí: es la
-        // diferencia entre "un post más el martes" y "esto empuja tu meta".
-        $de_jugada = !empty($ev['tactica_id']) && isset($jugadas_tit[(int)$ev['tactica_id']])
-            ? ' · Meta: ' . $jugadas_tit[(int)$ev['tactica_id']] : '';
+        // De dónde salió esta pieza: es la diferencia entre "un post más el
+        // martes", "esto empuja tu meta" y "esto lo escribiste tú".
+        $de_jugada = ' · ' . $origen_pieza($ev);
+        // Y si su jugada quedó sustituida, se dice: quedó programada de antes y
+        // el dueño todavía no ha decidido si la deja salir.
+        $tid_ev = (int)($ev['tactica_id'] ?? 0);
+        if ($tid_ev > 0 && !empty($jugadas[$tid_ev]['sust'])) {
+            $de_jugada .= ' · jugada sustituida — pide tu decisión';
+        }
         $data='data-tipo="contenido" data-cap="'.$h($ev['caption']).'" data-img="'.$h($ev['grafica_path']??'').'" data-meta="'.$h(ucfirst($ev['plataforma']).' · '.$ev['estado'].$de_jugada).'"';
         $tt=$ev['caption']??'';
     } elseif ($ev['tipo']==='orden') {

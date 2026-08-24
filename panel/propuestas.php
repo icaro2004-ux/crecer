@@ -456,6 +456,10 @@ require __DIR__ . '/_shell.php';
 <?php
 // El wizard de CREAR (compartido con aprobar2): con ?crear=1 se abre solo.
 // Montarlo aquí = crear un post sin salir del Estudio (una sola superficie).
+//  El wizard de crear postea a aprobar2.php desde AQUI, asi que el token tiene
+//  que ponerse solo tambien en esta pagina: sin esto, sus 16 llamadas llegarian
+//  sin token y el candado nuevo las rechazaria — la ruta vieja se rompe.
+require __DIR__ . '/../includes/csrf_js.php';
 include __DIR__ . '/_crear_wizard.php';
 ?>
 
