@@ -16,7 +16,7 @@
 //    semana_estado_pieza()qué se puede decir de cada pieza
 //    semana_accion()      cuál es la ÚNICA acción principal, y si se puede
 //    semana_compromiso()  si ya hay algo que va a salir solo
-//    semana_aviso_cuota() si quitarla gasta de verdad una imagen del mes
+//    semana_cuota_gastada() cuantas imagenes del mes gasto ya esta pieza
 //    semana_nota_hora()   si se puede afirmar que la hora es la buena
 //  Copiar cualquiera de esas reglas aquí sería tener dos verdades.
 //
@@ -81,8 +81,11 @@ foreach ($sm['items'] as $i => $it) {
         'clave'   => $cla,
         'accion'  => semana_accion($it, $marca_id, $BASE),
         'cuando'  => semana_cuando($p['fecha_programada'] ?? null),
-        //  El aviso de cuota SOLO si el asiento demuestra que se gastó.
-        'cuota'   => $pid > 0 ? semana_aviso_cuota($pdo, $marca_id, $pid) : false,
+        //  CUÁNTAS unidades gastó ya esta pieza — arte, realce y los slides de
+        //  su carrusel. Un booleano se quedaba corto: un carrusel de cinco
+        //  slides son cinco imágenes, y decir «esta imagen» sería contar mal.
+        'cuota'   => $pid > 0 ? semana_cuota_gastada($pdo, $marca_id, $pid)
+                              : ['gastada' => false, 'unidades' => 0],
         'comp'    => $comp,
         //  La puerta de la pieza ya lleva el regreso a ESTA posición.
         'puerta'  => $p ? semana_ruta_pieza($p, $marca_id, $BASE) . MetaRetorno::marcador($n) : '',
@@ -366,8 +369,8 @@ foreach ($sm['items'] as $i => $it) {
                               ? $h(date('Y-m-d\TH:i', strtotime((string)$p['fecha_programada']))) : '' ?>"
              data-puerta="<?= $h($x['puerta']) ?>"
              data-sust="<?= $h($x['sust']) ?>"
-             data-cuota="<?= $x['cuota'] ? '1' : '0' ?>"
-             data-cuota-tx="<?= $h($x['cuota'] ? semana_frase_cuota(true) : '') ?>">
+             data-cuota="<?= (int)$x['cuota']['unidades'] ?>"
+             data-cuota-tx="<?= $h(semana_frase_cuota((int)$x['cuota']['unidades'])) ?>">
 
       <?php /* ── LA PIEZA ────────────────────────────────────────────── */ ?>
       <div class="sm-media<?= ($arte === '' ? ' falta' : '') ?>">

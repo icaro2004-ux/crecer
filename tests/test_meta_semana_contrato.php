@@ -273,8 +273,15 @@ ok('y la pieza sigue como estaba',
 // ── 9 · EL AVISO DE CUOTA SOLO CUANDO EL ASIENTO LO DEMUESTRA ─
 echo "\n  — no se le cobra de palabra una imagen que no gasto —\n";
 $pz_sin = (int)$fx['piezas'][0];
-ok('una pieza sin asiento no genera aviso', semana_aviso_cuota($pdo, $M, $pz_sin) === false);
-ok('una pieza que no existe tampoco',       semana_aviso_cuota($pdo, $M, 999999999) === false);
+//  El detalle de la atribucion -arte, realce y slides- vive en
+//  tests/test_meta_cuota_aviso.php, sobre base desechable. Aqui solo se afirma
+//  el contrato de la funcion: devuelve unidades, y sin evidencia devuelve cero.
+$c_sin = semana_cuota_gastada($pdo, $M, $pz_sin);
+ok('una pieza sin asiento no genera aviso',
+   $c_sin['gastada'] === false && $c_sin['unidades'] === 0);
+ok('una pieza que no existe tampoco',
+   semana_cuota_gastada($pdo, $M, 999999999)['unidades'] === 0);
+ok('y sin unidades no se dice ninguna frase', semana_frase_cuota(0) === '');
 
 } finally {
     Fixture::limpiar($pdo, $M);

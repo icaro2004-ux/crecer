@@ -111,21 +111,31 @@ try {
     $fec_antes = (string)$pdo->query("SELECT fecha_programada FROM crecer_contenido WHERE id={$P2}")->fetchColumn();
 
     //  ── EL CONSUMO YA CONFIRMADO, EN EL PRODUCTO ──
-    //  Las dos piezas que el recorrido enseña con opción de quitar llevan su
-    //  imagen YA entregada y contada. Es el caso que la interfaz tiene que
-    //  saber decir, y hasta ahora nunca se había pintado: sin un asiento
-    //  confirmado el aviso no aparece nunca, así que ninguna captura lo tenía.
-    //  Un asiento es una FILA — aquí no se genera ninguna imagen.
-    $sembrar_asiento = function (int $pieza) use ($pdo, $M) {
+    //  Tres casos, y los tres tienen que verse distintos en pantalla: CERO
+    //  (no se dice nada de cuota), UNA (singular) y VARIAS (plural con el
+    //  número). Un asiento es una FILA — aquí no se genera ninguna imagen.
+    $sembrar_asiento = function (int $origen, string $op, string $tipo = 'contenido') use ($pdo, $M) {
         $pdo->prepare("INSERT INTO crecer_img_cuota_asiento
                 (marca_id,cubo,idem,operacion,ruta,punto,exencion,unidades,estado,
                  origen_tipo,origen_id,llamadas,costo_usd,overage,created_at)
-              VALUES (?,?,?, 'arte_post','prueba','prueba','',1,'confirmado','contenido',?,1,0,0,NOW())")
+              VALUES (?,?,?,?, 'prueba','prueba','',1,'confirmado',?,?,1,0,0,NOW())")
             ->execute([$M, CuotaImg::cuboMes(),
-                       CuotaImg::idem($M, 'arte_post', 'contenido', $pieza), $pieza]);
+                       CuotaImg::idem($M, $op, $tipo, $origen), $op, $tipo, $origen]);
     };
-    $sembrar_asiento($P2);   // la de Ajustar  → lo dice la Capa 2
-    $sembrar_asiento($P3);   // la comprometida → lo dice la puerta
+
+    //  P1 · CERO. No se le siembra nada: la pantalla no debe hablar de cuota.
+    //  P2 · UNA. Un arte desde cero → singular.
+    $sembrar_asiento($P2, 'arte_post');
+    //  P3 · VARIAS. La comprometida es la que se puede quitar, así que es la
+    //  que más importa que diga la verdad: arte + realce + dos slides = 4.
+    //  El realce y los slides son justo las dos rutas que antes se callaban.
+    $sembrar_asiento($P3, 'arte_post');
+    $sembrar_asiento($P3, 'realce');
+    foreach ([1, 2] as $orden) {
+        $pdo->prepare("INSERT INTO crecer_carrusel (contenido_id, marca_id, orden, idea, img_estado)
+                       VALUES (?,?,?, 'Idea de relleno.', 'ok')")->execute([$P3, $M, $orden]);
+        $sembrar_asiento((int)$pdo->lastInsertId(), 'slide', 'slide');
+    }
 
     //  Una pieza aparte, solo para el ayudante del token: se le reescribe el
     //  texto desde dos páginas distintas SIN mandar csrf a mano.
@@ -285,21 +295,56 @@ try {
        (bool)array_filter($orig, fn($o) => strpos((string)$o, 'Creado por ti') !== false
                                         && strpos((string)$o, 'De tu Meta') === false), $todo);
 
-    // ══ 7c · EL CONSUMO CONFIRMADO, DICHO EN LA PANTALLA ══════
-    echo "\n  — lo que ya se gastó se dice; y se dice que no vuelve —\n";
-    ok('la Capa 2 avisa de que la imagen ya contó',
-       strpos($r['HOJA_CUOTA'] ?? '', 'ya cuenta en tu cuota del mes') !== false,
-       ($r['HOJA_CUOTA'] ?? '(vacío)') . ' — con asiento confirmado esto tiene que salir');
+    // ══ 7c · CERO, UNA Y VARIAS — LOS TRES SE VEN DISTINTOS ═══
+    echo "\n  — lo que ya se gastó se dice, con su número, y se dice que no vuelve —\n";
+
+    //  CERO · la publicación 1 no gastó nada. No se le menciona la cuota.
+    ok('sin consumo, la Capa 2 no habla de cuota',
+       ($r['HOJA_CUOTA_P1'] ?? '') === '',
+       ($r['HOJA_CUOTA_P1'] ?? '') . ' — al lado de «quitar», cualquier frase sobre '
+       . 'cuota se lee como una devolución');
+
+    //  UNA · singular.
+    ok('con una imagen, la Capa 2 lo dice en singular',
+       strpos($r['HOJA_CUOTA'] ?? '', 'Esta imagen ya cuenta en tu cuota del mes') === 0,
+       $r['HOJA_CUOTA'] ?? '(vacío)');
     ok('y dice que quitarla no la devuelve',
        strpos($r['HOJA_CUOTA'] ?? '', 'aunque quites la publicación') !== false,
        $r['HOJA_CUOTA'] ?? '');
-    ok('la puerta de sustituir dice lo mismo',
-       strpos($r['GATE_CUOTA'] ?? '', 'ya cuenta en tu cuota del mes') !== false,
+
+    //  VARIAS · plural con el número. Es la suma de arte + realce + 2 slides.
+    ok('con varias, la puerta las cuenta todas',
+       strpos($r['GATE_CUOTA'] ?? '', 'Estas 4 imágenes ya cuentan en tu cuota del mes') === 0,
+       ($r['GATE_CUOTA'] ?? '(vacío)') . ' — arte + realce + 2 slides; con la lectura '
+       . 'vieja habría dicho «Esta imagen», contando solo el arte_post');
+    ok('y también dice que no vuelven',
+       strpos($r['GATE_CUOTA'] ?? '', 'aunque quites la publicación') !== false,
        $r['GATE_CUOTA'] ?? '');
-    ok('y en ningún sitio se promete que no gasta',
+
+    ok('en ningún sitio se promete que no gasta',
        stripos($r['HOJA_CUOTA'] ?? '', 'no gasta') === false
-       && stripos($r['GATE_CUOTA'] ?? '', 'no gasta') === false,
+       && stripos($r['GATE_CUOTA'] ?? '', 'no gasta') === false
+       && stripos($r['GATE_CUOTA'] ?? '', 'no genera') === false,
        ($r['HOJA_CUOTA'] ?? '') . ' | ' . ($r['GATE_CUOTA'] ?? ''));
+
+    //  Y el dominio y la pantalla dicen el MISMO número.
+    require_once __DIR__ . '/../includes/meta_semana.php';
+    ok('la pantalla enseña las unidades que cuenta el dominio',
+       (int)semana_cuota_gastada($pdo, $M, $P3)['unidades'] === 4,
+       (string)semana_cuota_gastada($pdo, $M, $P3)['unidades']);
+
+    // ══ 7d · poll_arte SIGUE LLEGANDO AL HANDLER ══════════════
+    //  REGRESIÓN DEL CSRF, no rediseño. El sondeo del arte corre solo desde la
+    //  página y con el candado nuevo tenía que seguir pasando. Se comprueba
+    //  que NO recibe 403: con una pieza sin job, el handler contesta su JSON
+    //  normal sin llamar a ningún proveedor.
+    echo "\n  — el sondeo del arte no se quedó fuera del candado —\n";
+    ok('poll_arte no recibe 403 desde la página',
+       strpos($r['POLL_ARTE'] ?? '', '"csrf":false') === false
+       && strpos($r['POLL_ARTE'] ?? '', '403') !== 0,
+       ($r['POLL_ARTE'] ?? '(vacío)') . ' — si diera 403, el arte se quedaría «preparando» para siempre');
+    ok('y contesta JSON, no una pantalla',
+       strpos($r['POLL_ARTE'] ?? '', '{') === 0, $r['POLL_ARTE'] ?? '');
 
     // ══ 8b · EL AYUDANTE DEL TOKEN, DESDE LAS DOS PÁGINAS ═════
     echo "\n  — las llamadas que no ponen el token a mano siguen funcionando —\n";

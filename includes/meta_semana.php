@@ -397,73 +397,125 @@ function semana_nota_hora(PDO $pdo, int $marca_id): string
 }
 
 /**
- * ¿La imagen de esta pieza YA se gasto del mes?
+ * ¿CUANTAS imagenes de cuota se gastaron ya en esta publicacion?
  *
- * Solo se dice que si cuando el LIBRO lo demuestra: un asiento de esta marca y
- * esta pieza, `confirmado`, con unidades > 0 y sin exencion. Un reel con video
- * del dueño, una foto suya reusada sin IA o una pieza sin arte no tienen nada
- * confirmado — y ahi el aviso sobra y ademas miente.
+ * LO QUE ESTA FUNCION AFIRMABA DE MENOS. Antes reconstruia UNA sola llave
+ * —`idem(marca, 'arte_post', 'contenido', pieza)`— y contaba con que eso era
+ * todo el consumo de la publicacion. No lo es, y el propio libro lo dice:
  *
- * POR QUE NO USA CuotaImg::asientoDePieza(). Esa funcion existe para el sondeo,
- * que busca el asiento VIVO para poder cerrarlo: filtra por
- * `estado IN ('reservado','riesgo')`. Preguntarle por un asiento confirmado es
- * pedirle justo lo que su WHERE excluye — devolvia 0 SIEMPRE, asi que esta
- * comprobacion no podia dar true ni una vez y el aviso era codigo muerto. La
- * primera prueba que lo intento de verdad lo destapo.
+ *   · CuotaImg::POR_PIEZA son TRES operaciones: arte_post, realce y slide.
+ *   · `realce` es la ruta de cuando el dueño SI puso su foto y la IA la mejora
+ *     (agentes.php:1009 elige `$tiene_foto ? 'realce' : 'arte_post'`). Es otra
+ *     operacion, luego otra `idem`, luego OTRO asiento — sobre la misma pieza.
+ *     Una foto suya realzada gastaba una unidad y esta pantalla callaba.
+ *   · Los slides de un carrusel se atribuyen al SLIDE, no a la pieza
+ *     (carrusel.php:287 usa origen_tipo='slide', origen_id=crecer_carrusel.id).
+ *     Un carrusel de cinco slides gastaba cinco unidades, invisibles todas.
  *
- * Se busca por `idem`, que es la misma llave que escribe la reserva
- * (marca + operacion + origen), y ademas se exige `marca_id` en el WHERE: la
- * llave ya lleva la marca dentro, pero una condicion explicita es lo que hace
- * imposible por construccion leer el consumo de otro negocio.
+ * Y «UNIQUE(marca_id, idem)» NO significa «un asiento por publicacion». La
+ * llave lleva la operacion y el origen dentro, asi que garantiza un asiento
+ * por (marca, operacion, origen): exactamente lo contrario de lo que yo dije.
+ * Un arte_post y un realce de la misma pieza son dos filas legitimas, y no
+ * chocan.
  *
- * UNA PIEZA TIENE COMO MUCHO UN ASIENTO: `crecer_img_cuota_asiento` lleva
- * UNIQUE(marca_id, idem), y un reintento no inserta otra fila — reusa la que
- * hay (CuotaImg::reservar devuelve `reusado`). Asi que la pregunta no es cual
- * de varios manda, sino simplemente si ESE asiento esta confirmado. Por eso el
- * LIMIT 1 no elige nada: no hay entre que elegir.
+ * ASI QUE SE SUMA, NO SE ADIVINA. Dos consultas, por las dos formas reales de
+ * atribucion, y se suman las UNIDADES (no las filas: un asiento puede valer
+ * mas de una).
+ *
+ * QUE NO ENTRA, y por que:
+ *   otra marca / otra pieza   no son suyas
+ *   reservado / riesgo        todavia no se sabe si se entrego
+ *   liberado                  se devolvio antes de gastarse
+ *   exencion != ''            material propio, misma_imagen, admin, logo,
+ *                             laboratorio, cuenta ilimitada: pesan 0 en el cubo
+ *   unidades = 0              cero imagenes es cero
+ *   logo/muestra/diagnostico/laboratorio  no son de esta publicacion; quedan
+ *                             fuera por no estar en POR_PIEZA
+ *
+ * @return array{gastada:bool, unidades:int}
  */
-function semana_aviso_cuota(PDO $pdo, int $marca_id, int $contenido_id): bool
+function semana_cuota_gastada(PDO $pdo, int $marca_id, int $contenido_id): array
 {
-    if ($marca_id <= 0 || $contenido_id <= 0) return false;
+    $nada = ['gastada' => false, 'unidades' => 0];
+    if ($marca_id <= 0 || $contenido_id <= 0) return $nada;
     if (!class_exists('CuotaImg')) {
         @include_once __DIR__ . '/cuota_imagenes.php';
-        if (!class_exists('CuotaImg')) return false;
+        if (!class_exists('CuotaImg')) return $nada;
     }
+
+    //  La lista sale del LIBRO, no de aqui: si mañana nace otra operacion por
+    //  pieza atada al contenido, se cuenta sola. `slide` se saca de esta rama
+    //  porque no se ata al contenido — se ata al slide, y va por la de abajo.
+    $por_pieza = defined('CuotaImg::POR_PIEZA') ? CuotaImg::POR_PIEZA
+                                                : ['arte_post', 'realce', 'slide'];
+    $directas = array_values(array_diff($por_pieza, ['slide']));
+
+    $unidades = 0;
+
+    //  1 · LO QUE CUELGA DE LA PIEZA: arte desde cero y realce de su foto.
+    if ($directas) {
+        try {
+            $hue = implode(',', array_fill(0, count($directas), '?'));
+            $q = $pdo->prepare(
+                "SELECT COALESCE(SUM(unidades), 0)
+                   FROM crecer_img_cuota_asiento
+                  WHERE marca_id = ?
+                    AND origen_tipo = 'contenido'
+                    AND origen_id = ?
+                    AND operacion IN ({$hue})
+                    AND estado = 'confirmado'
+                    AND unidades > 0
+                    AND (exencion IS NULL OR exencion = '')");
+            $q->execute(array_merge([$marca_id, $contenido_id], $directas));
+            $unidades += (int)$q->fetchColumn();
+        } catch (Throwable $e) {
+            error_log('semana_cuota_gastada (directas): ' . $e->getMessage());
+        }
+    }
+
+    //  2 · LOS SLIDES DE SU CARRUSEL. La relacion es de esquema
+    //      (crecer_carrusel.contenido_id), no un nombre ni una corazonada. Va
+    //      en su propio try: sin la tabla, lo de arriba sigue contando.
     try {
         $q = $pdo->prepare(
-            "SELECT 1 FROM crecer_img_cuota_asiento
-              WHERE marca_id = ?
-                AND idem = ?
-                AND estado = 'confirmado'
-                AND unidades > 0
-                AND (exencion IS NULL OR exencion = '')
-              LIMIT 1");
-        //  La MISMA operacion y el MISMO origen que usa la reserva del arte de
-        //  un post. Si una imagen llegara por otra operacion, aqui no se veria
-        //  y se callaria — que es el lado seguro: callarse no afirma nada.
-        $q->execute([$marca_id, CuotaImg::idem($marca_id, 'arte_post', 'contenido', $contenido_id)]);
-        return (bool)$q->fetchColumn();
+            "SELECT COALESCE(SUM(a.unidades), 0)
+               FROM crecer_img_cuota_asiento a
+               JOIN crecer_carrusel s
+                 ON s.id = a.origen_id AND s.marca_id = a.marca_id
+              WHERE a.marca_id = ?
+                AND s.contenido_id = ?
+                AND a.origen_tipo = 'slide'
+                AND a.operacion = 'slide'
+                AND a.estado = 'confirmado'
+                AND a.unidades > 0
+                AND (a.exencion IS NULL OR a.exencion = '')");
+        $q->execute([$marca_id, $contenido_id]);
+        $unidades += (int)$q->fetchColumn();
     } catch (Throwable $e) {
-        return false;
+        error_log('semana_cuota_gastada (slides): ' . $e->getMessage());
     }
+
+    return ['gastada' => $unidades > 0, 'unidades' => $unidades];
 }
 
 /**
  * Lo que se le DICE al dueño sobre la cuota antes de quitar una publicacion.
  *
- * Dos frases y ninguna intermedia, porque «Quitarla no gasta imagenes» se lee
- * como «me devuelven la unidad» — y no se devuelve. Quitar una publicacion
- * cuya imagen ya se entrego no recupera nada; y de una que nunca genero arte
- * no hay ninguna cuota de la que hablar.
- *
- * @return string vacio = no hay nada cierto que decir, y entonces no se dice.
+ * CON EVIDENCIA se dice cuantas y que NO vuelven. SIN evidencia no se dice
+ * nada: cadena vacia y la vista no pinta la linea. Aqui vivia una frase de
+ * relleno para el caso cero —«sustituirla no genera otra imagen hasta preparar
+ * la alternativa»— y se ha quitado: al lado de un boton de quitar, cualquier
+ * frase que empiece por «no gasta» o «no genera» se lee como «me la devuelven».
+ * Lo que pasa al sustituir ya lo dice la propia tarjeta de la opcion.
  */
-function semana_frase_cuota(bool $gastada): string
+function semana_frase_cuota(int $unidades): string
 {
-    return $gastada
+    if ($unidades <= 0) return '';
+    return $unidades === 1
         ? 'Esta imagen ya cuenta en tu cuota del mes aunque quites la publicación.'
-        : 'Sustituirla no genera otra imagen hasta preparar la alternativa.';
+        : "Estas {$unidades} imágenes ya cuentan en tu cuota del mes aunque quites la publicación.";
 }
+
 
 // -- LO QUE LA VISTA NO PUEDE DECIDIR POR SU CUENTA ----------
 /**

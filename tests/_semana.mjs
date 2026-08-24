@@ -222,6 +222,16 @@ try {
   await tirar('02_tras_aprobar_360', 360, 800);
 
   // ══ 3 · AJUSTAR · la hoja, y la pieza detras ═══════════════════
+  //  Antes de la 2, se mira la 1: NO gastó nada, así que su hoja no puede
+  //  mencionar la cuota. El caso cero es el que se afirma callando.
+  await ir(SEM + '&pos=1');
+  await cerrarRecibimiento(ev);
+  await clicSel('.sm-p.on [data-ajustar]');
+  await esperar('#smHojaC .sm-fila');
+  di('HOJA_CUOTA_P1', (await ev(`(function(){var p=document.querySelector('#smHojaC .sm-nota');
+      return p?p.textContent.replace(/\\s+/g,' ').trim():'';})()`)));
+  await clicSel('#smCerrar');
+
   await ir(SEM + '&pos=2');
   await cerrarRecibimiento(ev);
   di('URL_POS2', await url());
@@ -372,6 +382,20 @@ try {
     di('SHIM_' + nombre, String(j).slice(0, 120));
     di('SHIM_' + nombre + '_TX', texto);
   }
+
+  // ══ 7d · poll_arte · REGRESION DEL CANDADO ════════════════════
+  //  El sondeo corre solo desde la pagina y no manda el token a mano: lo pone
+  //  el ayudante. Si el candado lo rechazara, el arte se quedaria «preparando»
+  //  para siempre. Se llama con una pieza SIN job, asi que el handler contesta
+  //  su JSON sin salir a ningun proveedor.
+  await ir(`${BASE}/aprobar2.php?marca=${marca}`);
+  await cerrarRecibimiento(ev);
+  di('POLL_ARTE', String(await ev(`(function(){
+    var fd = new FormData();
+    fd.append('accion','poll_arte'); fd.append('id', ${piezaShim});
+    return fetch('/crecer/panel/aprobar2.php?marca=${marca}', {method:'POST', body:fd})
+      .then(function(r){ return r.text(); });
+  })()`)).slice(0, 120));
 
   // ══ 8 · LAS OTRAS DOS PANTALLAS ════════════════════════════════
   await ir(SEM);

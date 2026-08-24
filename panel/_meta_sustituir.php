@@ -81,10 +81,12 @@ $su_quitar = $su_exige && !empty($_GET['quitar']);
 $su_puerta = $su_exige && !$su_quitar;          // hay que preguntar primero
 $su_pza    = $su_comp['pieza'] ?? null;
 $su_cuando = semana_cuando($su_pza['fecha_programada'] ?? null);
-//  El aviso de cuota SOLO si el asiento demuestra que la imagen se entrego:
-//  reservado, liberado, exento o cero unidades no gastaron nada, y decir que si
-//  seria cobrarle de palabra algo que no pago.
-$su_cuota  = $su_pza ? semana_aviso_cuota($pdo, $marca_id, (int)$su_pza['id']) : false;
+//  CUANTAS unidades gasto ya esta publicacion: su arte, su realce y los slides
+//  de su carrusel. Reservado, liberado, exento o cero unidades no gastaron
+//  nada, y decir que si seria cobrarle de palabra algo que no pago.
+$su_cuota  = $su_pza ? semana_cuota_gastada($pdo, $marca_id, (int)$su_pza['id'])
+                     : ['gastada' => false, 'unidades' => 0];
+$su_cuota_tx = semana_frase_cuota((int)$su_cuota['unidades']);
 
 //  Las piezas que ya salieron de esta jugada. Se cuentan para poder DECIRLO en
 //  el repaso: es la duda de quien ya vio trabajo hecho colgando de ella.
@@ -259,9 +261,10 @@ $SU_FORMATOS = ['post' => 'Post', 'carrusel' => 'Carrusel', 'reel' => 'Reel',
         <?php /*  NI UNA PALABRA DE CUOTA QUE EL LIBRO NO SOSTENGA. Aquí había
                   antes una frase que negaba el consumo, y se leía como «me
                   devuelven la unidad» — y no se devuelve: lo confirmado,
-                  confirmado se queda. Las dos únicas frases posibles viven en
-                  semana_frase_cuota(), junto a la regla que las autoriza.  */ ?>
-        <small><?= $h(semana_frase_cuota($su_cuota)) ?></small>
+                  confirmado se queda. Sin consumo demostrado la línea NO SE
+                  PINTA: al lado de un botón de quitar, cualquier frase que
+                  empiece por «no gasta» se lee como una devolución.  */ ?>
+        <?php if ($su_cuota_tx !== ''): ?><small><?= $h($su_cuota_tx) ?></small><?php endif; ?>
       </a>
 
       <a class="su-opt" href="<?= $h($su_volver) ?>">
@@ -400,9 +403,12 @@ $SU_FORMATOS = ['post' => 'Post', 'carrusel' => 'Carrusel', 'reel' => 'Reel',
       </ol>
       <?php /*  LO QUE YA SE GASTÓ NO VUELVE. Aquí vivía una frase que negaba el
                 consumo en seco, y era falsa justo en el caso que importa: quitar
-                una publicación cuya imagen ya se entregó. Las dos únicas frases
-                posibles las decide semana_frase_cuota() con el libro delante.  */ ?>
-      <p class="nota"><?= $h(semana_frase_cuota($su_quitar && $su_cuota)) ?></p>
+                una publicación cuyas imágenes ya se entregaron. Solo se pinta
+                cuando el libro tiene algo que sostener, y solo si el dueño va a
+                quitarla: si la conserva, su cuota no viene al caso.  */ ?>
+      <?php if ($su_quitar && $su_cuota_tx !== ''): ?>
+        <p class="nota"><?= $h($su_cuota_tx) ?></p>
+      <?php endif; ?>
     </div>
   </section>
 
