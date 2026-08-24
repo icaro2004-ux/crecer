@@ -161,11 +161,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (($t['clase'] ?? 'produccion') !== 'produccion') {
                 echo json_encode(['ok'=>false,'err'=>'Esta jugada la tienes que hacer tú — no es de producir contenido.']); exit;
             }
-            $ya = meta_job_en_curso($pdo, $tid);
-            if ($ya) { echo json_encode(['ok'=>true, 'job'=>$ya, 'ya'=>true]); exit; }
-            $job = meta_job_encolar($pdo, $marca_id, $tid);
-            meta_job_disparar($job);
-            echo json_encode(['ok'=>true, 'job'=>$job]);
+            //  ENCOLADO UNICO. Antes esto era leer-y-despues-insertar, que no
+            //  arbitra nada: dos clics a la vez colaban dos jobs y el corillo
+            //  producia la misma tanda dos veces. El candado vive ahora en
+            //  meta_async.php, sobre la fila de la jugada.
+            $e = meta_job_encolar_unico($pdo, $marca_id, $tid);
+            if ($e['id'] <= 0) {
+                $msg = ['ya_completa' => 'Esa jugada ya tiene sus piezas hechas.',
+                        'descartada'  => 'Esa jugada la sustituiste — mira la nueva.',
+                        'no_tuya'     => 'No encuentro esa jugada.',
+                       ][$e['motivo']] ?? 'No pude ponerla en cola. Vuelve a intentarlo.';
+                echo json_encode(['ok'=>false, 'err'=>$msg, 'motivo'=>$e['motivo']]); exit;
+            }
+            //  El disparo es una llamada de red: SIEMPRE fuera de la transaccion,
+            //  y solo si este request fue el que creo el job.
+            if ($e['creado']) meta_job_disparar($e['id']);
+            echo json_encode(['ok'=>true, 'job'=>$e['id'], 'ya'=>!$e['creado']]);
             exit;
         }
 
