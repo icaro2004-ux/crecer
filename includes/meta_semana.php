@@ -412,15 +412,29 @@ function semana_nota_hora(PDO $pdo, int $marca_id): string
  *     (carrusel.php:287 usa origen_tipo='slide', origen_id=crecer_carrusel.id).
  *     Un carrusel de cinco slides gastaba cinco unidades, invisibles todas.
  *
- * Y «UNIQUE(marca_id, idem)» NO significa «un asiento por publicacion». La
- * llave lleva la operacion y el origen dentro, asi que garantiza un asiento
- * por (marca, operacion, origen): exactamente lo contrario de lo que yo dije.
- * Un arte_post y un realce de la misma pieza son dos filas legitimas, y no
- * chocan.
+ * QUE GARANTIZA DE VERDAD «UNIQUE(marca_id, idem)» — y es menos de lo que yo
+ * dije DOS veces. Primero dije que aseguraba un asiento por publicacion: falso,
+ * porque la llave lleva dentro la operacion y el origen. Luego dije que
+ * aseguraba uno por (marca, operacion, origen): tambien falso, y por otra razon.
+ *
+ * El contrato exacto es este:
+ *
+ *   La llave idempotente impide duplicar un ciclo VIVO. Cuando el asiento se
+ *   confirma o se libera, su llave SE RETIRA —CuotaImg::retirarLlave() la
+ *   reescribe como SHA1(idem|cerrado|id), muerta y derivada, y la fila se
+ *   queda para la auditoria—. Un ciclo posterior legitimo por la misma
+ *   operacion y la misma pieza puede abrir OTRO asiento. El consumo historico
+ *   de una publicacion se obtiene sumando TODOS sus asientos confirmados
+ *   atribuibles.
+ *
+ * Y esa retirada no es un descuido: existe para que «cambiar el arte» de una
+ * pieza que ya tiene imagen vuelva a costar. Si la llave siguiera puesta, la
+ * segunda peticion chocaria con un asiento muerto y saldria gratis.
  *
  * ASI QUE SE SUMA, NO SE ADIVINA. Dos consultas, por las dos formas reales de
- * atribucion, y se suman las UNIDADES (no las filas: un asiento puede valer
- * mas de una).
+ * atribucion, y se suman las UNIDADES de TODAS las filas confirmadas — no las
+ * filas (un asiento puede valer mas de una) y no «la del ciclo actual» (los
+ * ciclos anteriores tambien se cobraron).
  *
  * QUE NO ENTRA, y por que:
  *   otra marca / otra pieza   no son suyas

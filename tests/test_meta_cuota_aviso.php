@@ -12,10 +12,18 @@
 //     justo lo que la consulta excluia.
 //
 //  2. «Una publicacion tiene como mucho un asiento, lo garantiza
-//     UNIQUE(marca_id, idem)». NO lo garantiza. `idem` lleva DENTRO la
-//     operacion y el origen, asi que ese indice garantiza un asiento por
-//     (marca, operacion, origen) — que es otra cosa. La misma publicacion
-//     puede tener a la vez:
+//     UNIQUE(marca_id, idem)». NO lo garantiza, y falla por DOS motivos
+//     distintos que hubo que descubrir uno detras de otro:
+//
+//       a) `idem` lleva DENTRO la operacion y el origen, asi que el indice no
+//          separa publicaciones sino (marca, operacion, origen).
+//       b) y ni siquiera eso dura: al confirmar o liberar, CuotaImg retira la
+//          llave —la reescribe derivada y muerta— para que «cambiar el arte»
+//          vuelva a costar. Un ciclo posterior por la MISMA operacion y la
+//          MISMA pieza abre otro asiento. El indice arbitra el ciclo VIVO, no
+//          la vida entera de la publicacion.
+//
+//     La misma publicacion puede tener a la vez:
 //       · `arte_post`  arte hecho desde cero        → origen contenido
 //       · `realce`     su foto mejorada con IA      → origen contenido
 //       · `slide` xN   una por slide de su carrusel → origen slide
@@ -111,7 +119,7 @@ try {
     ok('y las dos filas conviven: la llave única no lo impide',
        (int)$db->query("SELECT COUNT(*) FROM crecer_img_cuota_asiento
                          WHERE origen_tipo='contenido' AND origen_id={$P_DOS}")->fetchColumn() === 2,
-       'UNIQUE(marca_id, idem) separa por operación, no por publicación');
+       'UNIQUE(marca_id, idem) solo arbitra ciclos VIVOS de la misma operación');
 
     echo "\n  — se suman UNIDADES, no filas —\n";
     $P_MULTI = 9104;
@@ -143,6 +151,95 @@ try {
     $asiento(['marca'=>$MARCA, 'origen'=>$sid,   'op'=>'slide',  'tipo'=>'slide', 'estado'=>'confirmado']);
     $asiento(['marca'=>$MARCA, 'origen'=>$P_MIX, 'op'=>'realce', 'estado'=>'confirmado']);
     ok('las dos ramas se suman', $u($MARCA, $P_MIX) === 2, (string)$u($MARCA, $P_MIX));
+
+    // ══════════════════════════════════════════════════════════════
+    //  1b · DOS CICLOS CONFIRMADOS DE LA MISMA OPERACIÓN
+    //
+    //  Aquí NO se escriben filas a mano: se usa el ciclo REAL de CuotaImg
+    //  —reservar() y confirmar()—, que son operaciones de base de datos puras.
+    //  Ningún proveedor, ninguna imagen. Es la única forma de demostrar de
+    //  verdad que la llave se retira al cerrar, porque la retira el código de
+    //  producción y no la prueba.
+    // ══════════════════════════════════════════════════════════════
+    echo "\n  — la llave se retira al cerrar: un ciclo posterior abre otro asiento —\n";
+    CuotaImg::disponible($db, true);   // la copia también tiene el libro
+
+    $reservar = fn(int $marca, int $pieza, string $op) => CuotaImg::reservar(
+        $db, CuotaCtx::de($db, $marca, $op, 'prueba_ciclo',
+                          ['origen_tipo' => 'contenido', 'origen_id' => $pieza]));
+
+    $P_CICLO = 9110;
+
+    //  CICLO 1 · el dueño pide su arte y llega.
+    $c1 = $reservar($MARCA, $P_CICLO, 'arte_post');
+    ok('el primer ciclo abre su asiento', !empty($c1['ok']) && (int)$c1['asiento_id'] > 0,
+       json_encode($c1, JSON_UNESCAPED_UNICODE));
+
+    //  MIENTRAS ESTÁ VIVO, la idempotencia manda: pedir otra vez NO duplica.
+    $vivo = $reservar($MARCA, $P_CICLO, 'arte_post');
+    ok('con el asiento VIVO, volver a pedir reusa el mismo',
+       !empty($vivo['reusado']) && (int)$vivo['asiento_id'] === (int)$c1['asiento_id'],
+       json_encode($vivo, JSON_UNESCAPED_UNICODE) . ' — así es como el respaldo no cobra dos veces');
+    ok('y sigue habiendo UNA sola fila',
+       (int)$db->query("SELECT COUNT(*) FROM crecer_img_cuota_asiento
+                         WHERE origen_tipo='contenido' AND origen_id={$P_CICLO}")->fetchColumn() === 1);
+    ok('todavía no cuenta como gastada', $u($MARCA, $P_CICLO) === 0,
+       'reservado no es consumido');
+
+    //  SE CIERRA. confirmar() retira la llave: la reescribe derivada y muerta.
+    CuotaImg::confirmar($db, (int)$c1['asiento_id'], 0.17);
+    $llave1 = (string)$db->query("SELECT idem FROM crecer_img_cuota_asiento
+                                   WHERE id=" . (int)$c1['asiento_id'])->fetchColumn();
+    ok('al confirmar, la llave del asiento ya NO es la canónica',
+       $llave1 !== CuotaImg::idem($MARCA, 'arte_post', 'contenido', $P_CICLO),
+       'retirarLlave() la reescribe como SHA1(idem|cerrado|id)');
+    ok('pero la fila se queda entera para la auditoría',
+       (string)$db->query("SELECT estado FROM crecer_img_cuota_asiento
+                            WHERE id=" . (int)$c1['asiento_id'])->fetchColumn() === 'confirmado');
+    ok('y ya cuenta 1', $u($MARCA, $P_CICLO) === 1);
+
+    //  CICLO 2 · «cambiar el arte» meses después. La llave está libre, así que
+    //  nace OTRO asiento — y vuelve a costar, que es justo el efecto buscado.
+    $c2 = $reservar($MARCA, $P_CICLO, 'arte_post');
+    ok('un ciclo posterior abre un asiento NUEVO',
+       !empty($c2['ok']) && (int)$c2['asiento_id'] !== (int)$c1['asiento_id'],
+       json_encode($c2, JSON_UNESCAPED_UNICODE)
+       . ' — «un retry confirmado reusa la fila» era falso: la llave ya no está');
+    ok('y NO se marca como reusado', empty($c2['reusado']));
+    CuotaImg::confirmar($db, (int)$c2['asiento_id'], 0.17);
+
+    ok('la misma publicación, la misma operación, DOS unidades',
+       $u($MARCA, $P_CICLO) === 2, (string)$u($MARCA, $P_CICLO));
+    ok('y son dos filas confirmadas de arte_post',
+       (int)$db->query("SELECT COUNT(*) FROM crecer_img_cuota_asiento
+                         WHERE origen_tipo='contenido' AND origen_id={$P_CICLO}
+                           AND operacion='arte_post' AND estado='confirmado'")->fetchColumn() === 2);
+    ok('la pantalla lo diría en plural',
+       semana_frase_cuota($u($MARCA, $P_CICLO)) === 'Estas 2 imágenes ya cuentan en tu cuota del mes aunque quites la publicación.',
+       semana_frase_cuota($u($MARCA, $P_CICLO)));
+
+    //  LO MISMO CON REALCE: dos ciclos de realce sobre la misma foto.
+    echo "\n  — y lo mismo con realce —\n";
+    $P_CIR = 9111;
+    $r1 = $reservar($MARCA, $P_CIR, 'realce');
+    CuotaImg::confirmar($db, (int)$r1['asiento_id'], 0.17);
+    $r2 = $reservar($MARCA, $P_CIR, 'realce');
+    ok('el segundo realce abre otro asiento',
+       (int)$r2['asiento_id'] !== (int)$r1['asiento_id'] && empty($r2['reusado']));
+    CuotaImg::confirmar($db, (int)$r2['asiento_id'], 0.17);
+    ok('dos ciclos de realce cuentan 2', $u($MARCA, $P_CIR) === 2, (string)$u($MARCA, $P_CIR));
+
+    //  UN CICLO LIBERADO NO SUMA, aunque su llave también se haya retirado.
+    echo "\n  — un ciclo liberado suelta la llave pero no cuenta —\n";
+    $P_CIL = 9112;
+    $l1 = $reservar($MARCA, $P_CIL, 'arte_post');
+    CuotaImg::liberar($db, (int)$l1['asiento_id'], 'no llegó nada');
+    ok('liberado no cuenta', $u($MARCA, $P_CIL) === 0);
+    $l2 = $reservar($MARCA, $P_CIL, 'arte_post');
+    ok('y el reintento abre otro asiento', (int)$l2['asiento_id'] !== (int)$l1['asiento_id']);
+    CuotaImg::confirmar($db, (int)$l2['asiento_id'], 0.17);
+    ok('solo el confirmado cuenta: 1, no 2', $u($MARCA, $P_CIL) === 1,
+       (string)$u($MARCA, $P_CIL) . ' — el liberado devolvió su unidad al cubo');
 
     // ══════════════════════════════════════════════════════════════
     //  2 · EL CANDADO CONTRA LA REGRESIÓN
