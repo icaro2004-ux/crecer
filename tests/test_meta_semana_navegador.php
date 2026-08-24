@@ -22,6 +22,7 @@
 
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/meta_negocio.php';
+require_once __DIR__ . '/../includes/cuota_imagenes.php';
 require_once __DIR__ . '/_fixture.php';
 
 $fallos = 0; $n = 0;
@@ -109,8 +110,34 @@ try {
     $cap_antes = (string)$pdo->query("SELECT caption FROM crecer_contenido WHERE id={$P2}")->fetchColumn();
     $fec_antes = (string)$pdo->query("SELECT fecha_programada FROM crecer_contenido WHERE id={$P2}")->fetchColumn();
 
+    //  ── EL CONSUMO YA CONFIRMADO, EN EL PRODUCTO ──
+    //  Las dos piezas que el recorrido enseña con opción de quitar llevan su
+    //  imagen YA entregada y contada. Es el caso que la interfaz tiene que
+    //  saber decir, y hasta ahora nunca se había pintado: sin un asiento
+    //  confirmado el aviso no aparece nunca, así que ninguna captura lo tenía.
+    //  Un asiento es una FILA — aquí no se genera ninguna imagen.
+    $sembrar_asiento = function (int $pieza) use ($pdo, $M) {
+        $pdo->prepare("INSERT INTO crecer_img_cuota_asiento
+                (marca_id,cubo,idem,operacion,ruta,punto,exencion,unidades,estado,
+                 origen_tipo,origen_id,llamadas,costo_usd,overage,created_at)
+              VALUES (?,?,?, 'arte_post','prueba','prueba','',1,'confirmado','contenido',?,1,0,0,NOW())")
+            ->execute([$M, CuotaImg::cuboMes(),
+                       CuotaImg::idem($M, 'arte_post', 'contenido', $pieza), $pieza]);
+    };
+    $sembrar_asiento($P2);   // la de Ajustar  → lo dice la Capa 2
+    $sembrar_asiento($P3);   // la comprometida → lo dice la puerta
+
+    //  Una pieza aparte, solo para el ayudante del token: se le reescribe el
+    //  texto desde dos páginas distintas SIN mandar csrf a mano.
+    $pdo->prepare("INSERT INTO crecer_contenido
+            (marca_id,plataforma,tipo,caption,estado,grafica_path)
+          VALUES (?, 'instagram','post','Texto de relleno para el ayudante.','borrador',?)")
+        ->execute([$M, $ARTE]);
+    $PSHIM = (int)$pdo->lastInsertId();
+
     $cmd = 'node ' . escapeshellarg(__DIR__ . DIRECTORY_SEPARATOR . '_semana.mjs')
-         . ' ' . escapeshellarg($sid) . ' ' . $M . ' ' . $T3 . ' ' . escapeshellarg($SHOTS) . ' 2>&1';
+         . ' ' . escapeshellarg($sid) . ' ' . $M . ' ' . $T3 . ' ' . escapeshellarg($SHOTS)
+         . ' ' . $PSHIM . ' 2>&1';
     $sal = []; exec($cmd, $sal);
     $r = [];
     foreach ($sal as $l) { if (strpos($l, '=') !== false) { [$k, $v] = explode('=', trim($l), 2); $r[$k] = $v; } }
@@ -258,6 +285,34 @@ try {
        (bool)array_filter($orig, fn($o) => strpos((string)$o, 'Creado por ti') !== false
                                         && strpos((string)$o, 'De tu Meta') === false), $todo);
 
+    // ══ 7c · EL CONSUMO CONFIRMADO, DICHO EN LA PANTALLA ══════
+    echo "\n  — lo que ya se gastó se dice; y se dice que no vuelve —\n";
+    ok('la Capa 2 avisa de que la imagen ya contó',
+       strpos($r['HOJA_CUOTA'] ?? '', 'ya cuenta en tu cuota del mes') !== false,
+       ($r['HOJA_CUOTA'] ?? '(vacío)') . ' — con asiento confirmado esto tiene que salir');
+    ok('y dice que quitarla no la devuelve',
+       strpos($r['HOJA_CUOTA'] ?? '', 'aunque quites la publicación') !== false,
+       $r['HOJA_CUOTA'] ?? '');
+    ok('la puerta de sustituir dice lo mismo',
+       strpos($r['GATE_CUOTA'] ?? '', 'ya cuenta en tu cuota del mes') !== false,
+       $r['GATE_CUOTA'] ?? '');
+    ok('y en ningún sitio se promete que no gasta',
+       stripos($r['HOJA_CUOTA'] ?? '', 'no gasta') === false
+       && stripos($r['GATE_CUOTA'] ?? '', 'no gasta') === false,
+       ($r['HOJA_CUOTA'] ?? '') . ' | ' . ($r['GATE_CUOTA'] ?? ''));
+
+    // ══ 8b · EL AYUDANTE DEL TOKEN, DESDE LAS DOS PÁGINAS ═════
+    echo "\n  — las llamadas que no ponen el token a mano siguen funcionando —\n";
+    foreach (['ESTUDIO' => 'El Estudio', 'APROBAR2' => 'Tus Posts'] as $k => $donde) {
+        ok("desde {$donde} la llamada sin token NO la rechaza el candado",
+           strpos($r['SHIM_' . $k] ?? '', '"csrf":false') === false,
+           ($r['SHIM_' . $k] ?? '') . ' — así llaman las 15 del wizard de crear');
+    }
+    //  Y lo que cuenta: la ÚLTIMA de las dos escribió de verdad en la base.
+    $cap_shim = (string)$pdo->query("SELECT caption FROM crecer_contenido WHERE id={$PSHIM}")->fetchColumn();
+    ok('y la escritura llegó a la base', $cap_shim === ($r['SHIM_APROBAR2_TX'] ?? '·'),
+       $cap_shim . ' ≠ ' . ($r['SHIM_APROBAR2_TX'] ?? ''));
+
     // ══ 9 · ESCRITORIO Y CONSOLA ══════════════════════════════
     echo "\n  — el escritorio no es el móvil estirado —\n";
     ok('a 1440 se ve la semana entera al lado', (int)($r['ESCRITORIO_LISTA'] ?? 0) === 3,
@@ -275,6 +330,11 @@ try {
        'capturas iguales = el recorte cayó fuera de la página');
 
 } finally {
+    //  `crecer_img_cuota_asiento` NO cuelga de ninguna llave foránea, así que
+    //  borrar el dueño no se lleva sus asientos. Se limpian a mano y por marca:
+    //  dejarlos ahí ensuciaría el libro de otra suite.
+    try { $pdo->prepare("DELETE FROM crecer_img_cuota_asiento WHERE marca_id=?")->execute([$M]); }
+    catch (Throwable $e) {}
     Fixture::limpiar($pdo, $M);
     echo "\n  (fixture limpiada · capturas en tests/_capturas/semana)\n";
 }

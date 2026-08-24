@@ -256,9 +256,12 @@ $SU_FORMATOS = ['post' => 'Post', 'carrusel' => 'Carrusel', 'reel' => 'Reel',
         <b>Quitarla del calendario y cambiarla</b>
         <span>No sale. Queda descartada en Tus Posts —no se borra— y te propongo
           otra jugada en su mismo sitio del plan.</span>
-        <small><?= $su_cuota
-          ? 'Su imagen ya está hecha y ya contó en tu mes: quitarla no te la devuelve.'
-          : 'Quitarla no gasta imágenes.' ?></small>
+        <?php /*  NI UNA PALABRA DE CUOTA QUE EL LIBRO NO SOSTENGA. Aquí había
+                  antes una frase que negaba el consumo, y se leía como «me
+                  devuelven la unidad» — y no se devuelve: lo confirmado,
+                  confirmado se queda. Las dos únicas frases posibles viven en
+                  semana_frase_cuota(), junto a la regla que las autoriza.  */ ?>
+        <small><?= $h(semana_frase_cuota($su_cuota)) ?></small>
       </a>
 
       <a class="su-opt" href="<?= $h($su_volver) ?>">
@@ -395,8 +398,11 @@ $SU_FORMATOS = ['post' => 'Post', 'carrusel' => 'Carrusel', 'reel' => 'Reel',
         <li>La nueva entra en el mismo sitio del plan, para esta misma semana.</li>
         <li>Te llevo de vuelta y ahí te digo qué toca.</li>
       </ol>
-      <p class="nota">Cambiarla no gasta imágenes. Se gastan cuando me digas que la produzca,
-        y solo si lleva arte hecho por mí.</p>
+      <?php /*  LO QUE YA SE GASTÓ NO VUELVE. Aquí vivía una frase que negaba el
+                consumo en seco, y era falsa justo en el caso que importa: quitar
+                una publicación cuya imagen ya se entregó. Las dos únicas frases
+                posibles las decide semana_frase_cuota() con el libro delante.  */ ?>
+      <p class="nota"><?= $h(semana_frase_cuota($su_quitar && $su_cuota)) ?></p>
     </div>
   </section>
 
@@ -559,10 +565,12 @@ $SU_FORMATOS = ['post' => 'Post', 'carrusel' => 'Carrusel', 'reel' => 'Reel',
     $('suNuevoT').textContent = d.alt.titulo || '';
     $('suNuevoQ').textContent = d.alt.que_hacer || '';
     $('suNuevoF').textContent = NOMBRE_F[d.alt.formato] || d.alt.formato || '';
-    //  Se dice si gasta imagenes o no, y se dice AQUI: enterarse despues de
-    //  confirmar es enterarse tarde.
+    //  Cuanto costara PRODUCIR la nueva, dicho AQUI: enterarse despues de
+    //  confirmar es enterarse tarde. Es una afirmacion hacia delante y no dice
+    //  nada sobre la unidad de la vieja — esa, si se gasto, se quedo gastada.
     $('suNuevoCuota').lastChild.nodeValue =
-      SIN_ARTE.indexOf(d.alt.formato) >= 0 ? 'No gasta imágenes' : 'Usa 1 imagen al producirla';
+      SIN_ARTE.indexOf(d.alt.formato) >= 0 ? 'No usa imágenes de tu cuota'
+                                            : 'Usa 1 imagen al producirla';
   }
 
   $('suOtra').addEventListener('click', pedirAlternativa);

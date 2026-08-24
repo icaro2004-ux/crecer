@@ -366,7 +366,8 @@ foreach ($sm['items'] as $i => $it) {
                               ? $h(date('Y-m-d\TH:i', strtotime((string)$p['fecha_programada']))) : '' ?>"
              data-puerta="<?= $h($x['puerta']) ?>"
              data-sust="<?= $h($x['sust']) ?>"
-             data-cuota="<?= $x['cuota'] ? '1' : '0' ?>">
+             data-cuota="<?= $x['cuota'] ? '1' : '0' ?>"
+             data-cuota-tx="<?= $h($x['cuota'] ? semana_frase_cuota(true) : '') ?>">
 
       <?php /* ── LA PIEZA ────────────────────────────────────────────── */ ?>
       <div class="sm-media<?= ($arte === '' ? ' falta' : '') ?>">
@@ -677,7 +678,8 @@ foreach ($sm['items'] as $i => $it) {
     image: <?= json_encode(ico('image')) ?>,
     clock: <?= json_encode(ico('clock')) ?>,
     refr:  <?= json_encode(ico('refresh')) ?>,
-    chev:  <?= json_encode(ico('chev-der')) ?>
+    chev:  <?= json_encode(ico('chev-der')) ?>,
+    img24: <?= json_encode(ico('image')) ?>
   };
   function fila(ic, tit, sub, attr) {
     return '<button type="button" class="sm-fila" ' + attr + '>' +
@@ -713,6 +715,13 @@ foreach ($sm['items'] as $i => $it) {
       fila(IC.clock, 'Fecha y hora', cuando || 'Ponerle cuándo sale', 'data-a="fecha"');
     if (el.dataset.sust) {
       html += fila(IC.refr, 'No puedo con esta', 'Que te proponga otra cosa', 'data-a="sust"');
+    }
+    //  LA CUOTA SOLO SI EL LIBRO LA DEMUESTRA. El servidor ya decidio si hay
+    //  algo cierto que decir; aqui no se deduce nada. Va de nota al pie: es
+    //  informacion subordinada a la decision, no la decision.
+    if (el.dataset.cuotaTx) {
+      html += '<p class="sm-nota" style="margin-top:14px">' + IC.img24 +
+              '<span>' + esc(el.dataset.cuotaTx) + '</span></p>';
     }
     abrir('¿Qué quieres ajustar?', html);
     $$('.sm-fila', hojaC).forEach(function (f) {

@@ -51,6 +51,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id     = (int)($_POST['id'] ?? 0);
     $accion = $_POST['accion'] ?? '';
 
+    // ══ CSRF · UNA SOLA PUERTA PARA TODAS LAS ESCRITURAS ═══════════════════
+    //
+    //  Este archivo concentra una veintena de acciones que ESCRIBEN: aprobar,
+    //  rechazar, reabrir, marcar publicado, editar el texto, mover la fecha,
+    //  generar arte, reusar arte, subir foto o video, crear posts, borrar,
+    //  publicar a las redes. Solo dos comprobaban el token (`publicar_api` y
+    //  `borrar`). Las demas aceptaban un POST de cualquier sitio: bastaba con
+    //  que el dueño tuviera la sesion abierta y visitara una pagina ajena para
+    //  que le publicaran, le borraran o le reescribieran un post.
+    //
+    //  LA REGLA VA AQUI, ANTES DE LEER NADA MAS, y no repartida por los
+    //  handlers: una excepcion por handler es una excepcion que se olvida, y
+    //  la que se olvide es exactamente el agujero. Toda mutacion pasa por esta
+    //  linea o no pasa.
+    //
+    //  LA RESPUESTA IMITA A QUIEN PREGUNTA. Un fetch() espera JSON y se traga
+    //  un redirect como si fuera un fallo de red; un formulario espera una
+    //  pagina. Se distingue por `ajax` —que es el mismo discriminador que ya
+    //  usan los handlers de abajo— y, si no viene, por el Accept: el navegador
+    //  pide text/html al enviar un formulario y `*/*` al hacer fetch.
+    //
+    //  Y NO SE ESCRIBE NADA antes de decidir: el `exit` va primero.
+    if (!csrf_ok()) {
+        $csrf_es_form = empty($_POST['ajax'])
+            && strpos((string)($_SERVER['HTTP_ACCEPT'] ?? ''), 'text/html') !== false;
+        if ($csrf_es_form) {
+            //  Nunca un alert(): el aviso se pinta DENTRO de la pantalla, en su
+            //  sitio, y el dueño puede reintentar sin perder donde estaba.
+            $vuelta = strtok((string)$_SERVER['REQUEST_URI'], '#');
+            $vuelta .= (strpos($vuelta, '?') === false ? '?' : '&') . 'sesion=vencida';
+            header('Location: ' . $vuelta);
+        } else {
+            header('Content-Type: application/json; charset=utf-8');
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'csrf' => false,
+                'err' => 'La sesión expiró. Recarga la página e intenta de nuevo.'],
+                JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
     // ── Publicar por la Graph API a las redes CONECTADAS ──
     // Un botón → publica server-side a la Página/IG conectados (NO al perfil
     // personal del teléfono). Solo si la marca tiene conexión activa.
@@ -64,7 +105,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         @ignore_user_abort(true);
         @set_time_limit(0);
         // CSRF: publicar postea a redes reales del cliente → exige token válido.
-        if (!csrf_ok()) { echo json_encode(['ok'=>false,'err'=>'Sesión expiró. Recarga la página e intenta de nuevo.']); exit; }
+        //  El token ya se comprobo en la puerta del bloque POST, para TODAS las
+        //  acciones. Aqui no hace falta repetirlo.
+
         // GATE del post gratis: publicar a redes reales exige celular verificado (1 gratis por número).
         if ($necesita_telefono) { echo json_encode(['ok'=>false,'needs_phone'=>true]); exit; }
         require_once __DIR__ . '/../includes/meta.php';
@@ -836,7 +879,30 @@ $guia = ['key'=>'contenido','agente'=>'pen','titulo'=>'Tu fábrica de posts',
     ['check','Cuando te guste, dale "Aprobar". Editar un post le enseña tu voz a la IA.'],
   ]];
 require __DIR__ . '/_shell.php';
+//  El token viaja solo en los ~30 llamadores de este archivo. Va DESPUES del
+//  shell y antes de todo el marcado: envuelve fetch() antes de que cualquier
+//  manejador pueda usarlo, y engancha el submit en captura sobre el documento.
+require __DIR__ . '/../includes/csrf_js.php';
 ?>
+<?php /*  EL TOKEN VENCIDO SE DICE EN LA PANTALLA, NO EN UN alert().
+          Un formulario que llega sin token valido vuelve aqui con
+          ?sesion=vencida. Se le cuenta que paso, que NO se guardo nada -que es
+          lo primero que quiere saber- y se le deja el camino de vuelta: en esta
+          pantalla, recargar es literalmente el arreglo.  */ ?>
+<?php if (isset($_GET['sesion']) && $_GET['sesion'] === 'vencida'): ?>
+<div role="alert" style="display:flex;gap:11px;align-items:flex-start;margin:12px 0;
+     padding:13px 15px;border-radius:12px;background:#FBF3E7;color:#8A5310">
+  <div style="flex:1;min-width:0">
+    <b style="display:block;font-size:16px;line-height:1.3">No pude guardar ese cambio</b>
+    <p style="margin:5px 0 0;font-size:15px;line-height:1.5">Tu sesión llevaba mucho
+      rato abierta. <b>No se cambió nada.</b> Recarga la pantalla y vuelve a intentarlo.</p>
+    <a href="<?= htmlspecialchars(strtok((string)$_SERVER['REQUEST_URI'], '?'), ENT_QUOTES) ?>?marca=<?= (int)$marca_id ?><?= $tab !== '' ? '&tab=' . htmlspecialchars($tab, ENT_QUOTES) : '' ?>"
+       style="display:inline-flex;align-items:center;min-height:44px;margin-top:6px;
+              font-size:15px;font-weight:700;color:inherit">Recargar la pantalla</a>
+  </div>
+</div>
+<?php endif; ?>
+
 <?php /* Regreso predecible: si se llegó desde Tu Meta, hay una salida clara de
          vuelta. Sin esto la acción del estado dominante era un viaje de ida. */ ?>
 <?php if (MetaRetorno::vieneDeMeta($_GET)): ?>

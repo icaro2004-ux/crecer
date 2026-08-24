@@ -397,36 +397,72 @@ function semana_nota_hora(PDO $pdo, int $marca_id): string
 }
 
 /**
- * ¿Hay que avisar de la cuota al quitar esta pieza?
+ * ¿La imagen de esta pieza YA se gasto del mes?
  *
- * Solo cuando la imagen se ENTREGO de verdad. Un asiento existe desde que se
- * reserva, asi que su mera existencia no prueba nada: hay que mirar el estado.
- * Un reel con video del dueño, una foto suya reusada sin IA o una pieza sin
- * arte no tienen asiento confirmado — y en esos casos el aviso sobra y encima
- * miente.
+ * Solo se dice que si cuando el LIBRO lo demuestra: un asiento de esta marca y
+ * esta pieza, `confirmado`, con unidades > 0 y sin exencion. Un reel con video
+ * del dueño, una foto suya reusada sin IA o una pieza sin arte no tienen nada
+ * confirmado — y ahi el aviso sobra y ademas miente.
+ *
+ * POR QUE NO USA CuotaImg::asientoDePieza(). Esa funcion existe para el sondeo,
+ * que busca el asiento VIVO para poder cerrarlo: filtra por
+ * `estado IN ('reservado','riesgo')`. Preguntarle por un asiento confirmado es
+ * pedirle justo lo que su WHERE excluye — devolvia 0 SIEMPRE, asi que esta
+ * comprobacion no podia dar true ni una vez y el aviso era codigo muerto. La
+ * primera prueba que lo intento de verdad lo destapo.
+ *
+ * Se busca por `idem`, que es la misma llave que escribe la reserva
+ * (marca + operacion + origen), y ademas se exige `marca_id` en el WHERE: la
+ * llave ya lleva la marca dentro, pero una condicion explicita es lo que hace
+ * imposible por construccion leer el consumo de otro negocio.
+ *
+ * UNA PIEZA TIENE COMO MUCHO UN ASIENTO: `crecer_img_cuota_asiento` lleva
+ * UNIQUE(marca_id, idem), y un reintento no inserta otra fila — reusa la que
+ * hay (CuotaImg::reservar devuelve `reusado`). Asi que la pregunta no es cual
+ * de varios manda, sino simplemente si ESE asiento esta confirmado. Por eso el
+ * LIMIT 1 no elige nada: no hay entre que elegir.
  */
 function semana_aviso_cuota(PDO $pdo, int $marca_id, int $contenido_id): bool
 {
+    if ($marca_id <= 0 || $contenido_id <= 0) return false;
     if (!class_exists('CuotaImg')) {
         @include_once __DIR__ . '/cuota_imagenes.php';
         if (!class_exists('CuotaImg')) return false;
     }
     try {
-        $id = CuotaImg::asientoDePieza($pdo, $marca_id, $contenido_id);
-        if ($id <= 0) return false;
         $q = $pdo->prepare(
-            "SELECT estado, unidades, exencion FROM crecer_img_cuota_asiento
-              WHERE id=? AND marca_id=?");
-        $q->execute([$id, $marca_id]);
-        $a = $q->fetch(PDO::FETCH_ASSOC);
-        if (!$a) return false;
-        if ((string)$a['estado'] !== 'confirmado') return false;   // reservado/liberado/riesgo: no
-        if ((int)$a['unidades'] <= 0)              return false;   // cero unidades: no
-        if (trim((string)$a['exencion']) !== '')   return false;   // exento: no
-        return true;
+            "SELECT 1 FROM crecer_img_cuota_asiento
+              WHERE marca_id = ?
+                AND idem = ?
+                AND estado = 'confirmado'
+                AND unidades > 0
+                AND (exencion IS NULL OR exencion = '')
+              LIMIT 1");
+        //  La MISMA operacion y el MISMO origen que usa la reserva del arte de
+        //  un post. Si una imagen llegara por otra operacion, aqui no se veria
+        //  y se callaria — que es el lado seguro: callarse no afirma nada.
+        $q->execute([$marca_id, CuotaImg::idem($marca_id, 'arte_post', 'contenido', $contenido_id)]);
+        return (bool)$q->fetchColumn();
     } catch (Throwable $e) {
         return false;
     }
+}
+
+/**
+ * Lo que se le DICE al dueño sobre la cuota antes de quitar una publicacion.
+ *
+ * Dos frases y ninguna intermedia, porque «Quitarla no gasta imagenes» se lee
+ * como «me devuelven la unidad» — y no se devuelve. Quitar una publicacion
+ * cuya imagen ya se entrego no recupera nada; y de una que nunca genero arte
+ * no hay ninguna cuota de la que hablar.
+ *
+ * @return string vacio = no hay nada cierto que decir, y entonces no se dice.
+ */
+function semana_frase_cuota(bool $gastada): string
+{
+    return $gastada
+        ? 'Esta imagen ya cuenta en tu cuota del mes aunque quites la publicación.'
+        : 'Sustituirla no genera otra imagen hasta preparar la alternativa.';
 }
 
 // -- LO QUE LA VISTA NO PUEDE DECIDIR POR SU CUENTA ----------

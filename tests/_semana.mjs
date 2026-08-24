@@ -19,7 +19,7 @@
 import { abrirChrome, dormir, cerrarRecibimiento } from './_chrome.mjs';
 import fs from 'node:fs';
 
-const [sid, marca, tacComp, shots] = process.argv.slice(2);
+const [sid, marca, tacComp, shots, piezaShim] = process.argv.slice(2);
 const BASE = 'http://localhost/crecer/panel';
 const SEM  = `${BASE}/meta.php?marca=${marca}&vista=semana`;
 const di = (k, v) => console.log(k + '=' + String(v).replace(/\r?\n/g, ' '));
@@ -231,6 +231,8 @@ try {
   di('HOJA_TIT', (await txt('#smHojaT')).trim());
   di('HOJA_FILAS', await ev(`JSON.stringify([].map.call(
       document.querySelectorAll('#smHojaC .sm-fila'), function(f){return f.dataset.a;}))`));
+  di('HOJA_CUOTA', (await ev(`(function(){var p=document.querySelector('#smHojaC .sm-nota');
+      return p?p.textContent.replace(/\\s+/g,' ').trim():'';})()`)));
   di('MED_HOJA_360', await ev(MEDIR).then(JSON.stringify));
   await tirar('03_ajustar_360', 360, 800);
 
@@ -320,6 +322,8 @@ try {
   di('GATE_TIT', (await txt('.wz-q')).trim());
   di('GATE_OPCIONES', await ev(`JSON.stringify([].map.call(
       document.querySelectorAll('.su-opts a'), function(a){return a.querySelector('b').textContent.trim();}))`));
+  di('GATE_CUOTA', (await ev(`(function(){var p=document.querySelector('.su-opt.pri small');
+      return p?p.textContent.replace(/\\s+/g,' ').trim():'';})()`)));
   di('GATE_CONSERVAR_TX', await ev(`(function(){var a=document.querySelectorAll('.su-opts a');
       return a.length>1?a[1].textContent.replace(/\s+/g,' ').trim():'';})()`));
   di('MED_GATE_360', await ev(MEDIR).then(JSON.stringify));
@@ -347,6 +351,27 @@ try {
   await cerrarRecibimiento(ev);
   di('CAL_ORIGENES', await ev(`JSON.stringify([].map.call(
       document.querySelectorAll('.ev-contenido'), function(e){return e.dataset.meta;}))`));
+
+  // ══ 7b · EL AYUDANTE DEL TOKEN, EN EL NAVEGADOR ════════════════
+  //  `_crear_wizard.php` hace 16 llamadas a aprobar2.php y solo UNA pone el
+  //  token a mano. Con el candado nuevo, las otras 15 moririan en 403 si el
+  //  ayudante no existiera — y el wizard se incrusta en DOS paginas, asi que
+  //  hay que comprobarlo en las dos. Se hace lo mismo que hace el wizard: un
+  //  fetch con FormData SIN csrf desde esa pagina.
+  for (const [nombre, pagina] of [['ESTUDIO', 'propuestas.php'], ['APROBAR2', 'aprobar2.php']]) {
+    await ir(`${BASE}/${pagina}?marca=${marca}`);
+    await cerrarRecibimiento(ev);
+    const texto = 'Texto puesto sin token desde ' + nombre + '.';
+    const j = await ev(`(function(){
+      var fd = new FormData();
+      fd.append('accion','editar'); fd.append('id', ${piezaShim}); fd.append('ajax','1');
+      fd.append('caption', ${JSON.stringify(texto)});
+      return fetch('/crecer/panel/aprobar2.php?marca=${marca}', {method:'POST', body:fd})
+        .then(function(r){ return r.text(); });
+    })()`);
+    di('SHIM_' + nombre, String(j).slice(0, 120));
+    di('SHIM_' + nombre + '_TX', texto);
+  }
 
   // ══ 8 · LAS OTRAS DOS PANTALLAS ════════════════════════════════
   await ir(SEM);
