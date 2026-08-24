@@ -692,7 +692,7 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
     <p class="cr-sub" id="wzFinP"></p>
     <div class="wz-nav fin">
       <?php if ($jugada_id): ?>
-        <a class="wz-go" href="<?= htmlspecialchars(MetaRetorno::url((int)$marca_id, 'programado'), ENT_QUOTES) ?>">Volver a tu meta <?= ico('send') ?></a>
+        <a class="wz-go" href="<?= htmlspecialchars(MetaRetorno::url((int)$marca_id, 'programado', MetaRetorno::posicion($_GET)), ENT_QUOTES) ?>">Volver a tu meta <?= ico('send') ?></a>
       <?php else: ?>
         <a class="wz-go" href="<?= $BASE ?>/aprobar2.php?marca=<?= $marca_id ?>&tab=programados">Ver tus posts <?= ico('send') ?></a>
       <?php endif; ?>
@@ -892,8 +892,8 @@ if ($slides) { $v0 = carrusel_slide_visual((string)$slides[0]['idea']); $edit_co
   // La vuelta la calcula el servidor, una por RESULTADO: programar y publicar
   // no son lo mismo y no pueden confirmar lo mismo.
   var META_VUELTA = <?= (MetaRetorno::vieneDeMeta($_GET) || $jugada_id)
-        ? json_encode(['programado' => MetaRetorno::url((int)$marca_id, 'programado'),
-                       'publicado'  => MetaRetorno::url((int)$marca_id, 'publicado')],
+        ? json_encode(['programado' => MetaRetorno::url((int)$marca_id, 'programado', MetaRetorno::posicion($_GET)),
+                       'publicado'  => MetaRetorno::url((int)$marca_id, 'publicado', MetaRetorno::posicion($_GET))],
                       JSON_UNESCAPED_SLASHES)
         : 'null' ?>;
 

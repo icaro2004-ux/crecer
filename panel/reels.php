@@ -313,7 +313,7 @@ require __DIR__ . '/_shell.php';
 <?php /* Regreso predecible: si se llegó desde Tu Meta, hay una salida clara de
          vuelta. Sin esto la acción del estado dominante era un viaje de ida. */ ?>
 <?php if (MetaRetorno::vieneDeMeta($_GET)): ?>
-<a href="<?= htmlspecialchars(MetaRetorno::url((int)$marca_id, 'pendiente'), ENT_QUOTES) ?>"
+<a href="<?= htmlspecialchars(MetaRetorno::url((int)$marca_id, 'pendiente', MetaRetorno::posicion($_GET)), ENT_QUOTES) ?>"
    style="display:inline-flex;align-items:center;gap:7px;min-height:44px;line-height:44px;
           font-size:14px;font-weight:700;color:var(--muted);text-decoration:none">&larr; Volver a tu meta</a>
 <?php endif; ?>
@@ -897,7 +897,7 @@ async function poll(rid){
 
 // La vuelta la calcula el servidor: el navegador no arma URLs de Crecer.
 var META_VUELTA_MATERIAL = <?= MetaRetorno::vieneDeMeta($_GET)
-      ? json_encode(MetaRetorno::url((int)$marca_id, 'material'), JSON_UNESCAPED_SLASHES)
+      ? json_encode(MetaRetorno::url((int)$marca_id, 'material', MetaRetorno::posicion($_GET)), JSON_UNESCAPED_SLASHES)
       : 'null' ?>;
 function showDone(j){
   go('done');

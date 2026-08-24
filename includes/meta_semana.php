@@ -24,7 +24,21 @@
 //    fallido / rechazado      → no es trabajo vigente
 // ============================================================
 
-if (function_exists('semana_construir')) return;
+//  -- POR QUE AQUI NO HAY UN «if (function_exists(...)) return;» --
+//
+//  Lo hubo, y era una trampa. PHP declara las funciones de un fichero al
+//  COMPILARLO, antes de ejecutar ninguna sentencia suya: en la PRIMERA
+//  inclusion la condicion YA se cumplia y el `return` cortaba todo lo demas.
+//  Debajo estaban los dos `const` y los tres `require_once` — que por tanto no
+//  llegaban a existir nunca.
+//
+//  No era cosmetico: la primera llamada real a semana_compromiso() o a
+//  semana_estado_pieza() con material moria con «Undefined constant
+//  SEMANA_PUBLICABLES». `php -l` no lo ve, porque no es un error de sintaxis;
+//  lo saco una prueba que las llamo de verdad.
+//
+//  Contra la doble inclusion vale `require_once`, que es como se incluye este
+//  fichero en los cinco sitios donde se usa.
 
 require_once __DIR__ . '/meta_negocio.php';
 require_once __DIR__ . '/meta_ejecutar.php';
@@ -69,7 +83,7 @@ function semana_piezas_de(PDO $pdo, int $marca_id, int $tactica_id): array
 {
     try {
         $q = $pdo->prepare(
-            "SELECT id, plataforma, tipo, estado, caption, grafica_path,
+            "SELECT id, plataforma, tipo, estado, caption, grafica_path, img_estado,
                     fecha_programada, necesita_material, calendario_id,
                     meta_id, tactica_id, plan_id
                FROM crecer_contenido
@@ -413,4 +427,163 @@ function semana_aviso_cuota(PDO $pdo, int $marca_id, int $contenido_id): bool
     } catch (Throwable $e) {
         return false;
     }
+}
+
+// -- LO QUE LA VISTA NO PUEDE DECIDIR POR SU CUENTA ----------
+/**
+ * LA PUERTA de una pieza: donde se trabaja de verdad.
+ *
+ * Es la misma regla que ya aplican MetaStateComposer (reglaNecesitaMaterial y
+ * reglaEsperaAprobacion) y jugada_puertas(): un reel que espera video va al
+ * estudio de reels, el carrusel al suyo, y lo demas a aprobar2. Se escribe
+ * aqui -una vez- porque la revision semanal necesita esa puerta para CADA
+ * pieza, y el compositor solo sabe darla para la dominante.
+ *
+ * Si algun dia discrepan, tests/test_meta_semana_contrato.php lo dice: compara
+ * esta funcion con lo que devuelve el compositor para la misma pieza.
+ */
+function semana_ruta_pieza(array $p, int $marca_id, string $BASE = '/crecer/panel'): string
+{
+    $id  = (int)($p['id'] ?? 0);
+    $mat = trim((string)($p['necesita_material'] ?? ''));
+    $tip = (string)($p['tipo'] ?? 'post');
+
+    if ($mat === 'video')    return "{$BASE}/reels.php?marca={$marca_id}&pieza={$id}";
+    if ($tip === 'carrusel') return "{$BASE}/carrusel.php?marca={$marca_id}&id={$id}";
+    return "{$BASE}/aprobar2.php?marca={$marca_id}&ver={$id}";
+}
+
+/**
+ * La posicion que se va a ensenar, RECORTADA contra el total de verdad.
+ *
+ * La posicion viaja por la URL para poder volver al sitio exacto, y por la URL
+ * viaja lo que sea. Aqui deja de importar: si pide la 9 de 3, se le da la 3.
+ * Con la semana vacia devuelve 0, que la vista lee como "no hay nada que
+ * revisar" -- no como la posicion 1 de una lista que no existe.
+ */
+function semana_pos(?int $pedida, int $total): int
+{
+    if ($total <= 0) return 0;
+    if ($pedida === null || $pedida < 1) return 1;
+    return min($pedida, $total);
+}
+
+/**
+ * El dia y la hora, dichos como los diria una persona. Y cuando no hay fecha,
+ * se dice que no la hay: inventar "martes" seria comprometer al dueno con un
+ * dia que nadie escribio.
+ *
+ * @return array{hay:bool, dia:string, hora:string}
+ */
+function semana_cuando(?string $fecha): array
+{
+    $ts = $fecha ? strtotime((string)$fecha) : false;
+    if (!$ts) return ['hay' => false, 'dia' => 'Sin fecha', 'hora' => ''];
+
+    $dias = ['Sun'=>'Domingo','Mon'=>'Lunes','Tue'=>'Martes','Wed'=>'Miércoles',
+             'Thu'=>'Jueves','Fri'=>'Viernes','Sat'=>'Sábado'];
+    $dia = date('Y-m-d', $ts);
+    if      ($dia === date('Y-m-d'))                      $cual = 'Hoy';
+    elseif  ($dia === date('Y-m-d', strtotime('+1 day'))) $cual = 'Mañana';
+    else    $cual = ($dias[date('D', $ts)] ?? date('j/n', $ts)) . ' ' . (int)date('j', $ts);
+
+    //  Minuscula y con puntos, como se escribe en espanol; no "11:00 AM".
+    $hora = strtr(date('g:i a', $ts), ['am' => 'a. m.', 'pm' => 'p. m.']);
+    return ['hay' => true, 'dia' => $cual, 'hora' => $hora];
+}
+
+/**
+ * LA ACCION PRINCIPAL de una publicacion. Una sola, y siempre una que se pueda
+ * hacer de verdad.
+ *
+ * La regla de la maqueta: cuando no se puede aprobar, el boton NO se
+ * deshabilita -- CAMBIA por lo que si se puede hacer. Un boton apagado le dice
+ * al dueno "esto es cosa tuya y no funciona"; uno que cambia le dice que hacer.
+ *
+ * Modos:
+ *   aprobar   escribe (POST). Es lo unico que se decide desde esta pantalla.
+ *   ir        lleva a la pantalla donde ESO se hace. No escribe nada aqui.
+ *   ninguna   no hay nada que el dueno pueda hacer ahora. Se dice por que.
+ *
+ * @param array $item un elemento de semana_construir()
+ * @return array{modo:string, etiqueta:string, ruta:string, tono:string, nota:string}
+ */
+function semana_accion(array $item, int $marca_id, string $BASE = '/crecer/panel'): array
+{
+    $p  = $item['pieza'] ?? null;
+    $cl = (string)($item['estado']['clave'] ?? 'preparando');
+
+    //  Sin pieza no hay nada que aprobar ni donde ir: la jugada esta viva y su
+    //  contenido todavia no existe. Se dice, y ya.
+    if (!$p) {
+        return ['modo' => 'ninguna', 'etiqueta' => '', 'ruta' => '', 'tono' => 'sec',
+                'nota' => 'Estoy preparando esta publicación. Vuelve en un rato.'];
+    }
+
+    $ruta = semana_ruta_pieza($p, $marca_id, $BASE);
+
+    switch ($cl) {
+        case 'falta_material':
+            $es_video = (string)($item['estado']['material'] ?? '') === 'video';
+            return ['modo' => 'ir', 'ruta' => $ruta, 'tono' => 'rosa',
+                    'etiqueta' => $es_video ? 'Subir tu video' : 'Subir tu foto',
+                    'nota' => $es_video
+                        ? 'Un clip corto con el celular basta. Ya te dejé escrito qué grabar.'
+                        : 'Con una foto tuya del celular sirve.'];
+
+        case 'publicado':
+            return ['modo' => 'ninguna', 'etiqueta' => '', 'ruta' => '', 'tono' => 'sec',
+                    'nota' => 'Esta ya salió. Queda en tu historial.'];
+
+        case 'publicando':
+            return ['modo' => 'ninguna', 'etiqueta' => '', 'ruta' => '', 'tono' => 'sec',
+                    'nota' => 'Está saliendo ahora mismo. Ya no se puede cambiar.'];
+
+        case 'fallido':
+            return ['modo' => 'ir', 'ruta' => $ruta, 'tono' => 'rosa',
+                    'etiqueta' => 'Ver qué pasó',
+                    'nota' => 'La tengo lista; falló al salir a tus redes.'];
+
+        case 'rechazado':
+            return ['modo' => 'ninguna', 'etiqueta' => '', 'ruta' => '', 'tono' => 'sec',
+                    'nota' => 'Esta la descartaste.'];
+
+        case 'aprobado':
+        case 'programado':
+            //  YA DECIDIDA. No se vuelve a pedir el OK: eso convertiria una
+            //  pantalla de decidir en una de repetirse.
+            return ['modo' => 'ninguna', 'etiqueta' => '', 'ruta' => '', 'tono' => 'sec',
+                    'nota' => ''];
+    }
+
+    //  BORRADOR. Lo unico que puede faltarle es el arte.
+    $arte = trim((string)($p['grafica_path'] ?? ''));
+    $img  = (string)($p['img_estado'] ?? '');
+    if ($arte === '' && $img === 'queued') {
+        return ['modo' => 'ninguna', 'etiqueta' => '', 'ruta' => '', 'tono' => 'sec',
+                'nota' => 'Le estoy haciendo la imagen. Vuelve en un rato.'];
+    }
+    if ($arte === '') {
+        //  No se aprueba lo que todavia no tiene imagen: el boton cambia por
+        //  lo que si se puede hacer, que es ir a ponersela.
+        return ['modo' => 'ir', 'ruta' => $ruta, 'tono' => 'rosa',
+                'etiqueta' => 'Ponerle imagen',
+                'nota' => 'Le falta la imagen. Te la hago yo o subes una tuya.'];
+    }
+    return ['modo' => 'aprobar', 'etiqueta' => 'Aprobar', 'ruta' => $ruta, 'tono' => 'pri',
+            'nota' => ''];
+}
+
+/**
+ * Cierra una frase con UN punto, no con dos.
+ *
+ * La hora en espanol se escribe «4:37 a. m.» — con punto final propio. Pegarle
+ * el punto de la frase daba «a las 4:37 a. m..» en tres pantallas distintas.
+ * Se arregla en un sitio, que es donde estaba el problema: en la regla, no en
+ * cada sitio donde se nota.
+ */
+function semana_punto(string $frase): string
+{
+    $f = rtrim(trim($frase), '.');
+    return $f === '' ? '' : $f . '.';
 }

@@ -42,10 +42,49 @@ $su_vale  = $su_jug
 //  Se vuelve A DONDE VINO. Desde el plan, al plan; desde la tarjeta de «lo que
 //  toca ahora» (estados G y H), a lo que toca ahora — que es donde el dueño
 //  estaba mirando. Devolverlo siempre al plan lo dejaria perdido.
+//
+//  Y DESDE LA REVISION DE LA SEMANA, a la MISMA publicacion. Volver a la 1 de
+//  3 despues de cambiar la 2 le hace repasar dos veces lo que ya decidio; a la
+//  tercera vez abandona. La posicion la valida MetaRetorno —es un entero
+//  pequeño y nada mas, nunca un destino—, asi que un `pos` inventado no puede
+//  mandar a ningun sitio: como mucho, a una posicion que la vista recorta.
 $su_desde  = (string)($_GET['desde'] ?? '');
-$su_volver = $BASE . '/meta.php?marca=' . $marca_id
-           . ($su_desde === 'ahora' ? '' : '&vista=plan');
+$su_pos    = MetaRetorno::posicion($_GET);
+if ($su_desde === 'semana' && $su_pos !== null) {
+    $su_volver = $BASE . '/meta.php?marca=' . $marca_id . '&vista=semana&pos=' . $su_pos;
+} else {
+    $su_volver = $BASE . '/meta.php?marca=' . $marca_id
+               . ($su_desde === 'ahora' ? '' : '&vista=plan');
+}
 $su_token  = $su_vale ? meta_token_jugada($su_jug) : '';
+
+// ── LA PIEZA QUE YA ESTA COMPROMETIDA ────────────────────────
+/*  EL AGUJERO QUE ESTO TAPA. Sustituir la jugada NO tocaba sus piezas. Si una
+    estaba aprobada o programada con fecha, seguia siendo publicable: el dueño
+    decia «no puedo grabar ese reel», la cambiaba por otra cosa, y el martes le
+    salia publicado el reel de todas formas — o su version vieja compitiendo
+    con la nueva.
+
+    «Comprometida» NO es «fecha vencida»: el publicador toma `aprobado` igual
+    que `programado` en cuanto la fecha llega, asi que una fecha FUTURA
+    compromete tambien — solo que todavia no llego.
+
+    Y no se decide por el: quitar del calendario algo que el aprobo es suyo.
+    Se le pregunta ANTES, en su propia pantalla, con la consecuencia delante.  */
+require_once __DIR__ . '/../includes/meta_semana.php';
+$su_comp   = $su_vale ? semana_compromiso($pdo, $marca_id, $su_id)
+                      : ['clase' => 'ninguna', 'pieza' => null];
+$su_exige  = $su_vale && semana_exige_decision((string)$su_comp['clase']);
+//  `quitar=1` solo significa algo si de verdad hay algo que quitar. Sin
+//  compromiso vivo se ignora y el recorrido es el de siempre.
+$su_quitar = $su_exige && !empty($_GET['quitar']);
+$su_puerta = $su_exige && !$su_quitar;          // hay que preguntar primero
+$su_pza    = $su_comp['pieza'] ?? null;
+$su_cuando = semana_cuando($su_pza['fecha_programada'] ?? null);
+//  El aviso de cuota SOLO si el asiento demuestra que la imagen se entrego:
+//  reservado, liberado, exento o cero unidades no gastaron nada, y decir que si
+//  seria cobrarle de palabra algo que no pago.
+$su_cuota  = $su_pza ? semana_aviso_cuota($pdo, $marca_id, (int)$su_pza['id']) : false;
 
 //  Las piezas que ya salieron de esta jugada. Se cuentan para poder DECIRLO en
 //  el repaso: es la duda de quien ya vio trabajo hecho colgando de ella.
@@ -132,7 +171,26 @@ $SU_FORMATOS = ['post' => 'Post', 'carrusel' => 'Carrusel', 'reel' => 'Reel',
   .su-nada a{display:inline-flex;align-items:center;gap:7px;min-height:44px;margin-top:8px;
     font-weight:700;color:inherit;text-decoration:none}
 
+  /* — LAS DOS SALIDAS DE LA PUERTA —
+     Cada una lleva DENTRO lo que pasa si se pulsa. Separar la consecuencia del
+     control obligaba a recordarla mientras se baja a buscar el boton, y a
+     360x800 el boton ni siquiera se veia. */
+  .su-opts{display:grid;gap:10px;margin-top:4px}
+  .su-opt{display:block;padding:14px 15px;border:1px solid var(--line);
+    border-radius:var(--tm-r);background:var(--card,#fff);text-decoration:none;
+    color:var(--tinta);transition:border-color .14s ease, background .14s ease}
+  .su-opt:hover{border-color:var(--tm-rosa);background:var(--crema,#FAF7F4)}
+  .su-opt:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
+  .su-opt b{display:block;font-size:17px;font-weight:600;line-height:1.3}
+  .su-opt span{display:block;font-size:15px;line-height:1.5;color:var(--ink,#4A434F);margin-top:6px}
+  .su-opt small{display:block;font-size:14px;line-height:1.45;color:var(--muted);margin-top:7px}
+  .su-opt.pri{border-color:var(--tm-rosa);box-shadow:0 0 0 1px var(--tm-rosa);
+    background:var(--tm-rosa-piel)}
+  .su-opt.pri b{color:var(--tm-rosa-tx)}
+  .su-opt.pri:hover{background:#FCE7EE}
+
   @media (min-width:1000px){
+    .su-opts{grid-template-columns:1fr 1fr;align-items:start}
     .su-mot{grid-template-columns:1fr 1fr}
     .su-cambio{display:grid;grid-template-columns:1fr 1fr}
     .su-lado + .su-lado{border-top:0;border-left:1px solid var(--line)}
@@ -162,6 +220,56 @@ $SU_FORMATOS = ['post' => 'Post', 'carrusel' => 'Carrusel', 'reel' => 'Reel',
     <p>Cambiar algo ya hecho borraría trabajo tuyo, así que no lo toco.
       <a href="<?= $h($su_volver) ?>">Volver al plan<?= ico('chev-der') ?></a></p>
   </div>
+<?php elseif ($su_puerta): ?>
+
+  <?php /*  UNA DECISION, UNA PANTALLA. Antes de hablar de alternativas hay que
+            resolver que pasa con lo que YA va a salir: mezclarlo con «que te
+            frena» seria pedirle dos cosas a la vez y que se lleve por delante
+            la que no leyo.
+
+            Y NO SE OFRECE «conservarla y ademas crear otra»: la sustituta
+            hereda semana y orden de la original, asi que las dos ocuparian el
+            mismo sitio del plan y el dueño acabaria con trabajo duplicado
+            saliendo el mismo dia.  */ ?>
+  <span class="wz-et">Antes de cambiarla</span>
+  <h1 class="wz-q">Esta ya está en tu calendario</h1>
+  <p class="wz-ayuda"><?= (string)$su_comp['clase'] === 'comprometida_vencida'
+      ? 'Su fecha ya pasó, así que sale en cuanto haga el próximo barrido. Todavía no he tocado nada.'
+      : 'Va a salir sola en su fecha. Todavía no he tocado nada.' ?></p>
+
+  <section class="wz-p on">
+    <div class="su-jug">
+      <span class="et">La publicación</span>
+      <b><?= $h(mb_substr(trim((string)($su_pza['caption'] ?? '')), 0, 120)
+              ?: (string)$su_jug['titulo']) ?></b>
+      <small><?= $h(ucfirst((string)($su_pza['plataforma'] ?? ''))) ?><?php
+        if ($su_cuando['hay']): ?> · <?= $h($su_cuando['dia']) ?> · <?= $h($su_cuando['hora']) ?><?php endif; ?>
+        · <?= $h(semana_estado_pieza($su_pza ?: [])['etiqueta']) ?></small>
+    </div>
+
+    <div class="su-opts">
+      <?php /*  La que el dueño vino a buscar va primera y en rosa: pulsó «no
+                puedo con esta». Lo destructivo no se esconde — se explica.  */ ?>
+      <a class="su-opt pri" href="<?= $h($BASE . '/meta.php?marca=' . $marca_id
+              . '&vista=sustituir&jugada=' . $su_id . '&desde=' . rawurlencode($su_desde)
+              . ($su_pos !== null ? '&pos=' . $su_pos : '') . '&quitar=1') ?>">
+        <b>Quitarla del calendario y cambiarla</b>
+        <span>No sale. Queda descartada en Tus Posts —no se borra— y te propongo
+          otra jugada en su mismo sitio del plan.</span>
+        <small><?= $su_cuota
+          ? 'Su imagen ya está hecha y ya contó en tu mes: quitarla no te la devuelve.'
+          : 'Quitarla no gasta imágenes.' ?></small>
+      </a>
+
+      <a class="su-opt" href="<?= $h($su_volver) ?>">
+        <b>Conservar esta publicación</b>
+        <span><?= $h(semana_punto('Sale tal como está' . ($su_cuando['hay']
+            ? ', el ' . mb_strtolower($su_cuando['dia']) . ' a las ' . $su_cuando['hora']
+            : ', en cuanto le llegue la fecha'))) ?> La jugada no cambia.</span>
+      </a>
+    </div>
+  </section>
+
 <?php else: ?>
 
   <ol class="wz-tren" id="wzTren" aria-hidden="true">
@@ -278,6 +386,12 @@ $SU_FORMATOS = ['post' => 'Post', 'carrusel' => 'Carrusel', 'reel' => 'Reel',
     <div class="wz-bloque wz-luego">
       <b>Qué pasa cuando confirmes</b>
       <ol>
+        <?php if ($su_quitar): ?>
+          <?php /*  Lo primero que pasa es lo que el dueño ya decidio en la
+                    puerta. Se repite aqui porque es lo unico irreversible del
+                    lote y porque entre una pantalla y otra se olvida.  */ ?>
+          <li><b>Saco del calendario</b> la publicación que ya estaba lista. No sale.</li>
+        <?php endif; ?>
         <li>La nueva entra en el mismo sitio del plan, para esta misma semana.</li>
         <li>Te llevo de vuelta y ahí te digo qué toca.</li>
       </ol>
@@ -308,7 +422,7 @@ $SU_FORMATOS = ['post' => 'Post', 'carrusel' => 'Carrusel', 'reel' => 'Reel',
 <?php endif; ?>
 </div>
 
-<?php if ($su_vale): ?>
+<?php if ($su_vale && !$su_puerta): ?>
 <script>
 (function(){
   var CSRF  = <?= json_encode(csrf_token()) ?>, MARCA = <?= (int)$marca_id ?>;
@@ -317,6 +431,10 @@ $SU_FORMATOS = ['post' => 'Post', 'carrusel' => 'Carrusel', 'reel' => 'Reel',
   //  estaba abierta, el servidor lo ve y no crea una segunda.
   var TOKEN  = document.getElementById('wz').dataset.token || '';
   var VOLVER = <?= json_encode($su_volver) ?>;
+  //  Lo que el dueño decidio en la puerta. El servidor NO se fia de esto: con
+  //  quitar=1 vuelve a leer el compromiso bajo pertenencia y rechaza la pieza
+  //  con su estado en el WHERE. Si cambio mientras decidia, no sustituye nada.
+  var QUITAR = <?= $su_quitar ? '1' : '0' ?>;
   //  Los formatos que NO pintan imagen. Sale del mismo sitio que la cuota
   //  (consumeDe, commit 3): decirlo aqui a ojo seria prometer por prometer.
   var SIN_ARTE = ['reel','carrusel'];
@@ -481,6 +599,7 @@ $SU_FORMATOS = ['post' => 'Post', 'carrusel' => 'Carrusel', 'reel' => 'Reel',
     var fd = new FormData();
     fd.append('csrf', CSRF); fd.append('accion','sustituir');
     fd.append('jugada', JUGADA); fd.append('token', TOKEN);
+    if (QUITAR) fd.append('quitar', '1');
     fd.append('motivo', d.motivo); fd.append('nota', d.nota);
     fd.append('alt', JSON.stringify(d.alt));
 
@@ -492,6 +611,13 @@ $SU_FORMATOS = ['post' => 'Post', 'carrusel' => 'Carrusel', 'reel' => 'Reel',
         if (j && j.motivo === 'concurrencia') {
           mostrarError('Esa jugada cambió mientras decidías. No toqué nada — vuelve a abrirla.',
                        'Esto cambió mientras decidías');
+          return;
+        }
+        //  LO QUE YA SALIO NO SE FINGE DETENIDO. Si entre la puerta y el boton
+        //  el publicador se llevo la pieza, se dice: nada se sustituyo.
+        if (j && (j.motivo === 'ya_salio' || j.motivo === 'ya_publicada' || j.motivo === 'ya_tomada')) {
+          mostrarError((j && j.err) ? j.err : 'Esa publicación cambió mientras decidías.',
+                       'Llegó tarde');
           return;
         }
         mostrarError((j && j.err) ? j.err : 'No pude cambiarla. Todo sigue como estaba.');

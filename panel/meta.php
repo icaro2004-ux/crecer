@@ -327,7 +327,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($accion === 'sustituir') {
             $alt = json_decode((string)($_POST['alt'] ?? ''), true);
             if (!is_array($alt)) { echo json_encode(['ok'=>false,'err'=>'Se perdió la alternativa. Vuelve a pedirla.']); exit; }
-            $r = meta_sustituir_jugada($pdo, $marca_id, (int)($_POST['jugada'] ?? 0),
+            $tid_sust = (int)($_POST['jugada'] ?? 0);
+
+            //  DOS CAMINOS, Y LOS DECIDE EL DUEÑO ANTES DE LLEGAR AQUI.
+            //
+            //  Cuando la jugada tiene una pieza que va a SALIR SOLA -aprobada o
+            //  programada, con fecha, futura o vencida-, sustituir a secas
+            //  dejaria viva la propuesta que el acaba de decir que no puede
+            //  hacer: el martes le saldria publicada. Por eso la pantalla le
+            //  pregunta primero, y si escoge quitarla, llega con `quitar=1`.
+            //
+            //  Las dos escrituras -rechazar la pieza y sustituir la jugada- van
+            //  en UNA transaccion (semana_quitar_y_sustituir): entre dos
+            //  peticiones cabe quedarse a medias, y las dos mitades son malas.
+            if (!empty($_POST['quitar'])) {
+                require_once __DIR__ . '/../includes/meta_semana.php';
+                $r = semana_quitar_y_sustituir($pdo, $marca_id, $tid_sust, (int)$usuario['id'],
+                    (string)($_POST['motivo'] ?? ''), (string)($_POST['nota'] ?? ''),
+                    $alt, (string)($_POST['token'] ?? ''));
+                echo json_encode($r, JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+
+            $r = meta_sustituir_jugada($pdo, $marca_id, $tid_sust,
                 (int)$usuario['id'], (string)($_POST['motivo'] ?? ''),
                 (string)($_POST['nota'] ?? ''), $alt, (string)($_POST['token'] ?? ''));
             echo json_encode($r, JSON_UNESCAPED_UNICODE);
@@ -420,21 +442,26 @@ $mt_estado = MetaStateComposer::componer($mt_snap);
 // TRES CAPAS, no tres pantallas apiladas:
 //   (por defecto) Meta · Ahora · Camino      — lo que toca hoy
 //   ?vista=plan   plan completo, diagnóstico, comparación e historial
+//   ?vista=semana&pos=N  revisar las publicaciones de la semana, una por una
 //   ?vista=wizard      el wizard de escoger meta (estado A)
 //   ?vista=plan-nuevo  pedirle otro plan a la Estratega, para esta misma meta
 //   ?vista=cambiar     cerrar esta meta y estrenar la proxima, de una
 $vista = $_GET['vista'] ?? '';
-if (!in_array($vista, ['plan', 'wizard', 'plan-nuevo', 'cambiar', 'ajustar', 'sustituir'], true)) $vista = 'ahora';
+if (!in_array($vista, ['plan', 'semana', 'wizard', 'plan-nuevo', 'cambiar', 'ajustar', 'sustituir'], true)) $vista = 'ahora';
 if (!$meta && $vista === 'ahora' && !empty($_GET['nueva'])) $vista = 'wizard';
 //  Las dos delicadas piden una meta viva. Sin ella no hay nada que rehacer ni
 //  que cambiar, y mandar a un wizard vacio es como se llegaba antes a que el
 //  negocio se quedara sin norte: se vuelve a lo que toca ahora.
-if (!$meta && in_array($vista, ['plan-nuevo', 'cambiar', 'ajustar', 'sustituir'], true)) $vista = 'ahora';
+if (!$meta && in_array($vista, ['plan-nuevo', 'cambiar', 'ajustar', 'sustituir', 'semana'], true)) $vista = 'ahora';
 //  Y las dos de 7a solo salen si su esquema esta. Sin la migracion no se
 //  degrada la pantalla: la capacidad no existe y punto. Ver la matriz de
 //  compatibilidad en tests/test_meta_compatibilidad.php.
 if ($vista === 'ajustar'   && !meta_ajuste_disponible($pdo))      $vista = 'plan';
 if ($vista === 'sustituir' && !meta_sustitucion_disponible($pdo)) $vista = 'plan';
+//  La semana se revisa sobre el plan VIGENTE. Sin plan no hay jugadas de esta
+//  semana, y una pantalla que dijera «0 de 0» no seria una pantalla: seria un
+//  callejon. Se vuelve a lo que toca ahora, que si sabe que decirle.
+if ($vista === 'semana'    && !$plan_act)                         $vista = 'ahora';
 
 /** Volver aquí desde donde sea que mande la acción dominante. */
 $mt_volver = MetaRetorno::marcador();
@@ -1040,6 +1067,12 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
   .tm-mas a:focus-visible{outline:2px solid var(--tinta);outline-offset:2px;border-radius:8px}
   .tm-mas a .ic{width:18px;height:18px;flex:none;color:var(--muted);stroke-width:1.9}
   .tm-mas a .ic:last-child{margin-left:auto;width:16px;height:16px}
+  /*  La cifra empuja: «Revisar mi semana» no dice si hay trabajo esperando;
+      «Revisar mi semana · 3» si. Va con margin-left:auto para que la flecha
+      quede pegada a ella y no al otro extremo del renglon. */
+  .tm-mas .tm-mas-n{margin-left:auto;display:inline-flex;align-items:center;justify-content:center;
+    min-width:26px;height:26px;padding:0 8px;border-radius:99px;background:var(--tm-rosa-piel);
+    color:var(--tm-rosa-tx);font-size:14px;font-weight:700;line-height:1}
 
   /* — la salida cuando la jugada que manda es imposible para el dueño — */
   .tm-nopuedo{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;
@@ -1106,6 +1139,10 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
 <?php elseif (!$meta && $vista === 'wizard'): /* ══════════ WIZARD ══════════ */ ?>
 
 <?php require __DIR__ . '/_meta_wizard.php'; ?>
+
+<?php elseif ($meta && $vista === 'semana'): /* ══════ REVISAR MI SEMANA ══════ */ ?>
+
+<?php require __DIR__ . '/_meta_semana.php'; ?>
 
 <?php elseif ($meta && $vista === 'plan'): /* ══════ CAPA 2 · EL PLAN COMPLETO ══════ */
   $def = meta_objetivo_def((string)$meta['objetivo']);
@@ -2036,6 +2073,21 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
   <?php endif; ?>
 
   <nav class="tm-mas">
+    <?php /*  LA REVISION DE LA SEMANA, con su numero. Sin la cifra el enlace no
+              dice si hay trabajo esperando o no, y el dueno tiene que entrar
+              para averiguarlo. La cifra sale de la MISMA lista que la vista
+              -jugadas vivas de la semana de turno-, asi que no puede prometer
+              tres y ensenar dos. Si no hay ninguna, el enlace no se pinta. */ ?>
+    <?php
+      $mt_sem_n = 0;
+      if ($meta && $plan_act) {
+          require_once __DIR__ . '/../includes/meta_semana.php';
+          $mt_sem_n = (int)semana_construir($pdo, $marca_id, $meta, $plan_act)['total'];
+      }
+    ?>
+    <?php if ($mt_sem_n > 0): ?>
+      <a href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&vista=semana"><?= ico('check-circle') ?>Revisar mi semana<span class="tm-mas-n"><?= $mt_sem_n ?></span><?= ico('chev-der') ?></a>
+    <?php endif; ?>
     <?php if ($meta): ?>
       <a href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&vista=plan"><?= ico('list') ?>Ver el plan completo<?= ico('chev-der') ?></a>
       <a href="<?= $BASE ?>/sala.php?marca=<?= $marca_id ?>"><?= ico('chat') ?>Discutirla con el corillo<?= ico('chev-der') ?></a>

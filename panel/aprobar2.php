@@ -742,7 +742,9 @@ if ($es_hub) {
         $extra .= '&ver=' . (int)$_GET['ver'];
     }
     require_once __DIR__ . '/../core/Meta/MetaRetorno.php';
-    if (MetaRetorno::vieneDeMeta($_GET)) $extra .= MetaRetorno::marcador();
+    //  Y con la POSICION si venia de la revision semanal: quien salio de la
+    //  publicacion 2 tiene que volver a la 2, no al principio de la cola.
+    if (MetaRetorno::vieneDeMeta($_GET)) $extra .= MetaRetorno::marcador(MetaRetorno::posicion($_GET));
     header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}&tab={$dest}{$extra}"); exit;
     // (el bloque HTML del hub de abajo queda inalcanzable a propósito)
 }
@@ -838,7 +840,7 @@ require __DIR__ . '/_shell.php';
 <?php /* Regreso predecible: si se llegó desde Tu Meta, hay una salida clara de
          vuelta. Sin esto la acción del estado dominante era un viaje de ida. */ ?>
 <?php if (MetaRetorno::vieneDeMeta($_GET)): ?>
-<a href="<?= htmlspecialchars(MetaRetorno::url((int)$marca_id, 'pendiente'), ENT_QUOTES) ?>"
+<a href="<?= htmlspecialchars(MetaRetorno::url((int)$marca_id, 'pendiente', MetaRetorno::posicion($_GET)), ENT_QUOTES) ?>"
    style="display:inline-flex;align-items:center;gap:7px;min-height:44px;line-height:44px;
           font-size:14px;font-weight:700;color:var(--muted);text-decoration:none">&larr; Volver a tu meta</a>
 <?php endif; ?>
@@ -1686,7 +1688,7 @@ $cf = [
   //  aprueban (botón, gesto de La Baraja y dos «crear y aprobar»), y uno
   //  suelto se habría quedado sin volver.
   var META_VUELTA = <?= MetaRetorno::vieneDeMeta($_GET)
-        ? json_encode(MetaRetorno::url((int)$marca_id, 'aprobado'), JSON_UNESCAPED_SLASHES)
+        ? json_encode(MetaRetorno::url((int)$marca_id, 'aprobado', MetaRetorno::posicion($_GET)), JSON_UNESCAPED_SLASHES)
         : 'null' ?>;
   function volverATuMeta(){
     if (!META_VUELTA) return false;
