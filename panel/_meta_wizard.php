@@ -74,6 +74,18 @@ if ($wiz_mat_fotos || $wiz_mat_videos) {
     $wiz_mat_txt = 'Ya tienes ' . trim($p1 . ($p1 && $p2 ? ' y ' : '') . $p2) . ' en tu Biblioteca.';
 }
 ?>
+<?php
+//  LA INTENCION DEL DUEÑO, ACUÑADA AL PINTAR LA PANTALLA.
+//
+//  No es el instante del clic: es «esta vez que se sento a crear su meta». El
+//  mismo identificador viaja con el envio, y meta_plan_generar() lo mira ANTES
+//  de llamar a la Estratega — asi un doble clic, un reenvio tardio o una
+//  recarga no cuestan otra llamada al modelo ni crean otro plan. La clave
+//  unica de `crecer_meta_plan.solicitud` arbitra las carreras de verdad.
+//
+//  Se acuña IGUAL que en _meta_opciones.php: mismo mecanismo, no uno nuevo.
+$wiz_solicitud = bin2hex(random_bytes(16));
+?>
 <?php require_once __DIR__ . '/_meta_wizard_piel.php'; ?>
 
 <div class="wz" id="wz">
@@ -205,7 +217,13 @@ if ($wiz_mat_fotos || $wiz_mat_videos) {
       <b>Cuando pulses</b>
       <ol>
         <li>Se crea tu meta con estos números.</li>
-        <li>Miro tu negocio, tu Biblioteca y tu calendario, y armo el plan.</li>
+        <?php /*  LO QUE DE VERDAD MIRA, y nada mas. Yo habia escrito aqui «tu
+                  Biblioteca y tu calendario» y es FALSO: meta_plan_generar()
+                  no lee crecer_activos ni el calendario. Lee tu negocio, tus
+                  numeros de los ultimos 30 dias, las lecciones de planes
+                  anteriores y cuanto has publicado. Prometer que mira algo que
+                  no mira es la mentira mas facil de esta pantalla.  */ ?>
+        <li>Miro tu negocio y tus números de los últimos 30 días, y armo el plan.</li>
         <li>Te llevo directo a revisar tu primera semana.</li>
       </ol>
       <p class="nota">Si no logro armarlo ahora mismo, tu meta queda creada igual y lo reintento
@@ -263,7 +281,7 @@ if ($wiz_mat_fotos || $wiz_mat_videos) {
   <div class="wz-load" id="wzLoad">
     <div class="sp"></div>
     <b>Creando tu meta</b>
-    <span>Miro tu negocio, tu Biblioteca y tu calendario<br>para armar el plan. Dale unos segundos.</span>
+    <span>Miro tu negocio y tus números<br>para armar el plan. Dale unos segundos.</span>
   </div>
 
   <details class="wz-glos">
@@ -279,6 +297,18 @@ if ($wiz_mat_fotos || $wiz_mat_videos) {
 <script>
 (function(){
   var CSRF = <?= json_encode(csrf_token()) ?>, MARCA = <?= (int)$marca_id ?>;
+  //  La intencion viaja con el envio y SOBREVIVE a la recarga: si se acuñara
+  //  de nuevo al repintar, el reenvio dejaria de reconocerse como el mismo y
+  //  nacerian dos planes. Es exactamente lo que paso en produccion el
+  //  2026-08-22 con las versiones 5 y 6.
+  var SOLICITUD = (function(){
+    var k = 'crecer.wizard.solicitud.' + MARCA;
+    try {
+      var v = sessionStorage.getItem(k);
+      if (!v) { v = <?= json_encode($wiz_solicitud) ?>; sessionStorage.setItem(k, v); }
+      return v;
+    } catch (e) { return <?= json_encode($wiz_solicitud) ?>; }
+  })();
   var VOLVER = <?= json_encode($BASE . '/meta.php?marca=' . $marca_id) ?>;
 
   //  TODA la respuesta del dueño vive aqui. Los pasos se esconden, no se
@@ -305,7 +335,14 @@ if ($wiz_mat_fotos || $wiz_mat_videos) {
     try { sessionStorage.setItem(LLAVE, JSON.stringify({ d: d, paso: paso })); }
     catch (e) { /* sin almacen: se sigue, solo que sin memoria */ }
   }
-  function olvidar(){ try { sessionStorage.removeItem(LLAVE); } catch (e) {} }
+  function olvidar(){
+    try {
+      sessionStorage.removeItem(LLAVE);
+      //  Y la intencion con el: sentarse OTRA VEZ a crear una meta es otra
+      //  intencion distinta, y tiene que poder crear su propio plan.
+      sessionStorage.removeItem('crecer.wizard.solicitud.' + MARCA);
+    } catch (e) {}
+  }
 
   /** Devuelve el paso al que hay que volver, o 0 si no habia nada guardado. */
   function recordar(){
@@ -537,13 +574,24 @@ if ($wiz_mat_fotos || $wiz_mat_videos) {
     fd.append('objetivo', d.obj); fd.append('cantidad', d.cant);
     fd.append('fecha_limite', fechaLimite().iso);
     fd.append('presupuesto', d.pauta); fd.append('contexto', d.ctx);
+    fd.append('solicitud', SOLICITUD);
 
     fetch(location.pathname + '?marca=' + MARCA, { method:'POST', body:fd })
       .then(function(r){ return r.json(); })
       .then(function(j){
         //  Se vuelve a Tu Meta SIEMPRE que la meta quedo escrita, salga o no el
         //  plan: el compositor recalcula alli y dice la verdad de lo que hay.
-        if (j && j.ok) { olvidar(); location.href = VOLVER; return; }
+        //  YA NO SE DESAPARECE HACIA TU META. El dueño acaba de confirmar y
+        //  tiene derecho a ver que pasa con lo suyo: se va a la pantalla de
+        //  preparacion, que lee estado persistido y sabe reconstruirse sola.
+        //
+        //  Y NO SE LLEVA LA INTENCION EN LA URL. La lleve aqui un rato con un
+        //  comentario que decia que asi una recarga seguia siendo la misma
+        //  intencion: era mentira, nadie la leia al otro lado. Y no le hace
+        //  falta — el plan ya esta creado cuando se llega, y esa pantalla no
+        //  vuelve a llamar a la Estratega. El reintento, cuando el plan no
+        //  llego a existir, es una intencion NUEVA y acuña la suya.
+        if (j && j.ok) { olvidar(); location.href = VOLVER + '&vista=preparando'; return; }
         [].forEach.call(document.querySelectorAll('.wz-p'), function(s){
           s.classList.toggle('on', +s.dataset.p === 4); });
         [].forEach.call(tren.children, function(li){ li.classList.toggle('ya', +li.dataset.t < 4); });

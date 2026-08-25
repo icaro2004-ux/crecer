@@ -73,8 +73,15 @@ foreach ($salidas as $f => $id) {
        'una capa sin salida deja al dueño encerrado con el botón del navegador');
     //  Y que la puerta diga QUE PASA con lo que lleva escrito. «Volver» a secas
     //  no contesta la pregunta que de verdad tiene: «¿pierdo lo que puse?».
+    //
+    //  Lo que se exige es la RESPUESTA, no una redaccion. El wizard de crear
+    //  una meta no cambia nada existente: lo suyo es «Salir sin crear nada», y
+    //  contesta igual de bien. Esta lista se ensancho el dia que esa frase dio
+    //  una roja siendo correcta — pero sigue sin aceptar un «Salir» pelado,
+    //  que es lo unico que de verdad obliga a adivinar.
     ok("{$f} dice si se guarda o no",
-       preg_match('~id="' . $id . '"[^>]*>.{0,120}?(sin guardar|sin cambiar nada|sin cambiar)~su',
+       preg_match('~id="' . $id . '"[^>]*>.{0,120}?'
+                  . '(sin guardar|sin cambiar nada|sin cambiar|sin crear nada|sin crear)~su',
                   $SRC[$f]) === 1,
        'una salida que no dice si guarda obliga a adivinar');
 }

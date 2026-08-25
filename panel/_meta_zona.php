@@ -45,7 +45,9 @@
   };
   //  `.sm` es la revision de la semana: tambien tiene un ultimo control que
   //  la barra de abajo puede tapar, asi que participa de la misma geometria.
-  var caja = function () { return document.querySelector('.ah, .plan, .wz, .sm'); };
+  //  `.pr` es la pantalla de preparacion: tambien tiene su ultimo control
+  //  contra la barra de abajo.
+  var caja = function () { return document.querySelector('.ah, .plan, .wz, .sm, .pr'); };
 
   // ══════════════════════════════════════════════════════════════
   //  1 · LA ZONA SEGURA — solo contra .botnav
@@ -141,7 +143,11 @@
     //  heredan de .wz-*, asi que sin nombrarlos Ayuda se sentaba encima de
     //  «Conservar esta publicacion» — que es media decision de las dos que
     //  ofrece esa pantalla.
-    '.su-opt', '.su-mot button', '.su-otra', '.su-nada a'
+    '.su-opt', '.su-mot button', '.su-otra', '.su-nada a',
+    //  la preparacion del plan. Son dos botones y uno de ellos es LA SALIDA:
+    //  con Ayuda sentada encima, en un Android de 360 el dueño se quedaba
+    //  mirando una pantalla de espera sin forma visible de salir de ella.
+    '.pr-bt'
   ].join(', ');
 
   var ob = null, dentro = null;

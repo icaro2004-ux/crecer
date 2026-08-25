@@ -97,10 +97,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'presupuesto_pauta' => (string)($_POST['presupuesto'] ?? ''),
                 'contexto'          => (string)($_POST['contexto'] ?? ''),
             ]);
-            $plan = meta_plan_generar($pdo, $marca_id, $meta_id);
+
+            //  LA INTENCION VIAJA HASTA LA ESTRATEGA. El wizard la acuña al
+            //  pintarse y la conserva entre recargas, asi que un reenvio no
+            //  cuesta otra llamada al modelo: meta_plan_generar() mira si ya
+            //  existe un plan con esa intencion ANTES de gastar, y la clave
+            //  unica de la base arbitra dos peticiones a la vez.
+            //
+            //  Esto ya existia y esta ruta no lo usaba: aqui solo habia un
+            //  «¿hay una meta igual en los ultimos 3 minutos?», que frena el
+            //  dedo nervioso y no arbitra nada.
+            $plan = meta_plan_generar($pdo, $marca_id, $meta_id, '',
+                                      trim((string)($_POST['solicitud'] ?? '')));
+
+            //  Y AHORA SE PREPARA LA PRIMERA SEMANA — solo la primera.
+            //  Va DESPUES de que el plan este confirmado y FUERA de cualquier
+            //  transaccion: encolar es escribir una fila, pero disparar al
+            //  worker es una llamada de red.
+            //
+            //  EL require VA AQUI, y no se da por hecho. Sin el, esta ruta
+            //  moria con «undefined function» y el dueño veia un error al
+            //  confirmar su meta. Mis pruebas no lo vieron porque cargaban el
+            //  archivo ellas mismas: solo lo cazo la que pide la pagina por
+            //  HTTP, como la pide un navegador.
+            require_once __DIR__ . '/../includes/meta_async.php';
+            $enc = !empty($plan['ok']) ? meta_encolar_primera_semana($pdo, $marca_id, $meta_id) : ['jobs'=>0,'nuevos'=>[]];
+
             // Si la Estratega falló, la meta igual queda creada (se puede reintentar).
             echo json_encode(['ok'=>true, 'meta_id'=>$meta_id, 'plan_ok'=>!empty($plan['ok']),
+                              'repetido'=>!empty($plan['repetido']),
+                              'encolados'=>(int)$enc['jobs'],
                               'err'=>$plan['err'] ?? null], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // (b2) EL ESTADO DE LA PREPARACION · SOLO LEE.
+        //
+        //  La pantalla de preparacion pregunta por aqui cada pocos segundos.
+        //  Este handler NO crea nada, NO reintenta nada y NO llama a nadie:
+        //  lee lo que hay escrito y lo cuenta. Un sondeo que produce trabajo
+        //  es un sondeo que multiplica el gasto por el numero de pestañas
+        //  abiertas.
+        if ($accion === 'preparacion') {
+            $meta = meta_activa($pdo, $marca_id);
+            if (!$meta) { echo json_encode(['ok'=>true, 'estado'=>'sin_meta']); exit; }
+            $plan = meta_plan_activo($pdo, (int)$meta['id']);
+            if (!$plan) {
+                //  La meta esta, el plan no. No es «preparando»: es un plan que
+                //  no llego a existir, y tiene su propia salida.
+                echo json_encode(['ok'=>true, 'estado'=>'sin_plan', 'meta_id'=>(int)$meta['id']]);
+                exit;
+            }
+            require_once __DIR__ . '/../includes/meta_semana.php';
+            $res = semana_resumen($pdo, $marca_id, $meta, $plan, $BASE);
+
+            //  CUANTOS JOBS SIGUEN VIVOS. Es lo que separa «se esta
+            //  preparando» de «nadie esta trabajando en esto».
+            $vivos = 0;
+            try {
+                $q = $pdo->prepare(
+                    "SELECT COUNT(*) FROM crecer_meta_jobs j
+                       JOIN crecer_meta_tactica t ON t.id = j.tactica_id
+                      WHERE j.marca_id = ? AND t.plan_id = ?
+                        AND j.estado IN ('queued','working')");
+                $q->execute([$marca_id, (int)$plan['id']]);
+                $vivos = (int)$q->fetchColumn();
+            } catch (Throwable $e) { $vivos = 0; }
+
+            echo json_encode(['ok'=>true,
+                'estado'     => $res['estado'],          // pendiente|preparando|lista|sin_semana|error
+                'total'      => (int)$res['total'],
+                'pendientes' => (int)$res['pendientes'],
+                'preparando' => (int)$res['preparando'],
+                'pos'        => (int)$res['pos'],
+                'jobs'       => $vivos,
+                'plan_id'    => (int)$plan['id'],
+                'meta_id'    => (int)$meta['id'],
+            ], JSON_UNESCAPED_UNICODE);
             exit;
         }
 
@@ -447,12 +520,17 @@ $mt_estado = MetaStateComposer::componer($mt_snap);
 //   ?vista=plan-nuevo  pedirle otro plan a la Estratega, para esta misma meta
 //   ?vista=cambiar     cerrar esta meta y estrenar la proxima, de una
 $vista = $_GET['vista'] ?? '';
-if (!in_array($vista, ['plan', 'semana', 'wizard', 'plan-nuevo', 'cambiar', 'ajustar', 'sustituir'], true)) $vista = 'ahora';
+if (!in_array($vista, ['plan', 'semana', 'preparando', 'wizard', 'plan-nuevo', 'cambiar', 'ajustar', 'sustituir'], true)) $vista = 'ahora';
 if (!$meta && $vista === 'ahora' && !empty($_GET['nueva'])) $vista = 'wizard';
 //  Las dos delicadas piden una meta viva. Sin ella no hay nada que rehacer ni
 //  que cambiar, y mandar a un wizard vacio es como se llegaba antes a que el
 //  negocio se quedara sin norte: se vuelve a lo que toca ahora.
 if (!$meta && in_array($vista, ['plan-nuevo', 'cambiar', 'ajustar', 'sustituir', 'semana'], true)) $vista = 'ahora';
+//  La preparacion SIN meta no tiene nada que preparar: o el dueño llego por una
+//  URL vieja, o su meta se cerro. Se le devuelve a lo que toca ahora, que sabe
+//  que decirle. Con meta pero sin plan, la vista SI se pinta: ese es justamente
+//  el estado «tu meta quedo guardada pero no pude terminar el plan».
+if (!$meta && $vista === 'preparando') $vista = 'ahora';
 //  Y las dos de 7a solo salen si su esquema esta. Sin la migracion no se
 //  degrada la pantalla: la capacidad no existe y punto. Ver la matriz de
 //  compatibilidad en tests/test_meta_compatibilidad.php.
@@ -1165,6 +1243,10 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
 <?php elseif (!$meta && $vista === 'wizard'): /* ══════════ WIZARD ══════════ */ ?>
 
 <?php require __DIR__ . '/_meta_wizard.php'; ?>
+
+<?php elseif ($meta && $vista === 'preparando'): /* ══════ PREPARANDO EL PLAN ══════ */ ?>
+
+<?php require __DIR__ . '/_meta_preparando.php'; ?>
 
 <?php elseif ($meta && $vista === 'semana'): /* ══════ REVISAR MI SEMANA ══════ */ ?>
 

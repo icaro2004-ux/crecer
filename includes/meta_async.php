@@ -245,3 +245,103 @@ function meta_job_estado(PDO $pdo, int $id, int $marca_id): ?array {
         return $r;
     } catch (Throwable $e) { return null; }
 }
+
+// -- LA PRIMERA SEMANA, Y SOLO LA PRIMERA ---------------------
+/**
+ * Pone en cola las jugadas de la SEMANA 1 del plan vigente.
+ *
+ * POR QUE EXISTE. Crear el plan deja las jugadas escritas pero NINGUNA pieza:
+ * las produce el corillo en su corrida por cron. El dueño acababa de confirmar
+ * su meta y se quedaba mirando una semana vacia sin nada que decidir, sin
+ * saber si aquello estaba vivo. Encolar aqui es lo que hace verdadera la frase
+ * «estoy preparando tu primera semana».
+ *
+ * SOLO LA SEMANA 1. Encolar las doce seria producir —y cobrar— un mes entero
+ * de contenido que el dueño todavia no ha visto ni aprobado.
+ *
+ * IDEMPOTENTE POR CONSTRUCCION: cada jugada pasa por meta_job_encolar_unico(),
+ * que bloquea su fila con FOR UPDATE, reusa el job vivo si lo hay y se niega a
+ * reproducir una jugada que ya tiene sus piezas. Un doble clic, una recarga o
+ * un reintento entran por la misma puerta y no duplican ni un job ni un gasto.
+ *
+ * LO QUE NO ENCOLA, y no es un descuido:
+ *   · las jugadas que NO son de produccion (`accion_dueno`, `regla`): las hace
+ *     el dueño, no hay nada que generar;
+ *   · las descartadas o ya hechas;
+ *   · las que piden VIDEO. Generar arte para un reel cuyo video no existe es
+ *     gastar en algo que no se puede terminar: esa jugada tiene que llegarle
+ *     al dueño como «Falta tu material», no como una imagen inutil. Es la
+ *     misma regla que ya aplica semana_encolar_alternativa().
+ *
+ * EL DISPARO VA FUERA DE TODA TRANSACCION, y despues de encolar: es una
+ * llamada de red y no puede vivir bajo un candado de base de datos.
+ *
+ * @return array{jobs:int, nuevos:int[], saltadas:int}
+ */
+function meta_encolar_primera_semana(PDO $pdo, int $marca_id, int $meta_id,
+                                     bool $disparar = true): array
+{
+    //  $disparar existe para las PRUEBAS, y no es un adorno. Disparar al worker
+    //  es una peticion HTTP a otro proceso — uno que carga la config de verdad,
+    //  con las credenciales de verdad. Una prueba que encola y dispara acabaria
+    //  llamando al modelo y gastando cuota aunque ella misma tenga la red
+    //  bloqueada, porque el gasto ocurriria al otro lado del cable. Con esto el
+    //  aislamiento es estructural y no depende de como este configurado el
+    //  entorno donde corre la suite.
+
+    $out = ['jobs' => 0, 'nuevos' => [], 'saltadas' => 0];
+    if ($marca_id <= 0 || $meta_id <= 0) return $out;
+
+    require_once __DIR__ . '/meta_negocio.php';
+    $plan = meta_plan_activo($pdo, $meta_id);
+    if (!$plan) return $out;
+
+    $formatos_con_video = ['reel', 'video'];
+
+    try {
+        $q = $pdo->prepare(
+            "SELECT id, clase, estado, formato, sustituida_at
+               FROM crecer_meta_tactica
+              WHERE meta_id = ? AND plan_id = ? AND marca_id = ?
+                AND semana = 1
+              ORDER BY orden ASC");
+        $q->execute([$meta_id, (int)$plan['id'], $marca_id]);
+        $filas = $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable $e) {
+        error_log('meta_encolar_primera_semana (lectura): ' . get_class($e));
+        return $out;
+    }
+
+    $a_disparar = [];
+    foreach ($filas as $t) {
+        if ((string)($t['clase'] ?? '') !== 'produccion')        { $out['saltadas']++; continue; }
+        if (!in_array((string)$t['estado'], ['pendiente', 'en_curso'], true)) { $out['saltadas']++; continue; }
+        if (!empty($t['sustituida_at']))                          { $out['saltadas']++; continue; }
+        //  Video: se deja para cuando el dueño suba el suyo.
+        if (in_array(mb_strtolower(trim((string)($t['formato'] ?? ''))), $formatos_con_video, true)) {
+            $out['saltadas']++; continue;
+        }
+
+        try {
+            $e = meta_job_encolar_unico($pdo, $marca_id, (int)$t['id']);
+        } catch (Throwable $ex) {
+            error_log('meta_encolar_primera_semana (encolar): ' . get_class($ex));
+            continue;
+        }
+        if ((int)$e['id'] > 0) {
+            $out['jobs']++;
+            //  Solo se dispara lo que ESTA peticion creo. Reusar un job vivo no
+            //  se vuelve a disparar: ya hay alguien trabajandolo.
+            if (!empty($e['creado'])) { $out['nuevos'][] = (int)$e['id']; $a_disparar[] = (int)$e['id']; }
+        }
+    }
+
+    //  EL DISPARO, AL FINAL Y FUERA DE TODO. Si alguno falla no se pierde
+    //  nada: el job ya esta persistido y el barrido del corillo lo recoge.
+    if ($disparar) {
+        foreach ($a_disparar as $id) {
+            try { meta_job_disparar($id); } catch (Throwable $e) { /* la fila ya esta */ }
+        }
+    }
+    return $out;
+}
