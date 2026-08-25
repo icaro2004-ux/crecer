@@ -1861,3 +1861,98 @@ function meta_resumen_corto(PDO $pdo, int $marca_id): string {
     }
     return $s;
 }
+
+// ══ LA LLEGADA · lo que se le cuenta al dueño cuando el plan ya existe ══
+//
+//  Dos funciones PURAS: reciben lo que el dominio ya leyó y devuelven cifras y
+//  frases. No consultan, no escriben, no deciden nada del negocio. Viven aquí
+//  —y no en la vista— porque la pantalla de llegada las enseña al cargar y el
+//  sondeo las vuelve a enseñar segundos después: dos redacciones del mismo
+//  número acabarían contradiciéndose.
+
+/**
+ * QUIÉN HACE QUÉ, en el plan vigente.
+ *
+ * SE CUENTA POR `clase`, NO POR `quien`, y esto no es una preferencia de
+ * estilo: en la base de producción 18 de las 20 jugadas de clase
+ * 'accion_dueno' llevan `quien = 'corillo'` (el modelo rellena esa columna a
+ * su aire y meta_plan_generar() la corrige por `clase`, no al revés). Contar
+ * por `quien` diría «el corillo se encarga de todo» justo en las jugadas que
+ * el dueño tiene que hacer con sus manos. Todo el resto del producto ya
+ * decide por `clase` — _meta_jugada.php, el compositor, el encolado — y esto
+ * no abre una segunda verdad.
+ *
+ * NO CUENTA lo que no es trabajo por venir: descartadas y sustituidas quedan
+ * de historia. Las 'regla' se cuentan aparte porque no son una tarea con
+ * fecha: son una forma de operar que no se «termina».
+ *
+ * @param array $tacticas Filas de crecer_meta_tactica del plan ACTIVO
+ *                        (meta_tacticas() ya filtra por él).
+ * @return array{corillo:int, tuyas:int, reglas:int, vivas:int,
+ *               frase_corillo:string, frase_tuyas:string}
+ */
+function meta_plan_reparto(array $tacticas): array
+{
+    $corillo = 0; $tuyas = 0; $reglas = 0;
+
+    foreach ($tacticas as $t) {
+        if ((string)($t['estado'] ?? '') === 'descartada') continue;
+        if (!empty($t['sustituida_at']))                   continue;
+
+        $clase = (string)($t['clase'] ?? 'produccion');
+        if ($clase === 'regla')             { $reglas++;  continue; }
+        if ($clase === 'accion_dueno')      { $tuyas++;   continue; }
+        $corillo++;
+    }
+
+    $acciones = fn(int $k) => $k === 1 ? '1 acción' : $k . ' acciones';
+
+    return [
+        'corillo' => $corillo,
+        'tuyas'   => $tuyas,
+        'reglas'  => $reglas,
+        'vivas'   => $corillo + $tuyas + $reglas,
+        'frase_corillo' => $corillo > 0
+            ? 'El corillo se encarga de ' . $acciones($corillo) . '.'
+            : '',
+        //  «Necesitaré tu ayuda» y no «tienes 2 tareas»: es un departamento
+        //  que trabaja para él, no una lista de deberes que se le entrega.
+        'frase_tuyas' => $tuyas > 0
+            ? 'Necesitaré tu ayuda en ' . ($tuyas === 1 ? '1.' : $tuyas . '.')
+            : '',
+    ];
+}
+
+/** Los meses, escritos como los dice la gente. */
+function meta_mes_es(int $m): string
+{
+    static $M = [1=>'enero','febrero','marzo','abril','mayo','junio','julio',
+                 'agosto','septiembre','octubre','noviembre','diciembre'];
+    return $M[$m] ?? '';
+}
+
+/**
+ * LA META EN UNA LÍNEA: «25 pedidos para el 23 de octubre».
+ *
+ * Afirma solo lo que hay. Sin cantidad no inventa un número; sin fecha no
+ * inventa un plazo. El objetivo se nombra con la `unidad` del catálogo
+ * —pedidos, mensajes, interacciones— que es la palabra que el dueño escogió,
+ * no una etiqueta interna.
+ */
+function meta_frase_meta(?array $meta): string
+{
+    if (!$meta) return '';
+
+    $def   = meta_objetivo_def((string)($meta['objetivo'] ?? ''));
+    $cant  = $meta['cantidad'] ?? null;
+    $trozo = ($cant !== null && (int)$cant > 0)
+        ? (int)$cant . ' ' . (string)($def['unidad'] ?? '')
+        : (string)($def['titulo'] ?? '');
+
+    $f = trim((string)($meta['fecha_limite'] ?? ''));
+    if ($f !== '' && ($ts = strtotime($f))) {
+        return trim($trozo) . ' para el ' . (int)date('j', $ts)
+             . ' de ' . meta_mes_es((int)date('n', $ts));
+    }
+    return trim($trozo);
+}

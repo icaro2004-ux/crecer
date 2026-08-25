@@ -164,12 +164,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $vivos = (int)$q->fetchColumn();
             } catch (Throwable $e) { $vivos = 0; }
 
+            //  LAS FRASES VIAJAN YA ESCRITAS. La pantalla las pega, no las
+            //  redacta: la de la primera pintada y la del sondeo salen de la
+            //  MISMA funcion del dominio. Con dos redacciones del mismo numero
+            //  bastaba con que una cambiara para que se contradijeran.
             echo json_encode(['ok'=>true,
                 'estado'     => $res['estado'],          // pendiente|preparando|lista|sin_semana|error
                 'total'      => (int)$res['total'],
                 'pendientes' => (int)$res['pendientes'],
                 'preparando' => (int)$res['preparando'],
+                'decididas'  => (int)$res['decididas'],
+                'continua'   => !empty($res['continua']),
                 'pos'        => (int)$res['pos'],
+                'frase_semana' => semana_frase_estado($res),
+                'frase_puerta' => semana_frase_puerta($res),
                 'jobs'       => $vivos,
                 'plan_id'    => (int)$plan['id'],
                 'meta_id'    => (int)$meta['id'],

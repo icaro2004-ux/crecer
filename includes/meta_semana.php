@@ -820,3 +820,34 @@ function semana_cuantas(int $n): string
 {
     return $n === 1 ? '1 publicación' : $n . ' publicaciones';
 }
+
+/**
+ * LA FRASE DEL ESTADO SEMANAL — la que le dice al dueño en una línea qué tiene
+ * esta semana. Vive aquí y no en la vista por una razón concreta: la pantalla
+ * de llegada la enseña al cargar y el sondeo la vuelve a enseñar unos segundos
+ * después. Si cada uno la redactara por su lado, acabarían diciendo cosas
+ * distintas del mismo número — y el servidor manda.
+ *
+ * No decide nada nuevo: lee el resumen que ya calculó semana_resumen().
+ */
+function semana_frase_estado(array $r): string
+{
+    $estado = (string)($r['estado'] ?? '');
+    $pen    = (int)($r['pendientes'] ?? 0);
+    $prep   = (int)($r['preparando'] ?? 0);
+
+    if ($estado === 'pendiente') {
+        return 'Tienes ' . semana_cuantas($pen) . ' para revisar.';
+    }
+    if ($estado === 'preparando') {
+        //  «Estoy preparando 2 publicaciones» — no «espera»: se dice QUÉ pasa.
+        return 'Estoy preparando ' . semana_cuantas($prep) . '.';
+    }
+    if ($estado === 'lista') {
+        return 'Tu primera semana ya está lista.';
+    }
+    //  sin_semana y error NO tienen frase de cifra: una es «todavía no hay» y
+    //  la otra es «no lo sé». Inventarles un número sería justo la mentira que
+    //  semana_resumen() se cuida de no decir.
+    return '';
+}
