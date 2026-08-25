@@ -74,8 +74,12 @@ try {
       dias: fe ? fe.dataset.dias : '',
       pauta: pa ? pa.dataset.pauta : '',
       ctx: document.getElementById('contexto').value,
+      //  De los seis quedan TRES en pantalla: el presupuesto y el contexto se
+      //  fueron a la capa opcional y «como se mide» al paso del numero. Se
+      //  piden los seis y se tolera el hueco: asi esta sonda sirve igual si
+      //  alguno vuelve.
       repaso: ['rObj','rCant','rFecha','rPauta','rCtx','rMedir'].reduce(function(a,i){
-        a[i]=(document.getElementById(i).textContent||'').trim(); return a; }, {}),
+        var e=document.getElementById(i); a[i]=e?(e.textContent||'').trim():''; return a; }, {}),
       err_visible: er.classList.contains('on'),
       err_txt: (document.getElementById('wzErrP').textContent||'').trim(),
       err_enfocado: document.activeElement === er,
@@ -86,16 +90,25 @@ try {
     };
   })())`).then(JSON.parse);
 
-  /** Contesta los tres pasos y deja el wizard en el repaso. */
+  /**
+   * Contesta los tres pasos y deja el wizard en el cuarto — el del material,
+   * que es donde se confirma.
+   *
+   * EL ORDEN CAMBIO: la cantidad y la fecha ya no comparten pantalla, y el
+   * presupuesto y el contexto bajaron a una capa opcional. Se rellenan igual,
+   * abriendola: son parte del contrato aunque ya no ocupen un paso propio.
+   */
   const contestar = async () => {
     await pulsa('.wz-obj', 260);
-    await pulsa('#sigue');
+    await pulsa('#sigue');                                   // → 2 · cuanto
     await escribir('cantidad', '25');
+    await pulsa('#sigue');                                   // → 3 · para cuando
     await pulsa('#wzFecha .wz-chip[data-dias="60"]', 120);
-    await pulsa('#sigue');
+    await pulsa('#sigue', 420);                              // → 4 · tu material
+    await pulsa('#wzAjustes', 260);
     await pulsa('#wzPauta .wz-chip[data-pauta="20"]', 120);
     await escribir('contexto', CTX);
-    await pulsa('#sigue', 420);
+    await pulsa('#wzHojaListo', 300);
   };
 
   // ══════════════════════════════════════════════════════════════

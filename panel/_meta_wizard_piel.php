@@ -160,8 +160,13 @@
   .wz-cambiar:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
 
   .wz-bloque{border-radius:var(--tm-r);padding:14px 15px;margin-top:14px}
-  .wz-bloque b{display:block;font-size:14px;font-weight:600;letter-spacing:.06em;
+  /*  «>» y no un descendiente cualquiera: esta regla viste el TITULO del
+      bloque -en bloque y en mayusculas- y estaba alcanzando tambien a
+      cualquier <b> de enfasis dentro de una viñeta. «mas adelante» salia en
+      su propia linea y gritando, partiendo la frase en tres. */
+  .wz-bloque > b{display:block;font-size:14px;font-weight:600;letter-spacing:.06em;
     text-transform:uppercase;margin-bottom:8px}
+  .wz-bloque li b,.wz-bloque p b{font-weight:600;color:inherit}
   .wz-bloque p{font-size:15px;line-height:1.55;margin:0}
   .wz-bloque ol,.wz-bloque ul{margin:0;padding-left:19px}
   .wz-bloque li{font-size:15px;line-height:1.55;margin-bottom:5px}
@@ -176,8 +181,17 @@
   .wz-guarda{background:var(--crema,#FAF7F4);color:var(--ink,#4A434F)}
   .wz-guarda b{color:var(--muted)}
 
-  /* — LA NAVEGACION — */
-  .wz-nav{display:flex;gap:10px;align-items:center;margin-top:22px}
+  /* — LA NAVEGACION · ANCLADA AL PIE —
+     Medido: con los seis objetivos en pantalla, el boton de continuar caia en
+     y=2050 con el suelo util en 729. O sea a tres pantallas de scroll. La
+     regla de la casa dice que la accion principal se ve sin desplazar, y con
+     contenido largo eso solo se consigue anclandola.
+     `--wz-suelo` lo pone el guion con el alto real de la barra de abajo: en
+     escritorio no hay barra y vale 0. */
+  .wz-nav{display:flex;gap:10px;align-items:center;margin-top:22px;
+    position:sticky;bottom:var(--wz-suelo,0px);z-index:4;
+    background:var(--crema,#FAF7F4);padding:10px 0 12px;
+    box-shadow:0 -12px 18px -16px rgba(0,0,0,.35)}
   .wz-atras{min-height:52px;padding:0 20px;border:1px solid var(--line);border-radius:var(--tm-r-bt);
     background:var(--card,#fff);font-family:inherit;font-size:16px;font-weight:600;
     color:var(--tinta);cursor:pointer}
@@ -214,6 +228,75 @@
   .wz-load b{display:block;font-family:var(--font-display,'Poppins',sans-serif);
     font-size:19px;font-weight:700;color:var(--tinta)}
   .wz-load span{display:block;font-size:15px;line-height:1.55;color:var(--muted);margin-top:7px}
+
+  /* — EL MATERIAL DEL DUEÑO —
+     Ni caja de alarma ni caja de exito: es una invitacion. Por eso va en crema
+     y no en rosa ni en teal, y los dos botones pesan lo mismo entre si — pero
+     menos que la primaria del pie, que es la que cierra el paso. */
+  .wz-mat{margin-top:16px}
+  .wz-mat-est{display:block;font-size:15px;line-height:1.5;color:var(--tm-teal-tx);
+    background:var(--tm-teal-piel);border-radius:var(--tm-r-bt);padding:10px 13px;margin-bottom:10px}
+  .wz-mat-est:empty{display:none}
+  .wz-mat-bt{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;
+    min-height:52px;margin-top:9px;padding:0 16px;border:1px solid var(--line);
+    border-radius:var(--tm-r-bt);background:var(--card,#fff);font-family:inherit;font-size:16px;
+    font-weight:600;color:var(--tinta);cursor:pointer;text-decoration:none}
+  .wz-mat-bt:hover{border-color:var(--tm-rosa);color:var(--tm-rosa-tx)}
+  .wz-mat-bt:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
+  .wz-mat-bt:disabled{opacity:.6;cursor:default}
+  .wz-mat-bt .ic{width:18px;height:18px;stroke-width:1.9}
+  .wz-mat-err{margin:10px 0 0;font-size:15px;line-height:1.5;color:var(--tm-aviso);
+    background:var(--tm-aviso-piel);border-radius:var(--tm-r-bt);padding:10px 13px}
+
+  /* — LA PUERTA A LO AVANZADO —
+     Una fila, no un boton: lo que hay detras es opcional y no debe competir
+     con la decision del paso. */
+  .wz-ajustes{display:flex;align-items:center;gap:12px;width:100%;text-align:left;min-height:64px;
+    margin-top:16px;padding:12px 14px;border:1px solid var(--line);border-radius:var(--tm-r);
+    background:var(--card,#fff);font-family:inherit;color:var(--tinta);cursor:pointer}
+  .wz-ajustes:hover{border-color:var(--tm-rosa)}
+  .wz-ajustes:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
+  .wz-ajustes .ic{width:19px;height:19px;flex:none;color:var(--muted);stroke-width:1.9}
+  .wz-ajustes .ic:last-child{margin-left:auto;color:#B8B2AB}
+  .wz-ajustes .tx{flex:1;min-width:0}
+  .wz-ajustes .tx b{display:block;font-size:16px;font-weight:600;line-height:1.3}
+  .wz-ajustes .tx span{display:block;font-size:14px;line-height:1.4;color:var(--muted);margin-top:2px}
+
+  /* — LA CAPA · el paso se queda detras —
+     Misma hoja que la de la revision semanal: es la misma casa. */
+  /*  La hoja se apoya en el fondo del viewport, y ahi vive la barra fija del
+      panel: su pie quedaba DEBAJO, con el boton inalcanzable. `--wz-suelo`
+      -el alto real de esa barra, medido por el guion- la levanta lo justo. En
+      escritorio no hay barra y vale 0. */
+  .wz-hoja-velo{position:fixed;inset:0;z-index:70;background:rgba(35,31,32,.44);
+    display:none;align-items:flex-end;justify-content:center;
+    padding-bottom:var(--wz-suelo,0px)}
+  .wz-hoja-velo.on{display:flex}
+  .wz-hoja{width:100%;max-width:560px;max-height:88vh;display:flex;flex-direction:column;
+    background:var(--crema,#FAF7F4);border-radius:18px 18px 0 0;
+    animation:wzSube .2s cubic-bezier(.22,1,.36,1)}
+  @keyframes wzSube{from{transform:translateY(22px)}to{transform:none}}
+  @media (prefers-reduced-motion:reduce){.wz-hoja{animation:none}}
+  .wz-hoja .cab{flex:none;display:flex;align-items:center;gap:10px;padding:14px 16px 10px;
+    border-bottom:1px solid var(--line)}
+  .wz-hoja .cab h3{font-family:var(--font-display,'Poppins',sans-serif);font-size:19px;
+    font-weight:700;margin:0;flex:1;line-height:1.25;color:var(--tinta)}
+  .wz-hoja .cab button{width:44px;height:44px;flex:none;margin:-4px -4px -4px 0;border-radius:11px;
+    border:1px solid var(--line);background:var(--card,#fff);color:var(--tinta);
+    display:grid;place-items:center;cursor:pointer}
+  .wz-hoja .cab button .ic{width:19px;height:19px;stroke-width:2}
+  .wz-hoja .cuerpo{flex:1;min-height:0;overflow-y:auto;padding:14px 16px 18px}
+  /*  El boton de la hoja va ANCLADO a su pie, no al final de lo que se
+      desplaza: con el textarea lleno quedaba fuera de la parte visible de la
+      propia hoja. La hoja es una pantalla pequeña y tiene la misma regla que
+      la grande — su decision se ve sin buscarla. */
+  .wz-hoja .pie2{position:sticky;bottom:0;margin-top:18px;padding:12px 0 2px;
+    background:var(--crema,#FAF7F4);box-shadow:0 -12px 18px -16px rgba(0,0,0,.35)}
+  .wz-hoja .pie2 .tm-btn{width:100%;margin-top:0}
+  @media (min-width:1000px){
+    .wz-hoja-velo{align-items:center}
+    .wz-hoja{border-radius:18px;max-height:80vh}
+  }
 
   /* — EL GLOSARIO · las palabras raras, a mano y plegadas — */
   .wz-glos{margin-top:26px;border-top:1px solid var(--line);padding-top:6px}

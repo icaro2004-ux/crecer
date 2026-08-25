@@ -288,8 +288,13 @@ try {
         return {t:(e.textContent||'').trim().slice(0,40),
                 px:parseFloat(getComputedStyle(e).fontSize)};}),
       nav_px: nav.length ? Math.min.apply(null, nav) : 0,
-      primarias: ah.querySelectorAll('.tm-btn:not(.linea)').length
-               + ah.querySelectorAll('.jg[open] .jg-hacer:not(.sec), .jg[open] .jg-ok2').length,
+      //  SOLO LAS QUE SE VEN. El wizard tiene ahora una capa opcional con su
+      //  propio boton; cerrada, ese boton no existe para el dueño. Contarlo
+      //  daba «dos primarias compiten» donde solo hay una en pantalla.
+      primarias: [].filter.call(
+          ah.querySelectorAll('.tm-btn:not(.linea), .jg[open] .jg-hacer:not(.sec), .jg[open] .jg-ok2'),
+          function(e){ var r=e.getBoundingClientRect();
+            return r.width>0 && r.height>0 && getComputedStyle(e).visibility!=='hidden'; }).length,
       abiertas: ah.querySelectorAll('.jg[open]').length,
       prim: pr ? {t:(prim.textContent||'').trim().slice(0,26), top:Math.round(pr.top),
                   visible: pr.bottom<=H && pr.top>=0} : null,
