@@ -243,7 +243,22 @@ try {
   di('PRIMARIAS_META', await evaluar(`document.querySelectorAll('.tm-btn').length`));
 
   // ── 2 · Abre la pieza EXACTA ──────────────────────────────────────────
+  //
+  //  LA PUERTA CAMBIO, EL CONTRATO NO. La accion dominante ya no lleva a
+  //  aprobar2 con ?ver=: lleva a la REVISION SEMANAL, en la posicion de esa
+  //  misma publicacion. Sigue abriendo el objeto exacto -una publicacion por
+  //  pantalla, no una bandeja- y ademas le dice al dueño cuantas le quedan.
+  //  Cambio porque el enlace a la revision vivia al final de Tu Meta, debajo
+  //  del pliegue en un telefono, y el dueño no lo encontraba.
   if (destino) { await ir(destino); }
+  di('DOMINANTE_URL', await url());
+  di('DOMINANTE_PASO', await evaluar(`(document.querySelector('#smPaso')||{}).textContent || ''`));
+  di('DOMINANTE_PIEZA', await evaluar(
+    `(function(){var a=document.querySelector('.sm-p.on'); return a?a.dataset.id:'';})()`));
+
+  //  Y aprobar2 SIGUE VIVO: se llega desde «Ajustar > Imagen o video». Se entra
+  //  por su ruta real para seguir cubriendo su modal, su brief y su vista previa.
+  await ir(`${BASE}/panel/aprobar2.php?marca=${marca}&ver=${pieza}&volver=meta&pos=1`);
   di('APROBAR_URL', await url());
   di('PIEZA_EN_PANTALLA', await evaluar(
     `!!document.querySelector('form button[value="aprobar"]')`));

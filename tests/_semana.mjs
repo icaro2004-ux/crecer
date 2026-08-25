@@ -185,11 +185,16 @@ try {
   // ══ 0 · LA PUERTA · sin enlace, la pantalla existe y nadie llega ═
   await ir(`${BASE}/meta.php?marca=${marca}`);
   await cerrarRecibimiento(ev);
-  di('ENTRADA_HAY', await ev(`!!document.querySelector('.tm-mas a[href*="vista=semana"]')`));
-  di('ENTRADA_TX', (await ev(`(function(){var a=document.querySelector('.tm-mas a[href*="vista=semana"]');
-      return a?a.textContent.replace(/\s+/g,' ').trim():'';})()`)));
-  if (await ev(`!!document.querySelector('.tm-mas a[href*="vista=semana"]')`)) {
-    await ev(`document.querySelector('.tm-mas a[href*="vista=semana"]').click()`);
+  //  LA PUERTA YA NO VIVE EN `.tm-mas`. Estaba al final de la pantalla, debajo
+  //  del pliegue en un telefono, y por eso el dueño no la encontraba. Ahora es
+  //  la ACCION PRINCIPAL cuando hay algo que decidir, o la fila que va justo
+  //  debajo. Se busca por donde LLEVA, no por donde estaba.
+  const PUERTA = 'a[href*="vista=semana"]';
+  di('ENTRADA_HAY', await ev(`!!document.querySelector('${PUERTA}')`));
+  di('ENTRADA_TX', (await ev(`(function(){var a=document.querySelector('${PUERTA}');
+      return a?(a.textContent+' '+(a.parentNode?a.parentNode.textContent:'')).replace(/\s+/g,' ').trim():'';})()`)));
+  if (await ev(`!!document.querySelector('${PUERTA}')`)) {
+    await ev(`document.querySelector('${PUERTA}').click()`);
     await listo();
     di('ENTRADA_LLEVA_A', await url());
   }

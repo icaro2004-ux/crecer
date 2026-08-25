@@ -451,6 +451,22 @@ try {
   //  Que la accion normal SIGA en pie es la mitad del contrato: el limite que
   //  no bloquea no puede quitarle el boton a lo que si se puede hacer hoy.
   di('CQ_ACCION', await evaluar("(document.querySelector('.tm-btn')||{}).textContent || ''"));
+  //  Y ADONDE LLEVA, que es lo que de verdad decide si el dueño puede aprobar.
+  //  El texto del boton cambio -«Revisar mi semana»- pero la capacidad es la
+  //  misma: la puerta desemboca donde vive Aprobar.
+  di('CQ_ACCION_HREF', await evaluar("(document.querySelector('.tm-btn[href]')||{}).href || ''"));
+  di('CQ_APROBAR_ALCANZABLE', await (async function () {
+    var h = await evaluar("(document.querySelector('.tm-btn[href]')||{}).href || ''");
+    if (!h) return 'sin-enlace';
+    await ir(h);
+    //  En la revision semanal el boton de decidir es [data-aprobar]; en
+    //  aprobar2 es el <button value="aprobar">. Vale cualquiera de los dos.
+    var hay = await evaluar(`!!document.querySelector('[data-aprobar], form button[value="aprobar"]')`);
+    //  Y SE VUELVE. Lo que sigue mide ESTA pantalla; irse y no volver hacia que
+    //  las afirmaciones de abajo midieran otra cosa y fallaran sin motivo.
+    await ir(BASE + '/panel/meta.php?marca=' + marca);
+    return hay ? 'si' : 'no';
+  })());
   //  Lo que el corillo SIGUE haciendo vive en el acordeon, abierto de nacimiento
   //  justo porque esta es una de las dos pantallas que no pueden pedir la accion
   //  normal del plan.

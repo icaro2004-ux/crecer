@@ -689,3 +689,134 @@ function semana_punto(string $frase): string
     $f = rtrim(trim($frase), '.');
     return $f === '' ? '' : $f . '.';
 }
+
+// -- LA PUERTA A LA REVISION, DECIDIDA EN EL DOMINIO ---------
+/**
+ * ¿Tiene el dueño algo que revisar esta semana, y por donde sigue?
+ *
+ * EL HUECO QUE CIERRA. La revision semanal existia y funcionaba, pero a Tu Meta
+ * solo se le habia colgado un enlace pequeño al FINAL de la pantalla. Medido en
+ * un telefono de 360x800: caia en top=680 con el suelo util en 729, o sea con
+ * la base por debajo de la barra de abajo. El dueño no lo veia, y para entrar
+ * tuvo que escribir la URL a mano. Una capacidad a la que no se llega es una
+ * capacidad que no existe.
+ *
+ * QUE CUENTA COMO «PENDIENTE», y no es «no decidida». Es «el dueño puede hacer
+ * algo AHORA», y eso ya lo sabe semana_accion(): si su modo no es `ninguna`,
+ * hay una accion posible —aprobar, ponerle imagen, subir su material, ver que
+ * fallo—. Contar como pendiente una pieza cuya imagen todavia se esta
+ * generando seria mandarlo a una pantalla donde no puede hacer nada.
+ *
+ * LOS CUATRO ESTADOS, y cada uno pide algo distinto de la pantalla:
+ *   sin_semana  no hay jugadas vivas → Tu Meta no inventa nada
+ *   pendiente   hay al menos una accionable → ES la accion principal
+ *   preparando  hay vivas pero ninguna accionable → se dice, SIN boton: un
+ *               boton aqui lleva a un callejon
+ *   lista       todas decididas → cierre honesto y acceso secundario, nunca
+ *               presentado como trabajo pendiente
+ *
+ * Y `pos` NO es siempre 1. Si el dueño ya resolvio la primera, volver a
+ * mandarlo a la 1 le hace repasar lo que ya decidio; a la tercera vez lo deja.
+ *
+ * @return array{estado:string, total:int, pendientes:int, preparando:int,
+ *               decididas:int, pos:int, continua:bool, clase:string}
+ */
+function semana_resumen(PDO $pdo, int $marca_id, ?array $meta, ?array $plan,
+                        string $BASE = '/crecer/panel'): array
+{
+    $vacio = ['estado' => 'sin_semana', 'total' => 0, 'pendientes' => 0, 'preparando' => 0,
+              'decididas' => 0, 'pos' => 1, 'continua' => false, 'clase' => ''];
+    if (!$meta || !$plan) return $vacio;
+
+    try {
+        $sem = semana_construir($pdo, $marca_id, $meta, $plan);
+    } catch (Throwable $e) {
+        //  NO SE CONVIERTE EN «no hay semana». Antes un fallo aqui se tragaba
+        //  con total=0 y la puerta desaparecia sin que nadie se enterara: el
+        //  dueño veia una pantalla coherente y equivocada. Se deja constancia
+        //  -sin datos suyos, solo la clase y el sitio- y la pantalla degrada a
+        //  no prometer nada, que es distinto de afirmar que no hay trabajo.
+        error_log('semana_resumen: ' . get_class($e) . ' marca=' . $marca_id
+                  . ' meta=' . (int)($meta['id'] ?? 0));
+        return ['estado' => 'error', 'total' => 0, 'pendientes' => 0, 'preparando' => 0,
+                'decididas' => 0, 'pos' => 1, 'continua' => false, 'clase' => get_class($e)];
+    }
+
+    $total = (int)$sem['total'];
+    if ($total === 0) {
+        //  «CERO» PUEDE SER DOS COSAS MUY DISTINTAS, y hay que separarlas.
+        //
+        //  semana_construir() no captura nada, pero TODAS sus lecturas si:
+        //  meta_tacticas() y semana_piezas_de() envuelven su consulta en un
+        //  catch y devuelven [] cuando falla. O sea que una base caida, una
+        //  tabla que falta o un permiso retirado NO llegan aqui como error —
+        //  llegan como «esta semana no tiene nada», que es una pantalla
+        //  coherente y mentirosa. El dueño no veria ningun aviso: veria que no
+        //  tiene trabajo.
+        //
+        //  Asi que el cero se COMPRUEBA con una lectura que no traga. Si
+        //  tampoco se puede leer esto, no es que no haya semana: es que no se
+        //  sabe, y eso se dice de otra manera.
+        try {
+            $q = $pdo->prepare("SELECT COUNT(*) FROM crecer_meta_tactica
+                                 WHERE meta_id = ? AND plan_id = ?");
+            $q->execute([(int)$meta['id'], (int)$plan['id']]);
+            $q->fetchColumn();
+        } catch (Throwable $e) {
+            error_log('semana_resumen (cero no verificable): ' . get_class($e)
+                      . ' marca=' . $marca_id . ' meta=' . (int)($meta['id'] ?? 0));
+            return ['estado' => 'error', 'total' => 0, 'pendientes' => 0, 'preparando' => 0,
+                    'decididas' => 0, 'pos' => 1, 'continua' => false, 'clase' => get_class($e)];
+        }
+        return $vacio;
+    }
+
+    $pendientes = 0; $preparando = 0; $decididas = 0;
+    $pos_pend = 0; $pos_prep = 0;
+
+    foreach ($sem['items'] as $i => $it) {
+        $n  = $i + 1;
+        $ac = semana_accion($it, $marca_id, $BASE);
+        $cl = (string)($it['estado']['clave'] ?? 'preparando');
+
+        if ($ac['modo'] !== 'ninguna') {
+            $pendientes++;
+            if ($pos_pend === 0) $pos_pend = $n;          // la primera que le toca
+        } elseif (in_array($cl, ['preparando', 'sin_decidir'], true)) {
+            //  Viva y sin decidir, pero sin nada que el dueño pueda hacer: o no
+            //  tiene pieza todavia, o su imagen sigue en la cola.
+            $preparando++;
+            if ($pos_prep === 0) $pos_prep = $n;
+        } else {
+            $decididas++;                                  // aprobada, programada, publicada...
+        }
+    }
+
+    if ($pendientes > 0) {
+        return ['estado' => 'pendiente', 'total' => $total, 'pendientes' => $pendientes,
+                'preparando' => $preparando, 'decididas' => $decididas,
+                'pos' => $pos_pend,
+                //  «Continuar» solo si de verdad dejo algo resuelto detras.
+                'continua' => $decididas > 0, 'clase' => ''];
+    }
+    if ($preparando > 0) {
+        return ['estado' => 'preparando', 'total' => $total, 'pendientes' => 0,
+                'preparando' => $preparando, 'decididas' => $decididas,
+                'pos' => $pos_prep, 'continua' => false, 'clase' => ''];
+    }
+    return ['estado' => 'lista', 'total' => $total, 'pendientes' => 0, 'preparando' => 0,
+            'decididas' => $decididas, 'pos' => 1, 'continua' => false, 'clase' => ''];
+}
+
+/** El texto de la puerta. Dice cuantas hay y si es empezar o seguir. */
+function semana_frase_puerta(array $r): string
+{
+    if (($r['estado'] ?? '') !== 'pendiente') return '';
+    return $r['continua'] ? 'Continuar revisando mi semana' : 'Revisar mi semana';
+}
+
+/** «2 publicaciones» / «1 publicación». La cifra es la que se puede decidir. */
+function semana_cuantas(int $n): string
+{
+    return $n === 1 ? '1 publicación' : $n . ' publicaciones';
+}

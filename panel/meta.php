@@ -1067,12 +1067,38 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
   .tm-mas a:focus-visible{outline:2px solid var(--tinta);outline-offset:2px;border-radius:8px}
   .tm-mas a .ic{width:18px;height:18px;flex:none;color:var(--muted);stroke-width:1.9}
   .tm-mas a .ic:last-child{margin-left:auto;width:16px;height:16px}
-  /*  La cifra empuja: «Revisar mi semana» no dice si hay trabajo esperando;
-      «Revisar mi semana · 3» si. Va con margin-left:auto para que la flecha
-      quede pegada a ella y no al otro extremo del renglon. */
-  .tm-mas .tm-mas-n{margin-left:auto;display:inline-flex;align-items:center;justify-content:center;
-    min-width:26px;height:26px;padding:0 8px;border-radius:99px;background:var(--tm-rosa-piel);
-    color:var(--tm-rosa-tx);font-size:14px;font-weight:700;line-height:1}
+  /*  Aqui vivia la pildora con la cifra del enlace del fondo. Se va con el:
+      la revision subio a ser accion principal y ya no es una fila mas.
+      Y no es solo limpieza — este comentario NOMBRABA la accion, y el nombre
+      viajaba en el HTML: la prueba que comprueba que en «todo preparandose» no
+      se ofrece ningun boton lo encontraba aqui y fallaba con razon. */
+
+  /* — LA SEMANA · la fila que lleva a decidir —
+     Comparte lenguaje con .tm-mas (fila pulsable con su flecha) pero pesa mas:
+     borde propio, fondo rosa palido y 64px. Es lo siguiente que el dueño tiene
+     que hacer, no un sitio mas al que podria ir. */
+  .tm-semana{display:flex;align-items:center;gap:12px;min-height:64px;margin-top:12px;
+    padding:12px 14px;border:1px solid var(--tm-rosa);border-radius:var(--tm-r,12px);
+    background:var(--tm-rosa-piel);color:var(--tinta);text-decoration:none}
+  .tm-semana:hover{background:#FCE7EE}
+  .tm-semana:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
+  .tm-semana .ic{width:20px;height:20px;flex:none;stroke-width:1.9;color:var(--tm-rosa-tx)}
+  .tm-semana .ic:last-child{margin-left:auto;width:17px;height:17px;color:var(--tm-rosa-tx)}
+  .tm-semana .tx{flex:1;min-width:0}
+  .tm-semana .tx b{display:block;font-size:16px;font-weight:600;line-height:1.3;
+    color:var(--tm-rosa-tx)}
+  .tm-semana .tx span{display:block;font-size:14px;line-height:1.4;color:var(--ink,#4A434F);
+    margin-top:2px}
+
+  /* — y cuando NO hay nada que decidir: se dice, sin boton — */
+  .tm-semana-nota{display:flex;align-items:flex-start;gap:10px;margin-top:12px;
+    padding:12px 14px;border-radius:var(--tm-r,12px);background:var(--crema,#FAF7F4);
+    font-size:15px;line-height:1.5;color:var(--ink,#4A434F)}
+  .tm-semana-nota .ic{width:18px;height:18px;flex:none;margin-top:2px;color:var(--muted)}
+  .tm-semana-nota.ok{background:var(--tm-teal-piel);color:var(--tm-teal-tx)}
+  .tm-semana-nota.ok .ic{color:var(--tm-teal-tx)}
+  .tm-semana-nota a{color:inherit;font-weight:600;min-height:44px;display:inline-flex;
+    align-items:center}
 
   /* — la salida cuando la jugada que manda es imposible para el dueño — */
   .tm-nopuedo{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;
@@ -1692,6 +1718,54 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
       elseif ($E->estado === MetaState::A_SIN_META)         $destino .= '&vista=wizard';
       elseif ($E->estado === MetaState::M_CERRADA)          $destino .= '&vista=wizard&nueva=1';
   }
+
+  // ══ LA PUERTA A LA REVISION SEMANAL ═══════════════════════════════════
+  //
+  //  EL DEFECTO QUE ESTO ARREGLA. La revision semanal funcionaba —entrando a
+  //  mano a `?vista=semana&pos=1` sale «Publicación 1 de 2» y se recorre
+  //  entera—, pero a Tu Meta solo se le habia colgado un enlace pequeño al
+  //  FINAL de la pantalla. Medido en un telefono de 360x800: caia en top=680
+  //  con el suelo util en 729, o sea con la base por debajo de la barra. El
+  //  dueño no lo veia y tuvo que escribir la URL a mano.
+  //
+  //  LA REVISION NO ES UN SITIO MAS: cuando hay algo que decidir, ES la
+  //  siguiente decision del dueño. Asi que no se añade un boton nuevo al lado
+  //  del que ya hay —dos primarias compiten y ninguna gana—: se REPUNTA el que
+  //  ya existe. Mismo sitio, mismo aspecto, misma altura de pantalla; cambia
+  //  adonde lleva y como se llama.
+  //
+  //  Y SOLO CUANDO LA REVISION CUBRE ESE TRABAJO. El compositor manda en el
+  //  resto: si lo que toca es estrenar la meta, ver el plan por primera vez o
+  //  poner dinero, esa sigue siendo la primaria y la revision baja a fila
+  //  secundaria. Repuntar siempre seria taparle al dueño lo que de verdad le
+  //  toca.
+  require_once __DIR__ . '/../includes/meta_semana.php';
+  $mt_sem = semana_resumen($pdo, $marca_id, $meta, $plan_act, $BASE);
+  $mt_sem_url = $BASE . '/meta.php?marca=' . $marca_id . '&vista=semana&pos=' . (int)$mt_sem['pos'];
+
+  //  Los tipos de accion que la revision semanal HACE mejor: son decisiones
+  //  sobre contenido, y alli van ordenadas, contadas y con vuelta al sitio.
+  $mt_sem_cubre = ['aprobacion', 'material', 'reintento'];
+  $mt_sem_manda = $mt_sem['estado'] === 'pendiente'
+      && $act !== null
+      && in_array((string)($act['tipo'] ?? ''), $mt_sem_cubre, true)
+      && !$mt_cuota_manda                        // el limite de imagenes manda sobre todo
+      //  Y CON EL MES DE IMAGENES AGOTADO, TAMPOCO. Una pieza sin arte y sin
+      //  cuota para hacerlo tiene como accion «Ponerle imagen», que ahi mismo
+      //  es un callejon: no queda ninguna. Mientras dure el tope, la accion
+      //  dominante sigue siendo la del compositor —que sabe que si se puede
+      //  hacer hoy— y la revision baja a la fila de abajo, que sigue a la vista.
+      && empty($mt_cuota['lleno']);
+
+  if ($mt_sem_manda) {
+      $destino = $mt_sem_url;
+      $act['etiqueta'] = semana_frase_puerta($mt_sem);
+      $act['consecuencia'] = 'Son ' . semana_cuantas((int)$mt_sem['pendientes'])
+                           . ': las ves una por una y decides.';
+      if ((int)$mt_sem['pendientes'] === 1) {
+          $act['consecuencia'] = 'Es 1 publicación: la ves y decides.';
+      }
+  }
 ?>
 
 <div class="ah">
@@ -2056,6 +2130,33 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
     <?php endif; ?>
   </div>
 
+  <?php /* ── LA SEMANA · lo que toca decidir, o el estado honesto ──────
+           Va JUSTO DEBAJO de la accion principal, no al final: en un telefono,
+           lo que esta debajo del pliegue no existe. Y solo se pinta si no se
+           repunto ya la primaria — si no, serian dos botones para lo mismo. */ ?>
+  <?php if (!$mt_sem_manda): ?>
+    <?php if ($mt_sem['estado'] === 'pendiente'): ?>
+      <a class="tm-semana" href="<?= $h($mt_sem_url) ?>">
+        <?= ico('check-circle') ?>
+        <span class="tx">
+          <b><?= $h(semana_frase_puerta($mt_sem)) ?></b>
+          <span><?= $h(semana_cuantas((int)$mt_sem['pendientes'])) ?> esperando tu decisión</span>
+        </span>
+        <?= ico('chev-der') ?></a>
+    <?php elseif ($mt_sem['estado'] === 'preparando'): ?>
+      <?php /*  SIN BOTON, a proposito. Mandarlo a una pantalla donde no puede
+                hacer nada es peor que no ofrecerle nada.  */ ?>
+      <p class="tm-semana-nota"><?= ico('sparkles') ?>
+        <span>Estoy preparando <?= $h(semana_cuantas((int)$mt_sem['preparando'])) ?>
+          de tu semana. Te aviso en cuanto puedas decidir.</span></p>
+    <?php elseif ($mt_sem['estado'] === 'lista'): ?>
+      <p class="tm-semana-nota ok"><?= ico('check-circle') ?>
+        <span>Tu semana está lista: <?= $h(semana_cuantas((int)$mt_sem['decididas'])) ?>
+          <?= (int)$mt_sem['decididas'] === 1 ? 'decidida' : 'decididas' ?>.
+          <a href="<?= $h($mt_sem_url) ?>">Verlas</a></span></p>
+    <?php endif; ?>
+  <?php endif; ?>
+
   <?php /* ── CAPA 3 · otra pantalla, detras de un enlace ── */ ?>
   <?php /*  LA SALIDA DE LA JUGADA IMPOSIBLE, TAMBIEN DESDE AQUI.
             Cuando lo que manda la pantalla es material (G), inversion (H) o una
@@ -2073,21 +2174,10 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
   <?php endif; ?>
 
   <nav class="tm-mas">
-    <?php /*  LA REVISION DE LA SEMANA, con su numero. Sin la cifra el enlace no
-              dice si hay trabajo esperando o no, y el dueno tiene que entrar
-              para averiguarlo. La cifra sale de la MISMA lista que la vista
-              -jugadas vivas de la semana de turno-, asi que no puede prometer
-              tres y ensenar dos. Si no hay ninguna, el enlace no se pinta. */ ?>
-    <?php
-      $mt_sem_n = 0;
-      if ($meta && $plan_act) {
-          require_once __DIR__ . '/../includes/meta_semana.php';
-          $mt_sem_n = (int)semana_construir($pdo, $marca_id, $meta, $plan_act)['total'];
-      }
-    ?>
-    <?php if ($mt_sem_n > 0): ?>
-      <a href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&vista=semana"><?= ico('check-circle') ?>Revisar mi semana<span class="tm-mas-n"><?= $mt_sem_n ?></span><?= ico('chev-der') ?></a>
-    <?php endif; ?>
+    <?php /*  AQUI YA NO VA LA REVISION. Vivia aqui, al final de la pantalla, y
+              por eso el dueño no la encontraba. Ahora sube: o es la accion
+              principal, o es la fila que va justo debajo. Dejar tambien una
+              copia aqui seria dos puertas compitiendo para lo mismo. */ ?>
     <?php if ($meta): ?>
       <a href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&vista=plan"><?= ico('list') ?>Ver el plan completo<?= ico('chev-der') ?></a>
       <a href="<?= $BASE ?>/sala.php?marca=<?= $marca_id ?>"><?= ico('chat') ?>Discutirla con el corillo<?= ico('chev-der') ?></a>

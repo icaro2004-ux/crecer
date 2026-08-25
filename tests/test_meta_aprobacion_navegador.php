@@ -114,11 +114,24 @@ try {
         echo "\n  — abre la pieza exacta —\n";
         ok('Tu Meta ofrece UNA sola acción primaria', (int)($r['PRIMARIAS_META'] ?? 9) === 1,
            'primarias=' . ($r['PRIMARIAS_META'] ?? '?'));
-        ok('la acción sale hacia aprobar2', strpos((string)($r['ACCION_HREF'] ?? ''), 'aprobar2.php') !== false,
+        //  EL CONTRATO ES «EL OBJETO EXACTO, NO UNA LISTA», y lo sigue
+        //  cumpliendo — por otra puerta. La acción dominante lleva ahora a la
+        //  revisión semanal, en la POSICIÓN de esa misma publicación: una por
+        //  pantalla, con su sitio en la semana y con vuelta. Antes iba a
+        //  aprobar2?ver=N; se movió porque el acceso a la revisión vivía al
+        //  final de Tu Meta y el dueño no lo encontraba.
+        ok('la acción abre la revisión de la semana',
+           strpos((string)($r['ACCION_HREF'] ?? ''), 'vista=semana') !== false,
            (string)($r['ACCION_HREF'] ?? ''));
-        ok('lleva el marcador de vuelta', strpos((string)($r['ACCION_HREF'] ?? ''), 'volver=meta') !== false);
-        ok('abre LA pieza, no la bandeja', strpos((string)($r['ACCION_HREF'] ?? ''), 'ver=' . $PIEZA) !== false,
-           'el contrato pide el objeto exacto, no una lista');
+        ok('conservando la marca',
+           strpos((string)($r['ACCION_HREF'] ?? ''), 'marca=' . $M) !== false,
+           'sin la marca, una cuenta con dos negocios aterriza en el que no era');
+        ok('abre UNA publicación, no la bandeja',
+           preg_match('#Publicaci[óo]n\s+\d+\s+de\s+\d+#ui', (string)($r['DOMINANTE_PASO'] ?? '')) === 1,
+           (string)($r['DOMINANTE_PASO'] ?? '') . ' — el contrato pide el objeto exacto');
+        ok('y es LA pieza que esperaba tu OK',
+           (string)($r['DOMINANTE_PIEZA'] ?? '') === (string)$PIEZA,
+           'en pantalla salió la pieza ' . ($r['DOMINANTE_PIEZA'] ?? '?') . ', se esperaba ' . $PIEZA);
         ok('y la pieza que sale en pantalla es esa',
            (string)($r['PIEZA_ID_EN_FORM'] ?? '') === (string)$PIEZA,
            'en el formulario: ' . (string)($r['PIEZA_ID_EN_FORM'] ?? '—'));

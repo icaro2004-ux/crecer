@@ -273,9 +273,18 @@ try {
            (bool)preg_match('~\d{2}/\d{2}~', (string)($c['CQ_TITULO'] ?? '')),
            'salió: ' . ($c['CQ_TITULO'] ?? '—'));
         //  Aprobar no necesita pintar: el limite NO puede quitarle su boton.
+        //
+        //  LO QUE SE EXIGE ES LA CAPACIDAD, NO LA PALABRA. Antes esto miraba
+        //  que el boton se llamara «aprobar». La puerta cambio de nombre —la
+        //  accion dominante lleva ahora a la revision semanal, que es donde
+        //  vive Aprobar— y la afirmacion literal habria dado por rota una
+        //  capacidad intacta. Asi que se sigue el enlace y se comprueba que al
+        //  final HAY un boton de aprobar. Eso es lo que el limite no puede
+        //  quitarle.
         ok('y la acción normal sigue en pie',
-           stripos($c['CQ_ACCION'] ?? '', 'aprobar') !== false,
-           'salió: ' . ($c['CQ_ACCION'] ?? '—'));
+           ($c['CQ_APROBAR_ALCANZABLE'] ?? '') === 'si',
+           'salió: «' . ($c['CQ_ACCION'] ?? '—') . '» → ' . ($c['CQ_ACCION_HREF'] ?? '—')
+           . ' · aprobar alcanzable: ' . ($c['CQ_APROBAR_ALCANZABLE'] ?? '?'));
         ok('se lee sin hacer scroll', ($c['CQ_SIN_SCROLL'] ?? '') === 'si',
            'bottom/alto = ' . ($c['CQ_SIN_SCROLL'] ?? '?'));
         ok('un solo botón primario en toda la pantalla',
