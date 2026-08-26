@@ -69,6 +69,99 @@ function material_compatible(string $tipo_pieza): array
 }
 
 /**
+ * REGISTRA UNA SUBIDA EN LA BIBLIOTECA — y solo eso.
+ *
+ * `foto_directa` y `video_directo` subian el archivo y escribian `grafica_path`
+ * a pelo: la foto acababa en `crecer_graficas` o en ningun sitio, la pieza
+ * apuntaba a una ruta, y de la Biblioteca del dueño no se enteraba nadie. Dos
+ * consecuencias: el material que el dueño sube desde el editor no aparecia
+ * luego en su Biblioteca, y la pieza no podia decir de donde salio.
+ *
+ * Esto lo registra donde tiene que estar —`crecer_activos`, con `origen`— y
+ * NADA MAS. Registrar y aplicar son dos decisiones distintas: el dueño puede
+ * subir una foto y arrepentirse de usarla, y la foto se queda suya igual.
+ *
+ * VALIDA EN EL SERVIDOR, no por la extension del nombre: un `.jpg` que por
+ * dentro es otra cosa no entra. Misma regla que el cargador de Biblioteca —
+ * este helper existe para que las dos puertas la obedezcan, no para tener otra.
+ *
+ * @param array $f Una entrada de $_FILES ya movida o por mover.
+ * @return array{ok:bool, err?:string, motivo?:string, activo_id?:int, tipo?:string}
+ */
+function material_registrar_subida(PDO $pdo, int $marca_id, array $f, string $nombre = ''): array
+{
+    if ($marca_id <= 0) return ['ok' => false, 'motivo' => 'sin_marca', 'err' => 'No pude guardarlo.'];
+    if (($f['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || empty($f['tmp_name'])) {
+        return ['ok' => false, 'motivo' => 'sin_archivo',
+                'err' => 'No llegó el archivo. Intenta de nuevo.'];
+    }
+    $tmp   = (string)$f['tmp_name'];
+    $bytes = (int)($f['size'] ?? 0);
+
+    //  EL TIPO SALE DEL CONTENIDO. La extension la escribe quien sube.
+    $mime = '';
+    if (function_exists('finfo_open')) {
+        $fi = finfo_open(FILEINFO_MIME_TYPE);
+        $mime = (string)@finfo_file($fi, $tmp);
+        finfo_close($fi);
+    }
+    $IMG = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
+    $VID = ['video/mp4' => 'mp4', 'video/quicktime' => 'mov', 'video/x-m4v' => 'm4v'];
+
+    $MAX_IMG = 15 * 1024 * 1024;
+    $MAX_VID = 100 * 1024 * 1024;
+
+    if (isset($IMG[$mime]))      { $tipo = 'imagen'; $ext = $IMG[$mime]; $max = $MAX_IMG; }
+    elseif (isset($VID[$mime]))  { $tipo = 'video';  $ext = $VID[$mime]; $max = $MAX_VID; }
+    else {
+        return ['ok' => false, 'motivo' => 'formato',
+                'err' => 'Ese archivo no es una foto ni un video que pueda usar.'];
+    }
+    if ($bytes > $max) {
+        return ['ok' => false, 'motivo' => 'tamano',
+                'err' => $tipo === 'imagen'
+                    ? 'Esa foto pesa demasiado (máximo 15 MB).'
+                    : 'Ese video pesa demasiado (máximo 100 MB).'];
+    }
+
+    //  El nombre del archivo lo pone el servidor, siempre. Un nombre que venga
+    //  de fuera es una ruta que viene de fuera.
+    $dirrel = "marca_{$marca_id}/biblioteca";
+    $base   = rtrim(defined('UPLOADS_PATH') ? UPLOADS_PATH : dirname(__DIR__) . '/uploads', '/' . DIRECTORY_SEPARATOR);
+    $dir    = $base . '/' . $dirrel;
+    if (!is_dir($dir)) @mkdir($dir, 0775, true);
+    $fn  = bin2hex(random_bytes(8)) . '.' . $ext;
+    $rel = $dirrel . '/' . $fn;
+
+    $movido = is_uploaded_file($tmp)
+        ? @move_uploaded_file($tmp, $dir . '/' . $fn)
+        : @rename($tmp, $dir . '/' . $fn);
+    if (!$movido) {
+        return ['ok' => false, 'motivo' => 'disco', 'err' => 'No pude guardarlo. Intenta otra vez.'];
+    }
+
+    $ancho = $alto = null;
+    if ($tipo === 'imagen') {
+        $gi = @getimagesize($dir . '/' . $fn);
+        if ($gi) { $ancho = (int)$gi[0]; $alto = (int)$gi[1]; }
+    }
+    $etq = trim($nombre) !== '' ? mb_substr(trim($nombre), 0, 180)
+                                : ($tipo === 'imagen' ? 'Foto' : 'Video');
+    try {
+        $pdo->prepare("INSERT INTO crecer_activos
+                (marca_id,tipo,archivo,nombre,mime,bytes,ancho,alto,origen,estado)
+              VALUES (?,?,?,?,?,?,?,?, 'subido','activo')")
+            ->execute([$marca_id, $tipo, $rel, $etq, $mime, $bytes, $ancho, $alto]);
+    } catch (Throwable $e) {
+        error_log('material_registrar_subida: ' . get_class($e));
+        @unlink($dir . '/' . $fn);
+        return ['ok' => false, 'motivo' => 'fallo', 'err' => 'No pude guardarlo. Intenta otra vez.'];
+    }
+    return ['ok' => true, 'activo_id' => (int)$pdo->lastInsertId(),
+            'tipo' => $tipo, 'archivo' => $rel, 'nombre' => $etq];
+}
+
+/**
  * APLICA UN RECURSO DE LA BIBLIOTECA A UNA PUBLICACION.
  *
  * Cero proveedor, cero cuota, cero generacion. Solo cambia a que archivo apunta

@@ -415,49 +415,97 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // ── Usar foto propia TAL CUAL (sin IA, sin límite) ──
+    //
+    //  ANTES ESTE HANDLER SE LO GUISABA TODO: subia el archivo a marca_N/fotos,
+    //  lo anotaba en `crecer_graficas` y escribia `grafica_path` a pelo. Tres
+    //  consecuencias, y ninguna buena:
+    //
+    //   · la foto que el dueño subia desde el editor NO aparecia despues en su
+    //     Biblioteca — la habia subido y no estaba;
+    //   · la pieza no podia decir de donde salio, porque no habia recurso al
+    //     que apuntar;
+    //   · y sus guardas eran las suyas: aqui se miraba getimagesize(), en
+    //     video_directo finfo, y en la seleccion de Biblioteca otra cosa. Tres
+    //     puertas a la misma capacidad, tres reglas distintas. La que se olvide
+    //     una es la que alguien encuentra.
+    //
+    //  Ahora las dos mitades estan separadas y son del dominio: registrar la
+    //  subida en `crecer_activos` y aplicarla a la pieza. Registrar no aplica
+    //  —el dueño puede subir y arrepentirse, y la foto se queda suya igual— y
+    //  aplicar valida marca, vida, formato y estado de la pieza en un solo
+    //  sitio.
     if ($accion === 'foto_directa') {
-        $dir_fotos = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/fotos";
-        if (!empty($_FILES['imagen']['tmp_name']) && $_FILES['imagen']['error'] === UPLOAD_ERR_OK && $_FILES['imagen']['size'] <= 12*1024*1024) {
-            $info = @getimagesize($_FILES['imagen']['tmp_name']);
-            $ext = ['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp'][$info['mime'] ?? ''] ?? null;
-            if ($ext) {
-                @mkdir($dir_fotos, 0775, true); $fn = 'foto_'.uniqid().'.'.$ext;
-                if (move_uploaded_file($_FILES['imagen']['tmp_name'], $dir_fotos.'/'.$fn)) {
-                    $url = rtrim(UPLOADS_URL, '/') . "/marca_{$marca_id}/fotos/" . $fn;
-                    $pdo->prepare("INSERT INTO crecer_graficas (marca_id, archivo, copy_text) VALUES (?,?,?)")->execute([$marca_id, $url, '(imagen propia)']);
-                    $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$url, $id, $marca_id]);
-                    header('Content-Type: application/json'); echo json_encode(['ok'=>true,'id'=>$id,'img'=>$url], JSON_UNESCAPED_UNICODE); exit;
-                }
-            }
+        require_once __DIR__ . '/../includes/material.php';
+        header('Content-Type: application/json');
+
+        $reg = material_registrar_subida($pdo, (int)$marca_id, $_FILES['imagen'] ?? [],
+                                         'Foto del negocio');
+        if (empty($reg['ok'])) {
+            echo json_encode(['ok'=>false, 'err'=>$reg['err'] ?? 'No pude guardar la foto.'],
+                             JSON_UNESCAPED_UNICODE); exit;
         }
-        header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'No se pudo subir (usa JPG/PNG/WebP, máx 12MB).']); exit;
+        //  `solo_subir` separa las dos decisiones: la hoja de material sube y
+        //  enseña la vista previa ANTES de tocar la publicacion. Sin el, el
+        //  handler aplicaba solo — que es justo lo que no puede hacer.
+        if (!empty($_POST['solo_subir']) || (int)$id <= 0) {
+            echo json_encode(['ok'=>true, 'activo_id'=>(int)$reg['activo_id'],
+                'tipo'=>$reg['tipo'], 'aplicado'=>false,
+                'img'=>rtrim(UPLOADS_URL, '/') . '/' . ltrim((string)$reg['archivo'], '/')],
+                JSON_UNESCAPED_UNICODE); exit;
+        }
+        $ap = material_aplicar($pdo, (int)$marca_id, (int)$id, (int)$reg['activo_id']);
+        if (empty($ap['ok'])) {
+            //  El archivo se queda en su Biblioteca aunque no se pueda aplicar:
+            //  ya es suyo y borrarlo seria castigarle por un formato.
+            echo json_encode(['ok'=>false, 'activo_id'=>(int)$reg['activo_id'],
+                'err'=>$ap['err'] ?? 'No pude ponerla en esta publicación.'],
+                JSON_UNESCAPED_UNICODE); exit;
+        }
+        echo json_encode(['ok'=>true, 'id'=>$id, 'img'=>$ap['archivo'],
+            'activo_id'=>(int)$reg['activo_id'], 'aplicado'=>true], JSON_UNESCAPED_UNICODE); exit;
+
     }
 
     // ── Usar VIDEO propio TAL CUAL (no producimos video; el dueño lo sube) ──
+    //
+    //  Misma historia que foto_directa: subia a marca_N/videos y escribia
+    //  `grafica_path` directo. El video no llegaba a la Biblioteca del dueño y
+    //  la pieza no podia decir de donde salio. Y las guardas eran otras — aqui
+    //  finfo, alli getimagesize —, o sea dos reglas para la misma capacidad.
+    //
+    //  Ahora las dos puertas usan el mismo dominio. La comprobacion de si el
+    //  video CABE en esta pieza tambien se centraliza: la hace
+    //  material_aplicar() mirando el tipo, y si no cabe lo dice — no lo
+    //  convierte nadie.
     if ($accion === 'video_directo') {
+        require_once __DIR__ . '/../includes/material.php';
         header('Content-Type: application/json');
-        $MAXV = 100 * 1024 * 1024;   // 100 MB (el server puede tener límite menor)
-        $f = $_FILES['video'] ?? null;
-        if (!$f || ($f['error'] ?? 1) !== UPLOAD_ERR_OK || empty($f['tmp_name'])) {
-            $why = ($f && in_array($f['error'] ?? 0, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true))
-                 ? 'El video excede el límite del servidor. Prueba uno más liviano.'
-                 : 'No se recibió el video. Intenta de nuevo.';
-            echo json_encode(['ok'=>false,'err'=>$why]); exit;
+
+        $reg = material_registrar_subida($pdo, (int)$marca_id, $_FILES['video'] ?? [],
+                                         'Video del negocio');
+        if (empty($reg['ok'])) {
+            echo json_encode(['ok'=>false, 'err'=>$reg['err'] ?? 'No pude guardar el video.'],
+                             JSON_UNESCAPED_UNICODE); exit;
         }
-        if ($f['size'] > $MAXV) { echo json_encode(['ok'=>false,'err'=>'El video es muy grande (máx 100 MB).']); exit; }
-        $ext = strtolower(pathinfo((string)$f['name'], PATHINFO_EXTENSION));
-        $mime = '';
-        if (function_exists('finfo_open')) { $fi = finfo_open(FILEINFO_MIME_TYPE); $mime = (string)@finfo_file($fi, $f['tmp_name']); finfo_close($fi); }
-        $ext_ok  = in_array($ext, ['mp4','mov','m4v'], true);
-        $mime_ok = ($mime === '' || in_array($mime, ['video/mp4','video/quicktime','video/x-m4v'], true));
-        if (!$ext_ok || !$mime_ok) { echo json_encode(['ok'=>false,'err'=>'Formato no válido. Sube un video MP4 o MOV.']); exit; }
-        $dir = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/videos";
-        @mkdir($dir, 0775, true);
-        $fn  = 'vid_' . uniqid() . '.' . ($ext === 'mov' ? 'mov' : 'mp4');
-        if (!move_uploaded_file($f['tmp_name'], $dir . '/' . $fn)) { echo json_encode(['ok'=>false,'err'=>'No se pudo guardar el video.']); exit; }
-        $url = rtrim(UPLOADS_URL, '/') . "/marca_{$marca_id}/videos/" . $fn;
-        if ($id) $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$url, $id, $marca_id]);
-        echo json_encode(['ok'=>true,'id'=>$id,'video'=>$url]); exit;
+        if ((string)$reg['tipo'] !== 'video') {
+            echo json_encode(['ok'=>false, 'activo_id'=>(int)$reg['activo_id'],
+                'err'=>'Eso no es un video. Sube un MP4 o un MOV.'],
+                JSON_UNESCAPED_UNICODE); exit;
+        }
+        if (!empty($_POST['solo_subir']) || (int)$id <= 0) {
+            echo json_encode(['ok'=>true, 'activo_id'=>(int)$reg['activo_id'],
+                'tipo'=>'video', 'aplicado'=>false,
+                'video'=>rtrim(UPLOADS_URL, '/') . '/' . ltrim((string)$reg['archivo'], '/')],
+                JSON_UNESCAPED_UNICODE); exit;
+        }
+        $ap = material_aplicar($pdo, (int)$marca_id, (int)$id, (int)$reg['activo_id']);
+        if (empty($ap['ok'])) {
+            echo json_encode(['ok'=>false, 'activo_id'=>(int)$reg['activo_id'],
+                'err'=>$ap['err'] ?? 'No pude ponerlo en esta publicación.'],
+                JSON_UNESCAPED_UNICODE); exit;
+        }
+        echo json_encode(['ok'=>true, 'id'=>$id, 'video'=>$ap['archivo'],
+            'activo_id'=>(int)$reg['activo_id'], 'aplicado'=>true], JSON_UNESCAPED_UNICODE); exit;
     }
 
     // ── POST DESDE VIDEO: el dueño sube su video YA LISTO (editado por él) y el
