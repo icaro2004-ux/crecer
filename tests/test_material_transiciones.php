@@ -178,6 +178,20 @@ try {
     $rg2 = generar_grafica($pdo, $M, null, ['copy' => '[prueba] Desde cero.',
         'con_texto' => false, 'con_logo' => false, 'contenido_id' => $C1]);
     ok('entrega una imagen', !empty($rg2['archivo']), json_encode($rg2));
+
+    //  Y LO QUE SE APUNTA EN EL LOG NO PUEDE DECIR QUE COSTO DINERO.
+    //  `crecer_ia_log` es la evidencia del gasto: la que se le enseña al jurado
+    //  y la que sostiene el margen que se le promete al cliente. Una corrida con
+    //  el transporte sustituido escribia el precio estimado del modelo igual que
+    //  una llamada de verdad — en un dia habia $4.55 de imagenes que nadie pidio,
+    //  indistinguibles de las que si.
+    $ult = $pdo->query("SELECT costo_usd, accion FROM crecer_ia_log
+                         WHERE marca_id={$M} ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+    ok('la línea del log no cobra nada', (float)($ult['costo_usd'] ?? -1) === 0.0,
+       json_encode($ult));
+    ok('y se ve que es de prueba',
+       str_starts_with((string)($ult['accion'] ?? ''), '[prueba]'),
+       (string)($ult['accion'] ?? '') . ' · sin marca no hay forma de apartarlas al reportar');
     //  Esto es lo que hace el handler cuando NO hubo foto de entrada.
     $pdo->prepare("UPDATE crecer_contenido SET grafica_path=? WHERE id=?")
         ->execute([$rg2['archivo'], $C1]);

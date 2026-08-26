@@ -390,7 +390,9 @@ function ia_ejecutar(PDO $pdo, string $agente, string $accion, string $prompt, a
     }
 
     $latencia_ms = (int)round((microtime(true) - $t0) * 1000);
-    $costo = ia_costo($modelo, $tokens_in, $tokens_out);
+    //  Y el texto igual: en modo prueba el costo es cero porque es cero.
+    $costo = ia_costo_real(ia_costo($modelo, $tokens_in, $tokens_out));
+    $accion = ia_accion_marcada($accion);
 
     $stmt = $pdo->prepare(
         "INSERT INTO crecer_ia_log
@@ -1128,6 +1130,24 @@ function motor_imagen(string $prompt, array $opts = []): array {
  * Wrapper: genera imagen, la guarda en uploads/$destino_rel y la registra en
  * crecer_ia_log. Devuelve ['archivo'=>url, 'costo', 'modelo'].
  */
+//  ── UNA PRUEBA NO CUESTA DINERO, Y EL LOG NO PUEDE DECIR QUE SI ──────────
+//
+//  `crecer_ia_log` no es un log de depuracion: es la EVIDENCIA del gasto —la
+//  que se le enseña al jurado y la que sostiene el margen que se le promete al
+//  cliente—. Y hasta ahora una corrida con el transporte sustituido escribia
+//  sus lineas con el precio estimado del modelo, exactamente igual que una
+//  llamada de verdad: en un solo dia habia $4.55 de imagenes que nunca se
+//  pidieron, indistinguibles de las que si.
+//
+//  En modo prueba el costo es CERO —porque es cero— y la accion lo dice, para
+//  que cualquier consulta de evidencia pueda apartarlas sin adivinar.
+function ia_es_prueba(): bool {
+    return defined('CRECER_TEST_MODE') && CRECER_TEST_MODE;
+}
+function ia_costo_real(float $costo): float { return ia_es_prueba() ? 0.0 : $costo; }
+function ia_accion_marcada(string $accion): string {
+    return ia_es_prueba() ? mb_substr('[prueba] ' . $accion, 0, 80) : $accion;
+}
 function ia_imagen(PDO $pdo, string $agente, string $accion, string $prompt, string $destino_rel, array $opts = []): array {
     $t0 = microtime(true); $estado = 'ok'; $err = null; $modelo = 'gemini-2.5-flash-image'; $rel = null; $razon = null;
 
@@ -1178,7 +1198,9 @@ function ia_imagen(PDO $pdo, string $agente, string $accion, string $prompt, str
         : 0;
     // La decisión del Director de Arte queda en la acción (evidencia del ruteo).
     // OJO: crecer_ia_log.accion es VARCHAR(80) → truncar para no romper el INSERT.
-    $accion_log = mb_substr($razon ? ($accion . ' · ' . $razon) : $accion, 0, 80);
+    $accion_log = ia_accion_marcada(
+        mb_substr($razon ? ($accion . ' · ' . $razon) : $accion, 0, 68));
+    $costo = ia_costo_real($costo);
     $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,costo_usd,latencia_ms,estado,error_msg)
                    VALUES (?,?,?,?,?,?,?,?,?,?)")
         ->execute([$opts['marca_id'] ?? null, $agente, $accion_log, $modelo, $prompt, $rel, $costo, $lat, $estado, $err]);
