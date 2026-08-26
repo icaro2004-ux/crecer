@@ -245,6 +245,47 @@ try {
         ok('otra marca no puede tocar esta pieza', empty($aj['ok']), json_encode($aj));
     }
 
+    // ══════════════════════════════════════════════════════════════
+    //  3 · LA HOJA SE ALCANZA DESDE DONDE HACE FALTA
+    // ══════════════════════════════════════════════════════════════
+    //
+    //  ESTO ES ESTRUCTURAL A PROPOSITO. El recorrido de navegador la abre y la
+    //  mide, pero solo si la semana de esa fixture tiene una pieza esperando
+    //  material — y no siempre la tiene. Una prueba que se salta en silencio se
+    //  lee como una prueba que paso, asi que la conexion se afirma tambien aqui,
+    //  donde no depende de que la fixture tenga suerte.
+    echo "\n  — y se alcanza desde donde hace falta —\n";
+    $vista = (string)@file_get_contents(dirname(__DIR__) . '/panel/_meta_semana.php');
+
+    ok('«Imagen o video» abre la hoja, no otra pantalla',
+       str_contains($vista, "if (a === 'arte')       return menuMaterial(el);"),
+       'antes hacia location.href y te sacaba de la semana');
+
+    ok('la primaria de «falta tu foto» también',
+       str_contains($vista, "'data-material'") && str_contains($vista, "$$('[data-material]')"),
+       'es el momento de material mas frecuente que hay');
+
+    ok('y sigue siendo un enlace de verdad',
+       str_contains($vista, 'href="<?= $h($x[\'puerta\']) ?>"' . "\n"
+                            . '             <?= $x[\'clave\'] === \'falta_material\''),
+       'sin JavaScript tiene que llevar a la pantalla de la pieza igual que antes');
+
+    ok('la subida separa las dos decisiones',
+       str_contains($vista, "fd.append('solo_subir', '1');"),
+       'subir termina en su Biblioteca pase lo que pase; ponerlo es la decision de despues');
+
+    ok('y hay vista previa antes de aplicar',
+       str_contains($vista, 'URL.createObjectURL') && str_contains($vista, 'sm-prev'),
+       'una foto que no ha visto puesta es una foto que va a querer quitar');
+
+    ok('mejorar dice lo que cuesta ANTES',
+       str_contains($vista, 'Gasta 1 de las imágenes de tu mes.'),
+       'el precio no se descubre en un aviso de error');
+
+    ok('y no se ofrece sobre arte generado',
+       str_contains($vista, 'if (d.matMejorable)'),
+       'sobre lo generado no se «mejora»: se vuelve a pintar, y eso ya tiene su fila');
+
 } catch (Throwable $e) {
     $fallos++; echo "\n  EXCEPCION · " . get_class($e) . ': ' . $e->getMessage()
                   . "\n  " . $e->getFile() . ':' . $e->getLine() . "\n";

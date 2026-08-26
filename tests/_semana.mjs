@@ -306,6 +306,33 @@ try {
   di('MAT_HOJA_DICE_QUE_LLEVA', await ev(
     '(document.querySelector("#smHojaC .sm-nota span")||{}).textContent || ""'));
   di('MAT_HOJA_SIGO_EN_LA_SEMANA', await ev('/vista=semana/.test(location.search)'));
+  //  LA HOJA ES LA PANTALLA MIENTRAS ESTA ABIERTA, asi que se mide como tal:
+  //  con el velo puesto, MEDIR mira la hoja y no lo que quedo detras.
+  di('MED_MAT_360', await ev(MEDIR).then(JSON.stringify));
+  await tirar('03b_material_360', 360, 800);
+  await ev('(function(){var x=document.getElementById("smCerrar"); if(x) x.click();})()');
+  await dormir(200);
+
+  //  LA PRIMARIA DE «FALTA TU FOTO» ABRE LA MISMA HOJA. Es el momento de
+  //  material mas frecuente que hay, y hasta ahora sacaba al dueño de la
+  //  semana. Se mira en TODA la lista, no solo en la publicacion abierta:
+  //  la que espera material puede ser cualquiera.
+  const hayFalta = await ev(
+    'document.querySelectorAll(".sm-p [data-material]").length');
+  di('FALTA_PRIMARIAS', hayFalta);
+  if (Number(hayFalta) > 0) {
+    await ev('(function(){var b=document.querySelector(".sm-p [data-material]");'
+           + ' if(b){ b.closest(".sm-p").classList.add("on"); b.click(); }})()');
+    await dormir(300);
+    di('FALTA_ABRE_HOJA', await ev(
+      '(document.getElementById("smHojaT")||{}).textContent === "Imagen o video"'));
+    di('FALTA_SIN_SALIR', await ev('/vista=semana/.test(location.search)'));
+    await ev('(function(){var x=document.getElementById("smCerrar"); if(x) x.click();})()');
+    await dormir(200);
+  }
+  await clicSel('.sm-p.on [data-ajustar]');
+  await clicSel('#smHojaC .sm-fila[data-a="arte"]');
+  await dormir(200);
   //  Y la puerta a la pieza, desde dentro de la hoja.
   await clicSel('#smHojaC .sm-fila[data-m="arte"]');
   await listo();
@@ -424,12 +451,28 @@ try {
   await dormir(600);
   di('MED_414', await ev(MEDIR).then(JSON.stringify));
   await tirar('06_semana_414', 414, 896);
+  //  LA HOJA TAMBIEN VIVE EN LAS OTRAS DOS. Medirla solo a 360 dejaba sin
+  //  mirar justo donde cambia: en 1440 una hoja de movil estirada a lo ancho
+  //  es una tira de texto de 1400px que no se lee.
+  await clicSel('.sm-p.on [data-ajustar]');
+  await clicSel('#smHojaC .sm-fila[data-a="arte"]');
+  await dormir(250);
+  di('MED_MAT_414', await ev(MEDIR).then(JSON.stringify));
+  await tirar('06b_material_414', 414, 896);
+  await ev('(function(){var x=document.getElementById("smCerrar"); if(x) x.click();})()');
+  await dormir(250);
 
   await cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await dormir(600);
   di('MED_1440', await ev(MEDIR).then(JSON.stringify));
   di('ESCRITORIO_LISTA', await ev('document.querySelectorAll("#smLista .sm-li").length'));
   await tirar('07_semana_1440', 1440, 900);
+
+  await clicSel('.sm-p.on [data-ajustar]');
+  await clicSel('#smHojaC .sm-fila[data-a="arte"]');
+  await dormir(250);
+  di('MED_MAT_1440', await ev(MEDIR).then(JSON.stringify));
+  await tirar('07b_material_1440', 1440, 900);
 
   di('ERRORES', await errs());
   di('OK', 1);

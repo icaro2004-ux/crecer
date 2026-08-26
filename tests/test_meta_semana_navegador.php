@@ -234,7 +234,47 @@ try {
     ok('y sigo en la MISMA publicación', ($r['FECHA_SIGO_EN_POS'] ?? '') === 'Publicación 2 de 3',
        $r['FECHA_SIGO_EN_POS'] ?? '');
 
-    // ══ 5 · SALIR A LA IMAGEN Y VOLVER ════════════════════════
+    // ══ 5 · LA HOJA DE IMAGEN, Y LA SALIDA QUE SIGUE VOLVIENDO ═
+    echo "\n  — «Imagen o video» decide sin sacarte de la semana —\n";
+    ok('abre una hoja, no otra pantalla', ($r['MAT_HOJA_TITULO'] ?? '') === 'Imagen o video',
+       $r['MAT_HOJA_TITULO'] ?? '');
+    ok('y sigo en la revisión semanal', ($r['MAT_HOJA_SIGO_EN_LA_SEMANA'] ?? '') === 'true',
+       'la decisión es pequeña: no merece perder el sitio');
+    //  Tres caminos con material aplicado, dos sin él: «mejorar» solo aparece
+    //  cuando hay una foto suya que mejorar, porque sobre arte generado no se
+    //  mejora nada — se vuelve a pintar, y eso ya tiene su propia fila.
+    ok('ofrece los caminos que caben', in_array((string)($r['MAT_HOJA_CAMINOS'] ?? ''), ['3','4'], true),
+       ($r['MAT_HOJA_CAMINOS'] ?? '') . ' filas · usar una tuya, subir, [mejorar,] que la haga');
+    ok('y dice qué lleva ahora', trim((string)($r['MAT_HOJA_DICE_QUE_LLEVA'] ?? '')) !== '',
+       'sin eso la hoja abre igual en los tres casos y se decide a ciegas');
+
+    //  Y la primaria de «falta tu foto» abre la MISMA hoja, sin sacarte de la
+    //  semana. Si esta semana no hay ninguna esperando material, se dice — una
+    //  prueba que se salta en silencio se lee como una prueba que paso.
+    $fp = (int)($r['FALTA_PRIMARIAS'] ?? 0);
+    if ($fp > 0) {
+        ok('«Subir tu foto» abre la hoja', ($r['FALTA_ABRE_HOJA'] ?? '') === 'true',
+           'era el momento de material mas frecuente, y sacaba al dueño de la semana');
+        ok('y sin salir de la semana', ($r['FALTA_SIN_SALIR'] ?? '') === 'true');
+    } else {
+        echo "  (esta semana no hay ninguna esperando material · sin primaria que medir)\n";
+    }
+
+    //  LA PIEL DE LA HOJA, EN LAS TRES ANCHURAS. Es una pantalla nueva y se
+    //  mide como las demas: nada fuera del ancho, nada que se toque por debajo
+    //  de 44x44, nada que se lea por debajo de 14px. Medirla solo a 360 dejaba
+    //  sin mirar justo donde cambia.
+    foreach (['360' => 'MED_MAT_360', '414' => 'MED_MAT_414', '1440' => 'MED_MAT_1440'] as $an => $k) {
+        $m = json_decode((string)($r[$k] ?? '{}'), true) ?: [];
+        ok("la hoja a {$an} · no se sale a lo ancho",
+           (int)($m['horiz'] ?? 0) === 0 && empty($m['fuera']),
+           json_encode(array_slice((array)($m['fuera'] ?? []), 0, 4)));
+        ok("la hoja a {$an} · ningún objetivo bajo 44x44",
+           empty($m['chicos']), json_encode(array_slice((array)($m['chicos'] ?? []), 0, 4)));
+        ok("la hoja a {$an} · ningún texto bajo 14px",
+           empty($m['finos']), json_encode(array_slice((array)($m['finos'] ?? []), 0, 4)));
+    }
+
     echo "\n  — salir a otra pantalla y volver a la publicación exacta —\n";
     ok('la imagen abre donde se hace', strpos($r['ARTE_URL'] ?? '', 'aprobar2.php') !== false, $r['ARTE_URL'] ?? '');
     ok('y se lleva el regreso con la posición', ($r['ARTE_LLEVA_POS'] ?? '') === 'true', $r['ARTE_URL'] ?? '');

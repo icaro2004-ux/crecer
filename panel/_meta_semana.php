@@ -562,7 +562,18 @@ foreach ($sm['items'] as $i => $it) {
         <?php if ($a['modo'] === 'aprobar'): ?>
           <button type="button" class="sm-bt pri" data-aprobar><?= ico('check') ?>Aprobar</button>
         <?php elseif ($a['modo'] === 'ir'): ?>
-          <a class="sm-bt <?= $h($a['tono']) ?>" href="<?= $h($x['puerta']) ?>">
+          <?php /*  «SUBIR TU FOTO» ABRE LA HOJA, NO OTRA PANTALLA. Es el momento
+                    de material mas frecuente que hay —la pieza esta esperandola— y
+                    hasta ahora sacaba al dueño de la semana para volver a traerlo.
+                    La hoja hace las tres cosas ahi mismo: la Biblioteca, la camara
+                    y el arte.
+
+                    Sigue siendo un <a> con su href de verdad: sin JavaScript lleva
+                    a la pantalla de la pieza, que es donde siempre llevo. El JS
+                    solo se pone delante. Un enlace que solo funciona con JS es un
+                    enlace que no funciona en el telefono de la reposteria.  */ ?>
+          <a class="sm-bt <?= $h($a['tono']) ?>" href="<?= $h($x['puerta']) ?>"
+             <?= $x['clave'] === 'falta_material' && $x['mat']['editable'] ? 'data-material' : '' ?>>
             <?= ico($x['clave'] === 'falta_material' ? 'camera' : 'image') ?><?= $h($a['etiqueta']) ?></a>
         <?php endif; ?>
 
@@ -833,6 +844,16 @@ foreach ($sm['items'] as $i => $it) {
 
   $$('[data-ajustar]').forEach(function (b) {
     b.addEventListener('click', function () { menuAjustar(b.closest('.sm-p')); });
+  });
+
+  //  La primaria de «falta tu foto» va directa a la hoja de material: el paso
+  //  intermedio de «¿qué quieres ajustar?» no aporta nada cuando lo que falta
+  //  ya se sabe.
+  $$('[data-material]').forEach(function (b) {
+    b.addEventListener('click', function (e) {
+      e.preventDefault();
+      menuMaterial(b.closest('.sm-p'));
+    });
   });
 
   function menuAjustar(el) {
