@@ -216,6 +216,78 @@ $page_title = 'Biblioteca';
 $guia = null; // La galería se usa sola: tap → fullscreen → swipe. Sin explicación.
 require __DIR__ . '/_shell.php';
 ?>
+<?php
+// ══════════════════════════════════════════════════════════════════════
+//  MODO SELECCION — Biblioteca abierta DESDE una publicacion
+//
+//  Entrar aqui desde el ajuste de una publicacion era un viaje de ida: se
+//  perdia de que pieza venia el dueño, en que posicion de la semana estaba, y
+//  no habia forma de elegir una foto y volver con ella. Acababa en su galeria,
+//  mirando fotos, sin publicacion y sin camino de vuelta.
+//
+//  EL DESTINO SE CONSTRUYE, NO SE COPIA. Lo arma MetaRetorno con la marca de la
+//  sesion y una posicion ya validada — nunca con una URL que venga en la
+//  peticion, que seria un redirect abierto con otro nombre.
+//
+//  Y ABIERTA DESDE EL MENU NO CAMBIA NADA: sin retorno valido, todo esto no se
+//  pinta y la galeria es la de siempre.
+// ══════════════════════════════════════════════════════════════════════
+require_once __DIR__ . '/../core/Meta/MetaRetorno.php';
+require_once __DIR__ . '/../includes/material.php';
+
+$bib_pieza = 0; $bib_pos = null; $bib_tipos = []; $bib_pieza_fila = null;
+if (MetaRetorno::vieneDeMeta($_GET)) {
+    $bib_pos   = MetaRetorno::posicion($_GET);
+    $bib_pieza = (int)($_GET['pieza'] ?? 0);
+    if ($bib_pieza > 0) {
+        //  La pieza tiene que ser SUYA. Sin esta consulta, cualquiera podria
+        //  abrir la seleccion apuntando a la publicacion de otro negocio.
+        $q = $pdo->prepare("SELECT id, tipo, caption FROM crecer_contenido
+                             WHERE id=? AND marca_id=?");
+        $q->execute([$bib_pieza, $marca_id]);
+        $bib_pieza_fila = $q->fetch(PDO::FETCH_ASSOC) ?: null;
+        if (!$bib_pieza_fila) $bib_pieza = 0;
+        else $bib_tipos = material_compatible((string)$bib_pieza_fila['tipo']);
+    }
+}
+$bib_selecc = $bib_pieza > 0;
+$bib_volver = MetaRetorno::url((int)$marca_id, '', $bib_pos);
+?>
+<?php if ($bib_selecc): ?>
+<div class="bib-sel" id="bibSel"
+     data-pieza="<?= (int)$bib_pieza ?>"
+     data-volver="<?= htmlspecialchars($bib_volver, ENT_QUOTES) ?>"
+     data-tipos="<?= htmlspecialchars(implode(',', $bib_tipos), ENT_QUOTES) ?>">
+  <p class="bib-sel-t">Elige material para esta publicación.</p>
+  <p class="bib-sel-s"><?= htmlspecialchars(
+      $bib_tipos === ['imagen'] ? 'Esta publicación lleva una imagen.'
+                                : 'Esta publicación admite foto o video.', ENT_QUOTES) ?></p>
+  <div class="bib-sel-pie">
+    <button type="button" class="bib-sel-usar" id="bibUsar" disabled>Usar este material</button>
+    <a class="bib-sel-x" href="<?= htmlspecialchars($bib_volver, ENT_QUOTES) ?>">Cancelar</a>
+  </div>
+</div>
+<style>
+  /*  La barra de seleccion. Va arriba y se queda: es el contexto de por que
+      esta aqui, y sin ella la galeria no dice nada.  */
+  .bib-sel{position:sticky;top:0;z-index:30;background:var(--card,#fff);
+    border:1px solid var(--line);border-radius:12px;padding:14px;margin:10px 0 14px}
+  .bib-sel-t{margin:0;font-size:16px;font-weight:600;color:var(--tinta)}
+  .bib-sel-s{margin:4px 0 0;font-size:14px;line-height:1.5;color:var(--muted)}
+  .bib-sel-pie{display:flex;gap:9px;align-items:center;margin-top:12px}
+  .bib-sel-usar{flex:1;min-height:48px;border:0;border-radius:10px;background:#D42A5C;
+    color:#fff;font:600 16px/1 inherit;cursor:pointer}
+  .bib-sel-usar[disabled]{background:#E4DED7;color:#8D857C;cursor:not-allowed}
+  .bib-sel-x{display:inline-flex;align-items:center;justify-content:center;min-height:48px;
+    padding:0 16px;border:1px solid var(--line);border-radius:10px;color:var(--tinta);
+    text-decoration:none;font:600 15px/1 inherit}
+  .bib-item.bib-on{outline:3px solid #D42A5C;outline-offset:2px;border-radius:12px}
+  .bib-sel-err{margin:10px 0 0;font-size:14px;line-height:1.5;color:#8A5310;display:none}
+  .bib-sel-err.on{display:block}
+</style>
+<p class="bib-sel-err" id="bibErr" role="alert"></p>
+<?php endif; ?>
+
 <?php /*  LA VUELTA AL WIZARD DE LA META.
           El paso «tu material» invita a venir aqui a subir fotos, y esta
           pantalla no tenia forma de volver: era un viaje de ida y el dueño
