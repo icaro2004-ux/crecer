@@ -1528,13 +1528,26 @@ function edicion_anotar(PDO $pdo, int $marca_id, int $contenido_id,
     }
 }
 
-function aprender_de_edicion(PDO $pdo, int $marca_id, string $original, string $editado): ?string {
+function aprender_de_edicion(PDO $pdo, int $marca_id, string $original, string $editado,
+                            array $opts = []): ?string {
+    //  $opts existe para que el DIGESTOR pueda reusar este prompt sin copiarlo,
+    //  y son dos cosas concretas:
+    //
+    //   · `mock_texto`  — con las llaves en blanco, ia_ejecutar() contesta con
+    //     el texto de reserva. El de aqui es 'NINGUNA', que es lo correcto para
+    //     la ruta viva: sin modelo, no se inventa una leccion. Pero una prueba
+    //     del ciclo necesita poder decir «supon que el Aprendiz contesto esto».
+    //   · `propagar`    — esta funcion se traga sus errores a proposito: nacio
+    //     dentro del guardado del caption, y alli un fallo del modelo no podia
+    //     tumbar la escritura del dueño. El digestor SI necesita distinguir «no
+    //     hay nada que aprender» de «el modelo fallo»: lo primero cierra la
+    //     nota, lo segundo la deja para reintentar.
     if (trim($original) === trim($editado) || trim($editado) === '') return null;
     $prompt = "El dueño de un negocio boricua editó el caption de un post. Compara el ORIGINAL con el EDITADO y extrae SOLO lecciones de VOCABULARIO o VOZ boricua para no repetir el error (ej: 'usa china, no naranja'; 'evita platicar, di hablar'). Máximo 2 viñetas muy cortas. Si el cambio NO es de vocabulario/voz (solo cambió datos o contenido), responde EXACTAMENTE: NINGUNA.\n\nORIGINAL:\n{$original}\n\nEDITADO:\n{$editado}";
     try {
         $r = ia_ejecutar($pdo, 'aprendiz', 'Aprender de edicion', $prompt, [
             'marca_id' => $marca_id, 'thinking_budget' => 0, 'max_tokens' => 200, 'temperatura' => 0.3,
-            'mock_texto' => 'NINGUNA',
+            'mock_texto' => (string)($opts['mock_texto'] ?? 'NINGUNA'),
         ]);
         $leccion = trim($r['texto']);
         if ($leccion === '' || stripos($leccion, 'NINGUNA') !== false) return null;
@@ -1557,7 +1570,186 @@ function aprender_de_edicion(PDO $pdo, int $marca_id, string $original, string $
             memoria_consolidar($pdo, $marca_id);
         }
         return $leccion;
-    } catch (Throwable $e) { return null; }
+    } catch (Throwable $e) {
+        if (!empty($opts['propagar'])) throw $e;
+        return null;
+    }
+}
+
+/**
+ * EL DIGESTOR — el que convierte las notas crudas en algo que el corillo sabe.
+ *
+ * POR QUE EXISTE. Al sacar la llamada al modelo del guardado del caption
+ * quedaron filas `edicion_cruda` en `pendiente_revision`… y nadie que las
+ * leyera. Una cola que nadie consume no es trabajo diferido: es trabajo
+ * perdido. Esto la consume, FUERA de la pantalla del dueño — lo llama el cron
+ * del corillo, no una carga de pagina.
+ *
+ * LOS ESTADOS SALEN DEL ESQUEMA QUE HAY, sin DDL. `crecer_memoria.estado` es un
+ * enum de cuatro valores y no tiene «en proceso» ni «procesada», asi que:
+ *
+ *   pendiente      → estado='pendiente_revision' y sin lease vivo
+ *   en proceso     → sigue 'pendiente_revision', con `valid_until` en el futuro
+ *                    (el LEASE: quien lo pone, la tiene reclamada)
+ *   procesada      → estado='superseded' y `superseded_by` = id de la leccion.
+ *                    Es literalmente lo que paso: la nota cruda quedo
+ *                    reemplazada por lo que se aprendio de ella.
+ *   fallo recuperable → vuelve a 'pendiente_revision', lease liberado, y el
+ *                    numero de intentos apuntado en `datos_json`
+ *   fallo terminal → estado='descartada' con el porque escrito. No se borra:
+ *                    una nota que fallo cinco veces es justo la que hay que
+ *                    poder mirar.
+ *
+ * LA CARRERA LA ARBITRA EL LEASE, no un «creada hace menos de N minutos». El
+ * UPDATE lleva la condicion en el WHERE y se mira `rowCount()`: dos crones
+ * simultaneos entran los dos, pero solo uno mueve la fila — el otro se va sin
+ * llamar a nadie. Eso es lo que impide pagar dos veces por la misma leccion.
+ *
+ * @return array{digeridas:int, fallidas:int, llamadas:int, sin_leccion:int}
+ */
+if (!function_exists('aprendiz_leccion')) {
+/**
+ * EL BORDE DEL APRENDIZ, sustituible — el mismo patron que ia_http_post_retry()
+ * y openai_responses_crear_bg(). Por aqui sale la unica llamada al modelo del
+ * digestor, asi que es el sitio donde un runner puede poner su doble y probar
+ * el ciclo entero —incluido el fallo— sin llamar a nadie.
+ *
+ * Por dentro no hay nada nuevo: es aprender_de_edicion(), el prompt de siempre,
+ * con `propagar` puesto para que el digestor pueda distinguir «no hay nada que
+ * aprender» de «el modelo fallo».
+ */
+function aprendiz_leccion(PDO $pdo, int $marca_id, string $original,
+                          string $editado, array $opts = []): ?string {
+    return aprender_de_edicion($pdo, $marca_id, $original, $editado,
+                               $opts + ['propagar' => true]);
+}
+}
+
+function edicion_digerir(PDO $pdo, int $marca_id, int $tope = 10): array
+{
+    require_once __DIR__ . '/memoria.php';
+    $out = ['digeridas' => 0, 'fallidas' => 0, 'llamadas' => 0, 'sin_leccion' => 0];
+    if ($marca_id <= 0 || $tope <= 0) return $out;
+
+
+    $MAX_INTENTOS = 3;
+    $LEASE_MIN    = 10;   // minutos que se reserva una fila reclamada
+
+    try {
+        $q = $pdo->prepare(
+            "SELECT id, fuente_id, datos_json FROM crecer_memoria
+              WHERE marca_id = ? AND tipo = 'edicion_cruda'
+                AND estado = 'pendiente_revision'
+                AND (valid_until IS NULL OR valid_until < NOW())
+              ORDER BY id ASC LIMIT {$tope}");
+        $q->execute([$marca_id]);
+        $filas = $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable $e) {
+        error_log('edicion_digerir (lectura): ' . get_class($e));
+        return $out;
+    }
+
+    foreach ($filas as $f) {
+        $id = (int)$f['id'];
+
+        //  1 · RECLAMAR. El lease va en el WHERE: si otro llego primero, aqui
+        //      se mueven cero filas y esta corrida ni mira el contenido.
+        try {
+            $u = $pdo->prepare(
+                "UPDATE crecer_memoria
+                    SET valid_until = DATE_ADD(NOW(), INTERVAL {$LEASE_MIN} MINUTE),
+                        updated_at = NOW()
+                  WHERE id = ? AND marca_id = ? AND estado = 'pendiente_revision'
+                    AND (valid_until IS NULL OR valid_until < NOW())");
+            $u->execute([$id, $marca_id]);
+            if ($u->rowCount() === 0) continue;   // otro la tiene
+        } catch (Throwable $e) {
+            error_log('edicion_digerir (reclamar): ' . get_class($e));
+            continue;
+        }
+
+        $d        = json_decode((string)($f['datos_json'] ?? ''), true) ?: [];
+        $original = (string)($d['original'] ?? '');
+        $editado  = (string)($d['editado'] ?? '');
+        $intentos = (int)($d['intentos'] ?? 0);
+
+        //  2 · DIGERIR. Es el prompt del Aprendiz de siempre, no uno nuevo.
+        $leccion = null; $fallo = null;
+        try {
+            $out['llamadas']++;
+            $leccion = aprendiz_leccion($pdo, $marca_id, $original, $editado);
+        } catch (Throwable $e) {
+            $fallo = get_class($e) . ': ' . mb_substr($e->getMessage(), 0, 120);
+        }
+
+        if ($fallo !== null) {
+            //  3a · FALLO. Se suelta el lease y se apunta el intento. A la
+            //       tercera se deja de insistir, pero NO se borra.
+            $intentos++;
+            $d['intentos'] = $intentos;
+            $terminal = $intentos >= $MAX_INTENTOS;
+            try {
+                $pdo->prepare(
+                    "UPDATE crecer_memoria
+                        SET estado = ?, valid_until = NULL, datos_json = ?,
+                            porque = ?, updated_at = NOW()
+                      WHERE id = ? AND marca_id = ?")
+                    ->execute([
+                        $terminal ? 'descartada' : 'pendiente_revision',
+                        json_encode($d, JSON_UNESCAPED_UNICODE),
+                        $terminal
+                            ? 'No pude aprender de esta edición después de ' . $intentos
+                              . ' intentos. La dejo aquí por si hace falta mirarla.'
+                            : 'Falló al digerirla; se reintenta en la próxima corrida.',
+                        $id, $marca_id]);
+            } catch (Throwable $e) { error_log('edicion_digerir (fallo): ' . get_class($e)); }
+            $out['fallidas']++;
+            continue;
+        }
+
+        //  3b · SIN LECCION. El modelo miro y no habia nada de voz que
+        //       aprender —solo cambio un dato—. Eso NO es un fallo: la nota se
+        //       cierra igual, o volveria a costar en cada corrida.
+        if ($leccion === null || trim((string)$leccion) === '') {
+            try {
+                $pdo->prepare(
+                    "UPDATE crecer_memoria
+                        SET estado='superseded', valid_until=NULL,
+                            porque='Miré esta edición y no cambiaba nada de la voz.',
+                            updated_at=NOW()
+                      WHERE id=? AND marca_id=?")->execute([$id, $marca_id]);
+            } catch (Throwable $e) { error_log('edicion_digerir (sin leccion): ' . get_class($e)); }
+            $out['sin_leccion']++;
+            continue;
+        }
+
+        //  3c · LECCION. aprender_de_edicion() ya la escribio con
+        //       memoria_escribir() —la misma que lee memoria_relevante() y por
+        //       tanto cerebro_negocio()—. Aqui solo se ata la nota cruda a ella
+        //       para poder decir de donde salio.
+        $lid = 0;
+        try {
+            $b = $pdo->prepare(
+                "SELECT id FROM crecer_memoria
+                  WHERE marca_id=? AND fuente='edicion' AND estado='activa'
+                    AND tipo='preferencia'
+                  ORDER BY id DESC LIMIT 1");
+            $b->execute([$marca_id]);
+            $lid = (int)$b->fetchColumn();
+        } catch (Throwable $e) { /* la leccion esta; el enlace es contexto */ }
+
+        try {
+            $pdo->prepare(
+                "UPDATE crecer_memoria
+                    SET estado='superseded', valid_until=NULL, superseded_by=?,
+                        porque='Ya la digerí: de aquí salió lo que aprendí.',
+                        updated_at=NOW()
+                  WHERE id=? AND marca_id=?")->execute([$lid ?: null, $id, $marca_id]);
+        } catch (Throwable $e) { error_log('edicion_digerir (cerrar): ' . get_class($e)); }
+        $out['digeridas']++;
+    }
+
+    return $out;
 }
 
 /**

@@ -34,8 +34,23 @@ try {
         require_once __DIR__ . '/../includes/analista.php';
         $an_total = 0;
         foreach (($res['detalle'] ?? []) as $d) { $an_total += analista_vigilar($pdo, (int)$d['marca_id']); }
-        $res['analista_senales'] = $an_total;
-    } catch (Throwable $e) { error_log('cron analista: ' . $e->getMessage()); }
+    } catch (Throwable $e) { error_log('cron_corillo analista: ' . $e->getMessage()); }
+
+    //  EL APRENDIZ DIGIERE LAS EDICIONES DEL DUEÑO. Cuando corrige un caption,
+    //  el texto se guarda al instante y la nota queda cruda: aprender de ella
+    //  es trabajo de aqui, no de su pantalla. Va en su propio try porque una
+    //  edicion rara no puede tumbar la corrida del corillo.
+    $ed_total = ['digeridas' => 0, 'fallidas' => 0];
+    try {
+        foreach (($res['detalle'] ?? []) as $d) {
+            $r = edicion_digerir($pdo, (int)$d['marca_id'], 10);
+            $ed_total['digeridas'] += (int)$r['digeridas'];
+            $ed_total['fallidas']  += (int)$r['fallidas'];
+        }
+        $res['ediciones_digeridas'] = $ed_total['digeridas'];
+        $res['ediciones_fallidas']  = $ed_total['fallidas'];
+    } catch (Throwable $e) { error_log('cron_corillo aprendiz: ' . $e->getMessage()); }
+    $res['analista_senales'] = $an_total ?? 0;
     $res['ms'] = (int)round((microtime(true) - $inicio) * 1000);
     if ($es_cli) {
         echo "[" . date('Y-m-d H:i:s') . "] corillo autónomo: "
