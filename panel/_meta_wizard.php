@@ -9,9 +9,25 @@
 //
 //      NADA SE ESCRIBE HASTA QUE EL DUEÑO VE, EN CONCRETO, QUE VA A CREAR.
 //
-//  De ahi los cuatro pasos: una decision cada uno, y el cuarto no pide nada
-//  nuevo — enseña lo escogido, lo que va a pasar despues y lo que queda
-//  guardado. Salir antes de ese boton no deja rastro en la base.
+//  De ahi los cuatro pasos, UNA DECISION CADA UNO:
+//
+//      1 · que quieres lograr      2 · cuanto
+//      3 · para cuando             4 · tu material  ← y aqui se confirma
+//
+//  Antes la cantidad y la fecha compartian pantalla y habia un quinto paso de
+//  repaso. Se separaron porque son dos decisiones distintas —una es tu
+//  ambicion, la otra tu calendario— y el repaso se fue porque el paso del
+//  material ya enseña, justo encima del boton, lo que va a pasar al pulsarlo.
+//
+//  EL PRESUPUESTO Y EL CONTEXTO BAJARON A UNA CAPA. Son utiles y son
+//  opcionales: ocupando un paso del camino obligaban a todo el mundo a pasar
+//  por una decision que la mayoria no tiene que tomar.
+//
+//  Y LAS RESPUESTAS SOBREVIVEN AL VIAJE. Vivian solo en memoria: salir a la
+//  Biblioteca a subir una foto —que es justo lo que este recorrido invita a
+//  hacer— las borraba todas. Ahora se guardan en sessionStorage: en el
+//  navegador, en esta pestaña, sin tocar la base. Salir antes del ultimo boton
+//  sigue sin dejar rastro en el servidor.
 //
 //  CUATRO COSAS QUE NO SE TOCAN
 //
@@ -37,18 +53,53 @@
 //  y en el manejador POST de meta.php.
 // ============================================================
 ?>
+<?php
+//  CUANTO MATERIAL SUYO HAY YA. Se dice solo si lo hay: «0 fotos» es ruido, y
+//  ademas suena a reproche. La consulta va aqui, no en el guion, para que la
+//  primera pintada ya lleve la verdad.
+$wiz_mat_fotos = 0; $wiz_mat_videos = 0;
+try {
+    $q = $pdo->prepare("SELECT tipo, COUNT(*) n FROM crecer_activos
+                         WHERE marca_id=? AND estado='activo' GROUP BY tipo");
+    $q->execute([$marca_id]);
+    foreach ($q as $r) {
+        if ((string)$r['tipo'] === 'imagen') $wiz_mat_fotos  = (int)$r['n'];
+        if ((string)$r['tipo'] === 'video')  $wiz_mat_videos = (int)$r['n'];
+    }
+} catch (Throwable $e) { /* sin tabla, sin frase */ }
+$wiz_mat_txt = '';
+if ($wiz_mat_fotos || $wiz_mat_videos) {
+    $p1 = $wiz_mat_fotos  ? $wiz_mat_fotos  . ($wiz_mat_fotos  === 1 ? ' foto' : ' fotos')   : '';
+    $p2 = $wiz_mat_videos ? $wiz_mat_videos . ($wiz_mat_videos === 1 ? ' video' : ' videos') : '';
+    $wiz_mat_txt = 'Ya tienes ' . trim($p1 . ($p1 && $p2 ? ' y ' : '') . $p2) . ' en tu Biblioteca.';
+}
+?>
+<?php
+//  LA INTENCION DEL DUEÑO, ACUÑADA AL PINTAR LA PANTALLA.
+//
+//  No es el instante del clic: es «esta vez que se sento a crear su meta». El
+//  mismo identificador viaja con el envio, y meta_plan_generar() lo mira ANTES
+//  de llamar a la Estratega — asi un doble clic, un reenvio tardio o una
+//  recarga no cuestan otra llamada al modelo ni crean otro plan. La clave
+//  unica de `crecer_meta_plan.solicitud` arbitra las carreras de verdad.
+//
+//  Se acuña IGUAL que en _meta_opciones.php: mismo mecanismo, no uno nuevo.
+$wiz_solicitud = bin2hex(random_bytes(16));
+?>
 <?php require_once __DIR__ . '/_meta_wizard_piel.php'; ?>
 
 <div class="wz" id="wz">
 
+  <?php /*  La salida dice QUE pasa si se pulsa. «Salir» a secas deja al dueño
+            preguntandose si perdio algo o si creo algo a medias.  */ ?>
   <a href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>" class="wz-salir" id="wzSalir">
-    <?= ico('chev-der') ?>Salir sin guardar</a>
+    <?= ico('chev-der') ?>Salir sin crear nada</a>
 
   <ol class="wz-tren" id="wzTren" aria-hidden="true">
     <li data-t="1"><i></i><span>Qué quieres</span></li>
     <li data-t="2"><i></i><span>Cuánto</span></li>
-    <li data-t="3"><i></i><span>Con qué cuentas</span></li>
-    <li data-t="4"><i></i><span>Repasar</span></li>
+    <li data-t="3"><i></i><span>Para cuándo</span></li>
+    <li data-t="4"><i></i><span>Tu material</span></li>
   </ol>
 
   <span class="wz-et" id="wzEt">Paso 1 de 4 · Qué quieres lograr</span>
@@ -79,7 +130,7 @@
     </div>
   </section>
 
-  <!-- ══ PASO 2 · cuanto y para cuando ══════════════════════════════ -->
+  <!-- ══ PASO 2 · cuanto ════════════════════════════════════════════ -->
   <section class="wz-p" data-p="2">
     <div class="wz-num">
       <input type="number" id="cantidad" min="1" step="1" placeholder="25" inputmode="numeric"
@@ -88,35 +139,66 @@
       <button type="button" class="wz-nose" id="nose">No sé — dime tú</button>
     </div>
     <div class="wz-tip" id="wzTip" role="status"></div>
-
-    <span class="wz-sub">¿Para cuándo?</span>
-    <div class="wz-chips" id="wzFecha">
-      <button type="button" class="wz-chip" data-dias="14">En 2 semanas</button>
-      <button type="button" class="wz-chip sel" data-dias="30">En un mes</button>
-      <button type="button" class="wz-chip" data-dias="60">En 2 meses</button>
-      <button type="button" class="wz-chip" data-dias="90">En 3 meses</button>
-    </div>
+    <?php /*  Es una META, no una promesa. Decirlo aqui —donde se escribe el
+              numero— y no en letra pequeña al final.  */ ?>
+    <p class="wz-ayuda" id="wzMedirNota" style="margin-top:16px">—</p>
   </section>
 
-  <!-- ══ PASO 3 · con que cuenta ════════════════════════════════════ -->
+  <!-- ══ PASO 3 · para cuando ═══════════════════════════════════════ -->
   <section class="wz-p" data-p="3">
-    <div class="wz-chips" id="wzPauta">
-      <button type="button" class="wz-chip sel" data-pauta="0">Nada por ahora<small>Todo sin pagar anuncios</small></button>
-      <button type="button" class="wz-chip" data-pauta="20">$20 al mes<small>Para empujar 1 o 2 posts</small></button>
-      <button type="button" class="wz-chip" data-pauta="50">$50 al mes<small>Alcance serio en tu área</small></button>
-      <button type="button" class="wz-chip" data-pauta="100">$100 o más<small>Campaña de verdad</small></button>
+    <div class="wz-chips" id="wzFecha">
+      <button type="button" class="wz-chip" data-dias="14">En 2 semanas<small>4 semanas de plan cortas</small></button>
+      <button type="button" class="wz-chip sel" data-dias="30">En un mes<small>Lo más común</small></button>
+      <button type="button" class="wz-chip" data-dias="60">En 2 meses<small>Da margen para corregir</small></button>
+      <button type="button" class="wz-chip" data-dias="90">En 3 meses<small>Para metas grandes</small></button>
     </div>
-
-    <span class="wz-sub">¿Con qué cuentas? (Opcional)</span>
-    <p class="wz-ayuda" style="margin:0 0 10px">Cuéntame si tienes una oferta, un producto que quieres
-       empujar, una fecha especial o un evento. Mientras más me digas, menos genérico sale el plan.</p>
-    <textarea class="wz-libre" id="contexto" maxlength="600"
-      placeholder="Ej: Tengo el combo de brazo gitano a $18 y en agosto son las fiestas del pueblo."></textarea>
+    <?php /*  LA FECHA CONCRETA, no solo «en 2 meses». Un plazo abstracto no se
+              puede comprobar contra el calendario de nadie.  */ ?>
+    <p class="wz-ayuda" style="margin-top:18px">Sería
+      <b id="wzFechaClara">—</b>. <span id="wzFechaNota"></span></p>
   </section>
 
-  <!-- ══ PASO 4 · el repaso ═════════════════════════════════════════ -->
+  <!-- ══ PASO 4 · tu material ═══════════════════════════════════════
+       No es un requisito ni una puerta: es una invitacion. El plan sale igual
+       sin subir nada, y el material se puede añadir cualquier semana. -->
   <section class="wz-p" data-p="4">
-    <div class="wz-res">
+    <div class="wz-bloque wz-medir">
+      <b>Lo que pasa con tus fotos y videos</b>
+      <ul>
+        <li>Puedes dejarlos en tu Biblioteca ahora o <b>más adelante</b>, cualquier semana.</li>
+        <li>Los reviso y te propongo usarlos <b>cuando encajen</b> con tu meta —
+            no te prometo usarlos todos.</li>
+        <li>Si la semana que viene grabas un video, lo subes y ya: <b>sin empezar de nuevo</b>.</li>
+        <li>Subir es <b>opcional</b>. Sin material tuyo también preparo las publicaciones.</li>
+      </ul>
+    </div>
+
+    <div class="wz-mat">
+      <span class="wz-mat-est" id="wzMatEstado"><?= $h($wiz_mat_txt) ?></span>
+      <input type="file" id="wzMatFile" accept="image/*,video/*" multiple hidden>
+      <button type="button" class="wz-mat-bt" id="wzMatAnadir">
+        <?= ico('upload') ?>Añadir fotos o videos</button>
+      <a class="wz-mat-bt linea" id="wzMatBiblio"
+         href="<?= $BASE ?>/biblioteca.php?marca=<?= $marca_id ?>&amp;volver=wizard">
+        <?= ico('image') ?>Ver mi Biblioteca</a>
+      <p class="wz-mat-err" id="wzMatErr" role="alert" hidden></p>
+    </div>
+
+    <?php /*  LO AVANZADO, EN SU CAPA. Presupuesto de anuncios y contexto son
+              utiles y opcionales: en el camino obligaban a todos a decidir algo
+              que la mayoria no tiene que decidir.  */ ?>
+    <button type="button" class="wz-ajustes" id="wzAjustes">
+      <?= ico('settings') ?>
+      <span class="tx"><b>Anuncios y detalles de tu negocio</b>
+        <span id="wzAjustesRes">Opcional — sin anuncios y sin notas</span></span>
+      <?= ico('chev-der') ?></button>
+
+    <?php /*  SUS TRES RESPUESTAS, JUNTAS Y ANTES DE PULSAR.
+              Al quitar la pantalla de repaso se fue tambien esto, y no debia:
+              una cosa es ahorrarle una pantalla y otra pedirle que confirme
+              sin ver lo que va a crear. Cabe en tres renglones y cada uno
+              vuelve a su paso.  */ ?>
+    <div class="wz-res" style="margin-top:16px">
       <div class="wz-fila">
         <span class="wz-fila-tx"><span>Qué quieres lograr</span><b id="rObj">—</b></span>
         <button type="button" class="wz-cambiar" data-ir="1">Cambiar</button>
@@ -127,45 +209,59 @@
       </div>
       <div class="wz-fila">
         <span class="wz-fila-tx"><span>Para cuándo</span><b id="rFecha">—</b></span>
-        <button type="button" class="wz-cambiar" data-ir="2">Cambiar</button>
-      </div>
-      <div class="wz-fila">
-        <span class="wz-fila-tx"><span>Inversión en anuncios</span><b id="rPauta">—</b></span>
         <button type="button" class="wz-cambiar" data-ir="3">Cambiar</button>
       </div>
-      <div class="wz-fila">
-        <span class="wz-fila-tx"><span>Lo que me contaste</span><b id="rCtx" class="suave">—</b></span>
-        <button type="button" class="wz-cambiar" data-ir="3">Cambiar</button>
-      </div>
-    </div>
-
-    <div class="wz-bloque wz-medir" id="rMedirCaja">
-      <b>Cómo lo voy a medir</b>
-      <p id="rMedir">—</p>
     </div>
 
     <div class="wz-bloque wz-luego">
-      <b>Qué pasa cuando confirmes</b>
+      <b>Cuando pulses</b>
       <ol>
         <li>Se crea tu meta con estos números.</li>
-        <li>La Estratega mira tu negocio y arma las jugadas para llegar.</li>
-        <li>Te llevo a Tu Meta y ahí te digo qué toca primero.</li>
+        <?php /*  LO QUE DE VERDAD MIRA, y nada mas. Yo habia escrito aqui «tu
+                  Biblioteca y tu calendario» y es FALSO: meta_plan_generar()
+                  no lee crecer_activos ni el calendario. Lee tu negocio, tus
+                  numeros de los ultimos 30 dias, las lecciones de planes
+                  anteriores y cuanto has publicado. Prometer que mira algo que
+                  no mira es la mentira mas facil de esta pantalla.  */ ?>
+        <li>Miro tu negocio y tus números de los últimos 30 días, y armo el plan.</li>
+        <li>Te llevo directo a revisar tu primera semana.</li>
       </ol>
-      <p class="nota">Si la Estratega no logra armarlo ahora mismo, tu meta queda creada igual y el plan
-         se reintenta desde Tu Meta.</p>
-    </div>
-
-    <div class="wz-bloque wz-guarda">
-      <b>Qué me queda guardado</b>
-      <ul>
-        <li>Lo que escogiste: la meta, el número, la fecha y la inversión.</li>
-        <li>Lo que me contaste, en tus palabras — es lo que hace que el plan no sea genérico.</li>
-        <li>Cómo venías antes: mido tus últimos <b id="rDias">30</b> días para poder decirte después
-            si mejoraste.</li>
-        <li>Si más adelante cambias de meta, esta no se borra: queda en tu historial.</li>
-      </ul>
+      <p class="nota">Si no logro armarlo ahora mismo, tu meta queda creada igual y lo reintento
+         desde Tu Meta. Nada se pierde.</p>
     </div>
   </section>
+
+  <?php /*  LA CAPA · se abre sobre el paso, y el paso se queda detras. */ ?>
+  <div class="wz-hoja-velo" id="wzHojaVelo" role="dialog" aria-modal="true" aria-labelledby="wzHojaT">
+    <div class="wz-hoja">
+      <div class="cab">
+        <h3 id="wzHojaT">Anuncios y detalles</h3>
+        <button type="button" id="wzHojaCerrar" aria-label="Cerrar"><?= ico('x') ?></button>
+      </div>
+      <div class="cuerpo">
+        <span class="wz-sub" style="margin-top:0">¿Puedes invertir algo en anuncios?</span>
+        <p class="wz-ayuda" style="margin:0 0 12px">Pagarle a Instagram o Facebook para que le enseñen
+          tu post a más gente del área. Si ahora no puedes, no hay problema: trabajo sin anuncios y no
+          te los recomiendo.</p>
+        <div class="wz-chips" id="wzPauta">
+          <button type="button" class="wz-chip sel" data-pauta="0">Nada por ahora<small>Todo sin pagar anuncios</small></button>
+          <button type="button" class="wz-chip" data-pauta="20">$20 al mes<small>Para empujar 1 o 2 posts</small></button>
+          <button type="button" class="wz-chip" data-pauta="50">$50 al mes<small>Alcance serio en tu área</small></button>
+          <button type="button" class="wz-chip" data-pauta="100">$100 o más<small>Campaña de verdad</small></button>
+        </div>
+
+        <span class="wz-sub">¿Con qué cuentas?</span>
+        <p class="wz-ayuda" style="margin:0 0 10px">Una oferta, un producto que quieras empujar, una
+          fecha especial. Mientras más me digas, menos genérico sale el plan.</p>
+        <textarea class="wz-libre" id="contexto" maxlength="600"
+          placeholder="Ej: Tengo el combo de brazo gitano a $18 y en agosto son las fiestas del pueblo."></textarea>
+
+        <div class="pie2">
+          <button type="button" class="tm-btn" id="wzHojaListo">Listo</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- El fallo se queda dentro de la pantalla, con su salida. -->
   <div class="wz-err" id="wzErr" role="alert" tabindex="-1">
@@ -185,8 +281,7 @@
   <div class="wz-load" id="wzLoad">
     <div class="sp"></div>
     <b>Creando tu meta</b>
-    <span>La Estratega está mirando tu negocio, tus números y el calendario<br>para decidir las jugadas.
-      Dale unos segundos.</span>
+    <span>Miro tu negocio y tus números<br>para armar el plan. Dale unos segundos.</span>
   </div>
 
   <details class="wz-glos">
@@ -202,6 +297,18 @@
 <script>
 (function(){
   var CSRF = <?= json_encode(csrf_token()) ?>, MARCA = <?= (int)$marca_id ?>;
+  //  La intencion viaja con el envio y SOBREVIVE a la recarga: si se acuñara
+  //  de nuevo al repintar, el reenvio dejaria de reconocerse como el mismo y
+  //  nacerian dos planes. Es exactamente lo que paso en produccion el
+  //  2026-08-22 con las versiones 5 y 6.
+  var SOLICITUD = (function(){
+    var k = 'crecer.wizard.solicitud.' + MARCA;
+    try {
+      var v = sessionStorage.getItem(k);
+      if (!v) { v = <?= json_encode($wiz_solicitud) ?>; sessionStorage.setItem(k, v); }
+      return v;
+    } catch (e) { return <?= json_encode($wiz_solicitud) ?>; }
+  })();
   var VOLVER = <?= json_encode($BASE . '/meta.php?marca=' . $marca_id) ?>;
 
   //  TODA la respuesta del dueño vive aqui. Los pasos se esconden, no se
@@ -211,6 +318,62 @@
             cant:'', dias:30, pauta:0, ctx:'' };
   var paso = 1, enviando = false;
 
+  // ── LAS RESPUESTAS SOBREVIVEN AL VIAJE ───────────────────────────
+  //
+  //  Vivian solo en este objeto, en memoria. Bastaba con salir a la Biblioteca
+  //  a subir una foto —que es justo lo que el ultimo paso invita a hacer— para
+  //  perderlo todo y tener que empezar de cero. Abandonar un formulario a la
+  //  cuarta pregunta es lo mas facil del mundo.
+  //
+  //  sessionStorage y NO la base: esto son respuestas a medias, no una meta.
+  //  Vive en esta pestaña, muere con ella, y el servidor no se entera de nada
+  //  hasta el ultimo boton. La llave lleva la marca dentro: dos negocios en la
+  //  misma cuenta no pueden heredarse las respuestas del otro.
+  var LLAVE = 'crecer.wizard.meta.' + MARCA;
+
+  function guardar(){
+    try { sessionStorage.setItem(LLAVE, JSON.stringify({ d: d, paso: paso })); }
+    catch (e) { /* sin almacen: se sigue, solo que sin memoria */ }
+  }
+  function olvidar(){
+    try {
+      sessionStorage.removeItem(LLAVE);
+      //  Y la intencion con el: sentarse OTRA VEZ a crear una meta es otra
+      //  intencion distinta, y tiene que poder crear su propio plan.
+      sessionStorage.removeItem('crecer.wizard.solicitud.' + MARCA);
+    } catch (e) {}
+  }
+
+  /** Devuelve el paso al que hay que volver, o 0 si no habia nada guardado. */
+  function recordar(){
+    var crudo;
+    try { crudo = sessionStorage.getItem(LLAVE); } catch (e) { return 0; }
+    if (!crudo) return 0;
+    var g;
+    try { g = JSON.parse(crudo); } catch (e) { olvidar(); return 0; }
+    if (!g || !g.d || !g.d.obj) return 0;          // sin objetivo no hay nada que restaurar
+    d = g.d;
+
+    //  Y SE REPINTA LA PANTALLA CON ELLO. Restaurar el objeto y dejar los
+    //  botones sin marcar seria peor que no restaurar: el dueño veria sus
+    //  respuestas en el resumen y los controles vacios.
+    var b = document.querySelector('.wz-obj[data-obj="' + d.obj + '"]');
+    if (b) {
+      [].forEach.call(document.querySelectorAll('.wz-obj'), function(x){ x.classList.remove('sel'); });
+      b.classList.add('sel');
+      if ($('wzUnidad')) $('wzUnidad').textContent = d.unidad;
+    }
+    if ($('cantidad')) $('cantidad').value = d.cant || '';
+    [].forEach.call(document.querySelectorAll('#wzFecha .wz-chip'), function(c){
+      c.classList.toggle('sel', +c.dataset.dias === +d.dias);
+    });
+    [].forEach.call(document.querySelectorAll('#wzPauta .wz-chip'), function(c){
+      c.classList.toggle('sel', +c.dataset.pauta === +d.pauta);
+    });
+    if ($('contexto')) $('contexto').value = d.ctx || '';
+    return Math.min(4, Math.max(1, +g.paso || 1));
+  }
+
   var $  = function(i){ return document.getElementById(i); };
   var et = $('wzEt'), q = $('wzQ'), ayuda = $('wzAyuda'), tren = $('wzTren');
   var sigue = $('sigue'), atras = $('atras'), nav = $('wzNav');
@@ -219,18 +382,15 @@
   var TITULO = [
     null,
     { et:'Qué quieres lograr',  q:'¿Qué quieres lograr?',
-      ay:'Escoge una sola. El corillo va a trabajar para eso — no para llenar el calendario. '
-       + 'Nada se guarda hasta el último paso.' },
-    { et:'Cuánto y para cuándo', q:'¿Cuánto quieres lograr?',
-      ay:'Un número te deja saber si vas bien o si hay que apretar. Si no sabes cuál poner, yo te lo '
+      ay:'Escoge una sola. Voy a trabajar para eso — no para llenar el calendario. '
+       + 'Nada se crea hasta el último paso.' },
+    { et:'Cuánto',              q:'¿Cuánto quieres lograr?',
+      ay:'Un número te deja saber si vas bien o si hay que apretar. Si no sabes cuál poner, te lo '
        + 'digo mirando tus propios números.' },
-    { et:'Con qué cuentas',      q:'¿Puedes invertir algo en anuncios?',
-      ay:'Pagarle a Instagram o Facebook para que le enseñen tu post a más gente del área — a eso le '
-       + 'dicen <b>boost</b> o <b>pauta</b>. Si ahora no puedes, no hay problema: el corillo trabaja '
-       + 'sin pagar anuncios y no te lo va a recomendar.' },
-    { et:'Repasar',              q:'Repasa antes de crear',
-      ay:'Esto es lo que voy a crear. Todavía no se ha guardado nada — si algo no cuadra, cámbialo '
-       + 'desde aquí mismo.' }
+    { et:'Para cuándo',         q:'¿Para cuándo quieres lograrlo?',
+      ay:'El plazo decide cuántas semanas de trabajo hay y qué tan seguido publico.' },
+    { et:'Tu material',         q:'Tu contenido también puede ser parte del plan',
+      ay:'Tus fotos y videos hacen el plan menos genérico. No hace falta subir nada ahora.' }
   ];
 
   var MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto',
@@ -262,9 +422,12 @@
                                         : TITULO[n].q;
     ayuda.innerHTML = TITULO[n].ay;
     atras.style.display = n > 1 ? '' : 'none';
-    sigue.textContent = n === 4 ? 'Crear mi meta' : 'Siguiente';
+    sigue.textContent = n === 4 ? 'Continuar con lo que tengo' : 'Siguiente';
     ocultarError();
-    if (n === 4) repasar();
+    if (n === 2) pintarMedir();
+    if (n === 3) pintarFecha();
+    if (n === 4) { pintarResumen(); pintarAjustes(); }
+    guardar();                      // cada paso deja su rastro en la pestaña
     revisar();
     window.scrollTo({ top:0, behavior:'smooth' });
     if (window.crecerMetaRecalcular) setTimeout(window.crecerMetaRecalcular, 60);
@@ -274,24 +437,49 @@
   function revisar(){
     if (paso === 1)      sigue.disabled = !d.obj;
     else if (paso === 2) sigue.disabled = !(d.cant && +d.cant > 0);
-    else                 sigue.disabled = enviando;
+    else if (paso === 3) sigue.disabled = !(d.dias > 0);
+    else                 sigue.disabled = enviando;   // el material es opcional
   }
 
-  // ── EL REPASO · lo escogido, en concreto ─────────────────────────
-  function repasar(){
+  // ── LO QUE CADA PASO TIENE QUE DECIR ─────────────────────────────
+  /**  Es una META, no una promesa. Se dice donde se escribe el numero, y con
+   *   las palabras del propio objetivo — que las trae el dominio.  */
+  function pintarMedir(){
+    var e = $('wzMedirNota');
+    if (!e) return;
+    e.textContent = d.medir
+      ? ('Es una meta, no una garantía: ' + d.medir.charAt(0).toLowerCase() + d.medir.slice(1))
+      : 'Es una meta, no una garantía. Sirve para saber si vas bien.';
+  }
+
+  /**  La fecha CONCRETA. «En 2 meses» no se puede cruzar con el calendario de
+   *   nadie; «el 23 de octubre» si.  */
+  function pintarFecha(){
     var f = fechaLimite();
-    $('rObj').textContent   = d.titulo || '—';
-    $('rCant').textContent  = d.cant ? (d.cant + ' ' + d.unidad) : '—';
-    $('rFecha').textContent = f.txt + ' · dentro de ' + d.dias + ' días';
-    $('rPauta').textContent = d.pauta > 0 ? ('$' + d.pauta + ' al mes en anuncios')
-                                          : 'Nada por ahora — sin pagar anuncios';
+    if ($('wzFechaClara')) $('wzFechaClara').textContent = f.txt.replace(/^el /, 'el ');
+    var nota = $('wzFechaNota');
+    if (!nota) return;
+    //  La restriccion real, al lado de la opcion y no en letra pequeña.
+    nota.textContent = d.dias <= 14
+      ? 'Con dos semanas el plan sale corto: menos publicaciones y menos margen para corregir.'
+      : (d.dias >= 90 ? 'Con tres meses hay sitio para probar y ajustar sobre la marcha.' : '');
+  }
+
+  /**  El resumen de la capa, para no obligar a abrirla para saber que hay.  */
+  /**  Las tres respuestas, en concreto, encima del boton que las crea.  */
+  function pintarResumen(){
+    var f = fechaLimite();
+    if ($('rObj'))   $('rObj').textContent   = d.titulo || '—';
+    if ($('rCant'))  $('rCant').textContent  = d.cant ? (d.cant + ' ' + d.unidad) : '—';
+    if ($('rFecha')) $('rFecha').textContent = f.txt + ' · dentro de ' + d.dias + ' días';
+  }
+
+  function pintarAjustes(){
+    var e = $('wzAjustesRes');
+    if (!e) return;
     var ctx = (d.ctx || '').trim();
-    $('rCtx').textContent = ctx !== '' ? ctx
-      : 'Nada todavía — el plan sale igual, solo que más general.';
-    $('rCtx').classList.toggle('suave', ctx === '');
-    $('rMedir').textContent = d.medir || '—';
-    $('rMedirCaja').classList.toggle('parcial', d.medible !== 1);
-    $('rDias').textContent = d.dias;
+    var a = d.pauta > 0 ? ('$' + d.pauta + ' al mes en anuncios') : 'Sin anuncios';
+    e.textContent = a + ' · ' + (ctx !== '' ? 'con tus notas' : 'sin notas');
   }
 
   // ── PASO 1 ───────────────────────────────────────────────────────
@@ -300,6 +488,7 @@
       [].forEach.call(document.querySelectorAll('.wz-obj'), function(x){ x.classList.remove('sel'); });
       b.classList.add('sel');
       d.obj = b.dataset.obj; d.titulo = b.dataset.titulo; d.unidad = b.dataset.unidad;
+      guardar();
       d.medible = +b.dataset.medible; d.medir = b.dataset.medir;
       $('wzUnidad').textContent = d.unidad;
       $('wzTip').classList.remove('on');
@@ -312,12 +501,12 @@
 
   // ── PASO 2 ───────────────────────────────────────────────────────
   var cant = $('cantidad');
-  cant.addEventListener('input', function(){ d.cant = cant.value; revisar(); });
+  cant.addEventListener('input', function(){ d.cant = cant.value; guardar(); revisar(); });
 
   $('wzFecha').addEventListener('click', function(e){
     var c = e.target.closest('.wz-chip'); if (!c) return;
     [].forEach.call(this.querySelectorAll('.wz-chip'), function(x){ x.classList.remove('sel'); });
-    c.classList.add('sel'); d.dias = +c.dataset.dias;
+    c.classList.add('sel'); d.dias = +c.dataset.dias; pintarFecha(); guardar();
   });
 
   //  «No sé — dime tú» LEE sus numeros; no escribe nada y no llama a ningun
@@ -347,9 +536,9 @@
   $('wzPauta').addEventListener('click', function(e){
     var c = e.target.closest('.wz-chip'); if (!c) return;
     [].forEach.call(this.querySelectorAll('.wz-chip'), function(x){ x.classList.remove('sel'); });
-    c.classList.add('sel'); d.pauta = +c.dataset.pauta;
+    c.classList.add('sel'); d.pauta = +c.dataset.pauta; pintarAjustes(); guardar();
   });
-  $('contexto').addEventListener('input', function(){ d.ctx = this.value; });
+  $('contexto').addEventListener('input', function(){ d.ctx = this.value; pintarAjustes(); guardar(); });
 
   // ── PASO 4 · las puertas de vuelta de cada linea ─────────────────
   [].forEach.call(document.querySelectorAll('.wz-cambiar'), function(b){
@@ -385,13 +574,24 @@
     fd.append('objetivo', d.obj); fd.append('cantidad', d.cant);
     fd.append('fecha_limite', fechaLimite().iso);
     fd.append('presupuesto', d.pauta); fd.append('contexto', d.ctx);
+    fd.append('solicitud', SOLICITUD);
 
     fetch(location.pathname + '?marca=' + MARCA, { method:'POST', body:fd })
       .then(function(r){ return r.json(); })
       .then(function(j){
         //  Se vuelve a Tu Meta SIEMPRE que la meta quedo escrita, salga o no el
         //  plan: el compositor recalcula alli y dice la verdad de lo que hay.
-        if (j && j.ok) { location.href = VOLVER; return; }
+        //  YA NO SE DESAPARECE HACIA TU META. El dueño acaba de confirmar y
+        //  tiene derecho a ver que pasa con lo suyo: se va a la pantalla de
+        //  preparacion, que lee estado persistido y sabe reconstruirse sola.
+        //
+        //  Y NO SE LLEVA LA INTENCION EN LA URL. La lleve aqui un rato con un
+        //  comentario que decia que asi una recarga seguia siendo la misma
+        //  intencion: era mentira, nadie la leia al otro lado. Y no le hace
+        //  falta — el plan ya esta creado cuando se llega, y esa pantalla no
+        //  vuelve a llamar a la Estratega. El reintento, cuando el plan no
+        //  llego a existir, es una intencion NUEVA y acuña la suya.
+        if (j && j.ok) { olvidar(); location.href = VOLVER + '&vista=preparando'; return; }
         [].forEach.call(document.querySelectorAll('.wz-p'), function(s){
           s.classList.toggle('on', +s.dataset.p === 4); });
         [].forEach.call(tren.children, function(li){ li.classList.toggle('ya', +li.dataset.t < 4); });
@@ -406,13 +606,107 @@
       });
   }
 
+  // ── LA CAPA DE AJUSTES · opcional y con salida ────────────────────
+  var velo = $('wzHojaVelo');
+  function abrirHoja(){
+    velo.classList.add('on');
+    var f = velo.querySelector('button, textarea');
+    if (f) f.focus();
+  }
+  function cerrarHoja(){
+    d.ctx = $('contexto') ? $('contexto').value : d.ctx;
+    pintarAjustes(); guardar();
+    velo.classList.remove('on');
+    var b = $('wzAjustes'); if (b) b.focus();
+  }
+  if ($('wzAjustes'))     $('wzAjustes').addEventListener('click', abrirHoja);
+  if ($('wzHojaCerrar'))  $('wzHojaCerrar').addEventListener('click', cerrarHoja);
+  if ($('wzHojaListo'))   $('wzHojaListo').addEventListener('click', cerrarHoja);
+  if (velo) velo.addEventListener('click', function(e){ if (e.target === velo) cerrarHoja(); });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && velo && velo.classList.contains('on')) cerrarHoja();
+  });
+
+  // ── AÑADIR MATERIAL SIN SALIR DEL PASO ───────────────────────────
+  //
+  //  Se sube por el MISMO handler que usa Biblioteca (`accion=subir`), con un
+  //  fetch desde aqui. Asi no se navega, y si no se navega no hay nada que
+  //  perder. Ir a Biblioteca sigue estando —para quien quiera verla entera—,
+  //  y de ahi se vuelve por su enlace de retorno.
+  var matFile = $('wzMatFile'), matBt = $('wzMatAnadir'),
+      matEst  = $('wzMatEstado'), matErr = $('wzMatErr');
+
+  if (matBt && matFile) {
+    matBt.addEventListener('click', function(){ matFile.click(); });
+    matFile.addEventListener('change', function(){
+      if (!matFile.files || !matFile.files.length) return;
+      matErr.hidden = true;
+      var antes = matBt.textContent;
+      matBt.disabled = true; matBt.textContent = 'Subiendo…';
+
+      var fd = new FormData();
+      fd.append('csrf', CSRF); fd.append('accion', 'subir');
+      for (var i = 0; i < matFile.files.length; i++) fd.append('archivos[]', matFile.files[i]);
+
+      fetch(<?= json_encode($BASE . '/biblioteca.php?marca=' . (int)$marca_id) ?>,
+            { method:'POST', body:fd, credentials:'same-origin' })
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+          matBt.disabled = false; matBt.textContent = antes;
+          matFile.value = '';
+          if (j && j.ok) {
+            //  Se dice CUANTO entro, no «listo»: el dueño acaba de darnos algo
+            //  suyo y quiere ver que llego.
+            var n = +j.guardados || 0;
+            matEst.textContent = n === 1 ? 'Añadiste 1 archivo a tu Biblioteca.'
+                                         : ('Añadiste ' + n + ' archivos a tu Biblioteca.');
+            if (j.errores && j.errores.length) {
+              matErr.hidden = false; matErr.textContent = j.errores.join(' ');
+            }
+          } else {
+            matErr.hidden = false;
+            matErr.textContent = (j && j.err) ? j.err
+              : 'No pude subirlo. Tus respuestas siguen aquí — inténtalo otra vez.';
+          }
+        })
+        .catch(function(){
+          matBt.disabled = false; matBt.textContent = antes; matFile.value = '';
+          matErr.hidden = false;
+          matErr.textContent = 'Se cayó la conexión. Tus respuestas siguen aquí.';
+        });
+    });
+  }
+
+  // ── LA SALIDA · no deja rastro en el servidor, y lo dice ──────────
+  var salir = $('wzSalir');
+  if (salir) salir.addEventListener('click', function(){ olvidar(); });
+
+  [].forEach.call(document.querySelectorAll('.wz-cambiar'), function(b){
+    b.addEventListener('click', function(){ ver(+b.dataset.ir); });
+  });
+
   atras.addEventListener('click', function(){ if (paso > 1) ver(paso - 1); });
   sigue.addEventListener('click', function(){
     if (paso < 4) { ver(paso + 1); return; }
     crear();
   });
 
-  ver(1);
+  //  EL SUELO DE LA NAVEGACION ANCLADA. La barra de abajo es fija y tapa lo
+  //  que quede debajo; en escritorio no existe y el suelo es 0. Se mide una
+  //  vez al cargar y en cada resize — nunca observando lo que uno mismo
+  //  escribe, que es como se cuelga una pestaña.
+  function suelo(){
+    var bn = document.querySelector('.botnav');
+    var alto = 0;
+    if (bn) { var r = bn.getBoundingClientRect(); if (r.height > 0) alto = Math.round(r.height); }
+    document.getElementById('wz').style.setProperty('--wz-suelo', alto + 'px');
+  }
+  if (document.readyState === 'complete') suelo();
+  else window.addEventListener('load', suelo);
+  window.addEventListener('resize', suelo);
+
+  //  Si el dueño venia de la Biblioteca, se le devuelve donde estaba.
+  ver(recordar() || 1);
 })();
 </script>
 

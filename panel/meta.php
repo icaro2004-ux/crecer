@@ -97,10 +97,110 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'presupuesto_pauta' => (string)($_POST['presupuesto'] ?? ''),
                 'contexto'          => (string)($_POST['contexto'] ?? ''),
             ]);
-            $plan = meta_plan_generar($pdo, $marca_id, $meta_id);
+
+            //  LA INTENCION VIAJA HASTA LA ESTRATEGA. El wizard la acuña al
+            //  pintarse y la conserva entre recargas, asi que un reenvio no
+            //  cuesta otra llamada al modelo: meta_plan_generar() mira si ya
+            //  existe un plan con esa intencion ANTES de gastar, y la clave
+            //  unica de la base arbitra dos peticiones a la vez.
+            //
+            //  Esto ya existia y esta ruta no lo usaba: aqui solo habia un
+            //  «¿hay una meta igual en los ultimos 3 minutos?», que frena el
+            //  dedo nervioso y no arbitra nada.
+            $plan = meta_plan_generar($pdo, $marca_id, $meta_id, '',
+                                      trim((string)($_POST['solicitud'] ?? '')));
+
+            //  Y AHORA SE PREPARA LA PRIMERA SEMANA — solo la primera.
+            //  Va DESPUES de que el plan este confirmado y FUERA de cualquier
+            //  transaccion: encolar es escribir una fila, pero disparar al
+            //  worker es una llamada de red.
+            //
+            //  EL require VA AQUI, y no se da por hecho. Sin el, esta ruta
+            //  moria con «undefined function» y el dueño veia un error al
+            //  confirmar su meta. Mis pruebas no lo vieron porque cargaban el
+            //  archivo ellas mismas: solo lo cazo la que pide la pagina por
+            //  HTTP, como la pide un navegador.
+            require_once __DIR__ . '/../includes/meta_async.php';
+            $enc = !empty($plan['ok']) ? meta_encolar_primera_semana($pdo, $marca_id, $meta_id) : ['jobs'=>0,'nuevos'=>[]];
+
             // Si la Estratega falló, la meta igual queda creada (se puede reintentar).
             echo json_encode(['ok'=>true, 'meta_id'=>$meta_id, 'plan_ok'=>!empty($plan['ok']),
+                              'repetido'=>!empty($plan['repetido']),
+                              'encolados'=>(int)$enc['jobs'],
                               'err'=>$plan['err'] ?? null], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // (b2) EL ESTADO DE LA PREPARACION · SOLO LEE.
+        //
+        //  La pantalla de preparacion pregunta por aqui cada pocos segundos.
+        //  Este handler NO crea nada, NO reintenta nada y NO llama a nadie:
+        //  lee lo que hay escrito y lo cuenta. Un sondeo que produce trabajo
+        //  es un sondeo que multiplica el gasto por el numero de pestañas
+        //  abiertas.
+        if ($accion === 'preparacion') {
+            $meta = meta_activa($pdo, $marca_id);
+            if (!$meta) { echo json_encode(['ok'=>true, 'estado'=>'sin_meta']); exit; }
+
+            //  LA MISMA FUENTE QUE LA PANTALLA. Aqui habia un
+            //  `meta_plan_activo()` a secas: sin plan activo contestaba
+            //  `sin_plan`, y despues de TERMINAR el plan eso convertia el
+            //  exito en fallo. La precedencia vive en el dominio, y este
+            //  handler la lee — no la reinventa.
+            $sit  = meta_plan_situacion($pdo, $marca_id, $meta);
+            $plan = $sit['plan'];
+            if ($sit['clase'] === 'completado') {
+                echo json_encode(['ok'=>true, 'estado'=>'plan_completado',
+                    'meta_id'    => (int)$meta['id'],
+                    'plan_id'    => (int)($plan['id'] ?? 0),
+                    'hechas'     => (int)$sit['hechas'],
+                    'meta_activa'=> !empty($sit['meta_activa'])], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            if ($sit['clase'] === 'error') {
+                echo json_encode(['ok'=>true, 'estado'=>'error', 'meta_id'=>(int)$meta['id']]);
+                exit;
+            }
+            if (!$plan) {
+                //  La meta esta, el plan no. No es «preparando»: es un plan que
+                //  no llego a existir, y tiene su propia salida.
+                echo json_encode(['ok'=>true, 'estado'=>'sin_plan', 'meta_id'=>(int)$meta['id']]);
+                exit;
+            }
+            require_once __DIR__ . '/../includes/meta_semana.php';
+            $res = semana_resumen($pdo, $marca_id, $meta, $plan, $BASE);
+
+            //  CUANTOS JOBS SIGUEN VIVOS. Es lo que separa «se esta
+            //  preparando» de «nadie esta trabajando en esto».
+            $vivos = 0;
+            try {
+                $q = $pdo->prepare(
+                    "SELECT COUNT(*) FROM crecer_meta_jobs j
+                       JOIN crecer_meta_tactica t ON t.id = j.tactica_id
+                      WHERE j.marca_id = ? AND t.plan_id = ?
+                        AND j.estado IN ('queued','working')");
+                $q->execute([$marca_id, (int)$plan['id']]);
+                $vivos = (int)$q->fetchColumn();
+            } catch (Throwable $e) { $vivos = 0; }
+
+            //  LAS FRASES VIAJAN YA ESCRITAS. La pantalla las pega, no las
+            //  redacta: la de la primera pintada y la del sondeo salen de la
+            //  MISMA funcion del dominio. Con dos redacciones del mismo numero
+            //  bastaba con que una cambiara para que se contradijeran.
+            echo json_encode(['ok'=>true,
+                'estado'     => $res['estado'],          // pendiente|preparando|lista|sin_semana|error
+                'total'      => (int)$res['total'],
+                'pendientes' => (int)$res['pendientes'],
+                'preparando' => (int)$res['preparando'],
+                'decididas'  => (int)$res['decididas'],
+                'continua'   => !empty($res['continua']),
+                'pos'        => (int)$res['pos'],
+                'frase_semana' => semana_frase_estado($res),
+                'frase_puerta' => semana_frase_puerta($res),
+                'jobs'       => $vivos,
+                'plan_id'    => (int)$plan['id'],
+                'meta_id'    => (int)$meta['id'],
+            ], JSON_UNESCAPED_UNICODE);
             exit;
         }
 
@@ -193,7 +293,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         //     (lo que pasa fuera de Crecer). Las de producción se cierran solas
         //     con la evidencia de publicación — el dueño no declara nuestro trabajo.
         if ($accion === 'tactica') {
-            $ok = meta_tactica_estado($pdo, (int)($_POST['id'] ?? 0), $marca_id, (string)($_POST['estado'] ?? 'hecha'));
+            //  LAS GUARDAS VIVEN EN EL DOMINIO, no aquí: este botón se pulsa
+            //  desde tres sitios (la capa del plan, «lo que toca ahora» y
+            //  ahora la revisión semanal) y las tres tienen que obedecer las
+            //  mismas reglas. Antes esto era un UPDATE a pelo: aceptaba
+            //  cualquier estado, cualquier clase y cualquier plan, y el
+            //  segundo clic contestaba `ok:false` porque MySQL no cuenta como
+            //  afectada una fila que no cambia.
+            $pedido = (string)($_POST['estado'] ?? 'hecha');
+            $tid    = (int)($_POST['id'] ?? 0);
+            if ($pedido === 'hecha') {
+                $r  = meta_tarea_hecha($pdo, $marca_id, $tid);
+                $ok = !empty($r['ok']);
+            } else {
+                $r  = [];
+                $ok = meta_tactica_estado($pdo, $tid, $marca_id, $pedido);
+            }
             $completo = false;
             if ($ok) {
                 $mt = meta_activa($pdo, $marca_id);
@@ -203,7 +318,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($pg['completo']) $completo = meta_plan_cerrar($pdo, (int)$pl['id'], 'completado');
                 }
             }
-            echo json_encode(['ok'=>$ok, 'plan_completo'=>$completo]);
+            echo json_encode(['ok'=>$ok, 'plan_completo'=>$completo,
+                              'repetido'=>!empty($r['repetido']),
+                              //  El mensaje del dominio, que dice QUE pasó sin
+                              //  enseñar tripas. Sin él, un rechazo legítimo
+                              //  llegaba a la pantalla como un fallo mudo.
+                              'err'=>$ok ? null : ($r['err'] ?? 'No pude guardarlo. Nada cambió.')],
+                             JSON_UNESCAPED_UNICODE);
             exit;
         }
 
@@ -411,14 +532,30 @@ if ($meta) jugadas_sincronizar_marca($pdo, $marca_id);
 
 $prog = $meta ? meta_progreso($pdo, $meta) : null;
 // EL PLAN VIGENTE y su cumplimiento; las jugadas mostradas son las SUYAS.
-$plan_act  = $meta ? meta_plan_activo($pdo, (int)$meta['id']) : null;
+//
+// LA SITUACION, una sola vez y para toda la pagina: es la misma funcion que
+// leen la llegada, su sondeo y el snapshot de Tu Meta.
+$mt_sit    = meta_plan_situacion($pdo, $marca_id, $meta);
+$plan_act  = $mt_sit['clase'] === 'activo' ? $mt_sit['plan'] : null;
 $prog_plan = $plan_act ? meta_plan_progreso($pdo, (int)$plan_act['id']) : null;
-$tacticas  = $meta ? meta_tacticas($pdo, (int)$meta['id']) : [];
+
+//  QUE PLAN ENSEÑA LA CAPA 2. Con plan activo, el suyo. SIN plan activo,
+//  meta_tacticas() se quedaba sin filtro y devolvia las jugadas de TODOS los
+//  planes de la meta mezcladas —incluidas las de uno reemplazado—. Con el plan
+//  terminado eso importa: «Ver el plan completado» lleva justo ahi.
+$mt_plan_ver = $plan_act ?: ($mt_sit['clase'] === 'completado' ? $mt_sit['plan'] : null);
+$tacticas  = $meta
+    ? ($mt_plan_ver
+        ? meta_tacticas($pdo, (int)$meta['id'], null, (int)$mt_plan_ver['id'])
+        : [])
+    : [];
 // EL HISTORIAL: cada plan cerrado con su récord medido (se abre para ver el detalle).
 $historial = [];
 if ($meta) {
     foreach (meta_planes($pdo, (int)$meta['id']) as $p) {
-        if ($plan_act && (int)$p['id'] === (int)$plan_act['id']) continue;   // el vigente va arriba
+        //  El que se enseña arriba no se repite en el historial: con plan
+        //  activo es el vigente; sin el, el completado que es el cierre.
+        if ($mt_plan_ver && (int)$p['id'] === (int)$mt_plan_ver['id']) continue;
         $historial[] = ['plan' => $p, 'prog' => meta_plan_progreso($pdo, (int)$p['id']),
                         'res'  => meta_plan_resultados($pdo, $p),
                         'tac'  => meta_tacticas($pdo, (int)$meta['id'], null, (int)$p['id'])];
@@ -447,12 +584,17 @@ $mt_estado = MetaStateComposer::componer($mt_snap);
 //   ?vista=plan-nuevo  pedirle otro plan a la Estratega, para esta misma meta
 //   ?vista=cambiar     cerrar esta meta y estrenar la proxima, de una
 $vista = $_GET['vista'] ?? '';
-if (!in_array($vista, ['plan', 'semana', 'wizard', 'plan-nuevo', 'cambiar', 'ajustar', 'sustituir'], true)) $vista = 'ahora';
+if (!in_array($vista, ['plan', 'semana', 'preparando', 'wizard', 'plan-nuevo', 'cambiar', 'ajustar', 'sustituir'], true)) $vista = 'ahora';
 if (!$meta && $vista === 'ahora' && !empty($_GET['nueva'])) $vista = 'wizard';
 //  Las dos delicadas piden una meta viva. Sin ella no hay nada que rehacer ni
 //  que cambiar, y mandar a un wizard vacio es como se llegaba antes a que el
 //  negocio se quedara sin norte: se vuelve a lo que toca ahora.
 if (!$meta && in_array($vista, ['plan-nuevo', 'cambiar', 'ajustar', 'sustituir', 'semana'], true)) $vista = 'ahora';
+//  La preparacion SIN meta no tiene nada que preparar: o el dueño llego por una
+//  URL vieja, o su meta se cerro. Se le devuelve a lo que toca ahora, que sabe
+//  que decirle. Con meta pero sin plan, la vista SI se pinta: ese es justamente
+//  el estado «tu meta quedo guardada pero no pude terminar el plan».
+if (!$meta && $vista === 'preparando') $vista = 'ahora';
 //  Y las dos de 7a solo salen si su esquema esta. Sin la migracion no se
 //  degrada la pantalla: la capacidad no existe y punto. Ver la matriz de
 //  compatibilidad en tests/test_meta_compatibilidad.php.
@@ -1165,6 +1307,10 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
 <?php elseif (!$meta && $vista === 'wizard'): /* ══════════ WIZARD ══════════ */ ?>
 
 <?php require __DIR__ . '/_meta_wizard.php'; ?>
+
+<?php elseif ($meta && $vista === 'preparando'): /* ══════ PREPARANDO EL PLAN ══════ */ ?>
+
+<?php require __DIR__ . '/_meta_preparando.php'; ?>
 
 <?php elseif ($meta && $vista === 'semana'): /* ══════ REVISAR MI SEMANA ══════ */ ?>
 

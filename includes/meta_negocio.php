@@ -1606,6 +1606,161 @@ function meta_tactica_estado(PDO $pdo, int $tactica_id, int $marca_id, string $e
     } catch (Throwable $e) { return false; }
 }
 
+/**
+ * ¿EN QUÉ SITUACIÓN ESTÁ EL PLAN DE ESTA META? Una sola función, con una sola
+ * precedencia, para que ninguna pantalla la resuelva a su manera.
+ *
+ * EL DEFECTO QUE CIERRA. La llegada preguntaba solo por el plan ACTIVO. Cuando
+ * el dueño marcaba hecha la última jugada, el handler cerraba el plan
+ * —`meta_plan_cerrar()` lo pone en 'completado', que es lo correcto— y la
+ * pantalla, al no encontrar activo, le decía «no pude terminar el plan» y le
+ * ofrecía crearlo otra vez. Un éxito presentado como fallo, con un botón que
+ * le fabricaba trabajo que no necesitaba.
+ *
+ * LA PRECEDENCIA, y por qué en este orden:
+ *
+ *   1 · ERROR DE LECTURA. Si la base no contesta no se sabe nada, y «no sé»
+ *       no puede convertirse ni en «terminaste» ni en «no tienes plan». Las
+ *       dos serían la misma mentira, en direcciones opuestas.
+ *   2 · PLAN ACTIVO. Si hay uno vivo, manda: es donde está el trabajo. Un
+ *       plan completado ANTERIOR no puede desplazarlo.
+ *   3 · ÚLTIMO PLAN COMPLETADO DE ESTA META. Es el cierre. Se exige
+ *       `meta_id` Y `marca_id`: el plan terminado de otra meta —o de otro
+ *       negocio— no es el cierre de esta.
+ *   4 · TODO LO DEMÁS es recuperación: nunca hubo plan, la Estratega no
+ *       contestó, o el único que hay quedó `reemplazado` o `abandonado`.
+ *       Ninguno de esos dos es un final feliz.
+ *
+ * NO ESCRIBE NADA y no llama a nadie: son dos SELECT y un conteo.
+ *
+ * OJO A LO QUE NO DICE: que el plan terminara NO significa que la meta de
+ * negocio se lograra. Por eso devuelve `meta_activa` aparte — las métricas de
+ * la meta siguen siendo la autoridad sobre si se consiguió o no.
+ *
+ * @return array{clase:string, plan:?array, estado_plan:string,
+ *               meta_activa:bool, hechas:int, total:int}
+ *         clase ∈ sin_meta | error | activo | completado | sin_plan
+ */
+function meta_plan_situacion(PDO $pdo, int $marca_id, ?array $meta): array
+{
+    $out = ['clase' => 'sin_meta', 'plan' => null, 'estado_plan' => '',
+            'meta_activa' => false, 'hechas' => 0, 'total' => 0];
+    if (!$meta || $marca_id <= 0 || (int)($meta['id'] ?? 0) <= 0) return $out;
+
+    $out['meta_activa'] = (string)($meta['estado'] ?? '') === 'activa';
+    $meta_id = (int)$meta['id'];
+
+    try {
+        //  2 · EL ACTIVO MANDA.
+        $q = $pdo->prepare(
+            "SELECT * FROM crecer_meta_plan
+              WHERE meta_id=? AND marca_id=? AND estado='activo'
+              ORDER BY version DESC, id DESC LIMIT 1");
+        $q->execute([$meta_id, $marca_id]);
+        if ($act = $q->fetch(PDO::FETCH_ASSOC)) {
+            $pg = meta_plan_progreso($pdo, (int)$act['id']);
+            return ['clase' => 'activo', 'plan' => $act, 'estado_plan' => 'activo',
+                    'meta_activa' => $out['meta_activa'],
+                    'hechas' => (int)$pg['hechas'], 'total' => (int)$pg['total']];
+        }
+
+        //  3 · EL ÚLTIMO COMPLETADO DE ESTA META. `cierre_at` primero porque es
+        //      la fecha del cierre real; la versión y el id desempatan.
+        $q = $pdo->prepare(
+            "SELECT * FROM crecer_meta_plan
+              WHERE meta_id=? AND marca_id=? AND estado='completado'
+              ORDER BY cierre_at DESC, version DESC, id DESC LIMIT 1");
+        $q->execute([$meta_id, $marca_id]);
+        if ($comp = $q->fetch(PDO::FETCH_ASSOC)) {
+            $pg = meta_plan_progreso($pdo, (int)$comp['id']);
+            return ['clase' => 'completado', 'plan' => $comp, 'estado_plan' => 'completado',
+                    'meta_activa' => $out['meta_activa'],
+                    'hechas' => (int)$pg['hechas'], 'total' => (int)$pg['total']];
+        }
+
+        //  4 · NI ACTIVO NI TERMINADO: hay que recuperar. Un `reemplazado` o un
+        //      `abandonado` caen aquí a propósito — son historial, no cierre.
+        return ['clase' => 'sin_plan'] + $out;
+
+    } catch (Throwable $e) {
+        error_log('meta_plan_situacion: ' . get_class($e) . ' marca=' . $marca_id
+                  . ' meta=' . $meta_id);
+        return ['clase' => 'error'] + $out;
+    }
+}
+
+/**
+ * «YA LO HICE» — el dueño declara hecha UNA acción suya.
+ *
+ * NO ES UNA CAPACIDAD NUEVA: escribe con meta_tactica_estado(), que es la que
+ * ya usaban la capa del plan y la de «lo que toca ahora». Lo que añade son las
+ * guardas que faltaban, y que ahora hacen falta porque esto se puede pulsar
+ * desde la revisión semanal:
+ *
+ *   · SOLO las de clase `accion_dueno`. Una de producción la cierra el corillo
+ *     con la evidencia de publicación — el dueño no declara nuestro trabajo.
+ *   · SOLO desde un estado vivo (`pendiente` / `en_curso`). Resucitar una
+ *     descartada por aquí sería meter en el plan algo que él ya quitó.
+ *   · SOLO del plan VIGENTE. Cerrar una de un plan pasado tocaría un historial
+ *     que ya se midió.
+ *   · SOLO de su marca.
+ *
+ * IDEMPOTENTE: si ya estaba hecha contesta que sí, marcado como repetido, sin
+ * volver a escribir. `meta_tactica_estado()` devuelve `false` en ese caso
+ * —MySQL no cuenta como afectada una fila que no cambia— y el segundo clic
+ * habría salido en rojo diciendo que falló algo que estaba perfecto.
+ *
+ * NO crea contenido, no llama a ningún proveedor, no toca la cuota y no abre
+ * transacción: es un UPDATE de una fila.
+ *
+ * @return array{ok:bool, repetido?:bool, motivo?:string, err?:string, tactica_id?:int}
+ */
+function meta_tarea_hecha(PDO $pdo, int $marca_id, int $tactica_id): array
+{
+    if ($marca_id <= 0 || $tactica_id <= 0) {
+        return ['ok' => false, 'motivo' => 'sin_id', 'err' => 'No encuentro esa acción.'];
+    }
+    try {
+        $q = $pdo->prepare("SELECT * FROM crecer_meta_tactica WHERE id=? AND marca_id=?");
+        $q->execute([$tactica_id, $marca_id]);
+        $t = $q->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        error_log('meta_tarea_hecha (lectura): ' . get_class($e));
+        return ['ok' => false, 'motivo' => 'fallo', 'err' => 'No pude guardarlo. Nada cambió.'];
+    }
+    if (!$t) return ['ok' => false, 'motivo' => 'no_tuya', 'err' => 'No encuentro esa acción.'];
+
+    if ((string)($t['clase'] ?? '') !== 'accion_dueno') {
+        return ['ok' => false, 'motivo' => 'no_es_tuya',
+                'err' => 'De esa me encargo yo — no hace falta que la marques.'];
+    }
+    if ((string)$t['estado'] === 'hecha') {
+        return ['ok' => true, 'repetido' => true, 'tactica_id' => $tactica_id];
+    }
+    if (!in_array((string)$t['estado'], ['pendiente', 'en_curso'], true)) {
+        return ['ok' => false, 'motivo' => 'no_viva', 'err' => 'Esa acción ya no está en tu plan.'];
+    }
+    $plan = meta_plan_activo($pdo, (int)$t['meta_id']);
+    if (!$plan || (int)$plan['id'] !== (int)$t['plan_id']) {
+        return ['ok' => false, 'motivo' => 'plan_viejo', 'err' => 'Esa acción es de un plan anterior.'];
+    }
+
+    $ok = meta_tactica_estado($pdo, $tactica_id, $marca_id, 'hecha');
+    if (!$ok) {
+        //  Carrera: alguien la cerró entre la lectura y el UPDATE. Se relee y,
+        //  si acabó hecha, es que el trabajo está — no un error que enseñarle.
+        try {
+            $q->execute([$tactica_id, $marca_id]);
+            $ya = $q->fetch(PDO::FETCH_ASSOC) ?: [];
+            if ((string)($ya['estado'] ?? '') === 'hecha') {
+                return ['ok' => true, 'repetido' => true, 'tactica_id' => $tactica_id];
+            }
+        } catch (Throwable $e) { /* se contesta abajo */ }
+        return ['ok' => false, 'motivo' => 'fallo', 'err' => 'No pude guardarlo. Nada cambió.'];
+    }
+    return ['ok' => true, 'tactica_id' => $tactica_id];
+}
+
 // ── EL ENGANCHE AL MOTOR ─────────────────────────────────────
 /**
  * El bloque de contexto que se le inyecta a CUALQUIER agente que
@@ -1860,4 +2015,99 @@ function meta_resumen_corto(PDO $pdo, int $marca_id): string {
         if ($prog['pct'] !== null) $s .= ' (' . $prog['pct'] . '%)';
     }
     return $s;
+}
+
+// ══ LA LLEGADA · lo que se le cuenta al dueño cuando el plan ya existe ══
+//
+//  Dos funciones PURAS: reciben lo que el dominio ya leyó y devuelven cifras y
+//  frases. No consultan, no escriben, no deciden nada del negocio. Viven aquí
+//  —y no en la vista— porque la pantalla de llegada las enseña al cargar y el
+//  sondeo las vuelve a enseñar segundos después: dos redacciones del mismo
+//  número acabarían contradiciéndose.
+
+/**
+ * QUIÉN HACE QUÉ, en el plan vigente.
+ *
+ * SE CUENTA POR `clase`, NO POR `quien`, y esto no es una preferencia de
+ * estilo: en la base de producción 18 de las 20 jugadas de clase
+ * 'accion_dueno' llevan `quien = 'corillo'` (el modelo rellena esa columna a
+ * su aire y meta_plan_generar() la corrige por `clase`, no al revés). Contar
+ * por `quien` diría «el corillo se encarga de todo» justo en las jugadas que
+ * el dueño tiene que hacer con sus manos. Todo el resto del producto ya
+ * decide por `clase` — _meta_jugada.php, el compositor, el encolado — y esto
+ * no abre una segunda verdad.
+ *
+ * NO CUENTA lo que no es trabajo por venir: descartadas y sustituidas quedan
+ * de historia. Las 'regla' se cuentan aparte porque no son una tarea con
+ * fecha: son una forma de operar que no se «termina».
+ *
+ * @param array $tacticas Filas de crecer_meta_tactica del plan ACTIVO
+ *                        (meta_tacticas() ya filtra por él).
+ * @return array{corillo:int, tuyas:int, reglas:int, vivas:int,
+ *               frase_corillo:string, frase_tuyas:string}
+ */
+function meta_plan_reparto(array $tacticas): array
+{
+    $corillo = 0; $tuyas = 0; $reglas = 0;
+
+    foreach ($tacticas as $t) {
+        if ((string)($t['estado'] ?? '') === 'descartada') continue;
+        if (!empty($t['sustituida_at']))                   continue;
+
+        $clase = (string)($t['clase'] ?? 'produccion');
+        if ($clase === 'regla')             { $reglas++;  continue; }
+        if ($clase === 'accion_dueno')      { $tuyas++;   continue; }
+        $corillo++;
+    }
+
+    $acciones = fn(int $k) => $k === 1 ? '1 acción' : $k . ' acciones';
+
+    return [
+        'corillo' => $corillo,
+        'tuyas'   => $tuyas,
+        'reglas'  => $reglas,
+        'vivas'   => $corillo + $tuyas + $reglas,
+        'frase_corillo' => $corillo > 0
+            ? 'El corillo se encarga de ' . $acciones($corillo) . '.'
+            : '',
+        //  «Necesitaré tu ayuda» y no «tienes 2 tareas»: es un departamento
+        //  que trabaja para él, no una lista de deberes que se le entrega.
+        'frase_tuyas' => $tuyas > 0
+            ? 'Necesitaré tu ayuda en ' . ($tuyas === 1 ? '1.' : $tuyas . '.')
+            : '',
+    ];
+}
+
+/** Los meses, escritos como los dice la gente. */
+function meta_mes_es(int $m): string
+{
+    static $M = [1=>'enero','febrero','marzo','abril','mayo','junio','julio',
+                 'agosto','septiembre','octubre','noviembre','diciembre'];
+    return $M[$m] ?? '';
+}
+
+/**
+ * LA META EN UNA LÍNEA: «25 pedidos para el 23 de octubre».
+ *
+ * Afirma solo lo que hay. Sin cantidad no inventa un número; sin fecha no
+ * inventa un plazo. El objetivo se nombra con la `unidad` del catálogo
+ * —pedidos, mensajes, interacciones— que es la palabra que el dueño escogió,
+ * no una etiqueta interna.
+ */
+function meta_frase_meta(?array $meta): string
+{
+    if (!$meta) return '';
+
+    $def   = meta_objetivo_def((string)($meta['objetivo'] ?? ''));
+    $cant  = $meta['cantidad'] ?? null;
+    $trozo = ($cant !== null && (int)$cant > 0)
+        ? (int)$cant . ' ' . (string)($def['unidad'] ?? '')
+        : (string)($def['titulo'] ?? '');
+
+    $f = trim((string)($meta['fecha_limite'] ?? ''));
+    if ($f !== '' && ($ts = strtotime($f))) {
+        return trim($trozo) . ' para el ' . (int)date('j', $ts)
+             . ' de ' . meta_mes_es((int)date('n', $ts));
+    }
+    return trim($trozo);
 }

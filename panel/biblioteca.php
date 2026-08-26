@@ -216,6 +216,19 @@ $page_title = 'Biblioteca';
 $guia = null; // La galería se usa sola: tap → fullscreen → swipe. Sin explicación.
 require __DIR__ . '/_shell.php';
 ?>
+<?php /*  LA VUELTA AL WIZARD DE LA META.
+          El paso «tu material» invita a venir aqui a subir fotos, y esta
+          pantalla no tenia forma de volver: era un viaje de ida y el dueño
+          perdia el recorrido. El regreso se arma AQUI con la marca —nunca con
+          una URL que venga en la peticion, que seria un redirect abierto— y
+          solo se pinta si de verdad se vino de alli.  */ ?>
+<?php if (($_GET['volver'] ?? '') === 'wizard'): ?>
+<a href="<?= $BASE ?>/meta.php?marca=<?= (int)$marca_id ?>&amp;vista=wizard"
+   style="display:inline-flex;align-items:center;gap:8px;min-height:44px;margin:10px 0 4px;
+          font-size:15px;font-weight:600;color:var(--tinta);text-decoration:none">
+  <span style="transform:rotate(180deg);display:inline-flex"><?= ico('chev-der') ?></span>
+  Volver a crear mi meta</a>
+<?php endif; ?>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
   /* ══ LA BIBLIOTECA ══ galería viva. Mismo director que Home/Propuestas:

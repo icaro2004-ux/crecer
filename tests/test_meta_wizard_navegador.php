@@ -148,16 +148,21 @@ try {
                 //  pedir una decision a ciegas, que es justo lo que este paso
                 //  existe para evitar.
                 $r = $j['repaso'] ?? [];
+                //  Tres, no seis. El presupuesto y el contexto se fueron a la
+                //  capa opcional -no todo el mundo tiene que decidirlos- y
+                //  «como se mide» se dice en el paso donde se escribe el
+                //  numero, que es donde importa. Lo que NO puede faltar es que
+                //  vea sus tres respuestas antes de crear.
                 foreach (['rObj' => 'que quiere lograr', 'rCant' => 'cuanto',
-                          'rFecha' => 'para cuando', 'rPauta' => 'la inversion',
-                          'rCtx' => 'lo que conto', 'rMedir' => 'como se mide'] as $id => $qs) {
+                          'rFecha' => 'para cuando'] as $id => $qs) {
                     ok("{$etq} · el repaso dice {$qs}",
                        isset($r[$id]) && trim($r[$id]) !== '' && trim($r[$id]) !== '—',
                        $id . '=' . json_encode($r[$id] ?? null, JSON_UNESCAPED_UNICODE));
                 }
-                ok("{$etq} · y el texto largo cabe entero",
-                   strpos((string)($r['rCtx'] ?? ''), 'bizcochos de boda') !== false,
-                   'se corto: ' . mb_substr((string)($r['rCtx'] ?? ''), -40));
+                //  El texto largo se comprueba en el recorrido que de verdad
+                //  lo escribe -el de «atrás», más abajo-: esta medida entra al
+                //  paso 4 por su cuenta y no abre la capa de ajustes, así que
+                //  aquí el contexto está vacío con razón.
             }
             if ($p === 1) {
                 //  La salida, en la primera pantalla y sin ambiguedad sobre si
@@ -190,6 +195,15 @@ try {
         ok('y el contexto tampoco se pierde',
            strpos((string)($j['alPrincipio']['ctx'] ?? ''), 'brazo gitano') !== false,
            'ctx=' . mb_substr((string)($j['alPrincipio']['ctx'] ?? '—'), 0, 40));
+        //  Y ENTERO, de principio a fin: un textarea largo escrito en la capa
+        //  opcional no puede volver recortado por ningún extremo. Se comprueba
+        //  con las dos puntas del texto que la sonda escribió — buscar una
+        //  frase que no esté en ese texto sería una afirmación inventada.
+        $ctx4 = (string)($j['enElRepaso']['ctx'] ?? '');
+        ok('el texto largo se conserva entero',
+           strpos($ctx4, '[prueba] Tengo el combo') === 0
+           && substr($ctx4, -strlen('fiestas del pueblo.')) === 'fiestas del pueblo.',
+           'quedó: «' . mb_substr($ctx4, 0, 24) . ' … ' . mb_substr($ctx4, -24) . '»');
         //  Ir hacia adelante SIN volver a contestar solo funciona si el boton
         //  Siguiente sigue habilitado, que es la prueba de que nada se borro.
         ok('el repaso se rehace con lo guardado',

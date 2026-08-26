@@ -57,7 +57,10 @@ $sm_sust_ok = meta_sustitucion_disponible($pdo);
 //  TODO lo que cada publicación necesita, resuelto ANTES de pintar. Así la
 //  plantilla no llama a nada que pueda decidir algo.
 $sm_items = [];
-$sm_cuenta = ['decididas' => 0, 'pendientes' => 0, 'tuyas' => 0];
+$sm_cuenta = ['decididas' => 0, 'pendientes' => 0, 'tuyas' => 0, 'hechas' => 0];
+//  ¿Hay alguna acción suya esta semana? De eso depende que la cabecera pueda
+//  decir «Publicación N de M» — con una tarea entre medias, sería falso.
+$sm_hay_tarea = false;
 foreach ($sm['items'] as $i => $it) {
     $n   = $i + 1;
     $p   = $it['pieza'];
@@ -71,7 +74,11 @@ foreach ($sm['items'] as $i => $it) {
 
     if (in_array($cla, ['aprobado', 'programado', 'publicado', 'publicando'], true)) $sm_cuenta['decididas']++;
     elseif ($cla === 'falta_material')                                               $sm_cuenta['tuyas']++;
+    //  Una acción suya ya marcada NO es «sin decidir»: está resuelta. Contarla
+    //  con las pendientes dejaba el cierre diciendo que quedaba trabajo.
+    elseif ($cla === 'tarea_hecha')                                                  $sm_cuenta['hechas']++;
     else                                                                             $sm_cuenta['pendientes']++;
+    if (!empty($it['tarea'])) $sm_hay_tarea = true;
 
     $sm_items[] = [
         'n'       => $n,
@@ -79,6 +86,7 @@ foreach ($sm['items'] as $i => $it) {
         'tac'     => $t,
         'estado'  => $it['estado'],
         'clave'   => $cla,
+        'tarea'   => !empty($it['tarea']),
         'accion'  => semana_accion($it, $marca_id, $BASE),
         'cuando'  => semana_cuando($p['fecha_programada'] ?? null),
         //  CUÁNTAS unidades gastó ya esta pieza — arte, realce y los slides de
@@ -195,6 +203,22 @@ foreach ($sm['items'] as $i => $it) {
   .sm-bt:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
   .sm-dos{display:flex;gap:9px;margin-top:9px}
   .sm-dos .sm-bt{flex:1;min-width:0}
+  /* — LA TAREA DEL DUEÑO —
+     Sin marco de foto: aquí no hay pieza que enseñar. Lo que manda es qué
+     tiene que hacer y por qué le ayuda. */
+  .sm-tarea{background:var(--tm-rosa-piel);border:1px solid #F6D3DE;border-radius:var(--tm-r);
+    padding:16px 15px;margin-bottom:14px}
+  .sm-tarea .et{display:inline-flex;align-items:center;gap:7px;font-size:14px;font-weight:700;
+    letter-spacing:.03em;color:var(--tm-rosa-tx);margin-bottom:9px}
+  .sm-tarea .et .ic{width:17px;height:17px;stroke-width:2}
+  .sm-tarea h2{margin:0;font-family:var(--font-display,'Poppins',sans-serif);font-weight:700;
+    font-size:22px;line-height:1.25;letter-spacing:-.018em;color:var(--tinta);text-wrap:balance}
+  .sm-tarea .qh{margin:9px 0 0;font-size:15px;line-height:1.55;color:var(--ink,#4A434F)}
+  .sm-tarea .sm-porque{margin-top:11px}
+  .sm-tarea .est{margin:12px 0 0;font-size:14px;font-weight:600;color:var(--tm-rosa-tx)}
+  .sm-p .sm-pie .sm-nota{margin-top:11px}
+  @media (min-width:1000px){ .sm-tarea h2{font-size:26px} }
+
   .sm-nopuedo{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;
     min-height:46px;margin-top:8px;font-size:15px;font-weight:600;color:var(--muted);
     text-decoration:none;border-radius:var(--tm-r-bt)}
@@ -314,7 +338,8 @@ foreach ($sm['items'] as $i => $it) {
   }
 </style>
 
-<div class="sm" id="sm" data-marca="<?= (int)$marca_id ?>" data-total="<?= $sm_total ?>">
+<div class="sm" id="sm" data-marca="<?= (int)$marca_id ?>" data-total="<?= $sm_total ?>"
+     data-tarea="<?= $sm_hay_tarea ? '1' : '0' ?>">
 
 <?php if ($sm_total === 0): /* ══ NO HAY SEMANA QUE REVISAR ══════════════ */ ?>
 
@@ -343,7 +368,12 @@ foreach ($sm['items'] as $i => $it) {
 
   <div class="sm-top">
     <a class="sm-atras" href="<?= $h($sm_atras) ?>" aria-label="Volver a tu meta"><?= ico('chev-der') ?></a>
-    <span class="sm-paso" id="smPaso">Publicación <?= $sm_pos ?> de <?= $sm_total ?></span>
+    <?php /*  LA CUENTA HONESTA. «Publicación 3 de 3» era falso en cuanto una
+              de las tres era una acción suya. Con mezcla se dice «Tu semana ·
+              3 de 3», que vale para las dos cosas y no promete ninguna.  */ ?>
+    <span class="sm-paso" id="smPaso"><?= $sm_hay_tarea
+        ? 'Tu semana · ' . $sm_pos . ' de ' . $sm_total
+        : 'Publicación ' . $sm_pos . ' de ' . $sm_total ?></span>
   </div>
   <?php /*  LA BARRA CUENTA LAS PUBLICACIONES, no el recorrido entero: es lo
             que convierte «una cola» en «una tarea que se acaba».  */ ?>
@@ -370,7 +400,63 @@ foreach ($sm['items'] as $i => $it) {
              data-puerta="<?= $h($x['puerta']) ?>"
              data-sust="<?= $h($x['sust']) ?>"
              data-cuota="<?= (int)$x['cuota']['unidades'] ?>"
-             data-cuota-tx="<?= $h(semana_frase_cuota((int)$x['cuota']['unidades'])) ?>">
+             data-cuota-tx="<?= $h(semana_frase_cuota((int)$x['cuota']['unidades'])) ?>"
+             data-tactica="<?= (int)$t['id'] ?>">
+
+    <?php if ($x['tarea']): /* ══ LA QUE LE TOCA A ÉL ═══════════════════════
+          Ni imagen vacía, ni caption inventado, ni red social, ni fecha de
+          publicación: nada de eso existe. Lo que hay es una cosa que hacer
+          fuera de Crecer, su razón, y qué puede decidir. */ ?>
+
+      <div class="sm-tarea">
+        <span class="et"><?= ico('users') ?><?= $h($x['estado']['etiqueta']) ?></span>
+        <h2><?= $h((string)$t['titulo']) ?></h2>
+        <?php $qh = trim((string)($t['que_hacer'] ?? '')); ?>
+        <?php if ($qh !== ''): ?><p class="qh"><?= $h($qh) ?></p><?php endif; ?>
+        <?php if (trim((string)($t['por_que'] ?? '')) !== ''): ?>
+          <p class="sm-porque"><?= ico('target') ?>
+            <span><b>Por qué ayuda:</b> <?= $h((string)$t['por_que']) ?></span></p>
+        <?php endif; ?>
+        <p class="est"><?= $x['clave'] === 'tarea_hecha'
+              ? 'Marcada como hecha'
+              : 'Pendiente esta semana' ?></p>
+      </div>
+
+      <?php if ($a['nota'] !== ''): ?>
+        <p class="sm-nota"><?= ico('sparkles') ?><span><?= $h($a['nota']) ?></span></p>
+      <?php endif; ?>
+
+      <div class="sm-hecho" data-hecho<?= $x['clave'] === 'tarea_hecha' ? '' : ' hidden' ?>>
+        <?= ico('check-circle') ?><span>Listo. Lo marqué como hecho.</span></div>
+
+      <div class="sm-err" data-err role="alert"><?= ico('bolt') ?><p></p></div>
+
+      <div class="sm-pie">
+        <?php if ($x['clave'] !== 'tarea_hecha'): ?>
+          <button type="button" class="sm-bt pri" data-tarea-hecha>
+            <?= ico('check') ?>Ya lo hice</button>
+        <?php endif; ?>
+
+        <div class="sm-dos">
+          <?php /*  «No puedo con esta» es la MISMA sustitución de siempre: no
+                    hay un segundo wizard. Aquí sube a botón porque en una
+                    tarea es media decisión de las dos que se ofrecen.  */ ?>
+          <?php if ($x['sust'] !== '' && $x['clave'] !== 'tarea_hecha'): ?>
+            <a class="sm-bt sec" href="<?= $h($x['sust']) ?>">
+              <?= ico('refresh') ?>No puedo con esta</a>
+          <?php endif; ?>
+          <button type="button" class="sm-bt sec" data-siguiente>
+            <?= $x['n'] < $sm_total ? 'Volver después' : 'Terminar' ?></button>
+        </div>
+
+        <?php /*  Y se dice qué pasa si se va: nada. Sin prometer recordatorios
+                  que no existen ni fechas de regreso inventadas.  */ ?>
+        <?php if ($x['clave'] !== 'tarea_hecha'): ?>
+          <p class="sm-nota"><?= ico('clock') ?><span>Seguirá pendiente en tu semana.</span></p>
+        <?php endif; ?>
+      </div>
+
+    <?php else: /* ══ UNA PUBLICACIÓN, como siempre ═══════════════════════ */ ?>
 
       <?php /* ── LA PIEZA ────────────────────────────────────────────── */ ?>
       <div class="sm-media<?= ($arte === '' ? ' falta' : '') ?>">
@@ -459,6 +545,8 @@ foreach ($sm['items'] as $i => $it) {
             <?= ico('refresh') ?>No puedo con esta — cámbiala por otra</a>
         <?php endif; ?>
       </div>
+
+    <?php endif; ?>
     </article>
 <?php endforeach; ?>
 
@@ -472,6 +560,9 @@ foreach ($sm['items'] as $i => $it) {
           <div><b id="smFinA"><?= $sm_cuenta['decididas'] ?></b><span>listas para salir</span></div>
           <div><b id="smFinB"><?= $sm_cuenta['pendientes'] ?></b><span>sin decidir</span></div>
           <div><b id="smFinC"><?= $sm_cuenta['tuyas'] ?></b><span>esperan material tuyo</span></div>
+          <?php if ($sm_hay_tarea): ?>
+            <div><b id="smFinD"><?= $sm_cuenta['hechas'] ?></b><span>acciones tuyas hechas</span></div>
+          <?php endif; ?>
         </div>
         <nav class="sm-mas-nav">
           <a href="<?= $BASE ?>/calendario.php?marca=<?= $marca_id ?>"><?= ico('calendar') ?>Ver cuándo sale cada una<?= ico('chev-der') ?></a>
@@ -522,6 +613,7 @@ foreach ($sm['items'] as $i => $it) {
 (function () {
   var SM     = document.getElementById('sm');
   var MARCA  = +SM.dataset.marca, TOTAL = +SM.dataset.total;
+  var HAY_TAREA = SM.dataset.tarea === '1';
   var CSRF   = <?= json_encode(csrf_token()) ?>;
   var APROBAR = '<?= $BASE ?>/aprobar2.php?marca=' + MARCA;
   var HORA_NOTA = <?= json_encode($sm_hora, JSON_UNESCAPED_UNICODE) ?>;
@@ -548,7 +640,9 @@ foreach ($sm['items'] as $i => $it) {
     });
     $$('.sm-li').forEach(function (b) { b.classList.toggle('on', +b.dataset.ir === n); });
     var paso = $('#smPaso');
-    if (paso) paso.textContent = n > TOTAL ? 'Tu semana' : ('Publicación ' + n + ' de ' + TOTAL);
+    if (paso) paso.textContent = n > TOTAL ? 'Tu semana'
+      : (HAY_TAREA ? ('Tu semana · ' + n + ' de ' + TOTAL)
+                   : ('Publicación ' + n + ' de ' + TOTAL));
     if (n <= TOTAL) {
       try {
         history.replaceState(null, '',
@@ -564,15 +658,17 @@ foreach ($sm['items'] as $i => $it) {
   /*  EL CIERRE CUENTA LO QUE HAY, no lo que se hizo en esta sesión: si el
       dueño aprobó dos ayer y una hoy, el número tiene que decir tres.  */
   function recontar() {
-    var a = 0, b = 0, c = 0;
+    var a = 0, b = 0, c = 0, d = 0;
     piezas.forEach(function (el) {
       if (el.dataset.fin) return;
       var k = el.dataset.clave;
       if (k === 'aprobado' || k === 'programado' || k === 'publicado' || k === 'publicando') a++;
       else if (k === 'falta_material') c++;
+      else if (k === 'tarea_hecha') d++;
       else b++;
     });
     $('#smFinA').textContent = a; $('#smFinB').textContent = b; $('#smFinC').textContent = c;
+    var fd = $('#smFinD'); if (fd) fd.textContent = d;
     $('#smFinT').textContent = b + c === 0 ? 'Tu semana está lista' : 'Repasaste tu semana';
     $('#smFinP').textContent = b + c === 0
       ? 'No te queda nada por decidir esta semana.'
@@ -806,6 +902,52 @@ foreach ($sm['items'] as $i => $it) {
       «vuelve el jueves», así que decirlo sería inventarse persistencia. La
       pieza se queda en borrador y la lista la sigue enseñando: eso sí es
       verdad, y es lo que dice el cierre.  */
+  /*  «YA LO HICE» — va al handler `tactica` de meta.php, el mismo que usan la
+      capa del plan y «lo que toca ahora». No crea contenido, no llama a nadie
+      y no toca la cuota: es un estado de la jugada.
+
+      Lo que se afirma después es lo único comprobable —que ÉL la marcó—, no
+      que el resultado de allá afuera haya ocurrido.  */
+  $$('[data-tarea-hecha]').forEach(function (bt) {
+    bt.addEventListener('click', function () {
+      var el = bt.closest('.sm-p');
+      if (enviando) return;
+      enviando = true; bt.disabled = true; limpiar(el);
+
+      var fd = new FormData();
+      fd.append('csrf', CSRF);
+      fd.append('accion', 'tactica');
+      fd.append('id', el.dataset.tactica);
+      fd.append('estado', 'hecha');
+
+      fetch(location.pathname + '?marca=' + MARCA,
+            { method: 'POST', body: fd, credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          enviando = false; bt.disabled = false;
+          if (!j || !j.ok) { fallo(el, (j && j.err) ? j.err : 'No pude guardarlo. Nada cambió.'); return; }
+          marcarHecha(el);
+          ir(pos + 1);
+        })
+        .catch(function () {
+          enviando = false; bt.disabled = false;
+          fallo(el, 'Se cayó la conexión antes de guardar. Todo sigue como estaba.');
+        });
+    });
+  });
+
+  function marcarHecha(el) {
+    el.dataset.clave = 'tarea_hecha';
+    var caja = $('.sm-tarea .est', el); if (caja) caja.textContent = 'Marcada como hecha';
+    var et = $('.sm-tarea .et span', el);
+    var hecho = $('[data-hecho]', el); if (hecho) hecho.hidden = false;
+    ['[data-tarea-hecha]', '.sm-pie .sm-bt.sec[href]', '.sm-pie .sm-nota'].forEach(function (sel) {
+      var n = $(sel, el); if (n) n.remove();
+    });
+    var li = $$('.sm-li').filter(function (b) { return +b.dataset.ir === +el.dataset.n; })[0];
+    if (li) { var sp = $('.tx span', li); if (sp) { sp.textContent = 'Hecha'; sp.className = 'ok'; } }
+  }
+
   $$('[data-siguiente]').forEach(function (b) {
     b.addEventListener('click', function () { ir(+b.closest('.sm-p').dataset.n + 1); });
   });
