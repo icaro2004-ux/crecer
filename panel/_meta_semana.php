@@ -1131,7 +1131,11 @@ foreach ($sm['items'] as $i => $it) {
         })
         .catch(function () {
           b.disabled = false; b.textContent = 'Mejorarla';
-          hojaErr('#smMjE', 'Se cayó la conexión. No se gastó nada.');
+          //  NO SE PUEDE PROMETER QUE NO SE GASTO. Un realce tarda, y si lo que
+          //  se cayo fue la respuesta -no la peticion- la imagen puede haberse
+          //  hecho igual. Decir «no se gastó nada» seria afirmar algo que desde
+          //  aqui no se sabe. Se dice lo que SI es cierto: que mire.
+          hojaErr('#smMjE', 'Se cortó la conexión. Si alcanzó a hacerse, la verás al recargar.');
         });
     });
   }

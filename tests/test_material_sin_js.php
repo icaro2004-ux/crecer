@@ -198,6 +198,12 @@ try {
     $AJENO = (int)$pdo->lastInsertId();
     enviar($sid, $BIB, ['csrf' => token($sid), 'accion' => 'usar_material',
                         'pieza' => $C, 'activo_id' => $AJENO, 'pos' => 2]);
+    //  Y NI SIQUIERA SE ENSEÑA. Que no se pueda aplicar es la mitad; la otra
+    //  es que no aparezca en el HTML de nadie mas.
+    [$html_x] = pedir($sid, $BIB . "&pieza={$C}&volver=meta&pos=2");
+    ok('un recurso de otra marca no sale en el HTML',
+       !str_contains($html_x, 'ajena.jpg') && !str_contains($html_x, 'value="' . $AJENO . '"'),
+       'la Biblioteca lista por marca: un id de otra cuenta no se pinta ni tapado');
     ok('un recurso de otra marca no entra', (int)$mat($C) === $mat_antes,
        'el dueño de esta marca no puede alcanzar el archivo de otra');
 
