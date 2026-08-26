@@ -40,10 +40,16 @@ try {
     //  el texto se guarda al instante y la nota queda cruda: aprender de ella
     //  es trabajo de aqui, no de su pantalla. Va en su propio try porque una
     //  edicion rara no puede tumbar la corrida del corillo.
+    //  UNA SOLA BOLSA PARA TODA LA CORRIDA. Se crea aqui y se pasa por
+    //  referencia a cada marca: asi el techo global es de la corrida y no de
+    //  cada marca. Cuando se agota, se deja de repartir y lo que quede en la
+    //  cola lo drena la proxima — aprender de una edicion no es urgente.
     $ed_total = ['digeridas' => 0, 'fallidas' => 0];
+    $ed_bolsa = ['restantes' => aprendiz_tope_corrida()];
     try {
         foreach (($res['detalle'] ?? []) as $d) {
-            $r = edicion_digerir($pdo, (int)$d['marca_id'], 10);
+            if ((int)$ed_bolsa['restantes'] <= 0) break;
+            $r = edicion_digerir($pdo, (int)$d['marca_id'], null, $ed_bolsa);
             $ed_total['digeridas'] += (int)$r['digeridas'];
             $ed_total['fallidas']  += (int)$r['fallidas'];
         }

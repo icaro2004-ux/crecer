@@ -1607,6 +1607,34 @@ function aprender_de_edicion(PDO $pdo, int $marca_id, string $original, string $
  *
  * @return array{digeridas:int, fallidas:int, llamadas:int, sin_leccion:int}
  */
+/**
+ * CUANTO PUEDE COSTAR UNA CORRIDA DE APRENDIZAJE.
+ *
+ * `edicion_digerir()` nacio con LIMIT, pero POR MARCA: el cron le pasaba 10 a
+ * cada una. Con veinte marcas que hubieran corregido captions, una sola corrida
+ * del corillo disparaba doscientas llamadas al modelo — sin que nadie lo pidiera
+ * y sin que nadie lo viera venir, porque la cola se llena con el uso normal.
+ *
+ * El arreglo no es una cola nueva: es un techo. Uno GLOBAL por corrida, para
+ * que el gasto de una noche sea predecible, y uno POR MARCA menor que el
+ * global, para que la primera de la lista no se lo coma entero. Lo que no cupo
+ * se queda pendiente y lo drena la corrida siguiente: aprender de una edicion
+ * no es urgente, y gastar de golpe si es caro.
+ *
+ * Se configuran como todo aqui: una constante que gana si esta definida.
+ */
+function aprendiz_tope_corrida(): int {
+    return max(1, (int)(defined('CRECER_APRENDIZ_TOPE_CORRIDA')
+        ? CRECER_APRENDIZ_TOPE_CORRIDA : 5));
+}
+function aprendiz_tope_marca(): int {
+    //  Siempre por debajo del global: si fueran iguales, la primera marca
+    //  vaciaria la bolsa y las demas no verian una corrida en su vida.
+    $g = aprendiz_tope_corrida();
+    $m = (int)(defined('CRECER_APRENDIZ_TOPE_MARCA') ? CRECER_APRENDIZ_TOPE_MARCA : 2);
+    return max(1, min($m, max(1, $g - 1)));
+}
+
 if (!function_exists('aprendiz_leccion')) {
 /**
  * EL BORDE DEL APRENDIZ, sustituible — el mismo patron que ia_http_post_retry()
@@ -1625,12 +1653,26 @@ function aprendiz_leccion(PDO $pdo, int $marca_id, string $original,
 }
 }
 
-function edicion_digerir(PDO $pdo, int $marca_id, int $tope = 10): array
+function edicion_digerir(PDO $pdo, int $marca_id, ?int $tope = null, &$bolsa = null): array
 {
     require_once __DIR__ . '/memoria.php';
     $out = ['digeridas' => 0, 'fallidas' => 0, 'llamadas' => 0, 'sin_leccion' => 0];
-    if ($marca_id <= 0 || $tope <= 0) return $out;
+    if ($marca_id <= 0) return $out;
 
+    //  LA BOLSA ES EL TECHO GLOBAL DE LA CORRIDA, y va por referencia a
+    //  proposito: el cron la crea UNA vez y se la pasa a todas las marcas. Si
+    //  cada una creara la suya, el techo global se multiplicaria por el numero
+    //  de marcas — que es exactamente el problema que esto cierra.
+    if ($bolsa === null) $bolsa = ['restantes' => aprendiz_tope_corrida()];
+    if (!is_array($bolsa) || (int)($bolsa['restantes'] ?? 0) <= 0) return $out;
+
+    //  Y EL TECHO DE ESTA MARCA: lo menor entre lo que pidan, su tope y lo que
+    //  quede en la bolsa. Nunca se leen mas filas de las que se van a procesar:
+    //  reclamar una fila que no se va a tocar la deja bloqueada diez minutos
+    //  para todo el mundo.
+    $tope = $tope !== null ? max(0, $tope) : aprendiz_tope_marca();
+    $tope = min($tope, aprendiz_tope_marca(), (int)$bolsa['restantes']);
+    if ($tope <= 0) return $out;
 
     $MAX_INTENTOS = 3;
     $LEASE_MIN    = 10;   // minutos que se reserva una fila reclamada
@@ -1650,6 +1692,9 @@ function edicion_digerir(PDO $pdo, int $marca_id, int $tope = 10): array
     }
 
     foreach ($filas as $f) {
+        //  La bolsa se mira ANTES de reclamar: quedarse sin presupuesto a
+        //  mitad no puede dejar una fila con el lease puesto.
+        if ((int)$bolsa['restantes'] <= 0) break;
         $id = (int)$f['id'];
 
         //  1 · RECLAMAR. El lease va en el WHERE: si otro llego primero, aqui
@@ -1676,7 +1721,11 @@ function edicion_digerir(PDO $pdo, int $marca_id, int $tope = 10): array
         //  2 · DIGERIR. Es el prompt del Aprendiz de siempre, no uno nuevo.
         $leccion = null; $fallo = null;
         try {
+            //  El turno se gasta al INTENTARLO, salga bien o mal. Un fallo que
+            //  no descontara dejaria a una marca rota consumiendo la corrida
+            //  entera a base de reintentos.
             $out['llamadas']++;
+            $bolsa['restantes'] = (int)$bolsa['restantes'] - 1;
             $leccion = aprendiz_leccion($pdo, $marca_id, $original, $editado);
         } catch (Throwable $e) {
             $fallo = get_class($e) . ': ' . mb_substr($e->getMessage(), 0, 120);
