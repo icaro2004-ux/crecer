@@ -805,8 +805,20 @@ foreach ($sm['items'] as $i => $it) {
     var f = hojaC.querySelector('button, a, textarea, input');
     if (f) f.focus();
   }
+  //  LA VISTA PREVIA LOCAL SE SUELTA. `URL.createObjectURL` reserva el
+  //  archivo en memoria hasta que se le dice que ya no; una repostera que
+  //  prueba seis fotos seguidas en un telefono de gama baja se las lleva
+  //  todas puestas. Se suelta al cerrar y al reemplazar, que son los dos
+  //  unicos momentos en que deja de verse.
+  var urlLocal = null;
+  function soltarLocal() {
+    if (!urlLocal) return;
+    try { URL.revokeObjectURL(urlLocal); } catch (e) {}
+    urlLocal = null;
+  }
   function cerrar() {
     velo.classList.remove('on'); hojaC.innerHTML = '';
+    soltarLocal();
     if (focoPrevio && focoPrevio.isConnected) focoPrevio.focus();
   }
   $('#smCerrar').addEventListener('click', cerrar);
@@ -991,7 +1003,11 @@ foreach ($sm['items'] as $i => $it) {
 
   function previaYSubir(el, f) {
     var esVideo = /^video\//.test(f.type);
+    //  Si ya habia una previa puesta -escogio, se lo penso, escogio otra-
+    //  aquella se suelta antes de reservar esta.
+    soltarLocal();
     var url = URL.createObjectURL(f);
+    urlLocal = url;
     var medio = esVideo
       ? '<video src="' + url + '" muted playsinline controls preload="metadata"></video>'
       : '<img src="' + url + '" alt="">';
