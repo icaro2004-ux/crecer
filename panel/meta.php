@@ -274,7 +274,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         //     (lo que pasa fuera de Crecer). Las de producción se cierran solas
         //     con la evidencia de publicación — el dueño no declara nuestro trabajo.
         if ($accion === 'tactica') {
-            $ok = meta_tactica_estado($pdo, (int)($_POST['id'] ?? 0), $marca_id, (string)($_POST['estado'] ?? 'hecha'));
+            //  LAS GUARDAS VIVEN EN EL DOMINIO, no aquí: este botón se pulsa
+            //  desde tres sitios (la capa del plan, «lo que toca ahora» y
+            //  ahora la revisión semanal) y las tres tienen que obedecer las
+            //  mismas reglas. Antes esto era un UPDATE a pelo: aceptaba
+            //  cualquier estado, cualquier clase y cualquier plan, y el
+            //  segundo clic contestaba `ok:false` porque MySQL no cuenta como
+            //  afectada una fila que no cambia.
+            $pedido = (string)($_POST['estado'] ?? 'hecha');
+            $tid    = (int)($_POST['id'] ?? 0);
+            if ($pedido === 'hecha') {
+                $r  = meta_tarea_hecha($pdo, $marca_id, $tid);
+                $ok = !empty($r['ok']);
+            } else {
+                $r  = [];
+                $ok = meta_tactica_estado($pdo, $tid, $marca_id, $pedido);
+            }
             $completo = false;
             if ($ok) {
                 $mt = meta_activa($pdo, $marca_id);
@@ -284,7 +299,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($pg['completo']) $completo = meta_plan_cerrar($pdo, (int)$pl['id'], 'completado');
                 }
             }
-            echo json_encode(['ok'=>$ok, 'plan_completo'=>$completo]);
+            echo json_encode(['ok'=>$ok, 'plan_completo'=>$completo,
+                              'repetido'=>!empty($r['repetido']),
+                              //  El mensaje del dominio, que dice QUE pasó sin
+                              //  enseñar tripas. Sin él, un rechazo legítimo
+                              //  llegaba a la pantalla como un fallo mudo.
+                              'err'=>$ok ? null : ($r['err'] ?? 'No pude guardarlo. Nada cambió.')],
+                             JSON_UNESCAPED_UNICODE);
             exit;
         }
 

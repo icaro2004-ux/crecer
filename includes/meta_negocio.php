@@ -1606,6 +1606,78 @@ function meta_tactica_estado(PDO $pdo, int $tactica_id, int $marca_id, string $e
     } catch (Throwable $e) { return false; }
 }
 
+/**
+ * «YA LO HICE» — el dueño declara hecha UNA acción suya.
+ *
+ * NO ES UNA CAPACIDAD NUEVA: escribe con meta_tactica_estado(), que es la que
+ * ya usaban la capa del plan y la de «lo que toca ahora». Lo que añade son las
+ * guardas que faltaban, y que ahora hacen falta porque esto se puede pulsar
+ * desde la revisión semanal:
+ *
+ *   · SOLO las de clase `accion_dueno`. Una de producción la cierra el corillo
+ *     con la evidencia de publicación — el dueño no declara nuestro trabajo.
+ *   · SOLO desde un estado vivo (`pendiente` / `en_curso`). Resucitar una
+ *     descartada por aquí sería meter en el plan algo que él ya quitó.
+ *   · SOLO del plan VIGENTE. Cerrar una de un plan pasado tocaría un historial
+ *     que ya se midió.
+ *   · SOLO de su marca.
+ *
+ * IDEMPOTENTE: si ya estaba hecha contesta que sí, marcado como repetido, sin
+ * volver a escribir. `meta_tactica_estado()` devuelve `false` en ese caso
+ * —MySQL no cuenta como afectada una fila que no cambia— y el segundo clic
+ * habría salido en rojo diciendo que falló algo que estaba perfecto.
+ *
+ * NO crea contenido, no llama a ningún proveedor, no toca la cuota y no abre
+ * transacción: es un UPDATE de una fila.
+ *
+ * @return array{ok:bool, repetido?:bool, motivo?:string, err?:string, tactica_id?:int}
+ */
+function meta_tarea_hecha(PDO $pdo, int $marca_id, int $tactica_id): array
+{
+    if ($marca_id <= 0 || $tactica_id <= 0) {
+        return ['ok' => false, 'motivo' => 'sin_id', 'err' => 'No encuentro esa acción.'];
+    }
+    try {
+        $q = $pdo->prepare("SELECT * FROM crecer_meta_tactica WHERE id=? AND marca_id=?");
+        $q->execute([$tactica_id, $marca_id]);
+        $t = $q->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        error_log('meta_tarea_hecha (lectura): ' . get_class($e));
+        return ['ok' => false, 'motivo' => 'fallo', 'err' => 'No pude guardarlo. Nada cambió.'];
+    }
+    if (!$t) return ['ok' => false, 'motivo' => 'no_tuya', 'err' => 'No encuentro esa acción.'];
+
+    if ((string)($t['clase'] ?? '') !== 'accion_dueno') {
+        return ['ok' => false, 'motivo' => 'no_es_tuya',
+                'err' => 'De esa me encargo yo — no hace falta que la marques.'];
+    }
+    if ((string)$t['estado'] === 'hecha') {
+        return ['ok' => true, 'repetido' => true, 'tactica_id' => $tactica_id];
+    }
+    if (!in_array((string)$t['estado'], ['pendiente', 'en_curso'], true)) {
+        return ['ok' => false, 'motivo' => 'no_viva', 'err' => 'Esa acción ya no está en tu plan.'];
+    }
+    $plan = meta_plan_activo($pdo, (int)$t['meta_id']);
+    if (!$plan || (int)$plan['id'] !== (int)$t['plan_id']) {
+        return ['ok' => false, 'motivo' => 'plan_viejo', 'err' => 'Esa acción es de un plan anterior.'];
+    }
+
+    $ok = meta_tactica_estado($pdo, $tactica_id, $marca_id, 'hecha');
+    if (!$ok) {
+        //  Carrera: alguien la cerró entre la lectura y el UPDATE. Se relee y,
+        //  si acabó hecha, es que el trabajo está — no un error que enseñarle.
+        try {
+            $q->execute([$tactica_id, $marca_id]);
+            $ya = $q->fetch(PDO::FETCH_ASSOC) ?: [];
+            if ((string)($ya['estado'] ?? '') === 'hecha') {
+                return ['ok' => true, 'repetido' => true, 'tactica_id' => $tactica_id];
+            }
+        } catch (Throwable $e) { /* se contesta abajo */ }
+        return ['ok' => false, 'motivo' => 'fallo', 'err' => 'No pude guardarlo. Nada cambió.'];
+    }
+    return ['ok' => true, 'tactica_id' => $tactica_id];
+}
+
 // ── EL ENGANCHE AL MOTOR ─────────────────────────────────────
 /**
  * El bloque de contexto que se le inyecta a CUALQUIER agente que

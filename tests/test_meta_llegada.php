@@ -208,9 +208,17 @@ try {
 
     if (function_exists('semana_frase_estado')) {
         $fs = semana_frase_estado($res);
-        ok('la frase dice cuántas hay que revisar',
-           mb_strpos($fs, (string)(int)$res['pendientes']) !== false
-           && mb_stripos($fs, 'revisar') !== false, $fs);
+        //  ESTA SEMANA ES MIXTA: dos publicaciones y una acción suya. La frase
+        //  tiene que decir las dos cifras por separado. Antes esta afirmación
+        //  esperaba «3 publicaciones para revisar» — que era justo la mentira
+        //  que arregló el tramo de `accion_dueno`: una de las tres la hace él.
+        ok('la frase separa publicaciones de acciones',
+           mb_strpos($fs, (string)(int)$res['pend_pub']) !== false
+           && mb_stripos($fs, 'publicaci') !== false
+           && mb_strpos($fs, (string)(int)$res['pend_tarea']) !== false
+           && mb_stripos($fs, 'acción') !== false, $fs);
+        ok('y no mete todo en el mismo saco',
+           mb_stripos($fs, (string)(int)$res['pendientes'] . ' publicaciones') === false, $fs);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -233,8 +241,10 @@ try {
        'el reparto tiene que verse, no vivir solo en el modal');
     ok('y en cuántas necesita al dueño',
        mb_stripos($vis, 'ayuda en 2') !== false || mb_stripos($vis, '2 ') !== false);
-    ok('dice cuántas publicaciones esperan',
-       mb_stripos($vis, 'para revisar') !== false);
+    ok('dice qué tiene esta semana, con la frase del dominio',
+       mb_strpos($vis, semana_frase_estado($res)) !== false,
+       'la pantalla pega la frase del servidor: no la vuelve a redactar · '
+       . semana_frase_estado($res));
 
     //  LA PUERTA, con la posición REAL.
     ok('ofrece la acción principal', ofrecido($html, 'prIr'),
@@ -319,7 +329,8 @@ try {
     $vis3 = visible(pagina($sid, $M, '&vista=preparando'));
     ok('y la recarga cuenta lo mismo',
        mb_stripos($vis3, 'se encarga de 4') !== false
-       && mb_stripos($vis3, 'para revisar') !== false);
+       && mb_strpos($vis3, semana_frase_estado(
+            semana_resumen($pdo, $M, $meta, $plan, '/crecer/panel'))) !== false);
 
     // ══════════════════════════════════════════════════════════════
     //  6 · B · YA EMPEZÓ · «continuar», y en la posición correcta

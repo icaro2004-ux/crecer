@@ -358,12 +358,35 @@ function semana_construir(PDO $pdo, int $marca_id, array $meta, array $plan, ?in
             $viva = $p; break;
         }
 
+        //  ¿ES UNA TAREA SUYA? Una jugada de clase `accion_dueno` no tiene
+        //  pieza y NUNCA la va a tener: no la produce el ejecutor, el
+        //  encolado de la primera semana la salta a proposito y no hay job
+        //  que la complete. Meterla en la rama «sin pieza» le ponia «el
+        //  corillo esta preparando» —nadie la preparaba— y dejaba la semana
+        //  en `preparando` para siempre si era la unica abierta.
+        //
+        //  Si por lo que sea tuviera pieza, manda la pieza: se revisa como
+        //  cualquier publicacion.
+        $es_tarea = $viva === null
+                 && (string)($t['clase'] ?? 'produccion') === 'accion_dueno';
+
+        if ($es_tarea) {
+            $estado_it = (string)$t['estado'] === 'hecha'
+                ? ['clave' => 'tarea_hecha', 'etiqueta' => 'Hecha']
+                : ['clave' => 'tarea',       'etiqueta' => 'Te toca a ti'];
+        } elseif ($viva) {
+            $estado_it = semana_estado_pieza($viva);
+        } else {
+            $estado_it = ['clave' => 'preparando',
+                          'etiqueta' => 'El corillo está preparando la alternativa'];
+        }
+
         $items[] = [
             'tactica'   => $t,
             'pieza'     => $viva,
-            'estado'    => $viva ? semana_estado_pieza($viva) : ['clave' => 'preparando',
-                             'etiqueta' => 'El corillo está preparando la alternativa'],
-            'preparando'=> $viva === null,
+            'estado'    => $estado_it,
+            'tarea'     => $es_tarea,
+            'preparando'=> $viva === null && !$es_tarea,
             'sustituida'=> !empty($t['sustituye_a_id']),
             'token'     => meta_token_jugada($t),
         ];
@@ -615,6 +638,21 @@ function semana_accion(array $item, int $marca_id, string $BASE = '/crecer/panel
     $p  = $item['pieza'] ?? null;
     $cl = (string)($item['estado']['clave'] ?? 'preparando');
 
+    //  LA QUE LE TOCA A ÉL. Va ANTES que la rama «sin pieza», que es donde
+    //  caia hasta ahora y donde se le decia que el corillo la estaba
+    //  preparando. No hay nada que aprobar porque no hay pieza — hay algo que
+    //  HACER, fuera de Crecer, y luego marcarlo.
+    if ($cl === 'tarea') {
+        return ['modo' => 'tarea', 'etiqueta' => 'Ya lo hice', 'ruta' => '', 'tono' => 'rosa',
+                'nota' => 'Esta te toca a ti. Cuando la hagas, márcala aquí.'];
+    }
+    if ($cl === 'tarea_hecha') {
+        //  Y lo que se afirma es lo unico comprobable: que EL la marco. No que
+        //  el resultado de allá afuera haya ocurrido.
+        return ['modo' => 'ninguna', 'etiqueta' => '', 'ruta' => '', 'tono' => 'sec',
+                'nota' => 'Marcaste esta acción como hecha.'];
+    }
+
     //  Sin pieza no hay nada que aprobar ni donde ir: la jugada esta viva y su
     //  contenido todavia no existe. Se dice, y ya.
     if (!$p) {
@@ -725,7 +763,8 @@ function semana_resumen(PDO $pdo, int $marca_id, ?array $meta, ?array $plan,
                         string $BASE = '/crecer/panel'): array
 {
     $vacio = ['estado' => 'sin_semana', 'total' => 0, 'pendientes' => 0, 'preparando' => 0,
-              'decididas' => 0, 'pos' => 1, 'continua' => false, 'clase' => ''];
+              'decididas' => 0, 'pend_pub' => 0, 'pend_tarea' => 0,
+              'pos' => 1, 'continua' => false, 'clase' => ''];
     if (!$meta || !$plan) return $vacio;
 
     try {
@@ -739,7 +778,8 @@ function semana_resumen(PDO $pdo, int $marca_id, ?array $meta, ?array $plan,
         error_log('semana_resumen: ' . get_class($e) . ' marca=' . $marca_id
                   . ' meta=' . (int)($meta['id'] ?? 0));
         return ['estado' => 'error', 'total' => 0, 'pendientes' => 0, 'preparando' => 0,
-                'decididas' => 0, 'pos' => 1, 'continua' => false, 'clase' => get_class($e)];
+                'decididas' => 0, 'pend_pub' => 0, 'pend_tarea' => 0,
+                'pos' => 1, 'continua' => false, 'clase' => get_class($e)];
     }
 
     $total = (int)$sem['total'];
@@ -766,12 +806,14 @@ function semana_resumen(PDO $pdo, int $marca_id, ?array $meta, ?array $plan,
             error_log('semana_resumen (cero no verificable): ' . get_class($e)
                       . ' marca=' . $marca_id . ' meta=' . (int)($meta['id'] ?? 0));
             return ['estado' => 'error', 'total' => 0, 'pendientes' => 0, 'preparando' => 0,
-                    'decididas' => 0, 'pos' => 1, 'continua' => false, 'clase' => get_class($e)];
+                    'decididas' => 0, 'pend_pub' => 0, 'pend_tarea' => 0,
+                    'pos' => 1, 'continua' => false, 'clase' => get_class($e)];
         }
         return $vacio;
     }
 
     $pendientes = 0; $preparando = 0; $decididas = 0;
+    $pend_pub = 0; $pend_tarea = 0;
     $pos_pend = 0; $pos_prep = 0;
 
     foreach ($sem['items'] as $i => $it) {
@@ -781,6 +823,10 @@ function semana_resumen(PDO $pdo, int $marca_id, ?array $meta, ?array $plan,
 
         if ($ac['modo'] !== 'ninguna') {
             $pendientes++;
+            //  SE SEPARAN A PROPOSITO. Llamar «3 publicaciones» a dos posts y
+            //  una tarea suya es contarle mal el trabajo — y ademas le promete
+            //  que el corillo hace las tres.
+            if (!empty($it['tarea'])) $pend_tarea++; else $pend_pub++;
             if ($pos_pend === 0) $pos_pend = $n;          // la primera que le toca
         } elseif (in_array($cl, ['preparando', 'sin_decidir'], true)) {
             //  Viva y sin decidir, pero sin nada que el dueño pueda hacer: o no
@@ -792,9 +838,14 @@ function semana_resumen(PDO $pdo, int $marca_id, ?array $meta, ?array $plan,
         }
     }
 
+    //  UNA DECISION DISPONIBLE MANDA SOBRE LO QUE SE ESTA COCINANDO. Si hay
+    //  dos publicaciones en la cola y una tarea suya lista, la semana es
+    //  revisable: se abre en la tarea y las otras siguen preparandose. Antes
+    //  bastaba una posicion sin pieza para dejar la pantalla sin primaria.
     if ($pendientes > 0) {
         return ['estado' => 'pendiente', 'total' => $total, 'pendientes' => $pendientes,
                 'preparando' => $preparando, 'decididas' => $decididas,
+                'pend_pub' => $pend_pub, 'pend_tarea' => $pend_tarea,
                 'pos' => $pos_pend,
                 //  «Continuar» solo si de verdad dejo algo resuelto detras.
                 'continua' => $decididas > 0, 'clase' => ''];
@@ -802,10 +853,12 @@ function semana_resumen(PDO $pdo, int $marca_id, ?array $meta, ?array $plan,
     if ($preparando > 0) {
         return ['estado' => 'preparando', 'total' => $total, 'pendientes' => 0,
                 'preparando' => $preparando, 'decididas' => $decididas,
+                'pend_pub' => 0, 'pend_tarea' => 0,
                 'pos' => $pos_prep, 'continua' => false, 'clase' => ''];
     }
     return ['estado' => 'lista', 'total' => $total, 'pendientes' => 0, 'preparando' => 0,
-            'decididas' => $decididas, 'pos' => 1, 'continua' => false, 'clase' => ''];
+            'decididas' => $decididas, 'pend_pub' => 0, 'pend_tarea' => 0,
+            'pos' => 1, 'continua' => false, 'clase' => ''];
 }
 
 /** El texto de la puerta. Dice cuantas hay y si es empezar o seguir. */
@@ -819,6 +872,12 @@ function semana_frase_puerta(array $r): string
 function semana_cuantas(int $n): string
 {
     return $n === 1 ? '1 publicación' : $n . ' publicaciones';
+}
+
+/** «2 acciones» / «1 acción». Lo que le toca a EL, contado aparte. */
+function semana_acciones(int $n): string
+{
+    return $n === 1 ? '1 acción' : $n . ' acciones';
 }
 
 /**
@@ -837,6 +896,19 @@ function semana_frase_estado(array $r): string
     $prep   = (int)($r['preparando'] ?? 0);
 
     if ($estado === 'pendiente') {
+        //  DOS CIFRAS DISTINTAS, y nunca una sola que las mezcle: una
+        //  publicacion la hace el corillo y una accion la hace el. Decir «3
+        //  publicaciones» cuando una es suya le promete trabajo que nadie va
+        //  a hacer por el.
+        $pub = (int)($r['pend_pub'] ?? 0);
+        $tar = (int)($r['pend_tarea'] ?? 0);
+        if ($pub > 0 && $tar > 0) {
+            return 'Tienes ' . semana_cuantas($pub) . ' y ' . semana_acciones($tar)
+                 . ' esta semana.';
+        }
+        if ($tar > 0 && $pub === 0) {
+            return 'Tienes ' . semana_acciones($tar) . ' para completar.';
+        }
         return 'Tienes ' . semana_cuantas($pen) . ' para revisar.';
     }
     if ($estado === 'preparando') {
