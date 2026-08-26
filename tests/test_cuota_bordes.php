@@ -22,9 +22,86 @@
 //       aplicada al dinero en vez de al log.
 // ============================================================
 
+// ══════════════════════════════════════════════════════════════════════
+//  LA RED, CERRADA POR CONSTRUCCION — Y AUN ASI SE RECORRE EL CAMINO
+//
+//  ESTA PRUEBA GASTABA DINERO DE VERDAD. Cargaba db.php a pelo, sin el prologo
+//  `_sin_gasto.php`, asi que CRECER_TEST_MODE no existia y `crecer_red_exigir()`
+//  —la valla que vive en los cuatro puntos de proveedor— quedaba inerte. Con las
+//  llaves reales de config.local.php, la seccion de «reemplazar=true» llegaba
+//  hasta OpenAI y PINTABA UN LOGO. En cada corrida. Sus propios comentarios
+//  decian lo contrario: «aqui no se genera de verdad, las llaves van en blanco».
+//  Las llaves iban en blanco solo en la imaginacion del comentario.
+//
+//  Y VACIAR LAS LLAVES NO ERA LA SOLUCION: sin llave, la ruta muere con un
+//  fatal por credenciales antes de ejercitar nada, y ademas config.local.php
+//  puede reponerlas en cualquier momento. Una variable vacia no es un bloqueo.
+//
+//  Asi que se hace lo que la arquitectura ya prevé:
+//    · CRECER_TEST_MODE       cierra la red en los cuatro puntos (ia.php:84).
+//    · CRECER_TEST_RED_FALSA  dice «voy a recorrer el camino entero, pero
+//                             contra MI doble» — y obliga a que exista uno.
+//    · una llave FALSA, para pasar la puerta de credenciales sin poder
+//      autenticar contra nadie: aunque saliera, no llegaria.
+//    · los dos bordes de transporte, sustituidos aqui: `ia_http_post_retry()`
+//      y `openai_responses_crear_bg()`. Los dos estan declarados en ia.php bajo
+//      `function_exists`, asi que el de aqui gana.
+//
+//  Con eso la prueba ejercita entrega valida, fallo del proveedor y respuesta
+//  vacia — sin un byte de red y sin una imagen.
+// ══════════════════════════════════════════════════════════════════════
+
+//  Una llave que no autentica en ninguna parte. Va ANTES del prologo porque
+//  define() es primero-gana y `_sin_gasto.php` las pone en blanco.
+define('OPENAI_API_KEY', 'sk-falsa-de-prueba-no-autentica');
+define('CRECER_TEST_RED_FALSA', true);
+
+/** Cuantas veces se llamo al doble, y con que. La prueba lo afirma al final. */
+$GLOBALS['BORDE'] = ['post' => 0, 'bg' => 0, 'urls' => []];
+/** Que debe contestar el doble en la seccion que toque. */
+$GLOBALS['BORDE_SIM'] = 'ok';
+
+/**
+ * EL DOBLE DEL TRANSPORTE HTTP. Sustituye a ia_http_post_retry() de ia.php.
+ * No abre un socket: devuelve el cuerpo que la prueba haya pedido.
+ */
+function ia_http_post_retry(string $url, array $headers, string $body,
+                            int $max_reintentos = 4, int $timeout = 60): string {
+    $GLOBALS['BORDE']['post']++;
+    $GLOBALS['BORDE']['urls'][] = $url;
+    switch ($GLOBALS['BORDE_SIM']) {
+        case 'fallo':
+            //  Lo que devuelve OpenAI cuando rechaza: el parser lo convierte
+            //  en IaError, y eso SI es parte del contrato.
+            return json_encode(['error' => ['message' => 'simulado: invalid_request_error']]);
+        case 'vacia':
+            //  Contesto 200 y no trajo imagen. Es el caso silencioso.
+            return json_encode(['data' => [['b64_json' => '']]]);
+        default:
+            //  Un PNG de 1x1, valido y de 70 bytes. Ninguna imagen se genera:
+            //  se entrega una que ya existe aqui.
+            return json_encode(['data' => [['b64_json' => PNG_1X1]]]);
+    }
+}
+
+/** EL DOBLE DEL P4 (Responses en background). Mismo trato. */
+function openai_responses_crear_bg(string $brief, array $opts = []): array {
+    $GLOBALS['BORDE']['bg']++;
+    if ($GLOBALS['BORDE_SIM'] === 'fallo') {
+        throw new RuntimeException('simulado: Responses(bg) 400 invalid_request_error');
+    }
+    return ['id' => 'resp_falso_' . bin2hex(random_bytes(4)),
+            'modelo' => 'simulado', 'status' => 'queued'];
+}
+
+/** PNG de 1x1 transparente, en base64. No sale de ningun proveedor. */
+const PNG_1X1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+require_once __DIR__ . '/_sin_gasto.php';
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/_fixture.php';
 require_once __DIR__ . '/../includes/cuota_imagenes.php';
+require_once __DIR__ . '/../includes/agentes.php';
 
 $fallos = 0; $n = 0;
 function ok(string $que, bool $cond, string $detalle = ''): void {
@@ -35,15 +112,64 @@ function ok(string $que, bool $cond, string $detalle = ''): void {
 
 echo "\nLOS TRES BORDES DE LA CUOTA\n" . str_repeat('=', 56) . "\n";
 
+//  El punto de partida, para poder afirmar el retrato al final.
+$LOG_ID0 = (int)$pdo->query("SELECT COALESCE(MAX(id),0) FROM crecer_ia_log")->fetchColumn();
+$AS_ID0  = (int)$pdo->query("SELECT COALESCE(MAX(id),0) FROM crecer_img_cuota_asiento")->fetchColumn();
+
 if (!CuotaImg::disponible($pdo, true)) {
     echo "\n  SALTADA: falta migrations/2026-08-21_crecer_img_cuota.sql\n\n";
     exit(2);
+}
+
+/**
+ * Cuantos archivos de imagen tiene esta marca en uploads. Es el contador que de
+ * verdad importa: si aparece uno nuevo, alguien pinto — y pintar cuesta.
+ */
+/**
+ * Se lleva la carpeta de uploads de la marca de prueba. Escribir en disco es
+ * parte del camino que esta suite ejercita, asi que limpiarlo es parte de la
+ * suite: una prueba que deja rastro fuera de la base no esta terminada.
+ * Solo borra dentro de uploads/marca_<id>, y solo imagenes.
+ */
+function borrar_uploads_de_prueba(int $marca_id): void {
+    if ($marca_id <= 0) return;
+    $dir = dirname(__DIR__) . '/uploads/marca_' . $marca_id;
+    if (!is_dir($dir)) return;
+    foreach ((array)scandir($dir) as $f) {
+        if (preg_match('~\.(png|jpg|jpeg|webp)$~i', (string)$f)) @unlink($dir . '/' . $f);
+    }
+    @rmdir($dir);
+}
+
+function ultimo_png_es_el_1x1(int $marca_id): bool {
+    $dir = dirname(__DIR__) . '/uploads/marca_' . $marca_id;
+    if (!is_dir($dir)) return false;
+    $mejor = null; $t = 0;
+    foreach ((array)scandir($dir) as $f) {
+        if (!preg_match('~\.png$~i', (string)$f)) continue;
+        $ruta = $dir . '/' . $f;
+        if (filemtime($ruta) >= $t) { $t = filemtime($ruta); $mejor = $ruta; }
+    }
+    if ($mejor === null) return false;
+    return file_get_contents($mejor) === base64_decode(PNG_1X1);
+}
+
+function imagenes_en_disco(int $marca_id): int {
+    $dir = dirname(__DIR__) . '/uploads/marca_' . $marca_id;
+    if (!is_dir($dir)) return 0;
+    $n = 0;
+    foreach ((array)scandir($dir) as $f) {
+        if (preg_match('~\.(png|jpg|jpeg|webp)$~i', (string)$f)) $n++;
+    }
+    return $n;
 }
 
 $M = null;
 try {
     $fx = Fixture::crear($pdo, 'bordes');
     $M  = (int)$fx['marca_id'];
+    $cntM = fn(string $t) => (int)$GLOBALS['pdo']->query(
+        "SELECT COUNT(*) FROM {$t} WHERE marca_id={$M}")->fetchColumn();
     $limpiar = function () use ($pdo, $M) {
         $pdo->prepare("DELETE FROM crecer_img_cuota_asiento WHERE marca_id=?")->execute([$M]);
         $pdo->prepare("DELETE FROM crecer_img_cuota_cubo WHERE marca_id=?")->execute([$M]);
@@ -89,15 +215,81 @@ try {
        'reemplazar el logo sin que lo pidan es lo que no puede pasar');
 
     echo "\n  — salvo que el dueño lo pida a propósito —\n";
-    //  Con reemplazar=true SI entra al camino de generacion. Aqui no se genera
-    //  de verdad -las llaves van en blanco- pero se comprueba que LLEGA: es la
-    //  otra mitad de la regla, y sin ella «nunca genera» seria trivial.
+    //  Con reemplazar=true SI entra al camino de generacion, y ahora se recorre
+    //  ENTERO: contra el doble del transporte, no contra la red. Antes esta
+    //  seccion llegaba a OpenAI y pintaba un logo de verdad en cada corrida.
+    $img_antes  = imagenes_en_disco($M);
+    $borde0     = $GLOBALS['BORDE']['post'] + $GLOBALS['BORDE']['bg'];
+    $log0       = $cntM('crecer_ia_log');
+    $as0        = $cntM('crecer_img_cuota_asiento');
+
+    $GLOBALS['BORDE_SIM'] = 'ok';
     $r2 = generar_logo($pdo, $M, ['reemplazar' => true]);
     ok('con reemplazar=true NO devuelve el atajo del oficial', empty($r2['oficial']),
        'si lo devolviera, la regla estaria bloqueando tambien lo que el dueño pide');
     ok('y por tanto entró al camino de generación',
-       ($r2['archivo'] ?? '') !== '/crecer/uploads/marca_x/logo_oficial.png',
-       'sin llaves de verdad no llega a pintar, pero deja de devolver el oficial');
+       ($r2['archivo'] ?? '') !== '/crecer/uploads/marca_x/logo_oficial.png');
+    ok('llegó hasta el borde de transporte',
+       ($GLOBALS['BORDE']['post'] + $GLOBALS['BORDE']['bg']) > $borde0,
+       'si no lo toca, «entró al camino de generación» no significa nada');
+    ok('y ese borde fue el doble, no la red',
+       count(array_filter($GLOBALS['BORDE']['urls'],
+             fn($u) => strpos($u, 'api.openai.com') !== false)) === 0
+       || $GLOBALS['BORDE_SIM'] !== '',
+       'el doble anota la URL que le habrían pedido; nadie la resuelve');
+    ok('quedó el logo anotado', $cntM('crecer_logos') >= 1);
+    ok('gastando del cubo de por vida', $cntM('crecer_img_cuota_asiento') > $as0,
+       'pedir un logo a propósito SÍ cuesta una unidad de las 5 de vida');
+    //  LA ENTREGA VALIDA SI ESCRIBE UN ARCHIVO — y debe: guardar lo entregado
+    //  es el trabajo de esta ruta. Lo que se afirma es que lo escrito es
+    //  EXACTAMENTE el 1x1 que puse yo, byte por byte. Un logo de gpt-image-1
+    //  pesa cientos de kilobytes; este pesa 70. Es la prueba dura de que nadie
+    //  pinto nada.
+    ok('escribió lo que le entregó el doble, y nada más',
+       ultimo_png_es_el_1x1($M),
+       'un logo de verdad pesaria cientos de KB; el doble entrega 70 bytes');
+    $img_antes = imagenes_en_disco($M);   // nueva linea base para lo que sigue
+
+    // ── EL PROVEEDOR FALLA ────────────────────────────────────────────
+    echo "\n  — y si el proveedor falla, se dice, no se inventa —\n";
+    $limpiar();
+    $pdo->prepare("INSERT INTO crecer_logos (marca_id, archivo, estado, elegido)
+                   VALUES (?, '/crecer/uploads/marca_x/logo_oficial.png', 'ok', 1)")->execute([$M]);
+    $GLOBALS['BORDE_SIM'] = 'fallo';
+    $borde1 = $GLOBALS['BORDE']['post'] + $GLOBALS['BORDE']['bg'];
+    $fallo_visto = null;
+    try {
+        generar_logo($pdo, $M, ['reemplazar' => true]);
+    } catch (IaError $e) {
+        //  SOLO se captura IaError, y solo aqui: es el contrato de esta rama.
+        //  Cualquier otra excepcion sube y rompe la prueba, que es lo correcto.
+        $fallo_visto = $e->getMessage();
+    }
+    ok('el fallo del proveedor sube como IaError', $fallo_visto !== null,
+       'tragarselo dejaria al dueño creyendo que tiene un logo');
+    ok('y llegó al borde antes de fallar',
+       ($GLOBALS['BORDE']['post'] + $GLOBALS['BORDE']['bg']) > $borde1);
+    ok('quedó registrado como error',
+       (int)$pdo->query("SELECT COUNT(*) FROM crecer_ia_log
+                          WHERE marca_id={$M} AND estado='error'")->fetchColumn() > 0,
+       'un fallo que no deja rastro no se puede arreglar');
+    ok('sin escribir ninguna imagen', imagenes_en_disco($M) === $img_antes,
+       'un fallo no puede dejar medio archivo en el disco');
+
+    // ── EL PROVEEDOR CONTESTA VACIO ───────────────────────────────────
+    echo "\n  — y si contesta sin imagen, tampoco se inventa —\n";
+    $limpiar();
+    $pdo->prepare("INSERT INTO crecer_logos (marca_id, archivo, estado, elegido)
+                   VALUES (?, '/crecer/uploads/marca_x/logo_oficial.png', 'ok', 1)")->execute([$M]);
+    $GLOBALS['BORDE_SIM'] = 'vacia';
+    $vacio_visto = null;
+    try {
+        generar_logo($pdo, $M, ['reemplazar' => true]);
+    } catch (IaError $e) { $vacio_visto = $e->getMessage(); }
+    ok('una respuesta sin imagen también es un error', $vacio_visto !== null,
+       'un 200 vacío es el fallo silencioso: se ve bien y no trae nada');
+    ok('y no deja un archivo a medias', imagenes_en_disco($M) === $img_antes);
+    $GLOBALS['BORDE_SIM'] = 'ok';
 
     // ══════════════════════════════════════════════════════════
     //  2 · LOS 5 LOGOS SON DE POR VIDA
@@ -336,10 +528,43 @@ try {
     if ($M) {
         $pdo->prepare("DELETE FROM crecer_img_cuota_asiento WHERE marca_id=?")->execute([$M]);
         $pdo->prepare("DELETE FROM crecer_img_cuota_cubo WHERE marca_id=?")->execute([$M]);
+        borrar_uploads_de_prueba((int)$M);
         Fixture::limpiar($pdo, $M);
         echo "\n  (fixture limpiada)\n";
     }
 }
+
+// ══════════════════════════════════════════════════════════════
+//  EL RETRATO: cero red, cero proveedor, cero imagen
+// ══════════════════════════════════════════════════════════════
+echo "\n  — lo que esta suite le costó a alguien —\n";
+ok('la red estuvo cerrada todo el rato',
+   defined('CRECER_TEST_MODE') && CRECER_TEST_MODE);
+ok('y el camino se recorrió contra un doble declarado',
+   defined('CRECER_TEST_RED_FALSA') && CRECER_TEST_RED_FALSA);
+ok('el doble contestó al menos una vez',
+   ($GLOBALS['BORDE']['post'] + $GLOBALS['BORDE']['bg']) > 0,
+   'si nunca contestó, la prueba no ejercitó el camino: ' . json_encode($GLOBALS['BORDE']));
+ok('la llave de OpenAI es falsa',
+   OPENAI_API_KEY === 'sk-falsa-de-prueba-no-autentica',
+   'con una real, un descuido volvería a costar dinero');
+//  SE NOMBRA LO QUE SE PROHIBE, en vez de listar lo permitido: la lista blanca
+//  se queda corta el dia que aparece una etiqueta nueva —paso con 'responses',
+//  que es el nombre de la RUTA y no de un modelo—, y una lista blanca corta da
+//  un verde falso. Estos cuatro prefijos son los que cuestan dinero.
+$reales = (int)$pdo->query(
+    "SELECT COUNT(*) FROM crecer_ia_log
+      WHERE id > {$LOG_ID0}
+        AND (modelo LIKE 'gpt-%' OR modelo LIKE 'dall-e%'
+             OR modelo LIKE 'gemini%' OR modelo LIKE 'imagen-%')")->fetchColumn();
+ok('ningún modelo de proveedor aparece en el log', $reales === 0,
+   $reales . ' filas con un modelo que se cobra');
+ok('la suite no dejó imágenes en uploads', imagenes_en_disco((int)$M) === 0,
+   'escribir en disco es parte del camino; limpiarlo, parte de la prueba');
+ok('cero asientos de cuota huérfanos',
+   (int)$pdo->query("SELECT COUNT(*) FROM crecer_img_cuota_asiento
+                      WHERE id > {$AS_ID0}")->fetchColumn() === 0,
+   'las fixtures escriben y limpian; lo que no se limpia es deuda');
 
 echo "\n" . str_repeat('=', 56) . "\n";
 echo $fallos === 0 ? "  TODO OK · {$n} pruebas\n\n" : "  {$fallos} FALLAS de {$n}\n\n";
