@@ -532,14 +532,30 @@ if ($meta) jugadas_sincronizar_marca($pdo, $marca_id);
 
 $prog = $meta ? meta_progreso($pdo, $meta) : null;
 // EL PLAN VIGENTE y su cumplimiento; las jugadas mostradas son las SUYAS.
-$plan_act  = $meta ? meta_plan_activo($pdo, (int)$meta['id']) : null;
+//
+// LA SITUACION, una sola vez y para toda la pagina: es la misma funcion que
+// leen la llegada, su sondeo y el snapshot de Tu Meta.
+$mt_sit    = meta_plan_situacion($pdo, $marca_id, $meta);
+$plan_act  = $mt_sit['clase'] === 'activo' ? $mt_sit['plan'] : null;
 $prog_plan = $plan_act ? meta_plan_progreso($pdo, (int)$plan_act['id']) : null;
-$tacticas  = $meta ? meta_tacticas($pdo, (int)$meta['id']) : [];
+
+//  QUE PLAN ENSEÑA LA CAPA 2. Con plan activo, el suyo. SIN plan activo,
+//  meta_tacticas() se quedaba sin filtro y devolvia las jugadas de TODOS los
+//  planes de la meta mezcladas —incluidas las de uno reemplazado—. Con el plan
+//  terminado eso importa: «Ver el plan completado» lleva justo ahi.
+$mt_plan_ver = $plan_act ?: ($mt_sit['clase'] === 'completado' ? $mt_sit['plan'] : null);
+$tacticas  = $meta
+    ? ($mt_plan_ver
+        ? meta_tacticas($pdo, (int)$meta['id'], null, (int)$mt_plan_ver['id'])
+        : [])
+    : [];
 // EL HISTORIAL: cada plan cerrado con su récord medido (se abre para ver el detalle).
 $historial = [];
 if ($meta) {
     foreach (meta_planes($pdo, (int)$meta['id']) as $p) {
-        if ($plan_act && (int)$p['id'] === (int)$plan_act['id']) continue;   // el vigente va arriba
+        //  El que se enseña arriba no se repite en el historial: con plan
+        //  activo es el vigente; sin el, el completado que es el cierre.
+        if ($mt_plan_ver && (int)$p['id'] === (int)$mt_plan_ver['id']) continue;
         $historial[] = ['plan' => $p, 'prog' => meta_plan_progreso($pdo, (int)$p['id']),
                         'res'  => meta_plan_resultados($pdo, $p),
                         'tac'  => meta_tacticas($pdo, (int)$meta['id'], null, (int)$p['id'])];

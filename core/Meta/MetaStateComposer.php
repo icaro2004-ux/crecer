@@ -49,6 +49,7 @@ class MetaStateComposer
         'reglaTodoProgramado',     // 12 · J
         'reglaMidiendo',           // 13 · K
         'reglaAprendizaje',        // 14 · L
+        'reglaPlanCompletado',     // 15 · N  el plan termino y la meta sigue viva
     ];
 
     /**
@@ -487,9 +488,66 @@ class MetaStateComposer
             (string)$pc['leccion'],
             ['etiqueta' => 'Ver el ajuste',
              'destino' => self::url($s, 'meta.php', ['vista' => 'plan'], 'aprendizaje'),
-             'consecuencia' => 'Ya lo estoy aplicando en el plan de ahora.', 'tipo' => 'informativa'],
+             //  Solo se afirma que se está aplicando si HAY un plan de ahora.
+             //  Sin plan activo, esa frase promete un trabajo que no existe.
+             'consecuencia' => (($s['situacion']['clase'] ?? '') === 'activo')
+                 ? 'Ya lo estoy aplicando en el plan de ahora.'
+                 : 'Lo aplico en el próximo plan.',
+             'tipo' => 'informativa'],
             ['plan_id' => (int)($pc['id'] ?? 0), 'funciono' => $pc['funciono'] ?? null],
             self::camino($s), self::cobertura($s), 'leccion_reciente');
+    }
+
+    // ── 15 · N · El plan terminó, y la meta sigue viva ──────────────────────
+    /**
+     * VA LA ÚLTIMA A PROPÓSITO, y eso es la mitad de la regla.
+     *
+     * K (midiendo) y L (aprendizaje) ya describen bien un plan cerrado cuando
+     * hay algo que medir o una lección que contar: adelantarme a ellas habría
+     * tapado dos estados que dicen MÁS. Esta regla cubre exactamente el hueco
+     * que quedaba —plan terminado, sin piezas publicadas midiéndose y sin
+     * lección todavía—, que es por donde se colaba el último recurso diciendo
+     * «Tu plan está en marcha» justo después de que el dueño lo terminara.
+     *
+     * NO AFIRMA QUE LA META SE LOGRÓ. Terminar las acciones y conseguir el
+     * resultado son dos cosas distintas, y quien decide la segunda son las
+     * métricas de la meta — por eso M (meta cerrada o lograda) va antes que
+     * esta y le gana.
+     *
+     * Y NO PROMETE LA PRÓXIMA SEMANA: hoy las semanas 2 a 12 no las encola
+     * nadie automáticamente. Prometerla sería la misma clase de mentira que
+     * esta regla existe para quitar.
+     */
+    private static function reglaPlanCompletado(array $s): ?MetaState
+    {
+        $sit = $s['situacion'] ?? null;
+        if (!is_array($sit))                              return null;
+        if (($sit['clase'] ?? '') !== 'completado')        return null;
+        if (empty($sit['meta_activa']))                   return null;
+
+        $hechas = (int)($sit['hechas'] ?? 0);
+        //  La cuenta, con su concordancia. «Son las 1 accion que terminaste»
+        //  se leia como una traduccion automatica.
+        $cuenta = $hechas === 1 ? 'la acción' : 'las ' . $hechas . ' acciones';
+
+        //  LA ACLARACION VA EN `consecuencia`, NO EN `instruccion`. La tarjeta
+        //  de Tu Meta pinta titulo, etiqueta y consecuencia — la instruccion no
+        //  la enseña. Dejar ahi la frase mas importante del estado era
+        //  escribirla para nadie.
+        return new MetaState(
+            MetaState::N_PLAN_COMPLETADO,
+            'Completaste este plan',
+            'Terminaste ' . $cuenta . ' que habíamos preparado.',
+            ['etiqueta' => 'Ver el plan completado',
+             'destino' => self::url($s, 'meta.php', ['vista' => 'plan'], 'plan_completado'),
+             'consecuencia' => 'Tu Meta sigue activa: terminar el plan '
+                             . 'no significa que ya se logró.',
+             'tipo' => 'informativa'],
+            ['plan_id' => (int)($sit['plan_id'] ?? 0),
+             'version' => (int)($sit['version'] ?? 0),
+             'hechas'  => $hechas,
+             'total'   => (int)($sit['total'] ?? 0)],
+            self::camino($s), self::cobertura($s), 'plan_completado');
     }
 
     // ── Último recurso ──────────────────────────────────────────────────────

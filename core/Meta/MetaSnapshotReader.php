@@ -42,6 +42,9 @@ class MetaSnapshotReader
             'progreso'        => ['actual' => null, 'pct' => null, 'dias_rest' => null,
                                   'ritmo_dia' => null, 'al_dia' => null, 'vencida' => false],
             'plan'            => null,
+            //  LA SITUACION DEL PLAN, ya clasificada por el dominio. Ver mas
+            //  abajo: es lo que separa «terminaste» de «nunca hubo».
+            'situacion'       => null,
             'jugadas'         => [],
             'piezas'          => [],
             'jobs'            => [],
@@ -86,8 +89,38 @@ class MetaSnapshotReader
             ];
         } catch (Throwable $e) { error_log('MetaSnapshotReader progreso: ' . $e->getMessage()); }
 
+        //  ── LA SITUACION DEL PLAN, EN UNA SOLA LECTURA ──────────────────
+        //
+        //  Aqui habia un `meta_plan_activo()` a secas, y con eso el snapshot
+        //  resolvia cuatro situaciones con dos respuestas. Cuando el dueño
+        //  terminaba su ultima jugada, el handler cerraba el plan —correcto— y
+        //  este snapshot quedaba con plan, jugadas, piezas y jobs vacios: al
+        //  compositor no le aplicaba ninguna regla y caia al ultimo recurso,
+        //  «Tu plan esta en marcha». Justo despues de que el dueño lo
+        //  terminara, y contradiciendo a Semana y a la llegada.
+        //
+        //  Ahora se pregunta UNA vez a meta_plan_situacion(), que es la misma
+        //  funcion que usan la llegada y su sondeo, y el plan activo sale de
+        //  ahi. Una sola verdad, un solo sitio donde cambiarla.
+        $sit  = meta_plan_situacion($pdo, $marca_id, $meta);
+        $plan = $sit['clase'] === 'activo' ? $sit['plan'] : null;
+
+        //  LO QUE VIAJA es un objeto CERRADO, no la fila. Si mandara la fila
+        //  entera, cada pantalla podria volver a interpretarla a su manera —que
+        //  es exactamente el problema que esto cierra.
+        $s['situacion'] = [
+            'clase'       => (string)$sit['clase'],   // activo|completado|sin_plan|error|sin_meta
+            'plan_id'     => (int)($sit['plan']['id'] ?? 0),
+            'version'     => (int)($sit['plan']['version'] ?? 0),
+            'estado'      => (string)$sit['estado_plan'],
+            'cierre_at'   => isset($sit['plan']['cierre_at']) && $sit['plan']['cierre_at'] !== null
+                             ? (string)$sit['plan']['cierre_at'] : null,
+            'hechas'      => (int)$sit['hechas'],
+            'total'       => (int)$sit['total'],
+            'meta_activa' => (bool)$sit['meta_activa'],
+        ];
+
         // Semana del plan: 1 + semanas completas desde que arrancó.
-        $plan = meta_plan_activo($pdo, (int)$meta['id']);
         if ($plan) {
             $s['plan'] = [
                 'id'          => (int)$plan['id'],

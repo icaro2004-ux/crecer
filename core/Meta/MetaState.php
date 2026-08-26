@@ -32,6 +32,7 @@ class MetaState
     public const K_MIDIENDO        = 'K';
     public const L_APRENDIZAJE     = 'L';
     public const M_CERRADA         = 'M';
+    public const N_PLAN_COMPLETADO = 'N';   // el plan termino; la meta sigue viva
     public const FALLBACK          = 'Z';   // nunca debería salir; si sale, se ve
 
     /** @var array<string,mixed> Todo el valor vive aquí, fuera del alcance de nadie. */
