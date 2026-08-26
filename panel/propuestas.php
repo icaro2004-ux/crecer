@@ -40,16 +40,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'usar_activo') {
     header('Content-Type: application/json; charset=utf-8');
     if (!csrf_ok()) { echo json_encode(['ok'=>false,'err'=>'Sesión expiró. Recarga.']); exit; }
+    //  ESTA ES LA MISMA CAPACIDAD QUE LA SELECCION DE BIBLIOTECA, desde otra
+    //  pantalla — y tenia sus propias guardas: miraba tipo='imagen' a mano, no
+    //  comprobaba si la pieza ya habia salido, y no guardaba de donde venia la
+    //  foto. Dos puertas a lo mismo con dos reglas distintas es como se acaba
+    //  teniendo una que se olvido de una.
+    require_once __DIR__ . '/../includes/material.php';
     $pieza = (int)($_POST['pieza'] ?? 0); $activo = (int)($_POST['activo'] ?? 0);
-    $a = $pdo->prepare("SELECT archivo FROM crecer_activos WHERE id=? AND marca_id=? AND tipo='imagen' AND estado='activo'");
-    $a->execute([$activo, $marca_id]); $arch = $a->fetchColumn();
-    $ok_pieza = false;
-    if ($arch) { $c = $pdo->prepare("SELECT 1 FROM crecer_contenido WHERE id=? AND marca_id=?"); $c->execute([$pieza, $marca_id]); $ok_pieza = (bool)$c->fetchColumn(); }
-    if ($arch && $ok_pieza) {
-        $url = (defined('UPLOADS_URL') ? UPLOADS_URL : '/crecer/uploads') . '/' . $arch;
-        $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$url, $pieza, $marca_id]);
-        echo json_encode(['ok'=>true,'url'=>$url]); exit;
+    $r = material_aplicar($pdo, (int)$marca_id, $pieza, $activo);
+    if (!empty($r['ok'])) {
+        echo json_encode(['ok'=>true, 'url'=>$r['archivo'],
+                          'activo_id'=>(int)$r['activo_id']], JSON_UNESCAPED_UNICODE); exit;
     }
+    echo json_encode(['ok'=>false, 'err'=>$r['err'] ?? 'No pude usar esa foto.'],
+                     JSON_UNESCAPED_UNICODE); exit;
     echo json_encode(['ok'=>false,'err'=>'No se pudo poner la foto.']); exit;
 }
 

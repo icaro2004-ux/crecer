@@ -131,6 +131,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $g = generar_grafica($pdo, $marca_id, null, ['copy'=>$cap, 'con_texto'=>$con_txt, 'con_logo'=>false]);
             if (!empty($g['archivo'])) {
                 $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$g['archivo'], $post_id, $marca_id]);
+        //  LA PIEZA DEJA DE DECIR QUE LLEVA MATERIAL SUYO. Esto pinta desde
+        //  cero, asi que si la pieza venia con una foto del dueño aplicada, la
+        //  referencia que la trazaba ya no es cierta: se muestra arte generado
+        //  y el origen seguiria diciendo «tu foto». Soltarla es barato — un
+        //  UPDATE que no hace nada si no habia nada — y evita la unica mentira
+        //  que esta columna puede contar.
+        require_once __DIR__ . '/../includes/material.php';
+        material_soltar($pdo, (int)$marca_id, (int)$post_id);
                 echo json_encode(['ok'=>true, 'img'=>(string)$g['archivo']]); exit;
             }
             echo json_encode(['ok'=>false, 'err'=>'No se pudo regenerar.']); exit;

@@ -227,35 +227,72 @@ try {
     //  7 · CODIGO NUEVO CON ESQUEMA VIEJO · degrada, no revienta
     // ══════════════════════════════════════════════════════════════
     echo "\n  — y si la columna no estuviera —\n";
-    $pdo->exec("ALTER TABLE crecer_contenido DROP INDEX idx_contenido_material_activo");
-    $pdo->exec("ALTER TABLE crecer_contenido DROP COLUMN material_activo_id");
-    ok('el código ve que no está', material_hay_columna($pdo, true) === false);
+    //  NO SE LE QUITA LA COLUMNA A LA BASE COMPARTIDA. Esta prueba la quitaba y
+    //  la volvia a poner en un `finally`, que es exactamente el incidente que
+    //  `tests/_esquema_desechable.php` existe para no repetir: un DROP COLUMN no
+    //  se deshace —los valores ya no vuelven— y ademas hace COMMIT implicito,
+    //  asi que cualquier prueba que estuviera dentro de una transaccion se veria
+    //  confirmada a media faena. Se clona la FORMA de las dos tablas que el
+    //  dominio mira, se rompe la copia, y la copia se muere al salir.
+    require_once __DIR__ . '/_esquema_desechable.php';
+    $copia = EsquemaDesechable::crear($pdo, ['crecer_contenido', 'crecer_activos']);
+    if ($copia === null) {
+        echo "  (sin privilegios para crear la base de copia · se salta)\n";
+    } else {
+        try {
+            $vpdo = $copia->pdo();
+            $copia->ejecutar("ALTER TABLE crecer_contenido DROP INDEX idx_contenido_material_activo");
+            $copia->ejecutar("ALTER TABLE crecer_contenido DROP COLUMN material_activo_id");
+            ok('el código ve que no está', material_hay_columna($vpdo, true) === false);
 
-    [$fv, $MV, $CV, $FOTOV, $VIDV] = montar($pdo, 'traV');
-    $limpiar[] = $MV;
-    $r = material_aplicar($pdo, $MV, $CV, $FOTOV);
-    ok('aplicar sigue funcionando',  !empty($r['ok']), json_encode($r));
-    ok('guarda la ruta igual',
-       mb_strpos((string)$pdo->query("SELECT grafica_path FROM crecer_contenido WHERE id={$CV}")
-                             ->fetchColumn(), 'suya.jpg') !== false);
-    ok('pero avisa de que no hay traza', empty($r['trazado']));
-    ok('y soltar no revienta',
-       (function () use ($pdo, $MV, $CV) { material_soltar($pdo, $MV, $CV); return true; })());
-    ok('ni resolver el origen',
-       (material_origen($pdo, $MV, $CV)['origen'] ?? '') === 'sin_columna');
+            //  Dos filas a mano. En la copia no hay dueño ni fixture: solo la
+            //  forma de las dos tablas que material_aplicar() consulta, que es
+            //  todo lo que hace falta para probar que degrada bien.
+            $MV = 9001;
+            $vpdo->prepare("INSERT INTO crecer_contenido
+                    (marca_id,plataforma,tipo,caption,estado,fecha_programada,grafica_path)
+                  VALUES (?, 'instagram','post',?, 'borrador', DATE_ADD(NOW(), INTERVAL 2 DAY), ?)")
+                 ->execute([$MV, '[prueba] El texto que no se debe tocar.',
+                            '/crecer/uploads/marca_x/generado_viejo.png']);
+            $CV = (int)$vpdo->lastInsertId();
+            $vpdo->prepare("INSERT INTO crecer_activos
+                    (marca_id,tipo,archivo,nombre,mime,bytes,origen,estado)
+                  VALUES (?, 'imagen',?,?, 'image/jpeg', 1234, 'subido','activo')")
+                 ->execute([$MV, "marca_{$MV}/biblioteca/suya.jpg", '[prueba] Su bizcocho']);
+            $FOTOV = (int)$vpdo->lastInsertId();
 
-    //  Se devuelve el esquema a como estaba.
-    $pdo->exec("ALTER TABLE crecer_contenido
-                  ADD COLUMN material_activo_id BIGINT UNSIGNED NULL,
-                  ADD INDEX idx_contenido_material_activo (marca_id, material_activo_id)");
-    ok('la columna vuelve', material_hay_columna($pdo, true));
+            $r = material_aplicar($vpdo, $MV, $CV, $FOTOV);
+            ok('aplicar sigue funcionando',  !empty($r['ok']), json_encode($r));
+            ok('guarda la ruta igual',
+               mb_strpos((string)$vpdo->query("SELECT grafica_path FROM crecer_contenido WHERE id={$CV}")
+                                      ->fetchColumn(), 'suya.jpg') !== false);
+            ok('pero avisa de que no hay traza', empty($r['trazado']));
+            ok('y soltar no revienta',
+               (function () use ($vpdo, $MV, $CV) { material_soltar($vpdo, $MV, $CV); return true; })());
+            ok('ni resolver el origen',
+               (material_origen($vpdo, $MV, $CV)['origen'] ?? '') === 'sin_columna');
 
-    //  Y CORRERLA DOS VECES SE NOTA, no se traga.
-    $dos = false;
-    try { $pdo->exec("ALTER TABLE crecer_contenido ADD COLUMN material_activo_id BIGINT UNSIGNED NULL"); }
-    catch (Throwable $e) { $dos = true; }
-    ok('correr la migración dos veces avisa', $dos,
-       'el migrador enseña «aplicada» mirando la base: no la corre dos veces a ciegas');
+            //  Y la migracion se corre de verdad sobre la copia: primero entera,
+            //  y luego otra vez, para ver que la segunda AVISA.
+            $copia->ejecutar("ALTER TABLE crecer_contenido
+                                ADD COLUMN material_activo_id BIGINT UNSIGNED NULL,
+                                ADD INDEX idx_contenido_material_activo (marca_id, material_activo_id)");
+            ok('la columna vuelve', material_hay_columna($vpdo, true));
+
+            $dos = false;
+            try {
+                $copia->ejecutar("ALTER TABLE crecer_contenido
+                                    ADD COLUMN material_activo_id BIGINT UNSIGNED NULL");
+            } catch (Throwable $e) { $dos = true; }
+            ok('correr la migración dos veces avisa', $dos,
+               'el migrador enseña «aplicada» mirando la base: no la corre dos veces a ciegas');
+        } finally {
+            $copia->soltar($pdo);
+            //  El cache de la columna es estatico y global: se le devuelve la
+            //  verdad de la base de siempre antes de que lo lea nadie mas.
+            material_hay_columna($pdo, true);
+        }
+    }
 
 } catch (Throwable $e) {
     $fallos++; echo "\n  EXCEPCION · " . get_class($e) . ': ' . $e->getMessage()

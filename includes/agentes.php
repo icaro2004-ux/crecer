@@ -2041,6 +2041,14 @@ function crear_post_muestra(PDO $pdo, int $marca_id): int {
     try {
         $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => false]);
         if (!empty($g['archivo'])) $pdo->prepare("UPDATE crecer_contenido SET grafica_path=? WHERE id=?")->execute([$g['archivo'], $cid]);
+        //  LA PIEZA DEJA DE DECIR QUE LLEVA MATERIAL SUYO. Esto pinta desde
+        //  cero, asi que si la pieza venia con una foto del dueño aplicada, la
+        //  referencia que la trazaba ya no es cierta: se muestra arte generado
+        //  y el origen seguiria diciendo «tu foto». Soltarla es barato — un
+        //  UPDATE que no hace nada si no habia nada — y evita la unica mentira
+        //  que esta columna puede contar.
+        require_once __DIR__ . '/material.php';
+        material_soltar($pdo, (int)$marca_id, (int)$cid);
     } catch (Throwable $e) {}
     return $cid;
 }
@@ -2662,7 +2670,15 @@ function trabajo_autonomo(PDO $pdo, int $marca_id, string $enfoque = ''): array 
                 if (!empty($g['archivo'])) {
                     $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")
                         ->execute([$g['archivo'], $cid, $marca_id]);
-                }
+                                //  LA PIEZA DEJA DE DECIR QUE LLEVA MATERIAL SUYO. Esto pinta desde
+                //  cero, asi que si la pieza venia con una foto del dueño aplicada, la
+                //  referencia que la trazaba ya no es cierta: se muestra arte generado
+                //  y el origen seguiria diciendo «tu foto». Soltarla es barato — un
+                //  UPDATE que no hace nada si no habia nada — y evita la unica mentira
+                //  que esta columna puede contar.
+                require_once __DIR__ . '/material.php';
+                material_soltar($pdo, (int)$marca_id, (int)$cid);
+            }
             } catch (Throwable $e) { error_log('relevo arte: ' . $e->getMessage()); }
         }
         // Repartir en los próximos días (look "te dejé la semana lista")
@@ -2903,7 +2919,15 @@ function gerente_despachar(PDO $pdo, int $marca_id, string $peticion, bool $pued
                     if (!empty($g['archivo'])) {
                         $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")
                             ->execute([$g['archivo'], $cid, $marca_id]);
-                    }
+                                        //  LA PIEZA DEJA DE DECIR QUE LLEVA MATERIAL SUYO. Esto pinta desde
+                    //  cero, asi que si la pieza venia con una foto del dueño aplicada, la
+                    //  referencia que la trazaba ya no es cierta: se muestra arte generado
+                    //  y el origen seguiria diciendo «tu foto». Soltarla es barato — un
+                    //  UPDATE que no hace nada si no habia nada — y evita la unica mentira
+                    //  que esta columna puede contar.
+                    require_once __DIR__ . '/material.php';
+                    material_soltar($pdo, (int)$marca_id, (int)$cid);
+                }
                 } catch (Throwable $e) { error_log('gerente arte: ' . $e->getMessage()); }
             }
             $reprog->execute([date('Y-m-d 10:00:00', strtotime('+' . (++$i) . ' day')), $cid, $marca_id]);

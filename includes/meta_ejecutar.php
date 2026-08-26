@@ -648,6 +648,14 @@ function jugada_ejecutar(PDO $pdo, int $marca_id, int $tactica_id): array {
                         //  del dueño detras, y por tanto sin id que conservar.
                         $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")
                             ->execute([$g['archivo'], $cid, $marca_id]);
+                        //  LA PIEZA DEJA DE DECIR QUE LLEVA MATERIAL SUYO. Esto pinta desde
+                        //  cero, asi que si la pieza venia con una foto del dueño aplicada, la
+                        //  referencia que la trazaba ya no es cierta: se muestra arte generado
+                        //  y el origen seguiria diciendo «tu foto». Soltarla es barato — un
+                        //  UPDATE que no hace nada si no habia nada — y evita la unica mentira
+                        //  que esta columna puede contar.
+                        require_once __DIR__ . '/material.php';
+                        material_soltar($pdo, (int)$marca_id, (int)$cid);
                     }
                     // Se anota qué foto real se usó, para no repetirla en la próxima tanda.
                     if ($foto_id !== null) {

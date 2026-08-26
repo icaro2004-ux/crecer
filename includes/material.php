@@ -162,6 +162,80 @@ function material_registrar_subida(PDO $pdo, int $marca_id, array $f, string $no
 }
 
 /**
+ * REGISTRA EN LA BIBLIOTECA UN ARCHIVO QUE YA ESTA EN DISCO.
+ *
+ * Para lo que NO llega por $_FILES: el reel que acaba de renderizar el estudio,
+ * por ejemplo. El archivo ya existe y esta en su sitio; lo que falta es que la
+ * Biblioteca del dueño se entere de que es suyo.
+ *
+ * `origen` lo pone quien llama porque es lo unico que esta funcion no puede
+ * saber: 'subido' lo trajo el, 'reel' lo montamos nosotros con sus clips. Esa
+ * palabra es la que despues explica de donde salio, asi que no se inventa aqui.
+ *
+ * IDEMPOTENTE POR RUTA: el mismo archivo no se registra dos veces. Un reel que
+ * se cierra dos veces —un reintento, un sweep que lo recoge otra vez— no puede
+ * dejar dos filas apuntando al mismo video.
+ *
+ * @return array{ok:bool, activo_id?:int, tipo?:string, err?:string}
+ */
+function material_registrar_archivo(PDO $pdo, int $marca_id, string $rel,
+                                    string $tipo, string $nombre, string $origen = 'subido'): array
+{
+    $rel = ltrim(trim($rel), '/');
+    if ($marca_id <= 0 || $rel === '' || !in_array($tipo, ['imagen', 'video'], true)) {
+        return ['ok' => false, 'motivo' => 'sin_datos', 'err' => 'No pude registrarlo.'];
+    }
+    //  Nada de subir un nivel. La ruta se guarda relativa a uploads y tiene que
+    //  quedarse dentro — un `..` aqui es una ruta a cualquier sitio.
+    if (str_contains($rel, '..')) {
+        return ['ok' => false, 'motivo' => 'ruta', 'err' => 'No pude registrarlo.'];
+    }
+    try {
+        $q = $pdo->prepare("SELECT id FROM crecer_activos
+                             WHERE marca_id=? AND archivo=? LIMIT 1");
+        $q->execute([$marca_id, $rel]);
+        if ($ya = (int)$q->fetchColumn()) {
+            return ['ok' => true, 'activo_id' => $ya, 'tipo' => $tipo, 'repetido' => true];
+        }
+        $base = rtrim(defined('UPLOADS_PATH') ? UPLOADS_PATH : dirname(__DIR__) . '/uploads',
+                      '/' . DIRECTORY_SEPARATOR);
+        $abs  = $base . '/' . $rel;
+        $bytes = is_file($abs) ? (int)@filesize($abs) : 0;
+        $mime  = '';
+        if (is_file($abs) && function_exists('finfo_open')) {
+            $fi = finfo_open(FILEINFO_MIME_TYPE);
+            $mime = (string)@finfo_file($fi, $abs);
+            finfo_close($fi);
+        }
+        $pdo->prepare("INSERT INTO crecer_activos
+                (marca_id,tipo,archivo,nombre,mime,bytes,origen,estado)
+              VALUES (?,?,?,?,?,?,?, 'activo')")
+            ->execute([$marca_id, $tipo, $rel, mb_substr(trim($nombre), 0, 180) ?: 'Video',
+                       $mime, $bytes, mb_substr($origen, 0, 20)]);
+        return ['ok' => true, 'activo_id' => (int)$pdo->lastInsertId(), 'tipo' => $tipo];
+    } catch (Throwable $e) {
+        error_log('material_registrar_archivo: ' . get_class($e));
+        return ['ok' => false, 'motivo' => 'fallo', 'err' => 'No pude registrarlo.'];
+    }
+}
+
+/**
+ * La ruta relativa a uploads de una URL publica, o '' si no vive ahi.
+ * Se usa para registrar en la Biblioteca algo que ya se guardo por otro camino.
+ */
+function material_rel_de_url(string $url): string
+{
+    $u = trim($url);
+    if ($u === '') return '';
+    $pub = rtrim(defined('UPLOADS_URL') ? UPLOADS_URL : '/crecer/uploads', '/');
+    if ($pub !== '' && str_starts_with($u, $pub . '/')) {
+        return ltrim(substr($u, strlen($pub) + 1), '/');
+    }
+    //  Una URL que no cuelga de uploads no es material nuestro: no se registra.
+    return '';
+}
+
+/**
  * APLICA UN RECURSO DE LA BIBLIOTECA A UNA PUBLICACION.
  *
  * Cero proveedor, cero cuota, cero generacion. Solo cambia a que archivo apunta
@@ -269,6 +343,38 @@ function material_soltar(PDO $pdo, int $marca_id, int $contenido_id): void
                         WHERE id=? AND marca_id=? AND material_activo_id IS NOT NULL")
             ->execute([$contenido_id, $marca_id]);
     } catch (Throwable $e) { error_log('material_soltar: ' . get_class($e)); }
+}
+
+/**
+ * LA FOTO DEL DUEÑO QUE LLEVA ESTA PIEZA, EN DISCO.
+ *
+ * Para «mejórala»: lo que la IA realza es un archivo, no una URL. Devuelve la
+ * ruta absoluta SOLO si esta pieza lleva material propio, es una imagen, y el
+ * archivo existe de verdad. En cualquier otro caso, null — y quien llama tiene
+ * que decidir qué decir, porque «mejorar» sobre arte generado no es mejorar
+ * nada: es volver a pintar, que es otra cosa y cuesta lo mismo.
+ *
+ * La ruta se compone desde UPLOADS_PATH y se comprueba que el resultado siga
+ * colgando de ahi: `archivo` sale de la base, pero una ruta guardada no es una
+ * ruta confiable.
+ */
+function material_abs_de_pieza(PDO $pdo, int $marca_id, int $contenido_id): ?string
+{
+    $o = material_origen($pdo, $marca_id, $contenido_id);
+    if (($o['origen'] ?? '') !== 'biblioteca') return null;
+    $a = $o['activo'] ?? null;
+    if (!$a || (string)($a['tipo'] ?? '') !== 'imagen') return null;
+
+    $rel = ltrim(str_replace('\\', '/', (string)($a['archivo'] ?? '')), '/');
+    if ($rel === '' || str_contains($rel, '..')) return null;
+
+    $base = rtrim(defined('UPLOADS_PATH') ? UPLOADS_PATH : dirname(__DIR__) . '/uploads',
+                  '/' . DIRECTORY_SEPARATOR);
+    $abs  = $base . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+    $real = @realpath($abs);
+    $raiz = @realpath($base);
+    if ($real === false || $raiz === false || !str_starts_with($real, $raiz)) return null;
+    return is_file($real) ? $real : null;
 }
 
 /**

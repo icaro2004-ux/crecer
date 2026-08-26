@@ -970,7 +970,15 @@ function img_resp_completar(PDO $pdo, int $marca_id, int $post_id, bool $dedicad
         //  quedaba en 'reservado' para siempre: el numero del cubo era correcto
         //  pero el estado mentia, y barrerCaducadas() no los toca porque tienen
         //  job. Solo el PRIMERO que guarda cierra (rowCount), como con la pieza.
-        if ($u->rowCount() === 1) CuotaImg::confirmar($pdo, $asiento, 0.17, $rid);
+        if ($u->rowCount() === 1) {
+            CuotaImg::confirmar($pdo, $asiento, 0.17, $rid);
+            //  Y LA PIEZA DEJA DE DECIR QUE LLEVA MATERIAL DEL DUEÑO. Esta es
+            //  la entrega que de verdad usa el arte async: si la pieza tenia
+            //  una foto suya aplicada y encima cae lo generado, la referencia
+            //  que la trazaba pasa a ser mentira. Solo suelta quien gano la
+            //  carrera — el que no escribio nada no tiene nada que soltar.
+            material_soltar($pdo, $marca_id, (int)$post_id);
+        }
         return ['estado' => 'ok', 'img' => $url];
     }
 

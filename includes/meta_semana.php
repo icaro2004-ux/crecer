@@ -43,6 +43,7 @@
 require_once __DIR__ . '/meta_negocio.php';
 require_once __DIR__ . '/meta_ejecutar.php';
 require_once __DIR__ . '/meta_cambio.php';
+require_once __DIR__ . '/material.php';
 
 /** Estados de pieza que el publicador puede tomar (publicador.php:427). */
 const SEMANA_PUBLICABLES = ['aprobado', 'programado'];
@@ -417,6 +418,82 @@ function semana_nota_hora(PDO $pdo, int $marca_id): string
     return $hay
         ? 'Esta hora coincide con tu mejor rendimiento reciente.'
         : 'Te sugerimos esta hora para comenzar. La ajustaremos con tus resultados.';
+}
+
+/**
+ * QUE IMAGEN LLEVA ESTA PUBLICACION, Y DE DONDE SALIO.
+ *
+ * La hoja de «Imagen o video» tiene que abrir diciendo la verdad de lo que hay
+ * ahora: si es una foto suya, cual; si la pinto el corillo, que lo diga; y si
+ * no hay nada, que no finja que si. Sin esto, la hoja abre igual en los tres
+ * casos y el dueño decide a ciegas — «mejorar» sobre nada, o «poner una tuya»
+ * cuando la suya ya esta puesta.
+ *
+ * TAMBIEN DICE QUE CABE. Un reel no admite una foto y un post no admite un
+ * video: no lo convierte nadie. Ofrecer las dos opciones y rechazar despues es
+ * hacerle perder el viaje, asi que la hoja pregunta antes de pintarse.
+ *
+ * Y SI SE PUEDE TOCAR. Lo que ya salio no se cambia. Esa regla vive en
+ * material_aplicar() y aqui solo se lee, para no enseñar una puerta cerrada.
+ *
+ * @return array{
+ *   origen:string, nombre:string, frase:string, hay:bool,
+ *   admite:array, admite_video:bool, editable:bool, activo_id:int,
+ *   mat_tipo:string, mejorable:bool
+ * }
+ */
+function semana_material(PDO $pdo, int $marca_id, ?array $p): array
+{
+    $vacia = ['origen' => 'sin_pieza', 'nombre' => '', 'frase' => '', 'hay' => false,
+              'admite' => ['imagen'], 'admite_video' => false, 'editable' => false,
+              'activo_id' => 0, 'mat_tipo' => '', 'mejorable' => false];
+    if (!$p || (int)($p['id'] ?? 0) <= 0) return $vacia;
+
+    $tipo   = (string)($p['tipo'] ?? 'post');
+    $admite = material_compatible($tipo);
+    //  Lo que ya salio -o esta saliendo- no se toca. Es la misma lista que
+    //  guarda material_aplicar(); leerla aqui solo evita enseñar la puerta.
+    $editable = !in_array((string)($p['estado'] ?? ''), SEMANA_HISTORIAL, true);
+    $hay_arte = trim((string)($p['grafica_path'] ?? '')) !== '';
+
+    $o   = material_origen($pdo, $marca_id, (int)$p['id']);
+    $act = $o['activo'] ?? null;
+    $nom = $act ? trim((string)($act['nombre'] ?? '')) : '';
+
+    //  LA FRASE, EN CRISTIANO. «material_activo_id» no le dice nada a nadie;
+    //  «Ahora lleva tu foto Su bizcocho» si. Y cuando no se sabe, se dice que
+    //  no se sabe en vez de afirmar que la pinto el corillo: la columna es
+    //  nueva y todo lo de antes tiene la traza vacia sin haber hecho nada mal.
+    if (!$hay_arte) {
+        $frase = $admite === ['imagen']
+            ? 'Todavía no tiene imagen.'
+            : 'Todavía no tiene imagen ni video.';
+    } elseif (($o['origen'] ?? '') === 'biblioteca') {
+        $suyo  = (string)($act['tipo'] ?? 'imagen') === 'video' ? 'tu video' : 'tu foto';
+        $frase = $nom !== '' ? "Ahora lleva {$suyo}: «{$nom}»." : "Ahora lleva {$suyo}.";
+    } elseif (($o['origen'] ?? '') === 'sin_columna') {
+        $frase = 'Ahora lleva una imagen.';
+    } else {
+        $frase = 'Ahora lleva arte del corillo.';
+    }
+
+    return [
+        'origen'       => (string)($o['origen'] ?? 'generado_o_desconocido'),
+        'nombre'       => $nom,
+        'frase'        => $frase,
+        'hay'          => $hay_arte,
+        'admite'       => $admite,
+        'admite_video' => in_array('video', $admite, true),
+        'editable'     => $editable,
+        'activo_id'    => $act ? (int)$act['id'] : 0,
+        'mat_tipo'     => $act ? (string)($act['tipo'] ?? '') : '',
+        //  MEJORAR SOLO TIENE SENTIDO SOBRE UNA FOTO SUYA. Sobre arte generado
+        //  no se «mejora» nada: se vuelve a pintar, que es otra cosa, cuesta lo
+        //  mismo y ya tiene su propia fila. Ofrecerlo en los dos sitios seria
+        //  cobrar dos veces por la misma palabra.
+        'mejorable'    => $editable && $act !== null
+                          && (string)($act['tipo'] ?? '') === 'imagen',
+    ];
 }
 
 /**

@@ -290,9 +290,24 @@ try {
   di('FECHA_LINEA', (await txt('.sm-p.on .sm-linea')).replace(/\s+/g, ' ').trim());
   di('FECHA_SIGO_EN_POS', (await txt('#smPaso')).trim());
 
-  // ══ 4 · SALIR A LA IMAGEN Y VOLVER A LA MISMA PUBLICACION ══════
+  // ══ 4 · LA HOJA DE IMAGEN, Y LA SALIDA QUE SIGUE VOLVIENDO ═════
+  //
+  //  «Imagen o video» YA NO TE SACA DE LA SEMANA. Abre una segunda hoja con
+  //  los tres caminos —usar una tuya, subir una, que la haga el corillo— y
+  //  arriba dice qué lleva ahora, redactado por el servidor. La salida a la
+  //  pieza sigue existiendo, un toque más adentro, y sigue teniendo que
+  //  volver a ESTA publicación: eso es lo que se comprueba abajo.
   await clicSel('.sm-p.on [data-ajustar]');
   await clicSel('#smHojaC .sm-fila[data-a="arte"]');
+  await dormir(200);
+  di('MAT_HOJA_TITULO', (await txt('#smHojaT')).trim());
+  di('MAT_HOJA_CAMINOS', await ev(
+    'document.querySelectorAll("#smHojaC .sm-fila[data-m]").length'));
+  di('MAT_HOJA_DICE_QUE_LLEVA', await ev(
+    '(document.querySelector("#smHojaC .sm-nota span")||{}).textContent || ""'));
+  di('MAT_HOJA_SIGO_EN_LA_SEMANA', await ev('/vista=semana/.test(location.search)'));
+  //  Y la puerta a la pieza, desde dentro de la hoja.
+  await clicSel('#smHojaC .sm-fila[data-m="arte"]');
   await listo();
   const uArte = await url();
   di('ARTE_URL', uArte);

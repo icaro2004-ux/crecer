@@ -312,6 +312,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach (carrusel_slides($pdo, $cid) as $s) { if (trim((string)$s['grafica_path']) !== '') { $cover = (string)$s['grafica_path']; break; } }
         $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, estado='aprobado', updated_at=NOW() WHERE id=? AND marca_id=?")
             ->execute([$cover, $cid, $marca_id]);
+        //  LA PORTADA SALE DE LOS SLIDES, no del material de la pieza. Si esta
+        //  pieza llevaba una foto del dueño aplicada, la referencia que la
+        //  trazaba deja de ser cierta en cuanto la portada la tapa: se suelta,
+        //  que es un UPDATE que no hace nada si no habia nada que soltar.
+        require_once __DIR__ . '/../includes/material.php';
+        material_soltar($pdo, (int)$marca_id, (int)$cid);
         // Publicar a TODAS las redes conectadas (el carrusel se guarda como plataforma
         // 'instagram', así que sin esto FB nunca se intentaba): IG = swipe, FB = álbum.
         $plats = [];
