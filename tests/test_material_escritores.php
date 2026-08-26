@@ -112,6 +112,26 @@ try {
        $censo['dominio'] > 0 && $censo['generado'] >= 6,
        'dominio=' . $censo['dominio'] . ' generado=' . $censo['generado']);
 
+    //  Y QUIEN LLAMA AL DOMINIO, LO CARGA. Esto no es pulcritud: `material.php`
+    //  se incluye a mano, archivo por archivo, y una llamada sin su
+    //  `require_once` delante no es un aviso — es un fatal. Paso de verdad: el
+    //  soltar de la entrega async quedo sin require y la imagen dejo de
+    //  guardarse en la ruta que MAS se usa. `php -l` no lo ve, y el censo de
+    //  arriba tampoco: la palabra estaba ahi, escrita, y no se podia ejecutar.
+    echo "\n  — y quien lo llama, lo carga —\n";
+    $LLAMADAS = '~material_(soltar|aplicar|registrar_\w+|origen|compatible|abs_de_pieza|hay_columna|rel_de_url)\s*\(~';
+    $sin_cargar = [];
+    foreach ($php as $abs) {
+        $rel = str_replace('\\', '/', substr($abs, strlen($raiz) + 1));
+        if ($rel === 'includes/material.php') continue;
+        $cod = codigo($rel);
+        if (!preg_match($LLAMADAS, $cod)) continue;
+        if (preg_match("~require(_once)?[^;\n]*material\.php~", $cod)) continue;
+        $sin_cargar[] = $rel;
+    }
+    ok('ningún archivo llama al dominio sin cargarlo', $sin_cargar === [],
+       implode(' · ', $sin_cargar) . "\n         → un material_*() sin su require_once delante es un fatal, no un aviso");
+
     //  LAS RUTAS DE MATERIAL PROPIO, por su nombre. El censo prueba que nadie
     //  escribe por libre; esto prueba que las que conocemos siguen enchufadas.
     echo "\n  — y las puertas conocidas siguen en su sitio —\n";

@@ -977,6 +977,7 @@ function img_resp_completar(PDO $pdo, int $marca_id, int $post_id, bool $dedicad
             //  una foto suya aplicada y encima cae lo generado, la referencia
             //  que la trazaba pasa a ser mentira. Solo suelta quien gano la
             //  carrera — el que no escribio nada no tiene nada que soltar.
+            require_once __DIR__ . '/material.php';
             material_soltar($pdo, $marca_id, (int)$post_id);
         }
         return ['estado' => 'ok', 'img' => $url];
