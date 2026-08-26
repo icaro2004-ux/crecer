@@ -171,18 +171,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ── Editar caption (+ el bot aprende) ──
     if ($accion === 'editar') {
+        //  GUARDAR EL TEXTO ES UNA ESCRITURA, NO UNA LLAMADA.
+        //
+        //  Aqui vivia `aprender_de_edicion()`, que llama al modelo. O sea: cada
+        //  coma que el dueño corregia costaba una llamada de red. Tres cosas
+        //  malas de una vez — encarecia lo mas frecuente que hace, ataba una
+        //  escritura de una fila al humor de un proveedor, y hacia que guardar
+        //  tardara segundos en vez de milisegundos.
+        //
+        //  El aprendizaje NO se pierde: se apunta la edicion en el libro y el
+        //  Aprendiz la digiere en su corrida. Aprender de lo que el dueño
+        //  reescribe sigue siendo valioso; hacerlo mientras el espera con el
+        //  dedo en la pantalla, no.
         $nuevo_cap = trim($_POST['caption'] ?? '');
         $o = $pdo->prepare("SELECT caption FROM crecer_contenido WHERE id=? AND marca_id=?");
-        $o->execute([$id, $marca_id]); $orig = (string)$o->fetchColumn();
-        $leccion = null;
-        // El aprendizaje es premium, pero admin/cuentas de prueba también aprenden.
-        $u_ed = usuario_actual($pdo);
-        $aprende = $pagado || (($u_ed['rol'] ?? '') === 'admin') || (function_exists('activacion_de_prueba') && activacion_de_prueba($u_ed['email'] ?? null));
+        $o->execute([$id, $marca_id]);
+        $orig = $o->fetchColumn();
+        if ($orig === false) {
+            //  Ni suya, ni existe. Se contesta lo mismo en los dos casos: quien
+            //  prueba ids ajenos no merece saber cuales existen.
+            if (!empty($_POST['ajax'])) { header('Content-Type: application/json'); http_response_code(403); echo json_encode(['ok'=>false,'err'=>'No encuentro esa publicación.']); exit; }
+            header('Location: ' . $_SERVER['REQUEST_URI']); exit;
+        }
+        $guardado = false;
         if ($id && $nuevo_cap !== '') {
             $pdo->prepare("UPDATE crecer_contenido SET caption=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$nuevo_cap, $id, $marca_id]);
-            if ($aprende) $leccion = aprender_de_edicion($pdo, $marca_id, $orig, $nuevo_cap);
+            $guardado = true;
+            //  La nota para el Aprendiz, sin llamar a nadie. Si el libro no
+            //  esta, no pasa nada: el texto ya quedo guardado, que es lo que
+            //  el dueño pidio.
+            if (function_exists('edicion_anotar')) {
+                edicion_anotar($pdo, $marca_id, (int)$id, (string)$orig, $nuevo_cap);
+            }
         }
-        if (!empty($_POST['ajax'])) { header('Content-Type: application/json'); echo json_encode(['ok'=>true,'id'=>$id,'caption'=>$nuevo_cap,'leccion'=>$leccion], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE); exit; }
+        if (!empty($_POST['ajax'])) { header('Content-Type: application/json'); echo json_encode(['ok'=>$guardado,'id'=>$id,'caption'=>$nuevo_cap,'err'=>$guardado?null:'El texto no puede quedar vacío.'], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE); exit; }
         header('Location: ' . $_SERVER['REQUEST_URI']); exit;
     }
     // ── Regenerar caption con la IA ──
@@ -200,12 +222,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     // ── Reprogramar (el dueño escoge el día) ──
     if ($accion === 'fecha') {
-        $f = $_POST['fecha'] ?? '';
-        if ($id && strtotime($f)) {
+        //  TRES COSAS QUE ANTES NO SE MIRABAN, y las tres se notan.
+        //
+        //  1 · Que sea SUYA. Antes el UPDATE llevaba marca_id en el WHERE —o
+        //      sea, no escribia— pero contestaba `ok:true` igual, asi que la
+        //      pantalla de otro se quedaba tan contenta.
+        //  2 · Que sea FUTURO. `strtotime()` entiende perfectamente una fecha
+        //      del año pasado: entraba, y el publicador nunca la iba a tomar.
+        //  3 · Que TODAVIA SE PUEDA MOVER. Una pieza que ya salio o esta
+        //      saliendo no se reprograma; decir que si es prometerle al dueño
+        //      algo que va a descubrir solo, y tarde.
+        require_once __DIR__ . '/../includes/meta_semana.php';
+        $f  = trim((string)($_POST['fecha'] ?? ''));
+        $ts = $f !== '' ? strtotime($f) : false;
+
+        $q = $pdo->prepare("SELECT estado FROM crecer_contenido WHERE id=? AND marca_id=?");
+        $q->execute([$id, $marca_id]);
+        $est = $q->fetchColumn();
+
+        $err = null;
+        if ($est === false)                       $err = 'No encuentro esa publicación.';
+        elseif ($ts === false)                    $err = 'No entiendo esa fecha. Escoge un día y una hora.';
+        elseif ($ts < time())                     $err = 'Esa fecha ya pasó. Escoge una en el futuro.';
+        elseif ((string)$est === 'publicado')     $err = 'Esta ya salió. Queda en tu historial y no se puede mover.';
+        elseif ((string)$est === 'publicando')    $err = 'Está saliendo ahora mismo. Ya no se puede mover.';
+
+        if ($err === null) {
             $pdo->prepare("UPDATE crecer_contenido SET fecha_programada=?, updated_at=NOW() WHERE id=? AND marca_id=?")
-                ->execute([date('Y-m-d H:i:s', strtotime($f)), $id, $marca_id]);
+                ->execute([date('Y-m-d H:i:s', $ts), $id, $marca_id]);
         }
-        if (!empty($_POST['ajax'])) { header('Content-Type: application/json'); echo json_encode(['ok'=>(bool)strtotime($f)]); exit; }
+        if (!empty($_POST['ajax'])) {
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => $err === null, 'err' => $err,
+                //  La consecuencia, ya redactada por el dominio: la hoja la
+                //  pega y no la vuelve a escribir a su manera.
+                'cuando' => $err === null ? semana_frase_cuando(date('Y-m-d H:i:s', $ts)) : null],
+                JSON_UNESCAPED_UNICODE);
+            exit;
+        }
         header('Location: ' . $_SERVER['REQUEST_URI']); exit;
     }
 

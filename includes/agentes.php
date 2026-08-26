@@ -1485,6 +1485,49 @@ SYS;
  * vocabulario/voz boricua y la añade al glosario del negocio (para no repetirla).
  * No rompe la edición si la IA falla.
  */
+/**
+ * APUNTA LA EDICION, SIN LLAMAR A NADIE.
+ *
+ * `aprender_de_edicion()` vivia dentro del guardado del caption: cada coma que
+ * el dueño corregia costaba una llamada al modelo, y ademas lo dejaba esperando
+ * a que un proveedor contestara para ver su propio texto guardado. Aprender de
+ * lo que reescribe sigue siendo la señal mas valiosa que da — pero el sitio de
+ * digerirla es la corrida del Aprendiz, no el dedo del dueño en la pantalla.
+ *
+ * Aqui solo se deja la nota cruda: `estado = pendiente_revision`, que NO es
+ * `activa`, asi que nada la lee como si fuera ya una preferencia aprendida.
+ * Sin tabla nueva: `crecer_memoria` ya tiene `datos_json` y `fuente_id`.
+ *
+ * Falla en silencio a proposito: el texto del dueño YA quedo guardado, y perder
+ * la nota no puede convertirse en perder su edicion.
+ */
+function edicion_anotar(PDO $pdo, int $marca_id, int $contenido_id,
+                        string $original, string $editado): bool {
+    if (trim($original) === trim($editado) || trim($editado) === '') return false;
+    try {
+        $pdo->prepare(
+            "INSERT INTO crecer_memoria
+               (marca_id, tipo, titulo, detalle, porque, fuente, fuente_id,
+                confianza, peso, estado, visible_usuario, editable_usuario, datos_json)
+             VALUES (?, 'edicion_cruda', ?, ?, ?, 'edicion', ?, 0, 0,
+                     'pendiente_revision', 0, 0, ?)")
+            ->execute([
+                $marca_id,
+                mb_strimwidth('Editó un caption: ' . trim($editado), 0, 120, '…'),
+                mb_substr(trim($editado), 0, 2000),
+                'El dueño reescribió este texto. Falta digerir qué enseña.',
+                $contenido_id,
+                json_encode(['original' => mb_substr($original, 0, 2000),
+                             'editado'  => mb_substr($editado, 0, 2000)],
+                            JSON_UNESCAPED_UNICODE),
+            ]);
+        return true;
+    } catch (Throwable $e) {
+        error_log('edicion_anotar: ' . get_class($e));
+        return false;
+    }
+}
+
 function aprender_de_edicion(PDO $pdo, int $marca_id, string $original, string $editado): ?string {
     if (trim($original) === trim($editado) || trim($editado) === '') return null;
     $prompt = "El dueño de un negocio boricua editó el caption de un post. Compara el ORIGINAL con el EDITADO y extrae SOLO lecciones de VOCABULARIO o VOZ boricua para no repetir el error (ej: 'usa china, no naranja'; 'evita platicar, di hablar'). Máximo 2 viñetas muy cortas. Si el cambio NO es de vocabulario/voz (solo cambió datos o contenido), responde EXACTAMENTE: NINGUNA.\n\nORIGINAL:\n{$original}\n\nEDITADO:\n{$editado}";

@@ -401,6 +401,7 @@ foreach ($sm['items'] as $i => $it) {
              data-sust="<?= $h($x['sust']) ?>"
              data-cuota="<?= (int)$x['cuota']['unidades'] ?>"
              data-cuota-tx="<?= $h(semana_frase_cuota((int)$x['cuota']['unidades'])) ?>"
+             data-cuando-tx="<?= $h(semana_frase_cuando($p['fecha_programada'] ?? null)) ?>"
              data-tactica="<?= (int)$t['id'] ?>">
 
     <?php if ($x['tarea']): /* ══ LA QUE LE TOCA A ÉL ═══════════════════════
@@ -855,8 +856,20 @@ foreach ($sm['items'] as $i => $it) {
 
   // ── AJUSTE · FECHA Y HORA. Handler `fecha` de aprobar2. ──
   function editarFecha(el) {
+    /*  LA CONSECUENCIA, DICHA CON LA FRASE DEL SERVIDOR. La redacta
+        semana_frase_cuando() y viaja en la tarjeta; al guardar, el handler
+        devuelve la nueva y se pega tal cual. Aqui NO se formatea ninguna fecha
+        a mano: dos redacciones del mismo dato acaban diciendo cosas distintas,
+        y esta es la que el dueño usa para decidir.
+
+        Mientras escoge no se promete nada: prometer sobre un valor que aun no
+        guardo seria adelantarse a una decision que todavia no tomo.  */
     abrir('¿Cuándo quieres que salga?',
       '<input type="datetime-local" id="smFe" value="' + esc(el.dataset.fecha) + '">' +
+      (el.dataset.cuandoTx
+        ? '<p class="sm-nota" id="smFeQ" style="margin-top:12px">' + IC.clock +
+          '<span>' + esc(el.dataset.cuandoTx) + '</span></p>'
+        : '') +
       '<p class="sm-nota" style="margin-top:12px">' + IC.clock + '<span>' + esc(HORA_NOTA) + '</span></p>' +
       '<div class="sm-err" id="smFeE" role="alert">' + <?= json_encode(ico('bolt')) ?> + '<p></p></div>' +
       '<div class="pie2"><button type="button" class="sm-bt pri" id="smFeG">Guardar la fecha</button>' +
@@ -865,8 +878,9 @@ foreach ($sm['items'] as $i => $it) {
     $('#smFeG').addEventListener('click', function () {
       var v = $('#smFe').value;
       if (!v) { hojaErr('#smFeE', 'Escoge un día y una hora.'); return; }
-      guardar(el, 'fecha', { fecha: v.replace('T', ' ') }, '#smFeE', 'No pude mover la fecha.', function () {
+      guardar(el, 'fecha', { fecha: v.replace('T', ' ') }, '#smFeE', 'No pude mover la fecha.', function (j) {
         el.dataset.fecha = v;
+        if (j && j.cuando) el.dataset.cuandoTx = j.cuando;
         var d = new Date(v);
         var dia  = d.toLocaleDateString('es-PR', { weekday: 'long', day: 'numeric' });
         var hora = d.toLocaleTimeString('es-PR', { hour: 'numeric', minute: '2-digit' });
@@ -891,7 +905,10 @@ foreach ($sm['items'] as $i => $it) {
     fetch(APROBAR, { method: 'POST', body: fd, credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
-        if (j && j.ok) { alTerminar(); return; }
+        //  La respuesta viaja hasta el final: trae frases ya redactadas por el
+        //  servidor -la consecuencia de la fecha, por ejemplo- y volver a
+        //  escribirlas aqui seria tener dos versiones del mismo dato.
+        if (j && j.ok) { alTerminar(j); return; }
         hojaErr(errSel, (j && j.err) ? j.err : msg);
       })
       .catch(function () { hojaErr(errSel, 'Se cayó la conexión. Nada cambió.'); });

@@ -874,6 +874,34 @@ function semana_cuantas(int $n): string
     return $n === 1 ? '1 publicación' : $n . ' publicaciones';
 }
 
+/**
+ * QUE VA A PASAR SI GUARDA ESTA FECHA, dicho antes de pulsar.
+ *
+ *     «Se publicará el martes 26 a las 10:00 a. m.»
+ *
+ * Vive aqui y no en la hoja por lo de siempre: la escriben dos sitios —la hoja
+ * al abrirse y el servidor al contestar— y dos redacciones del mismo dato
+ * acaban diciendo cosas distintas. Sin fecha devuelve cadena vacia: no hay nada
+ * que prometer, y prometerlo igual seria inventarse un compromiso.
+ */
+function semana_frase_cuando(?string $fecha): string
+{
+    $f = trim((string)$fecha);
+    if ($f === '') return '';
+    $ts = strtotime($f);
+    if ($ts === false) return '';
+
+    $dias  = ['Sunday'=>'domingo','Monday'=>'lunes','Tuesday'=>'martes','Wednesday'=>'miércoles',
+              'Thursday'=>'jueves','Friday'=>'viernes','Saturday'=>'sábado'];
+    $dia   = $dias[date('l', $ts)] ?? '';
+    $num   = (int)date('j', $ts);
+    $h     = (int)date('g', $ts);
+    $min   = date('i', $ts);
+    $ampm  = date('a', $ts) === 'am' ? 'a. m.' : 'p. m.';
+
+    return 'Se publicará el ' . $dia . ' ' . $num . ' a las ' . $h . ':' . $min . ' ' . $ampm . '.';
+}
+
 /** «2 acciones» / «1 acción». Lo que le toca a EL, contado aparte. */
 function semana_acciones(int $n): string
 {
