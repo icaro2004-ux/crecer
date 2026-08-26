@@ -670,6 +670,11 @@ function img_gemini_fallback(PDO $pdo, int $marca_id, int $post_id, string $copy
         // Cuenta el intento SOLO al producir la imagen (no al encolar). Ver aprobar2 'arte'.
         $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, img_estado='ok', img_job=NULL, arte_intentos=arte_intentos+1, updated_at=NOW() WHERE id=? AND marca_id=?")
             ->execute([$url, $post_id, $marca_id]);
+        //  ARTE DESDE CERO: se SUELTA la referencia al material del dueño. Si
+        //  esta pieza usaba una foto suya y ahora la pinta el corillo, dejar el
+        //  id puesto haria que siguiera diciendo que usa una foto que ya no usa.
+        require_once __DIR__ . '/material.php';
+        material_soltar($pdo, $marca_id, (int)$post_id);
         //  El respaldo entrego: se cierra LA MISMA unidad que abrio el encolado
         //  original. Una imagen del cliente, una unidad — aunque el primer
         //  proveedor se quedara por el camino.

@@ -644,6 +644,8 @@ function jugada_ejecutar(PDO $pdo, int $marca_id, int $tactica_id): array {
                         'copy' => $cap, 'con_texto' => false, 'con_logo' => true, 'instrucciones' => $visual,
                     ]);
                     if (!empty($g['archivo'])) {
+                        //  Lo que pinta el ejecutor nace generado: sin material
+                        //  del dueño detras, y por tanto sin id que conservar.
                         $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")
                             ->execute([$g['archivo'], $cid, $marca_id]);
                     }

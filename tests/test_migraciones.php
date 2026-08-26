@@ -125,6 +125,29 @@ if ($copia === null) {
         foreach ($quitar_col as [$t, $c]) {
             try { $copia->ejecutar("ALTER TABLE `{$t}` DROP COLUMN `{$c}`"); } catch (Throwable $e) {}
         }
+        //  Y LOS INDICES QUE CREAN LAS MIGRACIONES. Un DROP COLUMN se lleva
+        //  por delante los indices de UNA sola columna, pero NO los
+        //  compuestos: al quitar `material_activo_id`, su indice
+        //  (marca_id, material_activo_id) sobrevivia sobre marca_id y la
+        //  migracion moria con un 1061 «Duplicate key name» que parecia un
+        //  fallo del archivo y era del arnes. Se leen del propio SQL, asi que
+        //  vale para cualquier migracion futura.
+        foreach ($DECLARADAS as $mig) {
+            if (!is_file($DIR . $mig)) continue;
+            $sql_m = (string)file_get_contents($DIR . $mig);
+            $sql_m = (string)preg_replace('~^\s*--[^
+]*$~m', '', $sql_m);
+            if (preg_match_all('~ADD\s+(?:UNIQUE\s+)?(?:INDEX|KEY)\s+`?([a-z0-9_]+)`?~i',
+                               $sql_m, $ix, PREG_SET_ORDER)) {
+                preg_match('~ALTER\s+TABLE\s+`?([a-z0-9_]+)`?~i', $sql_m, $tb);
+                foreach ($ix as $i) {
+                    if (empty($tb[1])) continue;
+                    try { $copia->ejecutar("ALTER TABLE `{$tb[1]}` DROP INDEX `{$i[1]}`"); }
+                    catch (Throwable $e) { /* no estaba: perfecto */ }
+                }
+            }
+        }
+
         //  Y las columnas hermanas de la de 7a: el mapa solo nombra dos de las
         //  cinco, porque para saber si la migracion entro basta con una.
         foreach (['motivo_sustitucion', 'nota_sustitucion', 'sustituye_a_id'] as $c) {

@@ -382,6 +382,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
             $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, arte_intentos=arte_intentos+1, updated_at=NOW() WHERE id=? AND marca_id=?")
                 ->execute([$r['archivo'], $id, $marca_id]);
+            //  Pintada desde cero: la referencia al material del dueño se suelta.
+            require_once __DIR__ . '/../includes/material.php';
+            material_soltar($pdo, $marca_id, (int)$id);
             header('Content-Type: application/json');
             echo json_encode([
                 'ok'=>true, 'id'=>$id, 'img'=>$r['archivo'],
@@ -401,6 +404,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $g->execute([$gid, $marca_id]); $arch = $g->fetchColumn();
         if ($arch && $id) {
             $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$arch, $id, $marca_id]);
+            //  Reusar arte GENERADO no viene de la Biblioteca del dueño: se
+            //  suelta la referencia. Si algun dia se reusara material suyo con
+            //  evidencia estructurada, ese camino guardaria su id — no este.
+            require_once __DIR__ . '/../includes/material.php';
+            material_soltar($pdo, $marca_id, (int)$id);
             header('Content-Type: application/json'); echo json_encode(['ok'=>true,'id'=>$id,'img'=>$arch], JSON_UNESCAPED_UNICODE); exit;
         }
         header('Content-Type: application/json'); echo json_encode(['ok'=>false]); exit;
