@@ -178,11 +178,64 @@ final class Fixture
         $u = $pdo->prepare("SELECT usuario_id FROM crecer_marca WHERE id=?");
         $u->execute([$marca_id]);
         $uid = (int)$u->fetchColumn();
-        // Borrar el usuario arrastra la marca por la FK en cascada, que es justo
-        // lo que rompió los datos aquella vez. Aquí es lo que se quiere: la
-        // marca ES de la fixture, y el sello ya lo confirmó.
+        //  LO QUE LA CASCADA NO SE LLEVA. Borrar el usuario arrastra la marca
+        //  por la FK, pero en este proyecto las tablas nuevas van SIN llaves
+        //  foraneas —regla de Hostinger, donde una FK tumba el CREATE entero en
+        //  silencio— asi que sus filas se quedaban vivas.
+        //
+        //  No era teorico: una tanda completa dejaba +30 activos, +7 asientos y
+        //  +83 unidades sumadas al cubo del mes de marcas que ya no existen. El
+        //  numero del mes es evidencia que se le enseña al jurado y a un cliente:
+        //  ensuciarlo con fixtures es ensuciar la evidencia.
+        //
+        //  Se borra por marca_id y en este orden: primero lo que cuelga, luego la
+        //  marca. Cada DELETE va en su try porque una tabla que todavia no exista
+        //  en esta base no puede impedir que se limpie el resto.
+        $porMarca = [
+            'crecer_img_cuota_asiento', 'crecer_img_cuota_cubo', 'crecer_ia_log',
+            'crecer_activos', 'crecer_graficas', 'crecer_memoria',
+        ];
+        foreach ($porMarca as $t) {
+            try { $pdo->prepare("DELETE FROM {$t} WHERE marca_id=?")->execute([$marca_id]); }
+            catch (Throwable $e) { /* tabla que no existe aqui: no es un fallo */ }
+        }
+        //  Los slides cuelgan de la pieza, no de la marca.
+        try {
+            $pdo->prepare("DELETE FROM crecer_carrusel WHERE contenido_id IN
+                            (SELECT id FROM crecer_contenido WHERE marca_id=?)")
+                ->execute([$marca_id]);
+        } catch (Throwable $e) {}
+
         if ($uid) $pdo->prepare("DELETE FROM usuarios WHERE id=?")->execute([$uid]);
         else      $pdo->prepare("DELETE FROM crecer_marca WHERE id=?")->execute([$marca_id]);
+
+        //  Y EL DISCO. Las fotos y los videos de la fixture viven en
+        //  uploads/marca_N: sin esto, cada tanda deja su carpeta para siempre.
+        self::borrarCarpeta(rtrim(defined('UPLOADS_PATH') ? UPLOADS_PATH
+                                   : dirname(__DIR__) . '/uploads', '/\\')
+                            . DIRECTORY_SEPARATOR . 'marca_' . $marca_id);
+    }
+
+    /**
+     * Borra una carpeta entera, y SOLO si es una carpeta de marca dentro de
+     * uploads. La guarda no es adorno: a esta funcion se le pasa una ruta
+     * construida, y una construida mal borra lo que no debe.
+     */
+    private static function borrarCarpeta(string $dir): void
+    {
+        $real = @realpath($dir);
+        $base = @realpath(rtrim(defined('UPLOADS_PATH') ? UPLOADS_PATH
+                                 : dirname(__DIR__) . '/uploads', '/\\'));
+        if ($real === false || $base === false) return;
+        if (!str_starts_with($real, $base . DIRECTORY_SEPARATOR)) return;
+        if (!preg_match('~[\\\\/]marca_\d+$~', $real)) return;
+        try {
+            $it = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($real, FilesystemIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::CHILD_FIRST);
+            foreach ($it as $f) { $f->isDir() ? @rmdir($f->getPathname()) : @unlink($f->getPathname()); }
+            @rmdir($real);
+        } catch (Throwable $e) { /* si no se puede, se dice en los contadores */ }
     }
 
     /** Restos de corridas que se murieron a la mitad. Solo lo sellado. */
