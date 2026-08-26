@@ -439,14 +439,14 @@ function semana_nota_hora(PDO $pdo, int $marca_id): string
  * @return array{
  *   origen:string, nombre:string, frase:string, hay:bool,
  *   admite:array, admite_video:bool, editable:bool, activo_id:int,
- *   mat_tipo:string, mejorable:bool
+ *   mat_tipo:string, mejorable:bool, realzada:bool
  * }
  */
 function semana_material(PDO $pdo, int $marca_id, ?array $p): array
 {
     $vacia = ['origen' => 'sin_pieza', 'nombre' => '', 'frase' => '', 'hay' => false,
               'admite' => ['imagen'], 'admite_video' => false, 'editable' => false,
-              'activo_id' => 0, 'mat_tipo' => '', 'mejorable' => false];
+              'activo_id' => 0, 'mat_tipo' => '', 'mejorable' => false, 'realzada' => false];
     if (!$p || (int)($p['id'] ?? 0) <= 0) return $vacia;
 
     $tipo   = (string)($p['tipo'] ?? 'post');
@@ -460,6 +460,13 @@ function semana_material(PDO $pdo, int $marca_id, ?array $p): array
     $act = $o['activo'] ?? null;
     $nom = $act ? trim((string)($act['nombre'] ?? '')) : '';
 
+    //  ¿LO QUE SE VE ES EL ARCHIVO SUYO, O ALGO SACADO DE EL? La traza dice de
+    //  donde salio; la ruta dice que se enseña. Cuando no coinciden, es un
+    //  realce — y eso se cuenta, no se calla.
+    $ruta_act = $act ? ltrim(str_replace('\\', '/', (string)($act['archivo'] ?? '')), '/') : '';
+    $realzada = $act !== null && $ruta_act !== ''
+                && !str_contains(str_replace('\\', '/', trim((string)($p['grafica_path'] ?? ''))), $ruta_act);
+
     //  LA FRASE, EN CRISTIANO. «material_activo_id» no le dice nada a nadie;
     //  «Ahora lleva tu foto Su bizcocho» si. Y cuando no se sabe, se dice que
     //  no se sabe en vez de afirmar que la pinto el corillo: la columna es
@@ -470,7 +477,15 @@ function semana_material(PDO $pdo, int $marca_id, ?array $p): array
             : 'Todavía no tiene imagen ni video.';
     } elseif (($o['origen'] ?? '') === 'biblioteca') {
         $suyo  = (string)($act['tipo'] ?? 'imagen') === 'video' ? 'tu video' : 'tu foto';
-        $frase = $nom !== '' ? "Ahora lleva {$suyo}: «{$nom}»." : "Ahora lleva {$suyo}.";
+        //  «TU FOTO» Y «TU FOTO REALZADA» NO SON LO MISMO, y la pieza tiene con
+        //  que distinguirlas sin columna nueva: un realce conserva la traza
+        //  —de esa foto salio lo que se ve— pero la ruta que se muestra ya NO
+        //  es la del archivo original. Si coinciden, es la suya tal cual; si no,
+        //  es la suya trabajada. Decir «tu foto» a secas sobre una realzada
+        //  seria decirle que no le hicimos nada.
+        $frase = $realzada
+            ? ($nom !== '' ? "Ahora lleva {$suyo} realzada: «{$nom}»." : "Ahora lleva {$suyo} realzada.")
+            : ($nom !== '' ? "Ahora lleva {$suyo}: «{$nom}»." : "Ahora lleva {$suyo}.");
     } elseif (($o['origen'] ?? '') === 'sin_columna') {
         $frase = 'Ahora lleva una imagen.';
     } else {
@@ -493,6 +508,7 @@ function semana_material(PDO $pdo, int $marca_id, ?array $p): array
         //  cobrar dos veces por la misma palabra.
         'mejorable'    => $editable && $act !== null
                           && (string)($act['tipo'] ?? '') === 'imagen',
+        'realzada'     => $realzada,
     ];
 }
 

@@ -15,6 +15,13 @@ require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/agentes.php';
 require __DIR__ . '/../includes/suscripcion.php';
 require __DIR__ . '/../includes/gateway.php';
+//  EL DOMINIO DEL MATERIAL, ARRIBA Y A LA VISTA. Estaba incluido dentro
+//  de los handlers, justo antes de cada llamada, y basto que UNO se
+//  quedara sin su require para que la entrega de arte muriera con un
+//  fatal en la ruta que mas se usa. Cargarlo aqui quita la clase entera
+//  de fallo: no depende de que rama se ejecute ni de que otra pagina lo
+//  haya cargado antes.
+require_once __DIR__ . '/../includes/material.php';
 require_once __DIR__ . '/../includes/iconos.php';
 requiere_login();
 
@@ -128,7 +135,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // rechazado_confirmado: no quedó nada creado. El motor viejo puede correr.
         }
         try {
-            $g = generar_grafica($pdo, $marca_id, null, ['copy'=>$cap, 'con_texto'=>$con_txt, 'con_logo'=>false]);
+            $g = generar_grafica($pdo, $marca_id, null, ['copy'=>$cap, 'con_texto'=>$con_txt, 'con_logo'=>false,
+                                                         'contenido_id'=>(int)$post_id]);
             if (!empty($g['archivo'])) {
                 $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$g['archivo'], $post_id, $marca_id]);
         //  LA PIEZA DEJA DE DECIR QUE LLEVA MATERIAL SUYO. Esto pinta desde
@@ -137,7 +145,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         //  y el origen seguiria diciendo «tu foto». Soltarla es barato — un
         //  UPDATE que no hace nada si no habia nada — y evita la unica mentira
         //  que esta columna puede contar.
-        require_once __DIR__ . '/../includes/material.php';
         material_soltar($pdo, (int)$marca_id, (int)$post_id);
                 echo json_encode(['ok'=>true, 'img'=>(string)$g['archivo']]); exit;
             }

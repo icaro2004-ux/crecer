@@ -1182,6 +1182,29 @@ function ia_imagen(PDO $pdo, string $agente, string $accion, string $prompt, str
     $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,costo_usd,latencia_ms,estado,error_msg)
                    VALUES (?,?,?,?,?,?,?,?,?,?)")
         ->execute([$opts['marca_id'] ?? null, $agente, $accion_log, $modelo, $prompt, $rel, $costo, $lat, $estado, $err]);
+    //  ── LA UNIDAD SE CIERRA AQUI ──────────────────────────────────
+    //
+    //  Esta funcion RESERVABA y no cerraba nunca. En exito el asiento se
+    //  quedaba «reservado» —el total del mes salia bien, pero el estado mentia:
+    //  contaba como retenida una imagen que el dueño ya tenia en pantalla— y
+    //  la llave idempotente no se retiraba, asi que un segundo intento
+    //  deliberado sobre la misma pieza reusaba aquel asiento y salia gratis
+    //  para siempre. En el FALLO era peor: la unidad no volvia al cubo, o sea
+    //  que el dueño pagaba del mes una imagen que nunca recibio.
+    //
+    //  El asiento se busca por el propio contexto porque el punto de proveedor
+    //  reserva con una copia (enPunto() clona) y aqui nunca llega el id.
+    //
+    //  Cerrar dos veces es inofensivo: confirmar() y liberar() solo tocan
+    //  asientos vivos, asi que el respaldo que ya cerro no se pisa con este.
+    try {
+        if (class_exists('CuotaImg') && ($opts['cuota'] ?? null) instanceof CuotaCtx) {
+            if ($estado === 'ok') CuotaImg::confirmarPorCtx($opts['cuota'], $costo);
+            else                  CuotaImg::liberarPorCtx($opts['cuota'],
+                                       'sin imagen: ' . mb_substr((string)$err, 0, 120));
+        }
+    } catch (Throwable $e) { error_log('ia_imagen cerrar cuota: ' . $e->getMessage()); }
+
     if ($estado === 'error') throw new IaError($err);
     return ['archivo' => $rel, 'costo' => $costo, 'modelo' => $modelo];
 }

@@ -26,6 +26,13 @@
 
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/meta_negocio.php';
+//  EL DOMINIO DEL MATERIAL, ARRIBA Y A LA VISTA. Estaba incluido dentro
+//  de los handlers, justo antes de cada llamada, y basto que UNO se
+//  quedara sin su require para que la entrega de arte muriera con un
+//  fatal en la ruta que mas se usa. Cargarlo aqui quita la clase entera
+//  de fallo: no depende de que rama se ejecute ni de que otra pagina lo
+//  haya cargado antes.
+require_once __DIR__ . '/material.php';
 
 /** Una jugada por id, verificando dueño. */
 function jugada_por_id(PDO $pdo, int $tactica_id, int $marca_id): ?array {
@@ -642,6 +649,7 @@ function jugada_ejecutar(PDO $pdo, int $marca_id, int $tactica_id): array {
                 try {
                     $g = generar_grafica($pdo, $marca_id, $foto_abs, [
                         'copy' => $cap, 'con_texto' => false, 'con_logo' => true, 'instrucciones' => $visual,
+                        'contenido_id' => (int)$cid,
                     ]);
                     if (!empty($g['archivo'])) {
                         //  Lo que pinta el ejecutor nace generado: sin material
@@ -654,7 +662,6 @@ function jugada_ejecutar(PDO $pdo, int $marca_id, int $tactica_id): array {
                         //  y el origen seguiria diciendo «tu foto». Soltarla es barato — un
                         //  UPDATE que no hace nada si no habia nada — y evita la unica mentira
                         //  que esta columna puede contar.
-                        require_once __DIR__ . '/material.php';
                         material_soltar($pdo, (int)$marca_id, (int)$cid);
                     }
                     // Se anota qué foto real se usó, para no repetirla en la próxima tanda.

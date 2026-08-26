@@ -12,6 +12,13 @@
 require_once __DIR__ . '/ia.php';
 
 require_once __DIR__ . '/worker_key.php';
+//  EL DOMINIO DEL MATERIAL, ARRIBA Y A LA VISTA. Estaba incluido dentro
+//  de los handlers, justo antes de cada llamada, y basto que UNO se
+//  quedara sin su require para que la entrega de arte muriera con un
+//  fatal en la ruta que mas se usa. Cargarlo aqui quita la clase entera
+//  de fallo: no depende de que rama se ejecute ni de que otra pagina lo
+//  haya cargado antes.
+require_once __DIR__ . '/material.php';
 // CR-F01b: sin CRECER_WORKER_KEY no hay llave. NADA de literal de respaldo:
 // adoptar en silencio una llave del repo publico era la trampa.
 if (!defined('ARTE_WORKER_KEY')) define('ARTE_WORKER_KEY', worker_key());
@@ -673,7 +680,6 @@ function img_gemini_fallback(PDO $pdo, int $marca_id, int $post_id, string $copy
         //  ARTE DESDE CERO: se SUELTA la referencia al material del dueño. Si
         //  esta pieza usaba una foto suya y ahora la pinta el corillo, dejar el
         //  id puesto haria que siguiera diciendo que usa una foto que ya no usa.
-        require_once __DIR__ . '/material.php';
         material_soltar($pdo, $marca_id, (int)$post_id);
         //  El respaldo entrego: se cierra LA MISMA unidad que abrio el encolado
         //  original. Una imagen del cliente, una unidad — aunque el primer
@@ -977,7 +983,6 @@ function img_resp_completar(PDO $pdo, int $marca_id, int $post_id, bool $dedicad
             //  una foto suya aplicada y encima cae lo generado, la referencia
             //  que la trazaba pasa a ser mentira. Solo suelta quien gano la
             //  carrera — el que no escribio nada no tiene nada que soltar.
-            require_once __DIR__ . '/material.php';
             material_soltar($pdo, $marca_id, (int)$post_id);
         }
         return ['estado' => 'ok', 'img' => $url];

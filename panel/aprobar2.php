@@ -9,6 +9,13 @@ require __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../core/Meta/MetaRetorno.php';
 require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/agentes.php';
+//  EL DOMINIO DEL MATERIAL, ARRIBA Y A LA VISTA. Estaba incluido dentro
+//  de los handlers, justo antes de cada llamada, y basto que UNO se
+//  quedara sin su require para que la entrega de arte muriera con un
+//  fatal en la ruta que mas se usa. Cargarlo aqui quita la clase entera
+//  de fallo: no depende de que rama se ejecute ni de que otra pagina lo
+//  haya cargado antes.
+require_once __DIR__ . '/../includes/material.php';
 require __DIR__ . '/../includes/suscripcion.php';
 require_once __DIR__ . '/../includes/baraja.php';   // La Baraja: el gesto de decidir (solo móvil, flag CRECER_BARAJA)
 requiere_login();
@@ -350,8 +357,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             //
             //  Y con foto delante el motor cuenta `realce`, no `arte_post`
             //  (agentes.php): subirla cuesta 0, transformarla cuesta 1.
-            require_once __DIR__ . '/../includes/material.php';
             $src = material_abs_de_pieza($pdo, (int)$marca_id, (int)$id);
+            //  ESTO ES UN REALCE DE SU PROPIA FOTO, y eso cambia que pasa con
+            //  la traza al final: no se suelta.
+            $realce_propio = ($src !== null);
             if ($src === null) {
                 header('Content-Type: application/json');
                 echo json_encode(['ok'=>false,
@@ -408,9 +417,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
             $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, arte_intentos=arte_intentos+1, updated_at=NOW() WHERE id=? AND marca_id=?")
                 ->execute([$r['archivo'], $id, $marca_id]);
-            //  Pintada desde cero: la referencia al material del dueño se suelta.
-            require_once __DIR__ . '/../includes/material.php';
-            material_soltar($pdo, $marca_id, (int)$id);
+            //  UN REALCE NO ES OTRA IMAGEN: ES LA SUYA, MEJOR. La foto de
+            //  entrada era el material aplicado de esta pieza, asi que la traza
+            //  sigue siendo cierta —de ahi salio lo que se ve— y se conserva.
+            //  Soltarla convertiria «tu bizcocho, realzado» en «arte del
+            //  corillo», que es justo lo contrario de lo que paso.
+            //
+            //  Lo demas SI se suelta: arte desde cero no tiene material detras,
+            //  y una foto del selector viejo no es la que la traza nombra, asi
+            //  que conservarla seria señalar a un archivo que ya no se ve.
+            if (empty($realce_propio)) material_soltar($pdo, $marca_id, (int)$id);
             header('Content-Type: application/json');
             echo json_encode([
                 'ok'=>true, 'id'=>$id, 'img'=>$r['archivo'],
@@ -433,7 +449,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             //  Reusar arte GENERADO no viene de la Biblioteca del dueño: se
             //  suelta la referencia. Si algun dia se reusara material suyo con
             //  evidencia estructurada, ese camino guardaria su id — no este.
-            require_once __DIR__ . '/../includes/material.php';
             material_soltar($pdo, $marca_id, (int)$id);
             header('Content-Type: application/json'); echo json_encode(['ok'=>true,'id'=>$id,'img'=>$arch], JSON_UNESCAPED_UNICODE); exit;
         }
@@ -461,7 +476,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     //  aplicar valida marca, vida, formato y estado de la pieza en un solo
     //  sitio.
     if ($accion === 'foto_directa') {
-        require_once __DIR__ . '/../includes/material.php';
         header('Content-Type: application/json');
 
         //  DOS NOMBRES DE CAMPO, UN SOLO HANDLER. Habia DOS bloques
@@ -510,7 +524,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     //  material_aplicar() mirando el tipo, y si no cabe lo dice — no lo
     //  convierte nadie.
     if ($accion === 'video_directo') {
-        require_once __DIR__ . '/../includes/material.php';
         header('Content-Type: application/json');
 
         $reg = material_registrar_subida($pdo, (int)$marca_id, $_FILES['video'] ?? [],
@@ -551,7 +564,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     //  pantalla — pero NO son dos reglas: las dos entran por material_aplicar(),
     //  que es quien decide si la pieza es suya, si ya salio y si el formato cabe.
     if ($accion === 'usar_activo') {
-        require_once __DIR__ . '/../includes/material.php';
         header('Content-Type: application/json');
 
         $act = (int)($_POST['activo_id'] ?? 0);

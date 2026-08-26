@@ -10,6 +10,13 @@
 
 require_once __DIR__ . '/ia.php';
 require_once __DIR__ . '/memoria.php';   // El Cerebro del Negocio (RAG + escritura)
+//  EL DOMINIO DEL MATERIAL, ARRIBA Y A LA VISTA. Estaba incluido dentro
+//  de los handlers, justo antes de cada llamada, y basto que UNO se
+//  quedara sin su require para que la entrega de arte muriera con un
+//  fatal en la ruta que mas se usa. Cargarlo aqui quita la clase entera
+//  de fallo: no depende de que rama se ejecute ni de que otra pagina lo
+//  haya cargado antes.
+require_once __DIR__ . '/material.php';
 
 if (!defined('CRECER_COPILOTO_HORA'))       define('CRECER_COPILOTO_HORA', 25);        // mensajes por negocio / hora con plan
 if (!defined('CRECER_COPILOTO_DIA'))        define('CRECER_COPILOTO_DIA', 120);        // mensajes por negocio / dia con plan
@@ -991,7 +998,7 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
     //    de más → cae a Gemini para no trabar la fábrica. ──
     if (!$tiene_foto && function_exists('img_resp_activo') && img_resp_activo()) {
         $estilo_raw = (trim($opts['estilo_arte'] ?? 'realista') ?: 'realista');
-        $rr = generar_grafica_responses($pdo, $marca_id, $m, $copy, $con_texto, ($con_logo && $logo_abs) ? $logo_abs : null, $fname, $estilo_raw, $instr, (int)($opts['contenido_id'] ?? 0));
+        $rr = generar_grafica_responses($pdo, $marca_id, $m, $copy, $con_texto, ($con_logo && $logo_abs) ? $logo_abs : null, $fname, $estilo_raw, $instr, (int)($opts['origen_id'] ?? ($opts['contenido_id'] ?? 0)), (string)($opts['origen_tipo'] ?? 'contenido'));
         if ($rr) {
             $pdo->prepare("INSERT INTO crecer_graficas (marca_id, archivo, copy_text) VALUES (?,?,?)")
                 ->execute([$marca_id, $rr['archivo'], $copy]);
@@ -1004,11 +1011,18 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
     //  RUTA 2. Cuenta 1: es arte nuevo o un realce con IA de la foto del dueño.
     //  Subir la foto cuesta 0 —no pasa por proveedor—; transformarla, 1.
     require_once __DIR__ . '/cuota_imagenes.php';
+    //  DE QUE ES ESTA UNIDAD. La llave idempotente se arma con el origen, asi
+    //  que un origen vacio es la MISMA llave para toda la marca: la segunda
+    //  pieza reusaba la reserva de la primera y salia sin pagar. Por defecto el
+    //  origen es la publicacion; el carrusel manda el suyo porque su unidad es
+    //  el slide, no la pieza — cinco slides son cinco imagenes.
+    $org_tipo = (string)($opts['origen_tipo'] ?? 'contenido');
+    $org_id   = (int)($opts['origen_id'] ?? ($opts['contenido_id'] ?? 0));
     $r = ia_imagen($pdo, 'creador', 'Crear arte de post', $prompt, $fname, [
         'marca_id'  => $marca_id,
         'cuota'     => CuotaCtx::de($pdo, $marca_id, $tiene_foto ? 'realce' : 'arte_post',
-                                    'crear_arte_post', ['origen_tipo' => 'contenido',
-                                    'origen_id' => (int)($opts['contenido_id'] ?? 0), 'costo' => 0.17]),
+                                    'crear_arte_post', ['origen_tipo' => $org_tipo,
+                                    'origen_id' => $org_id, 'costo' => 0.17]),
         'modelo'    => $modelo,
         'imagenes'  => $imagenes,
         'foto_real' => $tiene_foto,               // foto real → Gemini (fiel)
@@ -1030,7 +1044,7 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
 //  asi que el respaldo NO reusa la reserva del encolado original — abre otra, y
 //  el dueño paga dos por la misma imagen. Salio al probar el respaldo del
 //  credito agotado: dos asientos extra con origen=0.
-function generar_grafica_responses(PDO $pdo, int $marca_id, array $m, string $copy, bool $con_texto, ?string $logo_abs, string $fname, string $estilo = 'realista', string $extra = '', int $contenido_id = 0): ?array {
+function generar_grafica_responses(PDO $pdo, int $marca_id, array $m, string $copy, bool $con_texto, ?string $logo_abs, string $fname, string $estilo = 'realista', string $extra = '', int $contenido_id = 0, string $origen_tipo = 'contenido'): ?array {
     require_once __DIR__ . '/img_responses.php';
     if (!function_exists('openai_configurado') || !openai_configurado()) return null;
     $logo = null;
@@ -1055,7 +1069,7 @@ function generar_grafica_responses(PDO $pdo, int $marca_id, array $m, string $co
         require_once __DIR__ . '/cuota_imagenes.php';
         $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1']
             + ['cuota' => CuotaCtx::de($pdo, $marca_id, 'arte_post', 'crear_arte_post_responses',
-                          ['origen_tipo' => 'contenido', 'origen_id' => $contenido_id,
+                          ['origen_tipo' => $origen_tipo, 'origen_id' => $contenido_id,
                            'costo' => 0.17])]
             + ($logo ? ['logo' => $logo] : []));
     } catch (Throwable $e) { error_log('generar_grafica_responses crear: ' . $e->getMessage()); return null; }
@@ -2039,7 +2053,8 @@ function crear_post_muestra(PDO $pdo, int $marca_id): int {
         // rechazado_confirmado: no quedó nada creado. El motor viejo puede correr.
     }
     try {
-        $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => false]);
+        $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => false,
+                                                     'contenido_id' => (int)$cid]);
         if (!empty($g['archivo'])) $pdo->prepare("UPDATE crecer_contenido SET grafica_path=? WHERE id=?")->execute([$g['archivo'], $cid]);
         //  LA PIEZA DEJA DE DECIR QUE LLEVA MATERIAL SUYO. Esto pinta desde
         //  cero, asi que si la pieza venia con una foto del dueño aplicada, la
@@ -2047,7 +2062,6 @@ function crear_post_muestra(PDO $pdo, int $marca_id): int {
         //  y el origen seguiria diciendo «tu foto». Soltarla es barato — un
         //  UPDATE que no hace nada si no habia nada — y evita la unica mentira
         //  que esta columna puede contar.
-        require_once __DIR__ . '/material.php';
         material_soltar($pdo, (int)$marca_id, (int)$cid);
     } catch (Throwable $e) {}
     return $cid;
@@ -2666,7 +2680,8 @@ function trabajo_autonomo(PDO $pdo, int $marca_id, string $enfoque = ''): array 
         }
         if ($cap !== '' && $meta_id !== null) {
             try {
-                $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => true, 'instrucciones' => $visual]);
+                $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => true, 'instrucciones' => $visual,
+                                                             'contenido_id' => (int)$cid]);
                 if (!empty($g['archivo'])) {
                     $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")
                         ->execute([$g['archivo'], $cid, $marca_id]);
@@ -2676,7 +2691,6 @@ function trabajo_autonomo(PDO $pdo, int $marca_id, string $enfoque = ''): array 
                 //  y el origen seguiria diciendo «tu foto». Soltarla es barato — un
                 //  UPDATE que no hace nada si no habia nada — y evita la unica mentira
                 //  que esta columna puede contar.
-                require_once __DIR__ . '/material.php';
                 material_soltar($pdo, (int)$marca_id, (int)$cid);
             }
             } catch (Throwable $e) { error_log('relevo arte: ' . $e->getMessage()); }
@@ -2915,7 +2929,8 @@ function gerente_despachar(PDO $pdo, int $marca_id, string $peticion, bool $pued
             try { $rr = redactar_pieza($pdo, $cid); $cap = (string)($rr['caption'] ?? ''); $visual = (string)($rr['debate']['visual'] ?? ''); $ok++; } catch (Throwable $e) {}
             if ($cap !== '') {   // deja el arte listo también (post completo), con el concepto del corillo
                 try {
-                    $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => true, 'instrucciones' => $visual]);
+                    $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => true, 'instrucciones' => $visual,
+                                                                 'contenido_id' => (int)$cid]);
                     if (!empty($g['archivo'])) {
                         $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")
                             ->execute([$g['archivo'], $cid, $marca_id]);
@@ -2925,7 +2940,6 @@ function gerente_despachar(PDO $pdo, int $marca_id, string $peticion, bool $pued
                     //  y el origen seguiria diciendo «tu foto». Soltarla es barato — un
                     //  UPDATE que no hace nada si no habia nada — y evita la unica mentira
                     //  que esta columna puede contar.
-                    require_once __DIR__ . '/material.php';
                     material_soltar($pdo, (int)$marca_id, (int)$cid);
                 }
                 } catch (Throwable $e) { error_log('gerente arte: ' . $e->getMessage()); }

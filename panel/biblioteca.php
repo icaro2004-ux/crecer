@@ -12,6 +12,13 @@
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/iconos.php';
+//  EL DOMINIO DEL MATERIAL, ARRIBA Y A LA VISTA. Estaba incluido dentro
+//  de los handlers, justo antes de cada llamada, y basto que UNO se
+//  quedara sin su require para que la entrega de arte muriera con un
+//  fatal en la ruta que mas se usa. Cargarlo aqui quita la clase entera
+//  de fallo: no depende de que rama se ejecute ni de que otra pagina lo
+//  haya cargado antes.
+require_once __DIR__ . '/../includes/material.php';
 requiere_login();
 require_once __DIR__ . '/../includes/panel_guard.php';
 requiere_suscripcion($pdo, isset($_GET['marca']) ? (int)$_GET['marca'] : null);
@@ -45,7 +52,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     //  estado de la pieza— viven en material_aplicar() para que esta puerta y
     //  la del editor no puedan divergir.
     if ($accion === 'usar_material') {
-        require_once __DIR__ . '/../includes/material.php';
         require_once __DIR__ . '/../core/Meta/MetaRetorno.php';
         $pieza  = (int)($_POST['pieza'] ?? 0);
         $activo = (int)($_POST['activo_id'] ?? 0);
@@ -267,7 +273,6 @@ require __DIR__ . '/_shell.php';
 //  pinta y la galeria es la de siempre.
 // ══════════════════════════════════════════════════════════════════════
 require_once __DIR__ . '/../core/Meta/MetaRetorno.php';
-require_once __DIR__ . '/../includes/material.php';
 
 $bib_pieza = 0; $bib_pos = null; $bib_tipos = []; $bib_pieza_fila = null;
 if (MetaRetorno::vieneDeMeta($_GET)) {

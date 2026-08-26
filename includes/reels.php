@@ -17,6 +17,13 @@
 
 require_once __DIR__ . '/ia.php';
 require_once __DIR__ . '/render.php';
+//  EL DOMINIO DEL MATERIAL, ARRIBA Y A LA VISTA. Estaba incluido dentro
+//  de los handlers, justo antes de cada llamada, y basto que UNO se
+//  quedara sin su require para que la entrega de arte muriera con un
+//  fatal en la ruta que mas se usa. Cargarlo aqui quita la clase entera
+//  de fallo: no depende de que rama se ejecute ni de que otra pagina lo
+//  haya cargado antes.
+require_once __DIR__ . '/material.php';
 
 // ── PRESETS ─────────────────────────────────────────────────
 // Cada preset es un PAQUETE de estilo (no un filtro): ritmo de
@@ -981,7 +988,6 @@ function reels_cerrar_pieza(PDO $pdo, int $reel_id): bool {
         $pdo->prepare("UPDATE crecer_contenido SET " . implode(',', $sets) . " WHERE id=? AND marca_id=?")->execute($par);
     } catch (Throwable $e) { return false; }
 
-    require_once __DIR__ . '/material.php';
     $rel = material_rel_de_url((string)$r['video_url']);
     if ($rel !== '') {
         //  Registrar es idempotente por ruta: cerrar el mismo reel dos veces

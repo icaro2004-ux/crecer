@@ -13,6 +13,13 @@ require_once __DIR__ . '/../core/Meta/MetaRetorno.php';
 require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/iconos.php';
 require __DIR__ . '/../includes/carrusel.php';
+//  EL DOMINIO DEL MATERIAL, ARRIBA Y A LA VISTA. Estaba incluido dentro
+//  de los handlers, justo antes de cada llamada, y basto que UNO se
+//  quedara sin su require para que la entrega de arte muriera con un
+//  fatal en la ruta que mas se usa. Cargarlo aqui quita la clase entera
+//  de fallo: no depende de que rama se ejecute ni de que otra pagina lo
+//  haya cargado antes.
+require_once __DIR__ . '/../includes/material.php';
 requiere_login();
 require_once __DIR__ . '/../includes/panel_guard.php';
 requiere_suscripcion($pdo, isset($_GET['marca']) ? (int)$_GET['marca'] : null);
@@ -316,7 +323,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         //  pieza llevaba una foto del dueño aplicada, la referencia que la
         //  trazaba deja de ser cierta en cuanto la portada la tapa: se suelta,
         //  que es un UPDATE que no hace nada si no habia nada que soltar.
-        require_once __DIR__ . '/../includes/material.php';
         material_soltar($pdo, (int)$marca_id, (int)$cid);
         // Publicar a TODAS las redes conectadas (el carrusel se guarda como plataforma
         // 'instagram', así que sin esto FB nunca se intentaba): IG = swipe, FB = álbum.

@@ -11,6 +11,13 @@
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/suscripcion.php';
+//  EL DOMINIO DEL MATERIAL, ARRIBA Y A LA VISTA. Estaba incluido dentro
+//  de los handlers, justo antes de cada llamada, y basto que UNO se
+//  quedara sin su require para que la entrega de arte muriera con un
+//  fatal en la ruta que mas se usa. Cargarlo aqui quita la clase entera
+//  de fallo: no depende de que rama se ejecute ni de que otra pagina lo
+//  haya cargado antes.
+require_once __DIR__ . '/../includes/material.php';
 require __DIR__ . '/../includes/iconos.php';
 require_once __DIR__ . '/../includes/baraja.php';   // La Baraja: el gesto de decidir (solo móvil, flag CRECER_BARAJA)
 requiere_login();
@@ -45,7 +52,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'usar_
     //  comprobaba si la pieza ya habia salido, y no guardaba de donde venia la
     //  foto. Dos puertas a lo mismo con dos reglas distintas es como se acaba
     //  teniendo una que se olvido de una.
-    require_once __DIR__ . '/../includes/material.php';
     $pieza = (int)($_POST['pieza'] ?? 0); $activo = (int)($_POST['activo'] ?? 0);
     $r = material_aplicar($pdo, (int)$marca_id, $pieza, $activo);
     if (!empty($r['ok'])) {

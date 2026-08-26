@@ -449,6 +449,35 @@ class CuotaImg
      * del id del asiento. La busca por su llave idempotente, que es justo la
      * que identifica la imagen del cliente.
      */
+    /**
+     * CIERRA LA UNIDAD DESDE EL CONTEXTO, cuando el llamante no tiene el id.
+     *
+     * El espejo de liberarPorCtx(), y hacia falta por lo mismo: el punto de
+     * proveedor reserva con una COPIA del contexto —enPunto() clona— asi que
+     * quien llamo nunca se entera del id del asiento. Sin esto, la ruta
+     * SINCRONA no podia cerrar nada: la imagen llegaba, el dueño la veia, y el
+     * asiento se quedaba en «reservado» para siempre.
+     *
+     * Las consecuencias de eso no eran cosmeticas:
+     *   · el estado del mes contaba la unidad como RETENIDA, no consumida;
+     *   · la llave idempotente no se retiraba nunca, asi que un segundo ciclo
+     *     deliberado sobre la misma pieza reusaba el asiento viejo y salia
+     *     gratis para siempre;
+     *   · y en el fallo, la unidad no volvia: el dueño pagaba una imagen que
+     *     no recibio.
+     */
+    public static function confirmarPorCtx(?CuotaCtx $ctx, float $costo_usd = 0): void
+    {
+        if (!$ctx instanceof CuotaCtx || !self::disponible($ctx->pdo)) return;
+        $id = $ctx->asiento_id;
+        if ($id <= 0) {
+            $a  = self::porOrigen($ctx->pdo, $ctx->marca_id, $ctx->operacion,
+                                  $ctx->origen_tipo, $ctx->origen_id);
+            $id = (int)($a['id'] ?? 0);
+        }
+        if ($id > 0) self::confirmar($ctx->pdo, $id, $costo_usd);
+    }
+
     public static function liberarPorCtx(?CuotaCtx $ctx, string $motivo): void
     {
         if (!$ctx instanceof CuotaCtx || !self::disponible($ctx->pdo)) return;

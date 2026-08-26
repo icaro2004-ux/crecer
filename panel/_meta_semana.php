@@ -436,6 +436,7 @@ foreach ($sm['items'] as $i => $it) {
              data-mat-video="<?= $x['mat']['admite_video'] ? '1' : '' ?>"
              data-mat-edit="<?= $x['mat']['editable'] ? '1' : '' ?>"
              data-mat-mejorable="<?= $x['mat']['mejorable'] ? '1' : '' ?>"
+             data-mat-realzada="<?= $x['mat']['realzada'] ? '1' : '' ?>"
              data-arte="<?= $h($arte) ?>"
              data-tactica="<?= (int)$t['id'] ?>">
 
@@ -935,7 +936,7 @@ foreach ($sm['items'] as $i => $it) {
     //  que mejorar. Lo real siempre gana: si el dueño ya puso su bizcocho, lo
     //  primero que se le ofrece es sacarle partido a ESE, no sustituirlo.
     if (d.matMejorable) {
-      html += fila(IC.spark, 'Mejorar tu foto',
+      html += fila(IC.spark, d.matRealzada ? 'Volver a realzar tu foto' : 'Mejorar tu foto',
                    'El corillo la realza · gasta 1 imagen del mes', 'data-m="mejorar"');
     }
     html += fila(IC.spark, d.matHay ? 'Que el corillo la haga de nuevo'
@@ -1100,12 +1101,12 @@ foreach ($sm['items'] as $i => $it) {
         .then(function (j) {
           if (j && j.ok && j.img) {
             pintarMedia(el, j.img, false);
-            //  YA NO ES SU FOTO TAL CUAL: el servidor soltó la traza al pintar
-            //  encima, y la tarjeta tiene que contar lo mismo que la base.
-            el.dataset.matOrigen = 'generado_o_desconocido';
-            el.dataset.matMejorable = '';
+            //  SIGUE SIENDO SU FOTO, TRABAJADA. El servidor CONSERVA la traza
+            //  en un realce —de esa foto salio lo que se ve— asi que la tarjeta
+            //  dice lo mismo que la base. Decir «arte del corillo» aqui seria
+            //  borrarle de la pantalla que la foto era suya.
             el.dataset.matHay = '1';
-            el.dataset.matFrase = 'Ahora lleva arte del corillo.';
+            el.dataset.matFrase = 'Ahora lleva tu foto realzada.';
             cerrar();
             return;
           }
