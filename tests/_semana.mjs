@@ -330,6 +330,91 @@ try {
     await ev('(function(){var x=document.getElementById("smCerrar"); if(x) x.click();})()');
     await dormir(200);
   }
+  // ══ 4b · EL RECORRIDO DE VERDAD · Biblioteca → previa → usar → volver ══
+  //
+  //  ESTO NO SE COMPRUEBA MIRANDO HTML. Se pulsa lo que pulsa el dueño y se
+  //  mira DONDE acaba y QUE quedo en la base. Un `href` correcto no prueba que
+  //  el viaje funcione; probar el viaje, si.
+  await clicSel('.sm-p.on [data-ajustar]');
+  await clicSel('#smHojaC .sm-fila[data-a="arte"]');
+  await dormir(200);
+  di('BIB_HAY_CAMINO', await ev('!!document.querySelector("#smHojaC .sm-fila[data-m=\'bib\']")'));
+  await clicSel('#smHojaC .sm-fila[data-m="bib"]');
+  await listo();
+  const uBib = await url();
+  di('BIB_URL', uBib);
+  di('BIB_LLEVA_PIEZA', /pieza=\d+/.test(uBib) && /volver=meta/.test(uBib) && /pos=2/.test(uBib));
+  await cerrarRecibimiento(ev);
+
+  //  LA VISTA PREVIA ES LA PROPIA TARJETA: se ve lo que se va a poner.
+  di('BIB_TILES_CON_PREVIA', await ev(
+    'document.querySelectorAll(".bib-tile .bib-pick").length'));
+  di('BIB_PREVIA_PINTADA', await ev(
+    '(function(){var t=document.querySelector(".bib-tile:has(.bib-pick)");'
+    + ' if(!t) return false; var m=t.querySelector("img,video");'
+    + ' return !!m && !!(m.getAttribute("src")||"").length;})()'));
+  di('BIB_PRIMARIA_DESARMADA', await ev(
+    '(document.getElementById("bibUsar")||{}).disabled === true'));
+
+  //  Se escoge, y la primaria se arma sola.
+  await ev('(function(){var r=document.querySelector(".bib-pick input[type=radio]");'
+         + ' if(r){ r.checked = true; r.dispatchEvent(new Event("change",{bubbles:true})); }})()');
+  await dormir(250);
+  di('BIB_PRIMARIA_ARMADA', await ev(
+    '(document.getElementById("bibUsar")||{}).disabled === false'));
+  di('BIB_TARJETA_RESALTADA', await ev(
+    '!!document.querySelector(".bib-tile.bib-on")'));
+  await tirar('08_biblioteca_seleccion_360', 360, 800);
+
+  //  Y se confirma. El destino lo construye el servidor.
+  await clicSel('#bibUsar');
+  await listo();
+  const uVuelta = await url();
+  di('BIB_VUELVE_A', uVuelta);
+  di('BIB_VUELVE_A_META', /meta\.php/.test(uVuelta) && /pos=2/.test(uVuelta));
+  await cerrarRecibimiento(ev);
+  di('BIB_MISMA_PUBLICACION', (await txt('#smPaso')).trim());
+  di('BIB_PIEZA_CON_IMAGEN', await ev(
+    '!!document.querySelector(".sm-p.on .sm-media img, .sm-p.on .sm-media video")'));
+  di('BIB_CAPTION', (await txt('.sm-p.on .sm-cap')).trim().slice(0, 60));
+  await tirar('09_foto_aplicada_360', 360, 800);
+
+  //  Y la hoja ahora dice OTRA cosa: que lleva su foto, con su nombre.
+  await clicSel('.sm-p.on [data-ajustar]');
+  await clicSel('#smHojaC .sm-fila[data-a="arte"]');
+  await dormir(200);
+  di('MAT_DICE_TU_FOTO', await ev(
+    '(document.querySelector("#smHojaC .sm-nota span")||{}).textContent || ""'));
+  di('MAT_OFRECE_MEJORAR', await ev(
+    '!!document.querySelector("#smHojaC .sm-fila[data-m=\'mejorar\']")'));
+  await tirar('10_material_con_foto_360', 360, 800);
+
+  // ══ 4c · MEJORAR · lo que cuesta se dice ANTES ═════════════════
+  //
+  //  NO SE CONFIRMA CONTRA EL PROVEEDOR DE VERDAD. El servidor de pruebas
+  //  corre con las llaves reales, asi que confirmar aqui seria pagar una
+  //  imagen por cada vuelta de la suite. Lo que SI se comprueba en vivo es lo
+  //  que el dueño ve antes de decidir —el precio, dicho antes— y, mas abajo,
+  //  que con el mes agotado el servidor corta ANTES de llamar a nadie.
+  //  La mejora que de verdad genera se prueba con el proveedor sustituido en
+  //  tests/test_material_mejorar.php y tests/test_material_transiciones.php.
+  if (await ev('!!document.querySelector("#smHojaC .sm-fila[data-m=\'mejorar\']")')) {
+    await clicSel('#smHojaC .sm-fila[data-m="mejorar"]');
+    await dormir(250);
+    di('MEJORA_TITULO', (await txt('#smHojaT')).trim());
+    di('MEJORA_DICE_PRECIO', await ev(
+      '/Gasta 1 de las im[aá]genes de tu mes/.test(document.getElementById("smHojaC").textContent)'));
+    di('MEJORA_DICE_QUE_GUARDA_ORIGINAL', await ev(
+      '/Biblioteca/.test(document.getElementById("smHojaC").textContent)'));
+    di('MED_MEJORA_360', await ev(MEDIR).then(JSON.stringify));
+    await tirar('11_mejorar_360', 360, 800);
+    //  Se sale por «Dejarla como está»: cancelar no puede escribir nada.
+    await clicSel('#smMjC');
+    await dormir(200);
+    di('MEJORA_CANCELA_CIERRA', await ev(
+      '!document.querySelector("#smVelo").classList.contains("on")'));
+  }
+
   await clicSel('.sm-p.on [data-ajustar]');
   await clicSel('#smHojaC .sm-fila[data-a="arte"]');
   await dormir(200);

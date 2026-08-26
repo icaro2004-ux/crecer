@@ -145,6 +145,28 @@ try {
         ->execute([$M, $ARTE]);
     $PSHIM = (int)$pdo->lastInsertId();
 
+    //  ── ALGO EN SU BIBLIOTECA, para poder escogerlo ──────────────────
+    //
+    //  El recorrido de material no se puede probar con la Biblioteca vacia: no
+    //  hay nada que seleccionar y la hoja no tiene a donde llevar. Se siembra
+    //  UNA foto suya, con archivo de verdad en disco -la tarjeta pinta un <img>
+    //  y esa es la vista previa- y se retira al final con la fixture.
+    $rel_bib = "marca_{$M}/biblioteca/prueba_semana.png";
+    $abs_bib = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR
+             . str_replace('/', DIRECTORY_SEPARATOR, $rel_bib);
+    @mkdir(dirname($abs_bib), 0775, true);
+    file_put_contents($abs_bib, base64_decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='));
+    $pdo->prepare("INSERT INTO crecer_activos
+            (marca_id,tipo,archivo,nombre,mime,bytes,origen,estado)
+          VALUES (?, 'imagen',?,?, 'image/png', 70, 'subido','activo')")
+        ->execute([$M, $rel_bib, '[prueba] Su bizcocho']);
+    $ACTIVO = (int)$pdo->lastInsertId();
+
+    //  Lo que ya habia sembrado, para poder afirmar que el recorrido no gasta.
+    $realce_antes = (int)$pdo->query("SELECT COUNT(*) FROM crecer_img_cuota_asiento
+                                       WHERE marca_id={$M} AND operacion='realce'")->fetchColumn();
+
     $cmd = 'node ' . escapeshellarg(__DIR__ . DIRECTORY_SEPARATOR . '_semana.mjs')
          . ' ' . escapeshellarg($sid) . ' ' . $M . ' ' . $T3 . ' ' . escapeshellarg($SHOTS)
          . ' ' . $PSHIM . ' 2>&1';
@@ -247,6 +269,59 @@ try {
        ($r['MAT_HOJA_CAMINOS'] ?? '') . ' filas · usar una tuya, subir, [mejorar,] que la haga');
     ok('y dice qué lleva ahora', trim((string)($r['MAT_HOJA_DICE_QUE_LLEVA'] ?? '')) !== '',
        'sin eso la hoja abre igual en los tres casos y se decide a ciegas');
+
+    // ══ EL RECORRIDO DE MATERIAL, PULSADO ══════════════════════════
+    echo "\n  — Biblioteca → previa → usar → volver a la misma publicación —\n";
+    ok('la hoja ofrece su Biblioteca', ($r['BIB_HAY_CAMINO'] ?? '') === 'true');
+    ok('y lleva la pieza y la posición', ($r['BIB_LLEVA_PIEZA'] ?? '') === 'true',
+       $r['BIB_URL'] ?? '');
+    ok('hay material seleccionable', (int)($r['BIB_TILES_CON_PREVIA'] ?? 0) > 0,
+       'sin nada que escoger, el recorrido no prueba nada');
+    ok('cada opción se ve antes de escogerla', ($r['BIB_PREVIA_PINTADA'] ?? '') === 'true',
+       'la vista previa de la selección es la propia tarjeta');
+    ok('la primaria empieza desarmada', ($r['BIB_PRIMARIA_DESARMADA'] ?? '') === 'true',
+       'un botón que se puede pulsar sin haber escogido nada promete lo que no puede');
+    ok('y se arma al escoger',        ($r['BIB_PRIMARIA_ARMADA'] ?? '') === 'true');
+    ok('con la tarjeta resaltada',    ($r['BIB_TARJETA_RESALTADA'] ?? '') === 'true');
+
+    ok('confirmar devuelve a Tu Meta', ($r['BIB_VUELVE_A_META'] ?? '') === 'true',
+       $r['BIB_VUELVE_A'] ?? '');
+    ok('a la MISMA publicación',      ($r['BIB_MISMA_PUBLICACION'] ?? '') === 'Publicación 2 de 3',
+       $r['BIB_MISMA_PUBLICACION'] ?? '');
+    ok('y la publicación ya la enseña', ($r['BIB_PIEZA_CON_IMAGEN'] ?? '') === 'true');
+    ok('sin haberle tocado el texto',
+       str_starts_with((string)($r['BIB_CAPTION'] ?? ''), (string)mb_substr($cap_ahora, 0, 20)),
+       'esperaba «' . mb_substr($cap_ahora, 0, 40) . '» · salió «' . ($r['BIB_CAPTION'] ?? '') . '»');
+
+    //  Y EN LA BASE, que es donde de verdad pasa.
+    $mat_bd = $pdo->query("SELECT material_activo_id FROM crecer_contenido WHERE id={$P2}")->fetchColumn();
+    ok('la traza quedó en la base',   (int)$mat_bd === $ACTIVO, (string)$mat_bd);
+    ok('y la ruta es la de su foto',
+       str_contains((string)$pdo->query("SELECT grafica_path FROM crecer_contenido WHERE id={$P2}")
+                                ->fetchColumn(), 'prueba_semana.png'));
+
+    echo "\n  — y ahora la hoja cuenta otra historia —\n";
+    ok('dice que lleva SU foto, con nombre',
+       str_contains((string)($r['MAT_DICE_TU_FOTO'] ?? ''), 'tu foto')
+       && str_contains((string)($r['MAT_DICE_TU_FOTO'] ?? ''), 'bizcocho'),
+       $r['MAT_DICE_TU_FOTO'] ?? '');
+    ok('y ofrece mejorarla',          ($r['MAT_OFRECE_MEJORAR'] ?? '') === 'true',
+       'mejorar solo tiene sentido cuando hay una foto suya que mejorar');
+
+    echo "\n  — mejorar dice lo que cuesta antes de costarlo —\n";
+    ok('la hoja de mejorar abre',     ($r['MEJORA_TITULO'] ?? '') === 'Mejorar tu foto',
+       $r['MEJORA_TITULO'] ?? '');
+    ok('y dice el precio ANTES',      ($r['MEJORA_DICE_PRECIO'] ?? '') === 'true',
+       'el precio no se descubre en un aviso de error');
+    ok('y que la original se queda',  ($r['MEJORA_DICE_QUE_GUARDA_ORIGINAL'] ?? '') === 'true');
+    ok('cancelar cierra sin escribir',($r['MEJORA_CANCELA_CIERRA'] ?? '') === 'true');
+    //  Se compara contra lo que HABIA antes del recorrido: la fixture siembra
+    //  asientos a proposito para la nota de cuota, asi que exigir cero seria
+    //  medir la fixture y no el recorrido.
+    ok('y no gastó una sola unidad',
+       (int)$pdo->query("SELECT COUNT(*) FROM crecer_img_cuota_asiento
+                          WHERE marca_id={$M} AND operacion='realce'")->fetchColumn() === $realce_antes,
+       'la mejora que SÍ genera se prueba con el proveedor sustituido, no aquí');
 
     //  Y la primaria de «falta tu foto» abre la MISMA hoja, sin sacarte de la
     //  semana. Si esta semana no hay ninguna esperando material, se dice — una
