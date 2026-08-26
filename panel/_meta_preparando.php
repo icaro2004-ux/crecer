@@ -41,12 +41,23 @@
 
 require_once __DIR__ . '/../includes/meta_semana.php';
 
-$pr_plan = $plan_act;
-$pr_res  = semana_resumen($pdo, $marca_id, $meta, $pr_plan, $BASE);
+//  QUIEN DECIDE ES EL DOMINIO. Antes esta pantalla preguntaba «¿hay plan
+//  activo?» y con eso resolvía cuatro situaciones distintas con dos respuestas.
+//  El día que el dueño terminó su último trabajo, el plan se cerró —correcto—
+//  y aquí se leyó como «no hay plan»: se le dijo que no pude terminarlo y se le
+//  ofreció crearlo otra vez. La precedencia vive ahora en meta_plan_situacion().
+$pr_sit  = meta_plan_situacion($pdo, $marca_id, $meta);
+$pr_plan = $pr_sit['plan'];          // el activo, o el completado que es el cierre
+
+//  La semana solo se cuenta cuando hay un plan VIVO. En un plan terminado no
+//  hay semana que revisar, y pedirle su resumen sería inventar trabajo.
+$pr_res  = $pr_sit['clase'] === 'activo'
+    ? semana_resumen($pdo, $marca_id, $meta, $pr_plan, $BASE)
+    : semana_resumen($pdo, $marca_id, $meta, null, $BASE);
 
 //  Los jobs vivos separan «se está preparando» de «aquí no trabaja nadie».
 $pr_jobs = 0;
-if ($pr_plan) {
+if ($pr_plan && $pr_sit['clase'] === 'activo') {
     try {
         $q = $pdo->prepare(
             "SELECT COUNT(*) FROM crecer_meta_jobs j
@@ -60,7 +71,14 @@ if ($pr_plan) {
 
 //  EL ESTADO INICIAL, ya resuelto en el servidor. Sin esto la pantalla nacería
 //  vacía y el primer sondeo tardaría segundos en llenarla: parecería colgada.
-$pr_estado = !$pr_plan ? 'sin_plan' : (string)$pr_res['estado'];
+//  CUATRO SITUACIONES, cuatro respuestas. La que faltaba —y la que convertía
+//  un final en un fallo— es «plan_completado».
+$pr_estado = match ($pr_sit['clase']) {
+    'completado' => 'plan_completado',
+    'activo'     => (string)$pr_res['estado'],
+    'error'      => 'error',
+    default      => 'sin_plan',
+};
 $pr_url_semana = $BASE . '/meta.php?marca=' . $marca_id . '&vista=semana&pos=' . (int)$pr_res['pos'];
 $pr_url_meta   = $BASE . '/meta.php?marca=' . $marca_id;
 
@@ -93,6 +111,14 @@ $pr_guion = [
         'ay' => 'Voy a preparar tus publicaciones. Las verás en Tu Meta.',
         'pasos' => ['plan' => 'ok', 'semana' => 'ahora'],
     ],
+    //  EL CIERRE. Se dice lo que ÉL hizo —terminar las acciones— y nada más.
+    //  Ni «meta alcanzada» ni «objetivo logrado»: eso lo dicen sus números, no
+    //  el hecho de que se acabara la lista.
+    'plan_completado' => [
+        'q'  => 'Completaste este plan',
+        'ay' => 'Terminaste las acciones que habíamos preparado.',
+        'pasos' => ['plan' => 'ok', 'semana' => 'ok'],
+    ],
     'sin_plan' => [
         'q'  => 'Tu meta quedó guardada',
         'ay' => 'Pero no pude terminar el plan. No se perdió nada de lo que escogiste.',
@@ -109,7 +135,8 @@ $pr_g = $pr_guion[$pr_estado] ?? $pr_guion['sin_semana'];
 //  LA LLEGADA se pinta cuando la semana ya se puede contar. En «preparando»
 //  todavía no hay cifra que dar, y en los dos estados malos lo que toca es la
 //  recuperación de 2B, no un resumen de éxito.
-$pr_llegada = in_array($pr_estado, ['pendiente', 'lista'], true);
+$pr_llegada = in_array($pr_estado, ['pendiente', 'lista', 'plan_completado'], true);
+$pr_cerrado = $pr_estado === 'plan_completado';
 
 $pr_tacticas = ($pr_plan && $meta)
     ? meta_tacticas($pdo, (int)$meta['id'], null, (int)$pr_plan['id'])
@@ -324,7 +351,29 @@ $pr_ver_txt = ['alcanzable'       => 'Con lo que tienes, esta meta se puede.',
       </div>
     <?php endif; ?>
 
-    <?php if ($pr_rep['frase_corillo'] !== '' || $pr_rep['frase_tuyas'] !== ''): ?>
+    <?php if ($pr_cerrado): ?>
+      <?php /*  EN EL CIERRE, EL REPARTO SOBRA Y ADEMÁS MIENTE DE TIEMPO: «el
+                corillo se encarga de 6 acciones» está en presente y ya no hay
+                nada de lo que encargarse. Se dice lo que se terminó, y que la
+                meta sigue en pie.  */ ?>
+      <div class="pr-fila">
+        <?= ico('check-circle') ?>
+        <span class="tx">
+          <b><?= $h('Terminaste ' . semana_acciones((int)$pr_sit['hechas']) . ' de este plan.') ?></b>
+          <i>Este plan</i>
+        </span>
+      </div>
+      <?php if (!empty($pr_sit['meta_activa'])): ?>
+        <div class="pr-fila">
+          <?= ico('target') ?>
+          <span class="tx">
+            <b>Tu Meta sigue activa.</b>
+            <i>Terminar las acciones no la logra por sí solo.</i>
+          </span>
+        </div>
+      <?php endif; ?>
+
+    <?php elseif ($pr_rep['frase_corillo'] !== '' || $pr_rep['frase_tuyas'] !== ''): ?>
       <div class="pr-fila">
         <?= ico('sparkles') ?>
         <?php /*  DOS FRASES, DOS RENGLONES. Juntas en un solo bloque en
@@ -344,13 +393,15 @@ $pr_ver_txt = ['alcanzable'       => 'Con lo que tienes, esta meta se puede.',
       </div>
     <?php endif; ?>
 
-    <div class="pr-fila sem">
-      <?= ico('list') ?>
-      <span class="tx">
-        <b id="prSemana"><?= $h($pr_sem_fr) ?></b>
-        <i>Tu primera semana</i>
-      </span>
-    </div>
+    <?php if (!$pr_cerrado): ?>
+      <div class="pr-fila sem">
+        <?= ico('list') ?>
+        <span class="tx">
+          <b id="prSemana"><?= $h($pr_sem_fr) ?></b>
+          <i>Tu primera semana</i>
+        </span>
+      </div>
+    <?php endif; ?>
   </div>
 
   <div class="pr-caja" id="prCaja"<?= in_array($pr_estado, ['sin_plan', 'error'], true) ? '' : ' hidden' ?>><?php
@@ -375,10 +426,15 @@ $pr_ver_txt = ['alcanzable'       => 'Con lo que tienes, esta meta se puede.',
     <a class="pr-bt sec" id="prVer" href="<?= $h($pr_url_semana) ?>"<?= $pr_estado === 'lista' ? '' : ' hidden' ?>>
       <?= ico('eye') ?>Ver mi semana</a>
 
+    <?php /*  En el cierre no hay nada que decidir, así que la única cosa que
+              tiene sentido ofrecer es mirar lo que hizo: la explicación sube a
+              primaria y cambia de nombre. La capa es la MISMA — no se duplica
+              nada y sigue siendo accesible igual.  */ ?>
     <?php if ($pr_plan): ?>
-      <button type="button" class="pr-bt sec" id="prExplicar"
+      <button type="button" class="pr-bt <?= $pr_cerrado ? 'pri' : 'sec' ?>" id="prExplicar"
               aria-haspopup="dialog" aria-controls="prHoja"<?= $pr_llegada ? '' : ' hidden' ?>>
-        <?= ico('compass') ?>Ver mi plan explicado</button>
+        <?= ico('compass') ?><span id="prExplicarTx"><?= $pr_cerrado
+            ? 'Ver el plan completado' : 'Ver mi plan explicado' ?></span></button>
     <?php endif; ?>
 
     <a class="pr-bt sec" id="prVolver" href="<?= $h($pr_url_meta) ?>">Volver a Tu Meta</a>
@@ -404,7 +460,7 @@ $pr_ver_txt = ['alcanzable'       => 'Con lo que tienes, esta meta se puede.',
   <div class="pr-velo" id="prVelo" role="dialog" aria-modal="true" aria-labelledby="prHojaT">
     <div class="pr-hoja" id="prHoja">
       <div class="cab">
-        <h3 id="prHojaT">Mi plan explicado</h3>
+        <h3 id="prHojaT"><?= $pr_cerrado ? 'El plan que completaste' : 'Mi plan explicado' ?></h3>
         <button type="button" id="prHojaX" aria-label="Cerrar"><?= ico('x') ?></button>
       </div>
       <div class="cuerpo">
@@ -496,10 +552,19 @@ $pr_ver_txt = ['alcanzable'       => 'Con lo que tienes, esta meta se puede.',
              lo real siempre gana. Puedes seguir guardando fotos y videos cuando quieras.</p>
         </div>
 
+        <?php /*  EN EL CIERRE NO SE PROMETE LA PRÓXIMA SEMANA. Las semanas 2 a
+                  12 todavía no se encolan solas: decir «ya estoy preparando la
+                  próxima» sería exactamente la clase de frase que este arreglo
+                  existe para quitar.  */ ?>
         <div class="pr-sec">
           <h4>Qué pasa después</h4>
-          <p>Cada semana preparo lo que toca y te lo enseño para que decidas. Voy midiendo
-             lo que sale y ajusto el plan con lo que aprenda.</p>
+          <?php if ($pr_cerrado): ?>
+            <p>Terminaste las acciones de este plan. Tu Meta sigue activa y lo que
+               publicaste sigue midiéndose.</p>
+          <?php else: ?>
+            <p>Cada semana preparo lo que toca y te lo enseño para que decidas. Voy midiendo
+               lo que sale y ajusto el plan con lo que aprenda.</p>
+          <?php endif; ?>
         </div>
 
       </div>
@@ -534,14 +599,25 @@ $pr_ver_txt = ['alcanzable'       => 'Con lo que tienes, esta meta se puede.',
       if (v === 'ok' || v === 'ahora') el.classList.add(v);
     });
 
-    var llegada = (e.estado === 'pendiente' || e.estado === 'lista');
+    var cerrado = (e.estado === 'plan_completado');
+    var llegada = (e.estado === 'pendiente' || e.estado === 'lista' || cerrado);
     var caja = $('prCaja'), ir = $('prIr'), re = $('prReintentar'),
         ver = $('prVer'), exp = $('prExplicar'), pasos = $('prPasos'), res = $('prRes');
 
     caja.hidden = true; ir.hidden = true; re.hidden = true; ver.hidden = true;
     pasos.hidden = llegada;
     res.hidden   = !llegada;
-    if (exp) exp.hidden = !llegada;
+    if (exp) {
+      exp.hidden = !llegada;
+      //  En el cierre la explicacion es lo unico que queda por hacer: sube a
+      //  primaria y cambia de nombre. Sigue siendo la MISMA capa.
+      exp.className = 'pr-bt ' + (cerrado ? 'pri' : 'sec');
+      var tx = $('prExplicarTx');
+      if (tx) tx.textContent = cerrado ? 'Ver el plan completado' : 'Ver mi plan explicado';
+    }
+    //  Las filas que solo valen mientras el plan vive.
+    var filaSem = PR.querySelector('.pr-fila.sem');
+    if (filaSem) filaSem.hidden = cerrado;
 
     //  LA CIFRA LA ESCRIBE EL SERVIDOR. Aqui no se redacta ninguna frase con
     //  numeros: se pega la que vino. Dos redacciones del mismo dato acaban
@@ -559,6 +635,10 @@ $pr_ver_txt = ['alcanzable'       => 'Con lo que tienes, esta meta se puede.',
     } else if (e.estado === 'lista') {
       ver.href = e.url_semana || URL_SEMANA;
       ver.hidden = false;
+      $('prNota').hidden = true;
+    } else if (cerrado) {
+      //  Ni puerta a la semana ni reintento: no queda nada que decidir y no hay
+      //  nada que volver a intentar. Solo mirar lo que hizo, y salir.
       $('prNota').hidden = true;
     } else if (e.estado === 'sin_plan') {
       //  LA VERDAD ENTERA: la meta esta, el plan no. Y se puede reintentar
@@ -630,7 +710,7 @@ $pr_ver_txt = ['alcanzable'       => 'Con lo que tienes, esta meta se puede.',
   //
   //  Un solo temporizador, espaciado creciente, y se para solo en cuanto el
   //  estado es terminal o el navegador dice que ya no se ve la pestaña.
-  var TERMINAL = { pendiente:1, lista:1, sin_plan:1, error:1, sin_meta:1 };
+  var TERMINAL = { pendiente:1, lista:1, plan_completado:1, sin_plan:1, error:1, sin_meta:1 };
   var vueltas = 0, fallos = 0, parado = false, timer = null;
 
   function proximo() {

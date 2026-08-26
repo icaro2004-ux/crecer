@@ -1607,6 +1607,89 @@ function meta_tactica_estado(PDO $pdo, int $tactica_id, int $marca_id, string $e
 }
 
 /**
+ * ¿EN QUÉ SITUACIÓN ESTÁ EL PLAN DE ESTA META? Una sola función, con una sola
+ * precedencia, para que ninguna pantalla la resuelva a su manera.
+ *
+ * EL DEFECTO QUE CIERRA. La llegada preguntaba solo por el plan ACTIVO. Cuando
+ * el dueño marcaba hecha la última jugada, el handler cerraba el plan
+ * —`meta_plan_cerrar()` lo pone en 'completado', que es lo correcto— y la
+ * pantalla, al no encontrar activo, le decía «no pude terminar el plan» y le
+ * ofrecía crearlo otra vez. Un éxito presentado como fallo, con un botón que
+ * le fabricaba trabajo que no necesitaba.
+ *
+ * LA PRECEDENCIA, y por qué en este orden:
+ *
+ *   1 · ERROR DE LECTURA. Si la base no contesta no se sabe nada, y «no sé»
+ *       no puede convertirse ni en «terminaste» ni en «no tienes plan». Las
+ *       dos serían la misma mentira, en direcciones opuestas.
+ *   2 · PLAN ACTIVO. Si hay uno vivo, manda: es donde está el trabajo. Un
+ *       plan completado ANTERIOR no puede desplazarlo.
+ *   3 · ÚLTIMO PLAN COMPLETADO DE ESTA META. Es el cierre. Se exige
+ *       `meta_id` Y `marca_id`: el plan terminado de otra meta —o de otro
+ *       negocio— no es el cierre de esta.
+ *   4 · TODO LO DEMÁS es recuperación: nunca hubo plan, la Estratega no
+ *       contestó, o el único que hay quedó `reemplazado` o `abandonado`.
+ *       Ninguno de esos dos es un final feliz.
+ *
+ * NO ESCRIBE NADA y no llama a nadie: son dos SELECT y un conteo.
+ *
+ * OJO A LO QUE NO DICE: que el plan terminara NO significa que la meta de
+ * negocio se lograra. Por eso devuelve `meta_activa` aparte — las métricas de
+ * la meta siguen siendo la autoridad sobre si se consiguió o no.
+ *
+ * @return array{clase:string, plan:?array, estado_plan:string,
+ *               meta_activa:bool, hechas:int, total:int}
+ *         clase ∈ sin_meta | error | activo | completado | sin_plan
+ */
+function meta_plan_situacion(PDO $pdo, int $marca_id, ?array $meta): array
+{
+    $out = ['clase' => 'sin_meta', 'plan' => null, 'estado_plan' => '',
+            'meta_activa' => false, 'hechas' => 0, 'total' => 0];
+    if (!$meta || $marca_id <= 0 || (int)($meta['id'] ?? 0) <= 0) return $out;
+
+    $out['meta_activa'] = (string)($meta['estado'] ?? '') === 'activa';
+    $meta_id = (int)$meta['id'];
+
+    try {
+        //  2 · EL ACTIVO MANDA.
+        $q = $pdo->prepare(
+            "SELECT * FROM crecer_meta_plan
+              WHERE meta_id=? AND marca_id=? AND estado='activo'
+              ORDER BY version DESC, id DESC LIMIT 1");
+        $q->execute([$meta_id, $marca_id]);
+        if ($act = $q->fetch(PDO::FETCH_ASSOC)) {
+            $pg = meta_plan_progreso($pdo, (int)$act['id']);
+            return ['clase' => 'activo', 'plan' => $act, 'estado_plan' => 'activo',
+                    'meta_activa' => $out['meta_activa'],
+                    'hechas' => (int)$pg['hechas'], 'total' => (int)$pg['total']];
+        }
+
+        //  3 · EL ÚLTIMO COMPLETADO DE ESTA META. `cierre_at` primero porque es
+        //      la fecha del cierre real; la versión y el id desempatan.
+        $q = $pdo->prepare(
+            "SELECT * FROM crecer_meta_plan
+              WHERE meta_id=? AND marca_id=? AND estado='completado'
+              ORDER BY cierre_at DESC, version DESC, id DESC LIMIT 1");
+        $q->execute([$meta_id, $marca_id]);
+        if ($comp = $q->fetch(PDO::FETCH_ASSOC)) {
+            $pg = meta_plan_progreso($pdo, (int)$comp['id']);
+            return ['clase' => 'completado', 'plan' => $comp, 'estado_plan' => 'completado',
+                    'meta_activa' => $out['meta_activa'],
+                    'hechas' => (int)$pg['hechas'], 'total' => (int)$pg['total']];
+        }
+
+        //  4 · NI ACTIVO NI TERMINADO: hay que recuperar. Un `reemplazado` o un
+        //      `abandonado` caen aquí a propósito — son historial, no cierre.
+        return ['clase' => 'sin_plan'] + $out;
+
+    } catch (Throwable $e) {
+        error_log('meta_plan_situacion: ' . get_class($e) . ' marca=' . $marca_id
+                  . ' meta=' . $meta_id);
+        return ['clase' => 'error'] + $out;
+    }
+}
+
+/**
  * «YA LO HICE» — el dueño declara hecha UNA acción suya.
  *
  * NO ES UNA CAPACIDAD NUEVA: escribe con meta_tactica_estado(), que es la que

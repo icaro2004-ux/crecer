@@ -141,7 +141,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($accion === 'preparacion') {
             $meta = meta_activa($pdo, $marca_id);
             if (!$meta) { echo json_encode(['ok'=>true, 'estado'=>'sin_meta']); exit; }
-            $plan = meta_plan_activo($pdo, (int)$meta['id']);
+
+            //  LA MISMA FUENTE QUE LA PANTALLA. Aqui habia un
+            //  `meta_plan_activo()` a secas: sin plan activo contestaba
+            //  `sin_plan`, y despues de TERMINAR el plan eso convertia el
+            //  exito en fallo. La precedencia vive en el dominio, y este
+            //  handler la lee — no la reinventa.
+            $sit  = meta_plan_situacion($pdo, $marca_id, $meta);
+            $plan = $sit['plan'];
+            if ($sit['clase'] === 'completado') {
+                echo json_encode(['ok'=>true, 'estado'=>'plan_completado',
+                    'meta_id'    => (int)$meta['id'],
+                    'plan_id'    => (int)($plan['id'] ?? 0),
+                    'hechas'     => (int)$sit['hechas'],
+                    'meta_activa'=> !empty($sit['meta_activa'])], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            if ($sit['clase'] === 'error') {
+                echo json_encode(['ok'=>true, 'estado'=>'error', 'meta_id'=>(int)$meta['id']]);
+                exit;
+            }
             if (!$plan) {
                 //  La meta esta, el plan no. No es «preparando»: es un plan que
                 //  no llego a existir, y tiene su propia salida.
