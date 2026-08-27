@@ -265,9 +265,14 @@ try {
        str_contains($vista, "'data-material'") && str_contains($vista, "$$('[data-material]')"),
        'es el momento de material mas frecuente que hay');
 
+    //  SE MIRA LA FORMA, NO DOS LINEAS PEGADAS. La version anterior exigia que
+    //  el `href` y el `data-material` fueran lineas consecutivas exactas, y en
+    //  cuanto se metio un atributo entre medias se puso roja sin que nada se
+    //  hubiera roto. Lo que importa es que la primaria sea un ENLACE con
+    //  destino: sin JavaScript tiene que llevar a la pieza igual que antes.
     ok('y sigue siendo un enlace de verdad',
-       str_contains($vista, 'href="<?= $h($x[\'puerta\']) ?>"' . "\n"
-                            . '             <?= $x[\'clave\'] === \'falta_material\''),
+       str_contains($vista, 'href="<?= $h($x[\'puerta\']) ?>"')
+       && str_contains($vista, "'data-material'"),
        'sin JavaScript tiene que llevar a la pantalla de la pieza igual que antes');
 
     ok('la subida separa las dos decisiones',
