@@ -303,12 +303,42 @@ body{
   .ptop-menu .bars{display:flex}
 }
 
-/* ── Lightbox (agrandar imágenes al tocar) ── */
-img.zoomable{cursor:zoom-in}
-.lightbox-ov{display:none;position:fixed;inset:0;background:rgba(20,12,8,.82);z-index:100;
-  align-items:center;justify-content:center;padding:24px;cursor:zoom-out}
+/* ── VER LA IMAGEN COMPLETA ─────────────────────────────────────────────
+   POR QUE ESTO NO ES UN DETALLE. El dueño tiene que decidir —aprobar,
+   publicar, quedarse con la suya o usar la nueva— y hasta ahora la decidía
+   a medias: el menú, Ayuda y los botones le tapaban parte de la imagen. Se
+   le pedía un juicio sobre algo que no podía ver entero.
+
+   Z-INDEX 200 A PROPOSITO. Por debajo quedan la hoja de ajustes (70), la
+   Guía (120), el menú lateral (50), Ayuda (46) y la barra de abajo (45).
+   El visor tiene que estar encima de TODO o no sirve para lo que existe. */
+img.zoomable,[data-zoom]{cursor:zoom-in}
+.lightbox-ov{display:none;position:fixed;inset:0;background:rgba(18,14,12,.94);z-index:200;
+  align-items:center;justify-content:center;cursor:zoom-out;
+  /* El espacio seguro del teléfono: la muesca y la barra de gestos. */
+  padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right))
+          max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
+  overscroll-behavior:contain}
 .lightbox-ov.show{display:flex}
-.lightbox-ov img{max-width:92vw;max-height:90vh;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+/* CONTAIN, no recorte: la imagen entera o no sirve de nada. */
+.lightbox-ov img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;
+  border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.45);cursor:default}
+/* La X: 44x44 de verdad, y lejos de la muesca. */
+.lightbox-x{position:fixed;top:max(10px,env(safe-area-inset-top));
+  right:max(10px,env(safe-area-inset-right));width:44px;height:44px;border-radius:999px;
+  display:grid;place-items:center;border:0;cursor:pointer;z-index:201;
+  background:rgba(255,255,255,.16);color:#fff;-webkit-tap-highlight-color:transparent}
+.lightbox-x:hover{background:rgba(255,255,255,.28)}
+.lightbox-x:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.lightbox-x .ic{width:22px;height:22px;stroke-width:2.2}
+/* Con el visor abierto, lo de debajo no se desplaza. */
+body.lb-abierto{overflow:hidden}
+
+/* LA PISTA DE QUE SE PUEDE TOCAR. Discreta y en la esquina: no es un botón
+   más, es una señal sobre la propia imagen — que es el control entero. */
+.zoom-hint{position:absolute;right:8px;bottom:8px;width:32px;height:32px;border-radius:999px;
+  display:grid;place-items:center;background:rgba(24,20,28,.55);color:#fff;pointer-events:none}
+.zoom-hint .ic{width:17px;height:17px;stroke-width:2}
 
 /* ── Bottom nav + FAB (solo móvil — feel de app/PWA) ── */
 .botnav{display:none}
@@ -323,9 +353,11 @@ img.zoomable{cursor:zoom-in}
       pulgar encima: a 10px no se lee, se adivina. A 12 los cinco siguen
       cabiendo en 360 -medido- bajando el peso de 800 a 700, que a este
       tamaño ademas se lee mejor. */
-  .botnav a{display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;
+  /*  44 DE ALTO DE VERDAD. Medidos en el navegador salian 43.x: por encima del
+      umbral en el CSS y por debajo en el dedo. El pulgar no redondea. */
+  .botnav a{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:2px;flex:1;min-height:44px;
     text-decoration:none;color:var(--muted);font-size:12px;font-weight:700;
-    letter-spacing:-.012em;
     letter-spacing:.01em;transition:color .15s}
   .botnav a .ic{width:23px;height:23px;display:block}
   .botnav a.on{color:var(--terracota-700)}

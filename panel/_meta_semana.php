@@ -163,8 +163,14 @@ foreach ($sm['items'] as $i => $it) {
      escritorio caben las dos a lo ancho, que es donde comparar se hace
      de un vistazo. El alto se fija para que al cargar la segunda no salte
      el layout y el dedo acabe pulsando lo que no era. */
+  /*  La media de la tarjeta ya es relativa por su cinta; la pista se
+      apoya en eso. Se deja dicho por si algún día deja de serlo. */
+  .sm-media{position:relative}
+  .sm-media[data-zoom]{cursor:zoom-in}
+  .sm-media[data-zoom]:focus-visible{outline:3px solid var(--tinta);outline-offset:2px}
   .sm-comp{display:grid;grid-template-columns:1fr;gap:12px;margin:0 0 14px}
-  .sm-comp figure{margin:0;border-radius:var(--tm-r);overflow:hidden;
+  /*  La figura entera es el control, y se nota. */
+  .sm-comp figure{margin:0;border-radius:var(--tm-r);overflow:hidden;position:relative;cursor:zoom-in;
     border:1px solid var(--linea,#EDE7E1);background:var(--crema,#FAF7F4)}
   .sm-comp figcaption{padding:8px 12px;font-size:14px;font-weight:600;color:var(--tinta)}
   /*  EL ALTO CABE, Y ESO NO ES ESTETICA. A 34vh cada una, las dos apiladas
@@ -175,6 +181,8 @@ foreach ($sm['items'] as $i => $it) {
   .sm-comp .mk{display:block;width:100%;height:21vh;max-height:168px;object-fit:contain;
     background:#231F20}
   .sm-comp .nueva{outline:2px solid var(--tm-rosa-bt);outline-offset:-2px}
+  .sm-comp figure:focus-visible{outline:3px solid var(--tinta);outline-offset:2px}
+  .sm-comp .zoom-hint{right:8px;bottom:44px}
   @media (min-width:760px){
     .sm-comp{grid-template-columns:1fr 1fr}
     /*  En escritorio caben al lado, asi que pueden ser grandes: la primaria
@@ -549,11 +557,18 @@ foreach ($sm['items'] as $i => $it) {
     <?php else: /* ══ UNA PUBLICACIÓN, como siempre ═══════════════════════ */ ?>
 
       <?php /* ── LA PIEZA ────────────────────────────────────────────── */ ?>
-      <div class="sm-media<?= ($arte === '' ? ' falta' : '') ?>">
+      <?php /*  LA IMAGEN ES EL CONTROL, no un botón debajo. Se toca la
+                superficie entera y se abre entera: el dueño tiene que decidir
+                sobre esto, y hasta ahora la decidía viendo media —el menú,
+                Ayuda y los botones quedaban delante.  */ ?>
+      <div class="sm-media<?= ($arte === '' ? ' falta' : '') ?>"
+           <?= $arte !== '' && !$x['video'] ? 'data-zoom="' . $h($arte) . '" role="button" tabindex="0"'
+                . ' aria-label="' . $h(t('Ver imagen completa')) . '"' : '' ?>>
         <?php if ($arte !== '' && $x['video']): ?>
           <video src="<?= $h($arte) ?>" muted playsinline preload="metadata"></video>
         <?php elseif ($arte !== ''): ?>
           <img src="<?= $h($arte) ?>" alt="">
+          <span class="zoom-hint"><?= ico('eye') ?></span>
         <?php else: ?>
           <span class="vacio"><?= $h($x['clave'] === 'falta_material'
                 ? (($x['estado']['material'] ?? '') === 'video' ? 'Falta tu video' : 'Falta tu foto')
@@ -893,7 +908,8 @@ foreach ($sm['items'] as $i => $it) {
     chev:  <?= json_encode(ico('chev-der')) ?>,
     img24: <?= json_encode(ico('image')) ?>,
     up:    <?= json_encode(ico('upload')) ?>,
-    spark: <?= json_encode(ico('sparkles')) ?>
+    spark: <?= json_encode(ico('sparkles')) ?>,
+    ojo:   <?= json_encode(ico('eye')) ?>
   };
   function fila(ic, tit, sub, attr) {
     return '<button type="button" class="sm-fila" ' + attr + '>' +
@@ -915,6 +931,16 @@ foreach ($sm['items'] as $i => $it) {
   //  La primaria de «falta tu foto» va directa a la hoja de material: el paso
   //  intermedio de «¿qué quieres ajustar?» no aporta nada cuando lo que falta
   //  ya se sabe.
+  //  CON TECLADO TAMBIÉN. Lo que se abre con el dedo se abre con Enter o
+  //  espacio: si no, quien navega con teclado no puede ver la imagen entera.
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var z = e.target && e.target.closest ? e.target.closest('[data-zoom]') : null;
+    if (!z) return;
+    e.preventDefault();
+    if (window.verImagenCompleta) window.verImagenCompleta(z.getAttribute('data-zoom'), z);
+  });
+
   $$('[data-material]').forEach(function (b) {
     b.addEventListener('click', function (e) {
       e.preventDefault();
@@ -1101,7 +1127,7 @@ foreach ($sm['items'] as $i => $it) {
       : '<img src="' + url + '" alt="">';
 
     abrir('Tu ' + (esVideo ? 'video' : 'foto'),
-      '<div class="sm-prev cargando" id="smUpP">' + medio +
+      '<div class="sm-prev cargando" id="smUpP"' + (esVideo ? '' : ' data-zoom="' + url + '"') + '>' + medio +
       '<p class="sm-prev-pie" id="smUpQ">' + IC.up + '<span>Guardándola en tu Biblioteca…</span></p></div>' +
       '<div class="sm-err" id="smUpE" role="alert">' + <?= json_encode(ico('bolt')) ?> + '<p></p></div>' +
       '<div class="pie2" id="smUpB"></div>');
@@ -1375,10 +1401,19 @@ foreach ($sm['items'] as $i => $it) {
   function comparar(el, actual, nueva, gen) {
     pararSondeo();
     abrir('¿Cuál te gusta más?',
+      //  LAS DOS SE TOCAN Y SE ABREN ENTERAS. Comparar dos imágenes que solo
+      //  se ven a medias no es comparar: es adivinar. El visor va encima de
+      //  todo y al cerrarlo se vuelve aquí, con la decisión intacta.
       '<div class="sm-comp">' +
-        (actual ? '<figure><img class="mk" src="' + esc(actual) + '" alt="">' +
+        (actual ? '<figure data-zoom="' + esc(actual) + '" role="button" tabindex="0" ' +
+                  'aria-label="Ver la imagen que tienes, completa">' +
+                  '<img class="mk" src="' + esc(actual) + '" alt="">' +
+                  '<span class="zoom-hint">' + IC.ojo + '</span>' +
                   '<figcaption>La que tienes</figcaption></figure>' : '') +
-        '<figure><img class="mk nueva" src="' + esc(nueva) + '" alt="">' +
+        '<figure data-zoom="' + esc(nueva) + '" role="button" tabindex="0" ' +
+        'aria-label="Ver la nueva opción, completa">' +
+        '<img class="mk nueva" src="' + esc(nueva) + '" alt="">' +
+        '<span class="zoom-hint">' + IC.ojo + '</span>' +
         '<figcaption>La nueva opción</figcaption></figure>' +
       '</div>' +
       '<div class="sm-err" id="smCmE" role="alert">' + <?= json_encode(ico('bolt')) ?> + '<p></p></div>' +

@@ -30,12 +30,18 @@ $notif_nl = function_exists('notif_no_leidas') ? notif_no_leidas($pdo, $marca_id
 //  Tu equipo, El Genoma y Calendario dejaron de existir en móvil.)
 $nav = [
   ['key'=>'inicio',    'ic'=>'home',    'lb'=>t('Inicio'),     'bot'=>1, 'hr'=>"$BASE/index.php?marca=$marca_id"],
-  // LA META (2026-08-12): el norte del negocio. Va arriba porque gobierna todo
-  // lo demás — el corillo trabaja PARA esto, no para llenar el calendario.
-  // Tu Meta NO va en la barra del móvil (se pone una vez por semana; el
-  // seguimiento diario vive en el card del Home). Por eso sin 'bot': tiene que
-  // seguir visible en el drawer para que se pueda llegar desde el teléfono.
-  ['key'=>'meta',      'ic'=>'compass', 'lb'=>t('Tu Meta'),    'hr'=>"$BASE/meta.php?marca=$marca_id"],
+  // LA META: el norte del negocio. Va arriba porque gobierna todo lo demás —
+  // el corillo trabaja PARA esto, no para llenar el calendario.
+  //
+  // AHORA SÍ VA EN LA BARRA DEL MÓVIL, y por eso lleva 'bot'. La decisión de
+  // 2026-08-12 fue la contraria y era razonable entonces: la meta se ponía una
+  // vez y ya. Ya no — con la revisión semanal, el material y la comparación de
+  // imágenes, aquí es donde el dueño decide todos los días.
+  //
+  // 'bot' le pone `.dup`, que esconde esta entrada SOLO en móvil: en el
+  // teléfono se llega por la barra de abajo y en escritorio por el lateral.
+  // Dos entradas visibles a lo mismo en la misma navegación es ruido.
+  ['key'=>'meta',      'ic'=>'compass', 'lb'=>t('Tu Meta'),    'bot'=>1, 'hr'=>"$BASE/meta.php?marca=$marca_id"],
   ['key'=>'contenido', 'ic'=>'list', 'lb'=>t('Tus Posts'),  'bot'=>1, 'hr'=>"$BASE/propuestas.php?marca=$marca_id"],
   ['key'=>'sala',      'ic'=>'sparkles','lb'=>t('La Sala'),    'bot'=>1, 'hr'=>"$BASE/sala.php?marca=$marca_id"],
   ['key'=>'reels',     'ic'=>'camera',  'lb'=>t('Reels'),      'hr'=>"$BASE/reels.php?marca=$marca_id"],
@@ -92,14 +98,15 @@ $nav_perfil = [
   <aside class="side" id="side">
     <a class="sbrand" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="text-decoration:none;color:inherit"><img src="/crecer/assets/brand/crecer-icon.png" alt="<?= $h(t('Inicio')) ?>"><b style="display:inline-flex;flex-direction:column;line-height:1;gap:0"><span style="color:var(--teal)">Crecer</span><span style="font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.02em;margin-top:1px">by Encuéntralo</span></b></a>
     <?php
-      // CREAR con paridad desktop: el móvil tiene su botón central en el bottom
-      // nav; el sidebar tiene ESTE. Abre el wizard directo (?crear=1) donde toque
-      // según el flag (mismo criterio que propuestas.php).
+      // CREAR, AHORA COMO HERRAMIENTA DEL MENÚ. El sitio del pulgar en el móvil
+      // pasó a Tu Meta, que es donde se decide todos los días; crear es algo
+      // que se hace a ratos. No se elimina ni cambia: misma URL, mismo flag,
+      // misma marca activa, mismo wizard. Solo deja de gritar.
       $crear_url_shell = (defined('CRECER_CREAR_UNIFICADO') && CRECER_CREAR_UNIFICADO)
           ? "$BASE/propuestas.php?marca=$marca_id&crear=1"
           : "$BASE/aprobar2.php?marca=$marca_id&crear=1";
     ?>
-    <a href="<?= $crear_url_shell ?>" class="side-crear" style="display:flex;align-items:center;justify-content:center;gap:8px;margin:10px 0 6px;padding:12px 14px;border-radius:14px;text-decoration:none;color:#fff;font-weight:800;font-size:14.5px;background:linear-gradient(135deg,var(--teal),var(--teal-700,#00827e));box-shadow:0 8px 18px -8px rgba(0,164,159,.55)"><?= ico('pen') ?> <?= $h(t('Crear')) ?></a>
+    <a href="<?= $crear_url_shell ?>" class="side-crear<?= ($active ?? '')==='crear'?' on':'' ?>" style="display:flex;align-items:center;gap:10px;margin:10px 0 2px;padding:11px 14px;border-radius:12px;text-decoration:none;color:var(--tinta);font-weight:600;font-size:14.5px;border:1px solid var(--line)"><?= ico('pen') ?><?= $h(t('Crear')) ?></a>
     <nav>
       <?php foreach ($nav as $n): ?>
         <?php /* .dup = ya está en la barra de abajo → se esconde SOLO en móvil */ ?>
