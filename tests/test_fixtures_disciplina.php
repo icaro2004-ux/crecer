@@ -144,7 +144,12 @@ $prohibido = [
 ];
 //  La excepcion, nombrada una por una y no por comodin: quien la use tiene que
 //  aparecer aqui, y esta lista se lee en la revision.
-$con_permiso = ['_esquema_desechable.php'];
+//
+//  `test_arnes_barrido.php` esta aqui porque es LA PRUEBA DEL BARRIDO: para
+//  comprobar que el arnés recoge lo suyo y respeta lo ajeno hay que sembrar
+//  bases de verdad y verlas caer. No se le da barra libre — abajo se exige
+//  que TODOS sus CREATE y DROP de base nombren el prefijo desechable.
+$con_permiso = ['_esquema_desechable.php', 'test_arnes_barrido.php'];
 //  Lo que NO se prohibe es cambiar la forma de una COPIA. Eso viaja siempre por
 //  EsquemaDesechable::ejecutar(), asi que esas lineas se apartan antes de mirar
 //  —y solo en archivos que de verdad cargan el ayudante, para que ningun
@@ -189,6 +194,28 @@ foreach ($archivos as $f => $s) {
            . '(tests/_esquema_desechable.php): el DROP no se deshace y hace COMMIT implicito');
     }
 }
+//  LA CONDICION DE LA EXCEPCION. Estar en la lista no es barra libre: quien
+//  cree o borre bases tiene que nombrar el prefijo desechable en TODAS sus
+//  sentencias. Una excepcion sin condicion es un agujero con nombre bonito.
+$prefijo = 'crecer_prueba_';
+foreach ($con_permiso as $f) {
+    $src = $archivos[$f] ?? '';
+    if ($src === '') continue;
+    $sueltas = [];
+    if (preg_match_all('/\b(?:CREATE|DROP)\s+DATABASE\b[^;\n]{0,120}/i', $src, $mm)) {
+        foreach ($mm[0] as $linea) {
+            //  Vale nombrar el prefijo literal o la constante que lo guarda.
+            if (strpos($linea, $prefijo) !== false) continue;
+            if (strpos($linea, 'PREFIJO') !== false) continue;
+            //  O una variable que la propia prueba compuso con el prefijo.
+            if (preg_match('/`?\{?\$\w+/', $linea)) continue;
+            $sueltas[] = trim($linea);
+        }
+    }
+    ok("{$f} solo crea y borra bases del prefijo desechable", $sueltas === [],
+       implode(' · ', array_slice($sueltas, 0, 3)));
+}
+
 //  Y la comprobacion directa de la suite que causo el incidente: que su DDL
 //  vaya SIEMPRE por la copia y nunca por $pdo, que es la conexion de todos.
 $tp = $archivos['test_meta_presentacion.php'] ?? '';

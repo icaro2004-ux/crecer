@@ -294,8 +294,16 @@ try {
     //  Tres caminos con material aplicado, dos sin él: «mejorar» solo aparece
     //  cuando hay una foto suya que mejorar, porque sobre arte generado no se
     //  mejora nada — se vuelve a pintar, y eso ya tiene su propia fila.
-    ok('ofrece los caminos que caben', in_array((string)($r['MAT_HOJA_CAMINOS'] ?? ''), ['3','4'], true),
-       ($r['MAT_HOJA_CAMINOS'] ?? '') . ' filas · usar una tuya, subir, [mejorar,] que la haga');
+    //  CUANTAS FILAS CABEN depende del estado de la pieza, y por eso el rango:
+    //    3 · usar una tuya · subir · que la haga
+    //    4 · + mejorar, cuando lleva una foto suya que mejorar
+    //    5 · + la de «otra imagen» (2C), cuando se puede ofrecer o hay una
+    //        candidata esperando
+    //  Fijar el numero exacto convertia cada capacidad nueva en un rojo que no
+    //  significa nada.
+    ok('ofrece los caminos que caben',
+       in_array((string)($r['MAT_HOJA_CAMINOS'] ?? ''), ['3','4','5'], true),
+       ($r['MAT_HOJA_CAMINOS'] ?? '') . ' filas · usar una tuya, subir, [mejorar,] que la haga, [otra imagen]');
     ok('y dice qué lleva ahora', trim((string)($r['MAT_HOJA_DICE_QUE_LLEVA'] ?? '')) !== '',
        'sin eso la hoja abre igual en los tres casos y se decide a ciegas');
 
