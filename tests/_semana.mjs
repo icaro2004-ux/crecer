@@ -415,6 +415,97 @@ try {
       '!document.querySelector("#smVelo").classList.contains("on")'));
   }
 
+  // ══ 4d · OTRA IMAGEN · tipo de cambio, preparando y comparación ══
+  //
+  //  NO SE CONFIRMA CONTRA EL PROVEEDOR. La candidata entregada la siembra la
+  //  suite antes de arrancar el navegador: aquí se prueba la PANTALLA —que se
+  //  ofrezca, que diga lo que cuesta, que compare y que decida— sin pagar una
+  //  imagen por cada vuelta de la suite.
+  await clicSel('.sm-p.on [data-ajustar]');
+  await clicSel('#smHojaC .sm-fila[data-a="arte"]');
+  await dormir(200);
+  const hayOtra = await ev(
+    'document.querySelectorAll("#smHojaC .sm-fila[data-m=\'otra\'], #smHojaC .sm-fila[data-m=\'cand\']").length');
+  di('OTRA_HAY_FILA', hayOtra);
+
+  if (Number(hayOtra) > 0) {
+    const esCand = await ev('!!document.querySelector("#smHojaC .sm-fila[data-m=\'cand\']")');
+    di('OTRA_ES_CANDIDATA', esCand);
+    if (esCand === 'true' || esCand === true) {
+      //  Ya hay una esperando: la fila lleva a la comparación, no a empezar otra.
+      await clicSel('#smHojaC .sm-fila[data-m="cand"]');
+      await dormir(400);
+    } else {
+      await clicSel('#smHojaC .sm-fila[data-m="otra"]');
+      await dormir(250);
+      di('CAMBIO_TITULO', (await txt('#smHojaT')).trim());
+      di('CAMBIO_OPCIONES', await ev('document.querySelectorAll("#smHojaC .sm-opc").length'));
+      di('CAMBIO_DICE_MISMA', await ev(
+        '/Mantendr[ée] el concepto/.test(document.getElementById("smHojaC").textContent)'));
+      di('CAMBIO_DICE_DIFERENTE', await ev(
+        '/otro concepto para comunicar el mismo mensaje/.test(document.getElementById("smHojaC").textContent)'));
+      di('CAMBIO_DICE_CUOTA', await ev(
+        '/usa 1 imagen de tu cuota/.test(document.getElementById("smHojaC").textContent)'));
+      di('CAMBIO_HAY_EVITAR', await ev('!!document.getElementById("smEv")'));
+      di('MED_CAMBIO_360', await ev(MEDIR).then(JSON.stringify));
+      await tirar('12_tipo_de_cambio_360', 360, 800);
+      //  Se escribe algo a evitar y se pide «otra idea».
+      await ev('(function(){var e=document.getElementById("smEv"); if(e) e.value="sin personas";})()');
+      await clicSel('#smHojaC .sm-opc[data-i="idea_diferente"]');
+      await dormir(900);
+      di('PREP_TITULO', (await txt('#smHojaT')).trim());
+      di('PREP_ENSENA_LA_SUYA', await ev(
+        '!!document.querySelector("#smHojaC .sm-prev img")'));
+      di('PREP_DEJA_SALIR', await ev('!!document.getElementById("smPrC")'));
+      di('MED_PREP_360', await ev(MEDIR).then(JSON.stringify));
+      await tirar('13_preparando_360', 360, 800);
+      await ev('(function(){var b=document.getElementById("smPrC"); if(b) b.click();})()');
+      await dormir(300);
+    }
+  }
+
+  //  ── LA COMPARACIÓN. Se llega a ella volviendo a la hoja: si hay una
+  //     candidata entregada, la fila lleva ahí. Eso ES la prueba de que salir
+  //     y volver recupera el estado — no se guarda en el navegador.
+  await ir(SEM + '&pos=2');
+  await cerrarRecibimiento(ev);
+  await clicSel('.sm-p.on [data-ajustar]');
+  await clicSel('#smHojaC .sm-fila[data-a="arte"]');
+  await dormir(250);
+  const vuelveCand = await ev('!!document.querySelector("#smHojaC .sm-fila[data-m=\'cand\']")');
+  di('VUELVE_A_LA_CANDIDATA', vuelveCand);
+  if (vuelveCand === 'true' || vuelveCand === true) {
+    await clicSel('#smHojaC .sm-fila[data-m="cand"]');
+    await dormir(500);
+    di('COMP_TITULO', (await txt('#smHojaT')).trim());
+    di('COMP_DOS_IMAGENES', await ev('document.querySelectorAll("#smHojaC .sm-comp img").length'));
+    di('COMP_ETIQUETAS', await ev(
+      '[].map.call(document.querySelectorAll("#smHojaC .sm-comp figcaption"),'
+      + ' function(f){return f.textContent.trim();}).join(" | ")'));
+    di('COMP_UNA_PRIMARIA', await ev('document.querySelectorAll("#smHojaC .sm-bt.pri").length'));
+    di('MED_COMP_360', await ev(MEDIR).then(JSON.stringify));
+    await tirar('14_comparacion_360', 360, 800);
+
+    //  En escritorio las dos caben a lo ancho: es donde comparar se hace de un
+    //  vistazo, y donde una hoja de móvil estirada se vería como una tira.
+    await cmd('Emulation.setDeviceMetricsOverride',
+              { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+    await dormir(500);
+    di('MED_COMP_1440', await ev(MEDIR).then(JSON.stringify));
+    await tirar('15_comparacion_1440', 1440, 900);
+    await cmd('Emulation.setDeviceMetricsOverride',
+              { width: 360, height: 800, deviceScaleFactor: 1, mobile: true });
+    await dormir(400);
+
+    //  Y SE DECIDE: quedarse con la actual. Es la que no cambia nada, así que
+    //  se puede comprobar en la base que de verdad no cambió nada.
+    await clicSel('#smCmQ');
+    await dormir(900);
+    di('DECIDIO_CIERRA', await ev(
+      '!document.querySelector("#smVelo").classList.contains("on")'));
+    di('DECIDIO_SIGO_EN_POS', (await txt('#smPaso')).trim());
+  }
+
   await clicSel('.sm-p.on [data-ajustar]');
   await clicSel('#smHojaC .sm-fila[data-a="arte"]');
   await dormir(200);

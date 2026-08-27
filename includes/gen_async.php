@@ -142,6 +142,14 @@ function gen_procesar(PDO $pdo, int $id): void {
         $img = openai_imagen($escena, ['aspect'=>'1:1', 'marca_id'=>$mid, 'cuota'=>$cuota]);
     } catch (Throwable $e) {
         $http = null; if (preg_match('/HTTP (\d{3})/', $e->getMessage(), $mm)) $http = (int)$mm[1];
+        //  LA UNIDAD VUELVE. El punto de proveedor reserva ANTES de llamar —tiene
+        //  que hacerlo, o dos peticiones simultaneas se saltarian el tope— asi
+        //  que un fallo aqui deja la unidad retenida para siempre: el dueño
+        //  pagando del mes una imagen que no recibio. Se cierra donde se sabe
+        //  que no llego nada.
+        try { CuotaImg::liberarPorCtx($cuota ?? null,
+                  'no entregó: ' . mb_substr($e->getMessage(), 0, 100)); }
+        catch (Throwable $e2) { error_log('gen_procesar liberar: ' . $e2->getMessage()); }
         _gen_set($pdo, $id, ['estado'=>'failed', 'modelo_imagen'=>'gpt-image-1', 'http_status'=>$http,
             'error_msg'=>'imagen: ' . substr($e->getMessage(),0,400),
             'dur_imagen_ms'=>(int)round((microtime(true)-$ti)*1000), 'dur_total_ms'=>(int)round((microtime(true)-$t_all)*1000)]);
@@ -160,6 +168,13 @@ function gen_procesar(PDO $pdo, int $id): void {
     //  'completed' — y ahi se para. `grafica_path` y `material_activo_id`
     //  siguen como estaban hasta que el dueño escoja, que es justo lo que
     //  antes no pasaba: la imagen nueva pisaba la suya sin preguntarle.
+    //  Y SI LLEGO, LA UNIDAD SE CONSUME. Sin esto el asiento se queda en
+    //  'reservado' para siempre: el total del mes sale bien pero el estado
+    //  miente, y la llave no se retira — o sea que un ciclo posterior
+    //  deliberado reusaria aquella reserva y saldria gratis.
+    try { CuotaImg::confirmarPorCtx($cuota ?? null, 0.17); }
+    catch (Throwable $e) { error_log('gen_procesar confirmar: ' . $e->getMessage()); }
+
     _gen_set($pdo, $id, ['estado'=>'completed', 'modelo_imagen'=>$img['modelo']??'gpt-image-1',
         'dur_imagen_ms'=>$dur_img, 'archivo'=>$url, 'dur_total_ms'=>(int)round((microtime(true)-$t_all)*1000)]);
 }

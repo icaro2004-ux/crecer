@@ -163,7 +163,36 @@ try {
         ->execute([$M, $rel_bib, '[prueba] Su bizcocho']);
     $ACTIVO = (int)$pdo->lastInsertId();
 
+    //  ── UNA CANDIDATA YA ENTREGADA, para poder probar la comparación ──
+    //
+    //  El navegador NO va a generar nada: el servidor local corre con llaves
+    //  reales y una imagen por vuelta de suite es dinero. Se siembra el
+    //  estado que deja el worker —archivo + 'completed', sin decisión— que es
+    //  exactamente donde empieza la pantalla que se quiere probar.
+    $CAND_NUEVA = '';
+    $CAND_ID = 0;
+    require_once __DIR__ . '/../includes/candidata.php';
+    if (cand_hay_columnas($pdo, true)) {
+        $rel_cand = "marca_{$M}/graficas/gen_prueba_semana.png";
+        $abs_cand = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR
+                  . str_replace('/', DIRECTORY_SEPARATOR, $rel_cand);
+        @mkdir(dirname($abs_cand), 0775, true);
+        file_put_contents($abs_cand, base64_decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='));
+        $CAND_NUEVA = rtrim(UPLOADS_URL, '/') . '/' . $rel_cand;
+        $pdo->prepare("INSERT INTO crecer_generaciones
+                (marca_id, contenido_id, estado, decision_dueno, copy_text,
+                 prompt_narrativo, archivo)
+              VALUES (?,?, 'completed', NULL, '[prueba]', '[prueba] instrucción', ?)")
+            ->execute([$M, $P2, $CAND_NUEVA]);
+        $CAND_ID = (int)$pdo->lastInsertId();
+    }
+    $img_antes_cand = (string)$pdo->query("SELECT grafica_path FROM crecer_contenido
+                                            WHERE id={$P2}")->fetchColumn();
+
     //  Lo que ya habia sembrado, para poder afirmar que el recorrido no gasta.
+    $arte_antes = (int)$pdo->query("SELECT COUNT(*) FROM crecer_img_cuota_asiento
+                                     WHERE marca_id={$M} AND operacion='arte_post'")->fetchColumn();
     $realce_antes = (int)$pdo->query("SELECT COUNT(*) FROM crecer_img_cuota_asiento
                                        WHERE marca_id={$M} AND operacion='realce'")->fetchColumn();
 
@@ -333,6 +362,74 @@ try {
         ok('y sin salir de la semana', ($r['FALTA_SIN_SALIR'] ?? '') === 'true');
     } else {
         echo "  (esta semana no hay ninguna esperando material · sin primaria que medir)\n";
+    }
+
+    // ══ OTRA IMAGEN · comparar y decidir, pulsado ══════════════════
+    if ($CAND_ID > 0) {
+        echo "\n  — otra imagen: comparar y decidir sin perder la suya —\n";
+        ok('la hoja ofrece el camino', (int)($r['OTRA_HAY_FILA'] ?? 0) > 0,
+           'con una candidata entregada, la fila tiene que llevar a ella');
+        ok('y lleva a la que ya está esperando',
+           ($r['OTRA_ES_CANDIDATA'] ?? '') === 'true',
+           'ofrecer «generar otra» con una sin decidir encima es invitar a gastar dos');
+
+        ok('salir y volver la recupera', ($r['VUELVE_A_LA_CANDIDATA'] ?? '') === 'true',
+           'lo que hay vive en la base, no en la memoria del navegador');
+        ok('la comparación abre',      ($r['COMP_TITULO'] ?? '') === '¿Cuál te gusta más?',
+           $r['COMP_TITULO'] ?? '');
+        ok('con las dos imágenes',     (int)($r['COMP_DOS_IMAGENES'] ?? 0) === 2,
+           $r['COMP_DOS_IMAGENES'] ?? '');
+        ok('y dice cuál es cuál',
+           str_contains((string)($r['COMP_ETIQUETAS'] ?? ''), 'La que tienes')
+           && str_contains((string)($r['COMP_ETIQUETAS'] ?? ''), 'La nueva opción'),
+           $r['COMP_ETIQUETAS'] ?? '');
+        ok('una sola primaria',        (int)($r['COMP_UNA_PRIMARIA'] ?? 0) === 1,
+           $r['COMP_UNA_PRIMARIA'] ?? '');
+
+        //  Y EN LA BASE, que es donde de verdad pasa. Se eligió «quedarme
+        //  con la actual»: la publicación no puede haber cambiado NADA.
+        $fila = $pdo->query("SELECT decision_dueno, decidida_at, archivo
+                               FROM crecer_generaciones WHERE id={$CAND_ID}")
+                    ->fetch(PDO::FETCH_ASSOC);
+        ok('quedó anotada la decisión', (string)($fila['decision_dueno'] ?? '') === 'descartada',
+           json_encode($fila['decision_dueno'] ?? null));
+        ok('con su fecha',              $fila['decidida_at'] !== null);
+        //  SE COMPARA CONTRA LA CANDIDATA, no contra una foto de antes del
+        //  recorrido: el propio recorrido aplica una foto de Biblioteca unos
+        //  pasos antes, asi que `grafica_path` cambio por OTRA razon legitima.
+        //  Lo que hay que afirmar es lo unico que la decision decide: que la
+        //  pieza NO se quedo con la candidata descartada.
+        ok('la publicación no se quedó con la descartada',
+           (string)$pdo->query("SELECT grafica_path FROM crecer_contenido WHERE id={$P2}")
+                       ->fetchColumn() !== $CAND_NUEVA,
+           'quedarse con la actual significa exactamente eso');
+        ok('y la candidata se conserva', trim((string)($fila['archivo'] ?? '')) !== '',
+           'para que la memoria creativa futura sepa qué dirección se rechazó');
+        ok('sigo en la misma publicación',
+           ($r['DECIDIO_SIGO_EN_POS'] ?? '') === 'Publicación 2 de 3',
+           $r['DECIDIO_SIGO_EN_POS'] ?? '');
+        ok('y la hoja se cerró',        ($r['DECIDIO_CIERRA'] ?? '') === 'true');
+
+        //  LA PIEL DE LAS PANTALLAS NUEVAS.
+        foreach (['360' => 'MED_COMP_360', '1440' => 'MED_COMP_1440'] as $an => $k) {
+            $m = json_decode((string)($r[$k] ?? '{}'), true) ?: [];
+            ok("la comparación a {$an} · no se sale a lo ancho",
+               (int)($m['horiz'] ?? 0) === 0 && empty($m['fuera']),
+               json_encode(array_slice((array)($m['fuera'] ?? []), 0, 4)));
+            ok("la comparación a {$an} · ningún objetivo bajo 44x44",
+               empty($m['chicos']), json_encode(array_slice((array)($m['chicos'] ?? []), 0, 4)));
+            ok("la comparación a {$an} · ningún texto bajo 14px",
+               empty($m['finos']), json_encode(array_slice((array)($m['finos'] ?? []), 0, 4)));
+        }
+
+        //  Y NADA DE ESTO GASTÓ UNA IMAGEN: comparar y decidir no llaman a nadie.
+        ok('comparar y decidir no gastaron cuota',
+           (int)$pdo->query("SELECT COUNT(*) FROM crecer_img_cuota_asiento
+                              WHERE marca_id={$M} AND operacion='arte_post'")->fetchColumn()
+             === $arte_antes,
+           'la unidad la abre el worker al generar, no la pantalla al decidir');
+    } else {
+        echo "  (sin las columnas de decisión · el recorrido de otra imagen se salta)\n";
     }
 
     //  LA PIEL DE LA HOJA, EN LAS TRES ANCHURAS. Es una pantalla nueva y se
