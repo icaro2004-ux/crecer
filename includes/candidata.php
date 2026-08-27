@@ -110,6 +110,36 @@ function cand_viva(PDO $pdo, int $marca_id, int $contenido_id): ?array
 }
 
 /**
+ * EL ULTIMO INTENTO QUE FALLO Y QUE EL DUEÑO NO HA VISTO.
+ *
+ * VA APARTE DE cand_viva() A PROPOSITO. Un intento fallido NO es una intencion
+ * viva —no puede bloquear que pida otra, seria dejarle encerrado por un fallo
+ * nuestro— pero SI es algo que tiene derecho a saber. Sin esto, el dueño pide
+ * otra imagen, se va, vuelve, y lo unico que ve es «Generar otra imagen» otra
+ * vez: nunca se entera de que su intento se cayo. Eso es un limbo silencioso,
+ * que es peor que un error.
+ *
+ * Se considera «no visto» mientras no haya decidido nada sobre el. Reintentar
+ * abre una intencion NUEVA y esta queda atras.
+ */
+function cand_ultimo_fallo(PDO $pdo, int $marca_id, int $contenido_id): ?array
+{
+    if (!cand_hay_columnas($pdo) || $marca_id <= 0 || $contenido_id <= 0) return null;
+    try {
+        $q = $pdo->prepare(
+            "SELECT * FROM crecer_generaciones
+              WHERE marca_id=? AND contenido_id=? AND estado='failed'
+                AND decision_dueno IS NULL
+           ORDER BY id DESC LIMIT 1");
+        $q->execute([$marca_id, $contenido_id]);
+        return $q->fetch(PDO::FETCH_ASSOC) ?: null;
+    } catch (Throwable $e) {
+        error_log('cand_ultimo_fallo: ' . get_class($e));
+        return null;
+    }
+}
+
+/**
  * ABRE UNA INTENCION, O DEVUELVE LA QUE YA ESTABA ABIERTA.
  *
  * ESTE ES EL ARBITRAJE, y es lo que impide que un doble clic —o un reenvio del

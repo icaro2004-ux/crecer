@@ -115,6 +115,10 @@ foreach ($sm['items'] as $i => $it) {
         'cand'    => $p ? cand_puede($pdo, $marca_id, $p)
                         : ['puede'=>false,'motivo'=>'','frase'=>'','pendiente'=>false],
         'cand_p'  => $pid > 0 ? cand_pendiente($pdo, $marca_id, $pid) : ['hay'=>false],
+        //  Y EL ULTIMO INTENTO QUE SE CAYO, si no lo ha visto. No bloquea nada
+        //  —pedir otra sigue estando disponible— pero tiene derecho a saber
+        //  que aquello no salio en vez de encontrarse el boton otra vez y ya.
+        'cand_f'  => $pid > 0 ? cand_ultimo_fallo($pdo, $marca_id, $pid) : null,
         //  La puerta a SU Biblioteca en modo escoger. Se construye aqui, con
         //  la marca y la pieza del servidor: la vuelta no viaja nunca en la
         //  peticion.
@@ -163,12 +167,19 @@ foreach ($sm['items'] as $i => $it) {
   .sm-comp figure{margin:0;border-radius:var(--tm-r);overflow:hidden;
     border:1px solid var(--linea,#EDE7E1);background:var(--crema,#FAF7F4)}
   .sm-comp figcaption{padding:8px 12px;font-size:14px;font-weight:600;color:var(--tinta)}
-  .sm-comp .mk{display:block;width:100%;height:34vh;max-height:260px;object-fit:contain;
+  /*  EL ALTO CABE, Y ESO NO ES ESTETICA. A 34vh cada una, las dos apiladas
+      empujaban «Usar la nueva» fuera de la pantalla en un telefono de 360:
+      la decision principal quedaba debajo del pliegue y habia que buscarla.
+      Comparar es mirar las dos Y decidir, y las tres cosas tienen que caber
+      a la vez.  */
+  .sm-comp .mk{display:block;width:100%;height:21vh;max-height:168px;object-fit:contain;
     background:#231F20}
   .sm-comp .nueva{outline:2px solid var(--tm-rosa-bt);outline-offset:-2px}
   @media (min-width:760px){
     .sm-comp{grid-template-columns:1fr 1fr}
-    .sm-comp .mk{height:30vh;max-height:300px}
+    /*  En escritorio caben al lado, asi que pueden ser grandes: la primaria
+        sigue estando debajo y a la vista.  */
+    .sm-comp .mk{height:34vh;max-height:320px}
   }
   /* — LAS DOS OPCIONES DE CAMBIO — */
   .sm-opc{display:block;width:100%;text-align:left;padding:14px;margin:0 0 10px;
@@ -478,6 +489,7 @@ foreach ($sm['items'] as $i => $it) {
              data-cand-gen="<?= (int)($x['cand_p']['gen']['id'] ?? 0) ?>"
              data-cand-estado="<?= $h((string)($x['cand_p']['gen']['estado'] ?? '')) ?>"
              data-cand-nueva="<?= $h((string)($x['cand_p']['gen']['archivo'] ?? '')) ?>"
+             data-cand-fallo="<?= (int)($x['cand_f']['id'] ?? 0) ?>"
              data-arte="<?= $h($arte) ?>"
              data-tactica="<?= (int)$t['id'] ?>">
 
@@ -1000,6 +1012,12 @@ foreach ($sm['items'] as $i => $it) {
     //  La fila se ofrece solo cuando el servidor dijo que se puede. Cuando
     //  no, se dice POR QUE en vez de esconderla en silencio: «este mes ya
     //  usaste tus imágenes» es una respuesta; una fila que desaparece, no.
+    //  UN INTENTO QUE SE CAYO SE CUENTA ANTES QUE NADA: es lo que el dueño
+    //  no sabe. Y no bloquea pedir otra — la fila de abajo sigue estando.
+    if (d.candFallo) {
+      html += fila(IC.refr, 'El intento anterior no salió',
+                   'Mira qué pasó y qué puedes hacer', 'data-m="fallo"');
+    }
     if (d.candGen && d.candEstado) {
       html += fila(IC.refr, d.candEstado === 'completed'
                      ? 'Ver la otra opción que te preparé'
@@ -1011,6 +1029,11 @@ foreach ($sm['items'] as $i => $it) {
       html += fila(IC.refr, 'Generar otra imagen',
                    'Otra versión o una idea distinta · gasta 1 imagen del mes',
                    'data-m="otra"');
+    } else if (d.candMotivo === 'cuota') {
+      //  Se ofrece igual, pero lleva a la hoja que explica y da salidas. Una
+      //  frase suelta en gris deja al dueño mirando una pared.
+      html += fila(IC.refr, 'Generar otra imagen',
+                   esc(d.candFrase), 'data-m="sincuota"');
     } else if (d.candFrase) {
       html += '<p class="sm-nota" style="margin-top:14px">' + IC.img24 +
               '<span>' + esc(d.candFrase) + '</span></p>';
@@ -1033,6 +1056,8 @@ foreach ($sm['items'] as $i => $it) {
         if (m === 'mejorar') return mejorarFoto(el);
         if (m === 'otra')    return menuOtraImagen(el);
         if (m === 'cand')    return verCandidata(el);
+        if (m === 'sincuota') return sinCuota(el, d.candFrase);
+        if (m === 'fallo')   return fallo(el, 'No me salió esta vez. Tu imagen sigue como estaba.');
       });
     });
   }
@@ -1328,7 +1353,11 @@ foreach ($sm['items'] as $i => $it) {
         el.dataset.candEstado = String(j.estado);
         el.dataset.candNueva = String(j.nueva || '');
         if (j.fallo) {
-          hojaErr('#smPrE', 'No me salió esta vez. Tu imagen sigue como estaba.');
+          //  UN FALLO NO PUEDE DEJARLE EN UN CALLEJON. Se dice lo que pasó
+          //  —sin enseñarle el mensaje crudo del proveedor, que no le dice
+          //  nada— y se le dan las dos salidas que sí tiene: volver a
+          //  intentarlo, o quedarse con la suya, que sigue donde estaba.
+          fallo(el, 'No me salió esta vez. Tu imagen sigue como estaba.');
           return;
         }
         if (j.lista) { comparar(el, j.actual, j.nueva, j.gen); return; }
@@ -1399,12 +1428,65 @@ foreach ($sm['items'] as $i => $it) {
       });
   }
 
+  /*  EL FALLO, CON SALIDA. Tres cosas y ninguna es un callejón: qué pasó, que
+      su imagen sigue ahí, y qué puede hacer ahora. Reintentar es un gesto
+      DELIBERADO —vuelve a costar una— y se dice; quedarse no cuesta nada.  */
+  function fallo(el, msg) {
+    pararSondeo();
+    abrir('No pude preparar la otra opción',
+      (el.dataset.arte
+        ? '<div class="sm-prev"><img src="' + esc(el.dataset.arte) + '" alt="">' +
+          '<p class="sm-prev-pie">' + IC.image + '<span><b>Tu imagen sigue como estaba.</b></span></p></div>'
+        : '') +
+      '<p class="completo">' + esc(msg) + '</p>' +
+      '<div class="pie2">' +
+        '<button type="button" class="sm-bt pri" id="smFaR">Intentar otra vez</button>' +
+        '<div class="sm-dos">' +
+          '<button type="button" class="sm-bt sec" id="smFaB">Usar algo de mi Biblioteca</button>' +
+          '<button type="button" class="sm-bt sec" id="smFaQ">Quedarme con la actual</button>' +
+        '</div></div>');
+    $('#smFaQ').addEventListener('click', cerrar);
+    $('#smFaB').addEventListener('click', function () {
+      if (el.dataset.bib) location.href = el.dataset.bib; else cerrar();
+    });
+    $('#smFaR').addEventListener('click', function () {
+      //  Reintentar abre una intención NUEVA: la anterior quedó fallida, y una
+      //  fallida no es una candidata esperando. Vuelve a costar una imagen y
+      //  por eso se pasa por la hoja que lo dice, no directo al trabajo.
+      el.dataset.candGen = ''; el.dataset.candEstado = '';
+      menuOtraImagen(el);
+    });
+  }
+
+  /*  LA CUOTA AGOTADA TAMPOCO ES UN CALLEJÓN. No se puede generar, pero sí
+      hacer otras dos cosas — y ninguna promete que se devuelva una unidad ya
+      confirmada, porque no se devuelve.  */
+  function sinCuota(el, frase) {
+    abrir('Este mes ya usaste tus imágenes',
+      '<p class="completo">' + esc(frase || 'Este mes ya usaste tus imágenes con IA.') + '</p>' +
+      '<p class="sm-nota" style="margin-top:12px">' + IC.img24 +
+        '<span>Las imágenes que ya se generaron siguen contando, aunque no las hayas usado.</span></p>' +
+      '<div class="pie2">' +
+        '<button type="button" class="sm-bt pri" id="smSqB">Usar algo de mi Biblioteca</button>' +
+        '<div class="sm-dos">' +
+          '<button type="button" class="sm-bt sec" id="smSqQ">Quedarme con la actual</button>' +
+        '</div></div>');
+    $('#smSqQ').addEventListener('click', cerrar);
+    $('#smSqB').addEventListener('click', function () {
+      if (el.dataset.bib) location.href = el.dataset.bib; else cerrar();
+    });
+  }
+
   /*  VOLVER A UNA CANDIDATA QUE YA ESTABA. Salir y regresar, o recargar, tiene
       que devolverte donde estabas — y sobre todo NO generar otra. Lo que hay
       vive en la base, así que basta con preguntar.  */
   function verCandidata(el) {
     if (el.dataset.candEstado === 'completed' && el.dataset.candNueva) {
       comparar(el, el.dataset.arte || '', el.dataset.candNueva, el.dataset.candGen);
+      return;
+    }
+    if (el.dataset.candEstado === 'failed') {
+      fallo(el, 'No me salió esta vez. Tu imagen sigue como estaba.');
       return;
     }
     preparando(el);
