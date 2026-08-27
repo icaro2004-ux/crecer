@@ -502,6 +502,14 @@ try {
         //  intencion, el libro impide pagar dos veces por ella.
         '2026-08-22_crecer_plan_solicitud.sql',
         '2026-08-22_crecer_plan_solicitud_libro.sql',
+        //  La trazabilidad del material: de donde salio la imagen de una pieza.
+        //  Aditiva y NULL-able — la columna vacia significa «generado o no se
+        //  sabe», que es exactamente lo que era antes de existir.
+        '2026-08-26_crecer_contenido_material.sql',
+        //  La decision del dueño sobre una candidata: aditiva, VARCHAR y sin FK.
+        //  Va aparte de `estado` porque una imagen que se genero bien y que el
+        //  dueño descarto no es una imagen fallida.
+        '2026-08-26_crecer_generacion_decision.sql',
     ];
     ok('declara exactamente las pendientes que hay', $decl === $esperadas,
        'declaradas: ' . implode(' · ', $decl));

@@ -273,12 +273,17 @@ try {
     //      post'. Se cuenta eso.
     // ══════════════════════════════════════════════════════════
     $motorViejo = function () use ($pdo): int {
+        //  LA ACCION PUEDE VENIR MARCADA. En modo prueba el log antepone
+        //  «[prueba] » y apunta costo cero, para que las corridas de prueba no
+        //  se cuelen en la evidencia del gasto. Buscar la accion EXACTA dejaba
+        //  de ver el motor viejo aunque hubiera corrido — y la prueba decia lo
+        //  contrario de lo que pasaba.
         return (int)$pdo->query("SELECT COUNT(*) FROM crecer_ia_log
-                                  WHERE accion='Crear arte de post'
+                                  WHERE accion LIKE '%Crear arte de post%'
                                     AND created_at > (NOW() - INTERVAL 3 MINUTE)")->fetchColumn();
     };
     $limpiarLog = function () use ($pdo) {
-        $pdo->query("DELETE FROM crecer_ia_log WHERE accion='Crear arte de post'
+        $pdo->query("DELETE FROM crecer_ia_log WHERE accion LIKE '%Crear arte de post%'
                        AND created_at > (NOW() - INTERVAL 3 MINUTE)");
     };
     /** Marca virgen: crear_post_muestra es idempotente y devolvería el post que ya hubiera. */

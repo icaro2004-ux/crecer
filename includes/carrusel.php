@@ -238,8 +238,13 @@ function carrusel_arte_slide(PDO $pdo, int $marca_id, int $slide_id): bool {
     $m = leer_marca($pdo, $marca_id);
     try {
         $brief = carrusel_slide_brief($m ?: [], $v, (int)$row['orden'], max(1, $total));
+        //  LA UNIDAD DEL CARRUSEL ES EL SLIDE. Sin origen propio los cinco
+        //  slides compartian una sola llave y el carrusel entero salia por una
+        //  imagen — el encolado de arriba ya contaba por slide, asi que las dos
+        //  rutas del mismo carrusel no contaban igual.
         $g = generar_grafica($pdo, $marca_id, null, [
             'copy' => $v['copy'], 'con_texto' => !empty($v['con_texto']), 'con_logo' => true, 'instrucciones' => $brief,
+            'origen_tipo' => 'slide', 'origen_id' => (int)$slide_id,
         ]);
         if (!empty($g['archivo'])) {
             $pdo->prepare("UPDATE crecer_carrusel SET grafica_path=?, img_estado='ok', updated_at=NOW() WHERE id=?")
@@ -364,7 +369,8 @@ function carrusel_arte_slide_gemini(PDO $pdo, int $marca_id, int $slide_id): boo
     $m = leer_marca($pdo, $marca_id);
     try {
         $brief = carrusel_slide_brief($m ?: [], $v, (int)$s['orden'], max(1, $total));
-        $g = generar_grafica($pdo, $marca_id, null, ['copy' => $v['copy'], 'con_texto' => !empty($v['con_texto']), 'con_logo' => true, 'instrucciones' => $brief]);
+        $g = generar_grafica($pdo, $marca_id, null, ['copy' => $v['copy'], 'con_texto' => !empty($v['con_texto']), 'con_logo' => true, 'instrucciones' => $brief,
+                                                     'origen_tipo' => 'slide', 'origen_id' => (int)$slide_id]);
         if (!empty($g['archivo'])) {
             $pdo->prepare("UPDATE crecer_carrusel SET grafica_path=?, img_estado='ok', img_job=NULL, updated_at=NOW() WHERE id=?")->execute([$g['archivo'], $slide_id]);
             return true;

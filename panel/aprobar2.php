@@ -9,6 +9,13 @@ require __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../core/Meta/MetaRetorno.php';
 require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/agentes.php';
+//  EL DOMINIO DEL MATERIAL, ARRIBA Y A LA VISTA. Estaba incluido dentro
+//  de los handlers, justo antes de cada llamada, y basto que UNO se
+//  quedara sin su require para que la entrega de arte muriera con un
+//  fatal en la ruta que mas se usa. Cargarlo aqui quita la clase entera
+//  de fallo: no depende de que rama se ejecute ni de que otra pagina lo
+//  haya cargado antes.
+require_once __DIR__ . '/../includes/material.php';
 require __DIR__ . '/../includes/suscripcion.php';
 require_once __DIR__ . '/../includes/baraja.php';   // La Baraja: el gesto de decidir (solo móvil, flag CRECER_BARAJA)
 requiere_login();
@@ -171,18 +178,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ── Editar caption (+ el bot aprende) ──
     if ($accion === 'editar') {
+        //  GUARDAR EL TEXTO ES UNA ESCRITURA, NO UNA LLAMADA.
+        //
+        //  Aqui vivia `aprender_de_edicion()`, que llama al modelo. O sea: cada
+        //  coma que el dueño corregia costaba una llamada de red. Tres cosas
+        //  malas de una vez — encarecia lo mas frecuente que hace, ataba una
+        //  escritura de una fila al humor de un proveedor, y hacia que guardar
+        //  tardara segundos en vez de milisegundos.
+        //
+        //  El aprendizaje NO se pierde: se apunta la edicion en el libro y el
+        //  Aprendiz la digiere en su corrida. Aprender de lo que el dueño
+        //  reescribe sigue siendo valioso; hacerlo mientras el espera con el
+        //  dedo en la pantalla, no.
         $nuevo_cap = trim($_POST['caption'] ?? '');
         $o = $pdo->prepare("SELECT caption FROM crecer_contenido WHERE id=? AND marca_id=?");
-        $o->execute([$id, $marca_id]); $orig = (string)$o->fetchColumn();
-        $leccion = null;
-        // El aprendizaje es premium, pero admin/cuentas de prueba también aprenden.
-        $u_ed = usuario_actual($pdo);
-        $aprende = $pagado || (($u_ed['rol'] ?? '') === 'admin') || (function_exists('activacion_de_prueba') && activacion_de_prueba($u_ed['email'] ?? null));
+        $o->execute([$id, $marca_id]);
+        $orig = $o->fetchColumn();
+        if ($orig === false) {
+            //  Ni suya, ni existe. Se contesta lo mismo en los dos casos: quien
+            //  prueba ids ajenos no merece saber cuales existen.
+            if (!empty($_POST['ajax'])) { header('Content-Type: application/json'); http_response_code(403); echo json_encode(['ok'=>false,'err'=>'No encuentro esa publicación.']); exit; }
+            header('Location: ' . $_SERVER['REQUEST_URI']); exit;
+        }
+        $guardado = false;
         if ($id && $nuevo_cap !== '') {
             $pdo->prepare("UPDATE crecer_contenido SET caption=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$nuevo_cap, $id, $marca_id]);
-            if ($aprende) $leccion = aprender_de_edicion($pdo, $marca_id, $orig, $nuevo_cap);
+            $guardado = true;
+            //  La nota para el Aprendiz, sin llamar a nadie. Si el libro no
+            //  esta, no pasa nada: el texto ya quedo guardado, que es lo que
+            //  el dueño pidio.
+            if (function_exists('edicion_anotar')) {
+                edicion_anotar($pdo, $marca_id, (int)$id, (string)$orig, $nuevo_cap);
+            }
         }
-        if (!empty($_POST['ajax'])) { header('Content-Type: application/json'); echo json_encode(['ok'=>true,'id'=>$id,'caption'=>$nuevo_cap,'leccion'=>$leccion], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE); exit; }
+        if (!empty($_POST['ajax'])) { header('Content-Type: application/json'); echo json_encode(['ok'=>$guardado,'id'=>$id,'caption'=>$nuevo_cap,'err'=>$guardado?null:'El texto no puede quedar vacío.'], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE); exit; }
         header('Location: ' . $_SERVER['REQUEST_URI']); exit;
     }
     // ── Regenerar caption con la IA ──
@@ -200,12 +229,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     // ── Reprogramar (el dueño escoge el día) ──
     if ($accion === 'fecha') {
-        $f = $_POST['fecha'] ?? '';
-        if ($id && strtotime($f)) {
+        //  TRES COSAS QUE ANTES NO SE MIRABAN, y las tres se notan.
+        //
+        //  1 · Que sea SUYA. Antes el UPDATE llevaba marca_id en el WHERE —o
+        //      sea, no escribia— pero contestaba `ok:true` igual, asi que la
+        //      pantalla de otro se quedaba tan contenta.
+        //  2 · Que sea FUTURO. `strtotime()` entiende perfectamente una fecha
+        //      del año pasado: entraba, y el publicador nunca la iba a tomar.
+        //  3 · Que TODAVIA SE PUEDA MOVER. Una pieza que ya salio o esta
+        //      saliendo no se reprograma; decir que si es prometerle al dueño
+        //      algo que va a descubrir solo, y tarde.
+        require_once __DIR__ . '/../includes/meta_semana.php';
+        $f  = trim((string)($_POST['fecha'] ?? ''));
+        $ts = $f !== '' ? strtotime($f) : false;
+
+        $q = $pdo->prepare("SELECT estado FROM crecer_contenido WHERE id=? AND marca_id=?");
+        $q->execute([$id, $marca_id]);
+        $est = $q->fetchColumn();
+
+        $err = null;
+        if ($est === false)                       $err = 'No encuentro esa publicación.';
+        elseif ($ts === false)                    $err = 'No entiendo esa fecha. Escoge un día y una hora.';
+        elseif ($ts < time())                     $err = 'Esa fecha ya pasó. Escoge una en el futuro.';
+        elseif ((string)$est === 'publicado')     $err = 'Esta ya salió. Queda en tu historial y no se puede mover.';
+        elseif ((string)$est === 'publicando')    $err = 'Está saliendo ahora mismo. Ya no se puede mover.';
+
+        if ($err === null) {
             $pdo->prepare("UPDATE crecer_contenido SET fecha_programada=?, updated_at=NOW() WHERE id=? AND marca_id=?")
-                ->execute([date('Y-m-d H:i:s', strtotime($f)), $id, $marca_id]);
+                ->execute([date('Y-m-d H:i:s', $ts), $id, $marca_id]);
         }
-        if (!empty($_POST['ajax'])) { header('Content-Type: application/json'); echo json_encode(['ok'=>(bool)strtotime($f)]); exit; }
+        if (!empty($_POST['ajax'])) {
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => $err === null, 'err' => $err,
+                //  La consecuencia, ya redactada por el dominio: la hoja la
+                //  pega y no la vuelve a escribir a su manera.
+                'cuando' => $err === null ? semana_frase_cuando(date('Y-m-d H:i:s', $ts)) : null],
+                JSON_UNESCAPED_UNICODE);
+            exit;
+        }
         header('Location: ' . $_SERVER['REQUEST_URI']); exit;
     }
 
@@ -285,6 +346,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!empty($_POST['foto'])) {
             $nombre = basename($_POST['foto']);
             if (strpos($nombre,'..')===false && is_file($dir_fotos.'/'.$nombre)) $src = $dir_fotos.'/'.$nombre;
+        } elseif (!empty($_POST['mejorar'])) {
+            //  MEJORAR ES ESTO MISMO CON SU FOTO DELANTE. No hace falta otro
+            //  handler: «mejórala» es `arte` con el material del dueño de
+            //  entrada, y asi hereda las cuatro guardas de arriba —paywall,
+            //  cuota del mes, tope por post, tope semanal— en vez de volver a
+            //  escribirlas. Un segundo camino con las mismas reglas escritas
+            //  aparte es un segundo camino con una reglas menos, tarde o
+            //  temprano.
+            //
+            //  Y con foto delante el motor cuenta `realce`, no `arte_post`
+            //  (agentes.php): subirla cuesta 0, transformarla cuesta 1.
+            $src = material_abs_de_pieza($pdo, (int)$marca_id, (int)$id);
+            //  ESTO ES UN REALCE DE SU PROPIA FOTO, y eso cambia que pasa con
+            //  la traza al final: no se suelta.
+            $realce_propio = ($src !== null);
+            if ($src === null) {
+                header('Content-Type: application/json');
+                echo json_encode(['ok'=>false,
+                    'err'=>'Esta publicación no lleva una foto tuya que mejorar.'],
+                    JSON_UNESCAPED_UNICODE); exit;
+            }
         }
         $capr = $pdo->prepare("SELECT caption FROM crecer_contenido WHERE id=? AND marca_id=?");
         $capr->execute([$id, $marca_id]); $copy = (string)$capr->fetchColumn();
@@ -325,9 +407,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     ? implode('+', array_map('strval', $_POST['estilo_arte']))
                                     : ($_POST['estilo_arte'] ?? 'realista')) ?: 'realista',   // combinable
                 'instrucciones'=> trim($_POST['instrucciones'] ?? ''),
+                //  LA UNIDAD LLEVA EL NOMBRE DE LA PIEZA. Sin esto la llave
+                //  idempotente sale de (marca, operacion, '-', 0) y es LA MISMA
+                //  para todas: la segunda pieza reusaba la reserva de la
+                //  primera y salia sin pagar. Con la pieza dentro, dos toques
+                //  seguidos en la MISMA publicacion reusan —que es lo que se
+                //  quiere— y dos publicaciones distintas cuentan dos.
+                'contenido_id' => (int)$id,
             ]);
             $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, arte_intentos=arte_intentos+1, updated_at=NOW() WHERE id=? AND marca_id=?")
                 ->execute([$r['archivo'], $id, $marca_id]);
+            //  UN REALCE NO ES OTRA IMAGEN: ES LA SUYA, MEJOR. La foto de
+            //  entrada era el material aplicado de esta pieza, asi que la traza
+            //  sigue siendo cierta —de ahi salio lo que se ve— y se conserva.
+            //  Soltarla convertiria «tu bizcocho, realzado» en «arte del
+            //  corillo», que es justo lo contrario de lo que paso.
+            //
+            //  Lo demas SI se suelta: arte desde cero no tiene material detras,
+            //  y una foto del selector viejo no es la que la traza nombra, asi
+            //  que conservarla seria señalar a un archivo que ya no se ve.
+            if (empty($realce_propio)) material_soltar($pdo, $marca_id, (int)$id);
             header('Content-Type: application/json');
             echo json_encode([
                 'ok'=>true, 'id'=>$id, 'img'=>$r['archivo'],
@@ -347,55 +446,209 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $g->execute([$gid, $marca_id]); $arch = $g->fetchColumn();
         if ($arch && $id) {
             $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$arch, $id, $marca_id]);
+            //  Reusar arte GENERADO no viene de la Biblioteca del dueño: se
+            //  suelta la referencia. Si algun dia se reusara material suyo con
+            //  evidencia estructurada, ese camino guardaria su id — no este.
+            material_soltar($pdo, $marca_id, (int)$id);
             header('Content-Type: application/json'); echo json_encode(['ok'=>true,'id'=>$id,'img'=>$arch], JSON_UNESCAPED_UNICODE); exit;
         }
         header('Content-Type: application/json'); echo json_encode(['ok'=>false]); exit;
     }
 
     // ── Usar foto propia TAL CUAL (sin IA, sin límite) ──
+    //
+    //  ANTES ESTE HANDLER SE LO GUISABA TODO: subia el archivo a marca_N/fotos,
+    //  lo anotaba en `crecer_graficas` y escribia `grafica_path` a pelo. Tres
+    //  consecuencias, y ninguna buena:
+    //
+    //   · la foto que el dueño subia desde el editor NO aparecia despues en su
+    //     Biblioteca — la habia subido y no estaba;
+    //   · la pieza no podia decir de donde salio, porque no habia recurso al
+    //     que apuntar;
+    //   · y sus guardas eran las suyas: aqui se miraba getimagesize(), en
+    //     video_directo finfo, y en la seleccion de Biblioteca otra cosa. Tres
+    //     puertas a la misma capacidad, tres reglas distintas. La que se olvide
+    //     una es la que alguien encuentra.
+    //
+    //  Ahora las dos mitades estan separadas y son del dominio: registrar la
+    //  subida en `crecer_activos` y aplicarla a la pieza. Registrar no aplica
+    //  —el dueño puede subir y arrepentirse, y la foto se queda suya igual— y
+    //  aplicar valida marca, vida, formato y estado de la pieza en un solo
+    //  sitio.
     if ($accion === 'foto_directa') {
-        $dir_fotos = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/fotos";
-        if (!empty($_FILES['imagen']['tmp_name']) && $_FILES['imagen']['error'] === UPLOAD_ERR_OK && $_FILES['imagen']['size'] <= 12*1024*1024) {
-            $info = @getimagesize($_FILES['imagen']['tmp_name']);
-            $ext = ['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp'][$info['mime'] ?? ''] ?? null;
-            if ($ext) {
-                @mkdir($dir_fotos, 0775, true); $fn = 'foto_'.uniqid().'.'.$ext;
-                if (move_uploaded_file($_FILES['imagen']['tmp_name'], $dir_fotos.'/'.$fn)) {
-                    $url = rtrim(UPLOADS_URL, '/') . "/marca_{$marca_id}/fotos/" . $fn;
-                    $pdo->prepare("INSERT INTO crecer_graficas (marca_id, archivo, copy_text) VALUES (?,?,?)")->execute([$marca_id, $url, '(imagen propia)']);
-                    $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$url, $id, $marca_id]);
-                    header('Content-Type: application/json'); echo json_encode(['ok'=>true,'id'=>$id,'img'=>$url], JSON_UNESCAPED_UNICODE); exit;
-                }
-            }
+        header('Content-Type: application/json');
+
+        //  DOS NOMBRES DE CAMPO, UN SOLO HANDLER. Habia DOS bloques
+        //  `foto_directa` en este archivo: este esperaba $_FILES['imagen'] y el
+        //  otro $_FILES['foto']. Como el primero siempre sale por `exit`, el
+        //  segundo llevaba tiempo muerto — quien mandaba `foto` recibia «no
+        //  llego el archivo» y el bloque que si lo entendia no se ejecutaba
+        //  nunca. Se acepta cualquiera de los dos y el duplicado se retira.
+        $sub = $_FILES['imagen'] ?? ($_FILES['foto'] ?? []);
+        $reg = material_registrar_subida($pdo, (int)$marca_id, $sub, 'Foto del negocio');
+        if (empty($reg['ok'])) {
+            echo json_encode(['ok'=>false, 'err'=>$reg['err'] ?? 'No pude guardar la foto.'],
+                             JSON_UNESCAPED_UNICODE); exit;
         }
-        header('Content-Type: application/json'); echo json_encode(['ok'=>false,'err'=>'No se pudo subir (usa JPG/PNG/WebP, máx 12MB).']); exit;
+        //  `solo_subir` separa las dos decisiones: la hoja de material sube y
+        //  enseña la vista previa ANTES de tocar la publicacion. Sin el, el
+        //  handler aplicaba solo — que es justo lo que no puede hacer.
+        if (!empty($_POST['solo_subir']) || (int)$id <= 0) {
+            echo json_encode(['ok'=>true, 'activo_id'=>(int)$reg['activo_id'],
+                'tipo'=>$reg['tipo'], 'aplicado'=>false,
+                'img'=>rtrim(UPLOADS_URL, '/') . '/' . ltrim((string)$reg['archivo'], '/')],
+                JSON_UNESCAPED_UNICODE); exit;
+        }
+        $ap = material_aplicar($pdo, (int)$marca_id, (int)$id, (int)$reg['activo_id']);
+        if (empty($ap['ok'])) {
+            //  El archivo se queda en su Biblioteca aunque no se pueda aplicar:
+            //  ya es suyo y borrarlo seria castigarle por un formato.
+            echo json_encode(['ok'=>false, 'activo_id'=>(int)$reg['activo_id'],
+                'err'=>$ap['err'] ?? 'No pude ponerla en esta publicación.'],
+                JSON_UNESCAPED_UNICODE); exit;
+        }
+        echo json_encode(['ok'=>true, 'id'=>$id, 'img'=>$ap['archivo'],
+            'activo_id'=>(int)$reg['activo_id'], 'aplicado'=>true], JSON_UNESCAPED_UNICODE); exit;
+
     }
 
     // ── Usar VIDEO propio TAL CUAL (no producimos video; el dueño lo sube) ──
+    //
+    //  Misma historia que foto_directa: subia a marca_N/videos y escribia
+    //  `grafica_path` directo. El video no llegaba a la Biblioteca del dueño y
+    //  la pieza no podia decir de donde salio. Y las guardas eran otras — aqui
+    //  finfo, alli getimagesize —, o sea dos reglas para la misma capacidad.
+    //
+    //  Ahora las dos puertas usan el mismo dominio. La comprobacion de si el
+    //  video CABE en esta pieza tambien se centraliza: la hace
+    //  material_aplicar() mirando el tipo, y si no cabe lo dice — no lo
+    //  convierte nadie.
     if ($accion === 'video_directo') {
         header('Content-Type: application/json');
-        $MAXV = 100 * 1024 * 1024;   // 100 MB (el server puede tener límite menor)
-        $f = $_FILES['video'] ?? null;
-        if (!$f || ($f['error'] ?? 1) !== UPLOAD_ERR_OK || empty($f['tmp_name'])) {
-            $why = ($f && in_array($f['error'] ?? 0, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true))
-                 ? 'El video excede el límite del servidor. Prueba uno más liviano.'
-                 : 'No se recibió el video. Intenta de nuevo.';
-            echo json_encode(['ok'=>false,'err'=>$why]); exit;
+
+        $reg = material_registrar_subida($pdo, (int)$marca_id, $_FILES['video'] ?? [],
+                                         'Video del negocio');
+        if (empty($reg['ok'])) {
+            echo json_encode(['ok'=>false, 'err'=>$reg['err'] ?? 'No pude guardar el video.'],
+                             JSON_UNESCAPED_UNICODE); exit;
         }
-        if ($f['size'] > $MAXV) { echo json_encode(['ok'=>false,'err'=>'El video es muy grande (máx 100 MB).']); exit; }
-        $ext = strtolower(pathinfo((string)$f['name'], PATHINFO_EXTENSION));
-        $mime = '';
-        if (function_exists('finfo_open')) { $fi = finfo_open(FILEINFO_MIME_TYPE); $mime = (string)@finfo_file($fi, $f['tmp_name']); finfo_close($fi); }
-        $ext_ok  = in_array($ext, ['mp4','mov','m4v'], true);
-        $mime_ok = ($mime === '' || in_array($mime, ['video/mp4','video/quicktime','video/x-m4v'], true));
-        if (!$ext_ok || !$mime_ok) { echo json_encode(['ok'=>false,'err'=>'Formato no válido. Sube un video MP4 o MOV.']); exit; }
-        $dir = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/videos";
-        @mkdir($dir, 0775, true);
-        $fn  = 'vid_' . uniqid() . '.' . ($ext === 'mov' ? 'mov' : 'mp4');
-        if (!move_uploaded_file($f['tmp_name'], $dir . '/' . $fn)) { echo json_encode(['ok'=>false,'err'=>'No se pudo guardar el video.']); exit; }
-        $url = rtrim(UPLOADS_URL, '/') . "/marca_{$marca_id}/videos/" . $fn;
-        if ($id) $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$url, $id, $marca_id]);
-        echo json_encode(['ok'=>true,'id'=>$id,'video'=>$url]); exit;
+        if ((string)$reg['tipo'] !== 'video') {
+            echo json_encode(['ok'=>false, 'activo_id'=>(int)$reg['activo_id'],
+                'err'=>'Eso no es un video. Sube un MP4 o un MOV.'],
+                JSON_UNESCAPED_UNICODE); exit;
+        }
+        if (!empty($_POST['solo_subir']) || (int)$id <= 0) {
+            echo json_encode(['ok'=>true, 'activo_id'=>(int)$reg['activo_id'],
+                'tipo'=>'video', 'aplicado'=>false,
+                'video'=>rtrim(UPLOADS_URL, '/') . '/' . ltrim((string)$reg['archivo'], '/')],
+                JSON_UNESCAPED_UNICODE); exit;
+        }
+        $ap = material_aplicar($pdo, (int)$marca_id, (int)$id, (int)$reg['activo_id']);
+        if (empty($ap['ok'])) {
+            echo json_encode(['ok'=>false, 'activo_id'=>(int)$reg['activo_id'],
+                'err'=>$ap['err'] ?? 'No pude ponerlo en esta publicación.'],
+                JSON_UNESCAPED_UNICODE); exit;
+        }
+        echo json_encode(['ok'=>true, 'id'=>$id, 'video'=>$ap['archivo'],
+            'activo_id'=>(int)$reg['activo_id'], 'aplicado'=>true], JSON_UNESCAPED_UNICODE); exit;
+    }
+
+    // ── OTRA IMAGEN, SIN PERDER LA QUE TIENE ──────────────────────────────
+    //
+    //  Tres puertas para un solo recorrido: abrir la intencion, preguntar como
+    //  va, y decidir. Ninguna de las tres pisa `grafica_path` — solo la ultima,
+    //  y solo cuando el dueño dice que si.
+    //
+    //  EL DISPARO VA FUERA DE LA TRANSACCION. cand_abrir() cierra su candado
+    //  antes de volver; el trabajo se lanza despues. Tener una transaccion
+    //  abierta mientras se espera a la red es como se bloquea una base entera.
+    if ($accion === 'otra_imagen') {
+        require_once __DIR__ . '/../includes/candidata.php';
+        header('Content-Type: application/json');
+
+        $intencion = (string)($_POST['intencion'] ?? '');
+        $evitar    = (string)($_POST['evitar'] ?? '');
+        $r = cand_abrir($pdo, (int)$marca_id, (int)$id, $intencion, $evitar);
+        if (empty($r['ok'])) {
+            echo json_encode(['ok'=>false, 'motivo'=>$r['motivo'] ?? '',
+                              'err'=>$r['err'] ?? 'No pude empezar.'], JSON_UNESCAPED_UNICODE); exit;
+        }
+        $gen = $r['gen'];
+        //  SOLO SE DISPARA LO QUE ACABA DE NACER. Si se reuso una intencion
+        //  viva, el trabajo ya esta corriendo: volver a dispararlo seria
+        //  exactamente el doble POST que el arbitraje existe para impedir.
+        if (empty($r['reusada']) && (string)$gen['estado'] === 'queued') {
+            require_once __DIR__ . '/../includes/gen_async.php';
+            gen_disparar((int)$gen['id']);
+        }
+        echo json_encode(['ok'=>true, 'gen'=>(int)$gen['id'],
+                          'estado'=>(string)$gen['estado'],
+                          'reusada'=>!empty($r['reusada'])], JSON_UNESCAPED_UNICODE); exit;
+    }
+
+    //  SOLO CONSULTA. El sondeo no genera, no dispara y no decide: pregunta.
+    //  Un sondeo que produce trabajo multiplica el gasto por pestaña abierta.
+    if ($accion === 'cand_estado') {
+        require_once __DIR__ . '/../includes/candidata.php';
+        header('Content-Type: application/json');
+        $p = cand_pendiente($pdo, (int)$marca_id, (int)$id);
+        if (empty($p['hay'])) { echo json_encode(['ok'=>true, 'hay'=>false]); exit; }
+        $g = $p['gen'];
+        //  NI EL PROMPT NI EL ERROR CRUDO SALEN DE AQUI. El primero es nuestro;
+        //  el segundo es del proveedor y no le dice nada al dueño.
+        echo json_encode([
+            'ok'=>true, 'hay'=>true, 'gen'=>(int)$g['id'],
+            'estado'=>(string)$g['estado'],
+            'lista'=>(string)$g['estado'] === 'completed',
+            'fallo'=>(string)$g['estado'] === 'failed',
+            'nueva'=>(string)($g['archivo'] ?? ''),
+            'actual'=>(string)($p['actual'] ?? ''),
+        ], JSON_UNESCAPED_UNICODE); exit;
+    }
+
+    //  DECIDIR. Aqui y solo aqui cambia la publicacion.
+    if ($accion === 'cand_decidir') {
+        require_once __DIR__ . '/../includes/candidata.php';
+        header('Content-Type: application/json');
+        $gid = (int)($_POST['gen'] ?? 0);
+        $dec = (string)($_POST['decision'] ?? '');
+        $r = cand_decidir($pdo, (int)$marca_id, (int)$id, $gid, $dec);
+        if (empty($r['ok'])) {
+            echo json_encode(['ok'=>false, 'motivo'=>$r['motivo'] ?? '',
+                              'err'=>$r['err'] ?? 'No pude guardar tu decisión.'],
+                             JSON_UNESCAPED_UNICODE); exit;
+        }
+        echo json_encode(['ok'=>true, 'decision'=>(string)$r['decision'],
+                          'ya_estaba'=>!empty($r['ya_estaba']),
+                          'img'=>(string)($r['img'] ?? '')], JSON_UNESCAPED_UNICODE); exit;
+    }
+
+    // ── USAR ALGO QUE YA ES SUYO ──────────────────────────────────────────
+    //
+    //  LA SEGUNDA MITAD DE UNA SUBIDA. `foto_directa` con `solo_subir` deja el
+    //  archivo en su Biblioteca y NO toca la publicacion, para que pueda verlo
+    //  antes de decidir. Esta es la otra mitad: «si, ese, ponlo».
+    //
+    //  Y sirve igual para lo que ya llevaba tiempo guardado. Es la misma
+    //  capacidad que la seleccion de Biblioteca, en JSON y sin salir de la
+    //  pantalla — pero NO son dos reglas: las dos entran por material_aplicar(),
+    //  que es quien decide si la pieza es suya, si ya salio y si el formato cabe.
+    if ($accion === 'usar_activo') {
+        header('Content-Type: application/json');
+
+        $act = (int)($_POST['activo_id'] ?? 0);
+        if ($act <= 0 || (int)$id <= 0) {
+            echo json_encode(['ok'=>false, 'err'=>'No pude identificar el material.'],
+                             JSON_UNESCAPED_UNICODE); exit;
+        }
+        $ap = material_aplicar($pdo, (int)$marca_id, (int)$id, $act);
+        if (empty($ap['ok'])) {
+            echo json_encode(['ok'=>false, 'err'=>$ap['err'] ?? 'No pude ponerlo en esta publicación.'],
+                             JSON_UNESCAPED_UNICODE); exit;
+        }
+        echo json_encode(['ok'=>true, 'id'=>(int)$id, 'img'=>$ap['archivo'],
+            'tipo'=>$ap['tipo'], 'nombre'=>$ap['nombre'] ?? '',
+            'activo_id'=>$act, 'aplicado'=>true], JSON_UNESCAPED_UNICODE); exit;
     }
 
     // ── POST DESDE VIDEO: el dueño sube su video YA LISTO (editado por él) y el
@@ -499,23 +752,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo json_encode(['ok'=>true, 'caption'=>$caption], JSON_UNESCAPED_UNICODE); exit;
     }
 
-    // ── Usar FOTO propia TAL CUAL (paso 2): el dueño manda, la IA no la toca.
-    //    (El "Subir mi foto" clásico la manda al realce; ESTE botón no.) ──
-    if ($accion === 'foto_directa') {
-        header('Content-Type: application/json');
-        $f = $_FILES['foto'] ?? null;
-        if (!$f || ($f['error'] ?? 1) !== UPLOAD_ERR_OK || empty($f['tmp_name'])) { echo json_encode(['ok'=>false,'err'=>'No se recibió la foto.']); exit; }
-        $info = @getimagesize($f['tmp_name']);
-        $ext = ['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp'][$info['mime'] ?? ''] ?? null;
-        if (!$ext || (int)$f['size'] > 12*1024*1024) { echo json_encode(['ok'=>false,'err'=>'Sube una foto JPG/PNG/WebP de hasta 12 MB.']); exit; }
-        $dir = rtrim(UPLOADS_PATH, '/\\') . "/marca_{$marca_id}/fotos";
-        @mkdir($dir, 0775, true);
-        $fn = 'propia_' . uniqid() . '.' . $ext;
-        if (!move_uploaded_file($f['tmp_name'], $dir . '/' . $fn)) { echo json_encode(['ok'=>false,'err'=>'No se pudo guardar la foto.']); exit; }
-        $url = rtrim(UPLOADS_URL, '/') . "/marca_{$marca_id}/fotos/" . $fn;
-        if ($id) $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")->execute([$url, $id, $marca_id]);
-        echo json_encode(['ok'=>true, 'id'=>$id, 'foto'=>$url]); exit;
-    }
 
     // ── POST DESDE FOTO (paso 1): la foto YA LISTA del dueño entra primero y el
     //    corillo escribe el texto MIRÁNDOLA. La foto va TAL CUAL — cero realce,

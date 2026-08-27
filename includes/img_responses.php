@@ -12,6 +12,13 @@
 require_once __DIR__ . '/ia.php';
 
 require_once __DIR__ . '/worker_key.php';
+//  EL DOMINIO DEL MATERIAL, ARRIBA Y A LA VISTA. Estaba incluido dentro
+//  de los handlers, justo antes de cada llamada, y basto que UNO se
+//  quedara sin su require para que la entrega de arte muriera con un
+//  fatal en la ruta que mas se usa. Cargarlo aqui quita la clase entera
+//  de fallo: no depende de que rama se ejecute ni de que otra pagina lo
+//  haya cargado antes.
+require_once __DIR__ . '/material.php';
 // CR-F01b: sin CRECER_WORKER_KEY no hay llave. NADA de literal de respaldo:
 // adoptar en silencio una llave del repo publico era la trampa.
 if (!defined('ARTE_WORKER_KEY')) define('ARTE_WORKER_KEY', worker_key());
@@ -670,6 +677,10 @@ function img_gemini_fallback(PDO $pdo, int $marca_id, int $post_id, string $copy
         // Cuenta el intento SOLO al producir la imagen (no al encolar). Ver aprobar2 'arte'.
         $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, img_estado='ok', img_job=NULL, arte_intentos=arte_intentos+1, updated_at=NOW() WHERE id=? AND marca_id=?")
             ->execute([$url, $post_id, $marca_id]);
+        //  ARTE DESDE CERO: se SUELTA la referencia al material del dueño. Si
+        //  esta pieza usaba una foto suya y ahora la pinta el corillo, dejar el
+        //  id puesto haria que siguiera diciendo que usa una foto que ya no usa.
+        material_soltar($pdo, $marca_id, (int)$post_id);
         //  El respaldo entrego: se cierra LA MISMA unidad que abrio el encolado
         //  original. Una imagen del cliente, una unidad — aunque el primer
         //  proveedor se quedara por el camino.
@@ -965,7 +976,15 @@ function img_resp_completar(PDO $pdo, int $marca_id, int $post_id, bool $dedicad
         //  quedaba en 'reservado' para siempre: el numero del cubo era correcto
         //  pero el estado mentia, y barrerCaducadas() no los toca porque tienen
         //  job. Solo el PRIMERO que guarda cierra (rowCount), como con la pieza.
-        if ($u->rowCount() === 1) CuotaImg::confirmar($pdo, $asiento, 0.17, $rid);
+        if ($u->rowCount() === 1) {
+            CuotaImg::confirmar($pdo, $asiento, 0.17, $rid);
+            //  Y LA PIEZA DEJA DE DECIR QUE LLEVA MATERIAL DEL DUEÑO. Esta es
+            //  la entrega que de verdad usa el arte async: si la pieza tenia
+            //  una foto suya aplicada y encima cae lo generado, la referencia
+            //  que la trazaba pasa a ser mentira. Solo suelta quien gano la
+            //  carrera — el que no escribio nada no tiene nada que soltar.
+            material_soltar($pdo, $marca_id, (int)$post_id);
+        }
         return ['estado' => 'ok', 'img' => $url];
     }
 

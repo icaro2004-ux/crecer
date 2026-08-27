@@ -102,6 +102,30 @@ foreach ($sm['items'] as $i => $it) {
               . '&desde=semana&pos=' . $n
             : '',
         'video'   => $p ? $sm_esVideo($p['grafica_path'] ?? '') : false,
+        //  QUE IMAGEN LLEVA Y DE DONDE SALIO — resuelto por el dominio, no
+        //  adivinado por la vista. La hoja de «Imagen o video» abre diciendo
+        //  la verdad de lo que hay ahora: sin esto abre igual en los tres
+        //  casos y el dueño decide a ciegas.
+        'mat'     => semana_material($pdo, $marca_id, $p),
+        //  ¿SE LE PUEDE OFRECER OTRA IMAGEN, Y HAY ALGUNA ESPERANDO?
+        //  Lo decide el dominio mirando esquema, estado de la pieza, cuota y
+        //  si ya hay una intencion viva. La vista no adivina ninguna de las
+        //  cuatro: un boton que se ofrece y luego dice que no se puede es
+        //  peor que no ofrecerlo.
+        'cand'    => $p ? cand_puede($pdo, $marca_id, $p)
+                        : ['puede'=>false,'motivo'=>'','frase'=>'','pendiente'=>false],
+        'cand_p'  => $pid > 0 ? cand_pendiente($pdo, $marca_id, $pid) : ['hay'=>false],
+        //  Y EL ULTIMO INTENTO QUE SE CAYO, si no lo ha visto. No bloquea nada
+        //  —pedir otra sigue estando disponible— pero tiene derecho a saber
+        //  que aquello no salio en vez de encontrarse el boton otra vez y ya.
+        'cand_f'  => $pid > 0 ? cand_ultimo_fallo($pdo, $marca_id, $pid) : null,
+        //  La puerta a SU Biblioteca en modo escoger. Se construye aqui, con
+        //  la marca y la pieza del servidor: la vuelta no viaja nunca en la
+        //  peticion.
+        'bib'     => $pid > 0
+            ? $BASE . '/biblioteca.php?marca=' . $marca_id . '&pieza=' . $pid
+              . MetaRetorno::marcador($n)
+            : '',
     ];
 }
 ?>
@@ -118,6 +142,55 @@ foreach ($sm['items'] as $i => $it) {
     max-width:560px;margin:0 auto;padding-bottom:var(--ah-zona,20px);
   }
   .sm [hidden]{display:none !important}
+
+  /* — LA VISTA PREVIA DE LA HOJA —
+     Se ve ANTES de que toque la publicación. Una foto que el dueño no ha
+     visto puesta es una foto que va a querer quitar, y quitarla cuesta más
+     que mirarla. Alto acotado: en un teléfono de 360 la primaria tiene que
+     seguir cabiendo sin desplazar. */
+  .sm-prev{position:relative;margin:0 0 14px;border-radius:var(--tm-r);overflow:hidden;
+    background:var(--crema,#FAF7F4);border:1px solid var(--linea,#EDE7E1)}
+  .sm-prev img,.sm-prev video{display:block;width:100%;max-height:38vh;object-fit:contain;
+    background:#231F20}
+  .sm-prev.cargando::after{content:'';position:absolute;inset:0;background:rgba(255,255,255,.55)}
+  .sm-prev-pie{display:flex;align-items:center;gap:8px;padding:10px 12px;font-size:14px;
+    line-height:1.4;color:var(--muted)}
+  .sm-prev-pie .ic{width:18px;height:18px;flex:none}
+  .sm-prev-pie b{color:var(--tinta);font-weight:600}
+
+  /* — LA COMPARACIÓN · las dos, una al lado de la otra —
+     En 360 van apiladas y la que TIENE va primero: es la referencia. En
+     escritorio caben las dos a lo ancho, que es donde comparar se hace
+     de un vistazo. El alto se fija para que al cargar la segunda no salte
+     el layout y el dedo acabe pulsando lo que no era. */
+  .sm-comp{display:grid;grid-template-columns:1fr;gap:12px;margin:0 0 14px}
+  .sm-comp figure{margin:0;border-radius:var(--tm-r);overflow:hidden;
+    border:1px solid var(--linea,#EDE7E1);background:var(--crema,#FAF7F4)}
+  .sm-comp figcaption{padding:8px 12px;font-size:14px;font-weight:600;color:var(--tinta)}
+  /*  EL ALTO CABE, Y ESO NO ES ESTETICA. A 34vh cada una, las dos apiladas
+      empujaban «Usar la nueva» fuera de la pantalla en un telefono de 360:
+      la decision principal quedaba debajo del pliegue y habia que buscarla.
+      Comparar es mirar las dos Y decidir, y las tres cosas tienen que caber
+      a la vez.  */
+  .sm-comp .mk{display:block;width:100%;height:21vh;max-height:168px;object-fit:contain;
+    background:#231F20}
+  .sm-comp .nueva{outline:2px solid var(--tm-rosa-bt);outline-offset:-2px}
+  @media (min-width:760px){
+    .sm-comp{grid-template-columns:1fr 1fr}
+    /*  En escritorio caben al lado, asi que pueden ser grandes: la primaria
+        sigue estando debajo y a la vista.  */
+    .sm-comp .mk{height:34vh;max-height:320px}
+  }
+  /* — LAS DOS OPCIONES DE CAMBIO — */
+  .sm-opc{display:block;width:100%;text-align:left;padding:14px;margin:0 0 10px;
+    border:1px solid var(--linea,#EDE7E1);border-radius:var(--tm-r);background:#fff;
+    min-height:44px;cursor:pointer}
+  .sm-opc b{display:block;font-size:16px;color:var(--tinta);margin-bottom:4px}
+  .sm-opc span{display:block;font-size:14px;line-height:1.5;color:var(--muted)}
+  .sm-opc:hover{border-color:var(--tm-rosa-bt)}
+  .sm-opc:focus-visible{outline:3px solid var(--tinta);outline-offset:2px}
+  .sm-evitar{width:100%;min-height:44px;padding:12px;font-size:16px;
+    border:1px solid var(--linea,#EDE7E1);border-radius:var(--tm-r-bt);margin:4px 0 0}
 
   /* — LA CABECERA · dónde estoy y cuánto me queda —
      El número va SIEMPRE: «2 de 3» es lo que convierte una cola infinita en
@@ -401,6 +474,23 @@ foreach ($sm['items'] as $i => $it) {
              data-sust="<?= $h($x['sust']) ?>"
              data-cuota="<?= (int)$x['cuota']['unidades'] ?>"
              data-cuota-tx="<?= $h(semana_frase_cuota((int)$x['cuota']['unidades'])) ?>"
+             data-cuando-tx="<?= $h(semana_frase_cuando($p['fecha_programada'] ?? null)) ?>"
+             data-bib="<?= $h($x['bib']) ?>"
+             data-mat-frase="<?= $h($x['mat']['frase']) ?>"
+             data-mat-origen="<?= $h($x['mat']['origen']) ?>"
+             data-mat-hay="<?= $x['mat']['hay'] ? '1' : '' ?>"
+             data-mat-video="<?= $x['mat']['admite_video'] ? '1' : '' ?>"
+             data-mat-edit="<?= $x['mat']['editable'] ? '1' : '' ?>"
+             data-mat-mejorable="<?= $x['mat']['mejorable'] ? '1' : '' ?>"
+             data-mat-realzada="<?= $x['mat']['realzada'] ? '1' : '' ?>"
+             data-cand-puede="<?= $x['cand']['puede'] ? '1' : '' ?>"
+             data-cand-frase="<?= $h($x['cand']['frase']) ?>"
+             data-cand-motivo="<?= $h($x['cand']['motivo']) ?>"
+             data-cand-gen="<?= (int)($x['cand_p']['gen']['id'] ?? 0) ?>"
+             data-cand-estado="<?= $h((string)($x['cand_p']['gen']['estado'] ?? '')) ?>"
+             data-cand-nueva="<?= $h((string)($x['cand_p']['gen']['archivo'] ?? '')) ?>"
+             data-cand-fallo="<?= (int)($x['cand_f']['id'] ?? 0) ?>"
+             data-arte="<?= $h($arte) ?>"
              data-tactica="<?= (int)$t['id'] ?>">
 
     <?php if ($x['tarea']): /* ══ LA QUE LE TOCA A ÉL ═══════════════════════
@@ -526,7 +616,18 @@ foreach ($sm['items'] as $i => $it) {
         <?php if ($a['modo'] === 'aprobar'): ?>
           <button type="button" class="sm-bt pri" data-aprobar><?= ico('check') ?>Aprobar</button>
         <?php elseif ($a['modo'] === 'ir'): ?>
-          <a class="sm-bt <?= $h($a['tono']) ?>" href="<?= $h($x['puerta']) ?>">
+          <?php /*  «SUBIR TU FOTO» ABRE LA HOJA, NO OTRA PANTALLA. Es el momento
+                    de material mas frecuente que hay —la pieza esta esperandola— y
+                    hasta ahora sacaba al dueño de la semana para volver a traerlo.
+                    La hoja hace las tres cosas ahi mismo: la Biblioteca, la camara
+                    y el arte.
+
+                    Sigue siendo un <a> con su href de verdad: sin JavaScript lleva
+                    a la pantalla de la pieza, que es donde siempre llevo. El JS
+                    solo se pone delante. Un enlace que solo funciona con JS es un
+                    enlace que no funciona en el telefono de la reposteria.  */ ?>
+          <a class="sm-bt <?= $h($a['tono']) ?>" href="<?= $h($x['puerta']) ?>"
+             <?= $x['clave'] === 'falta_material' && $x['mat']['editable'] ? 'data-material' : '' ?>>
             <?= ico($x['clave'] === 'falta_material' ? 'camera' : 'image') ?><?= $h($a['etiqueta']) ?></a>
         <?php endif; ?>
 
@@ -757,8 +858,20 @@ foreach ($sm['items'] as $i => $it) {
     var f = hojaC.querySelector('button, a, textarea, input');
     if (f) f.focus();
   }
+  //  LA VISTA PREVIA LOCAL SE SUELTA. `URL.createObjectURL` reserva el
+  //  archivo en memoria hasta que se le dice que ya no; una repostera que
+  //  prueba seis fotos seguidas en un telefono de gama baja se las lleva
+  //  todas puestas. Se suelta al cerrar y al reemplazar, que son los dos
+  //  unicos momentos en que deja de verse.
+  var urlLocal = null;
+  function soltarLocal() {
+    if (!urlLocal) return;
+    try { URL.revokeObjectURL(urlLocal); } catch (e) {}
+    urlLocal = null;
+  }
   function cerrar() {
     velo.classList.remove('on'); hojaC.innerHTML = '';
+    soltarLocal();
     if (focoPrevio && focoPrevio.isConnected) focoPrevio.focus();
   }
   $('#smCerrar').addEventListener('click', cerrar);
@@ -778,7 +891,9 @@ foreach ($sm['items'] as $i => $it) {
     clock: <?= json_encode(ico('clock')) ?>,
     refr:  <?= json_encode(ico('refresh')) ?>,
     chev:  <?= json_encode(ico('chev-der')) ?>,
-    img24: <?= json_encode(ico('image')) ?>
+    img24: <?= json_encode(ico('image')) ?>,
+    up:    <?= json_encode(ico('upload')) ?>,
+    spark: <?= json_encode(ico('sparkles')) ?>
   };
   function fila(ic, tit, sub, attr) {
     return '<button type="button" class="sm-fila" ' + attr + '>' +
@@ -795,6 +910,16 @@ foreach ($sm['items'] as $i => $it) {
 
   $$('[data-ajustar]').forEach(function (b) {
     b.addEventListener('click', function () { menuAjustar(b.closest('.sm-p')); });
+  });
+
+  //  La primaria de «falta tu foto» va directa a la hoja de material: el paso
+  //  intermedio de «¿qué quieres ajustar?» no aporta nada cuando lo que falta
+  //  ya se sabe.
+  $$('[data-material]').forEach(function (b) {
+    b.addEventListener('click', function (e) {
+      e.preventDefault();
+      menuMaterial(b.closest('.sm-p'));
+    });
   });
 
   function menuAjustar(el) {
@@ -828,10 +953,564 @@ foreach ($sm['items'] as $i => $it) {
         var a = f.dataset.a;
         if (a === 'texto')      return editarTexto(el);
         if (a === 'fecha')      return editarFecha(el);
-        if (a === 'arte')       { location.href = el.dataset.puerta; return; }
+        if (a === 'arte')       return menuMaterial(el);
         if (a === 'sust')       { location.href = el.dataset.sust; return; }
       });
     });
+  }
+
+  /*  ── AJUSTE · IMAGEN O VIDEO ─────────────────────────────────────────
+      LO QUE ESTA HOJA ARREGLA. «Imagen o video» te sacaba de la semana y te
+      dejaba en la pantalla de la pieza, que es otra pantalla con otras reglas
+      y otro camino de vuelta. La decision es pequeña —cambiar la foto— y no
+      merece perder el sitio.
+
+      Y ABRE DICIENDO QUE HAY. La frase la redacta semana_material() en el
+      servidor: si es una foto suya dice cual, si la pinto el corillo lo dice,
+      y si no hay nada no finge que si. Sin eso, las tres opciones se ofrecen
+      iguales en los tres casos.
+
+      LO QUE NO CABE, NO SE OFRECE. Un reel no admite una foto y un post no
+      admite un video: no lo convierte nadie. El servidor ya dijo que admite
+      esta pieza, asi que la hoja no ofrece un viaje que va a acabar en un
+      rechazo.  */
+  function menuMaterial(el) {
+    var d = el.dataset;
+    if (!d.matEdit) {
+      abrir('Imagen o video',
+        '<p class="completo">Esta publicación ya salió. Su imagen se queda como está.</p>' +
+        '<div class="pie2"><button type="button" class="sm-bt sec" id="smMk">Entendido</button></div>');
+      $('#smMk').addEventListener('click', cerrar);
+      return;
+    }
+
+    var video = !!d.matVideo;
+    var html  = '';
+
+    //  Lo que hay ahora, primero: es el contexto de la decision.
+    if (d.matFrase) {
+      html += '<p class="sm-nota" style="margin-bottom:14px">' + IC.img24 +
+              '<span>' + esc(d.matFrase) + '</span></p>';
+    }
+
+    html += fila(IC.image, video ? 'Usar una foto o un video tuyo' : 'Usar una foto tuya',
+                 'De las que ya tienes guardadas', 'data-m="bib"');
+    html += fila(IC.up,    video ? 'Subir una foto o un video' : 'Subir una foto',
+                 'Desde este teléfono', 'data-m="subir"');
+    //  MEJORAR VA ANTES QUE PINTAR DE NUEVO, y solo cuando hay una foto suya
+    //  que mejorar. Lo real siempre gana: si el dueño ya puso su bizcocho, lo
+    //  primero que se le ofrece es sacarle partido a ESE, no sustituirlo.
+    if (d.matMejorable) {
+      html += fila(IC.spark, d.matRealzada ? 'Volver a realzar tu foto' : 'Mejorar tu foto',
+                   'El corillo la realza · gasta 1 imagen del mes', 'data-m="mejorar"');
+    }
+    html += fila(IC.spark, d.matHay ? 'Que el corillo la haga de nuevo'
+                                    : 'Que el corillo la haga',
+                 'Arte nuevo para esta publicación', 'data-m="arte"');
+
+    //  ── OTRA IMAGEN, SIN PERDER LA QUE TIENE ───────────────────────────
+    //  La fila se ofrece solo cuando el servidor dijo que se puede. Cuando
+    //  no, se dice POR QUE en vez de esconderla en silencio: «este mes ya
+    //  usaste tus imágenes» es una respuesta; una fila que desaparece, no.
+    //  UN INTENTO QUE SE CAYO SE CUENTA ANTES QUE NADA: es lo que el dueño
+    //  no sabe. Y no bloquea pedir otra — la fila de abajo sigue estando.
+    if (d.candFallo) {
+      html += fila(IC.refr, 'El intento anterior no salió',
+                   'Mira qué pasó y qué puedes hacer', 'data-m="fallo"');
+    }
+    if (d.candGen && d.candEstado) {
+      html += fila(IC.refr, d.candEstado === 'completed'
+                     ? 'Ver la otra opción que te preparé'
+                     : 'Estoy preparando otra opción',
+                   d.candEstado === 'completed'
+                     ? 'Compárala con la que tienes'
+                     : 'Te aviso en cuanto esté', 'data-m="cand"');
+    } else if (d.candPuede) {
+      html += fila(IC.refr, 'Generar otra imagen',
+                   'Otra versión o una idea distinta · gasta 1 imagen del mes',
+                   'data-m="otra"');
+    } else if (d.candMotivo === 'cuota') {
+      //  Se ofrece igual, pero lleva a la hoja que explica y da salidas. Una
+      //  frase suelta en gris deja al dueño mirando una pared.
+      html += fila(IC.refr, 'Generar otra imagen',
+                   esc(d.candFrase), 'data-m="sincuota"');
+    } else if (d.candFrase) {
+      html += '<p class="sm-nota" style="margin-top:14px">' + IC.img24 +
+              '<span>' + esc(d.candFrase) + '</span></p>';
+    }
+
+    //  LA COMPATIBILIDAD, DICHA. Si la pieza solo admite imagen se avisa aqui
+    //  y no despues de que suba un video de 80 MB por datos moviles.
+    if (!video) {
+      html += '<p class="sm-nota" style="margin-top:14px">' + IC.image +
+              '<span>Esta publicación necesita una imagen.</span></p>';
+    }
+
+    abrir('Imagen o video', html);
+    $$('.sm-fila', hojaC).forEach(function (f) {
+      f.addEventListener('click', function () {
+        var m = f.dataset.m;
+        if (m === 'bib')   { if (d.bib) location.href = d.bib; return; }
+        if (m === 'arte')  { if (d.puerta) location.href = d.puerta; return; }
+        if (m === 'subir')   return subirMaterial(el);
+        if (m === 'mejorar') return mejorarFoto(el);
+        if (m === 'otra')    return menuOtraImagen(el);
+        if (m === 'cand')    return verCandidata(el);
+        if (m === 'sincuota') return sinCuota(el, d.candFrase);
+        if (m === 'fallo')   return fallo(el, 'No me salió esta vez. Tu imagen sigue como estaba.');
+      });
+    });
+  }
+
+  /*  ── SUBIR MATERIAL ──────────────────────────────────────────────────
+      DOS DECISIONES, NO UNA. Subir un archivo y ponerlo en la publicación
+      parecen lo mismo y no lo son: si se hacen de un tiro, un formato que no
+      cabe se lleva por delante el archivo —«no pude ponerla» y el dueño se
+      queda sin lo que acaba de subir por datos móviles—. Aquí la subida
+      termina en su Biblioteca SIEMPRE (`solo_subir`), y ponerla en la
+      publicación es la decisión de después, mirando la foto.
+
+      LA VISTA PREVIA ES LA LOCAL PRIMERO. `URL.createObjectURL` la enseña al
+      instante, sin esperar a que suba: en una repostería con una barra de
+      señal, esperar 20 segundos para ver si escogió la foto correcta es
+      exactamente donde la gente abandona.  */
+  function subirMaterial(el) {
+    var d = el.dataset;
+    var acepta = d.matVideo ? 'image/jpeg,image/png,image/webp,video/mp4,video/quicktime'
+                            : 'image/jpeg,image/png,image/webp';
+    var inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = acepta; inp.style.display = 'none';
+    document.body.appendChild(inp);
+    inp.addEventListener('change', function () {
+      var f = inp.files && inp.files[0];
+      document.body.removeChild(inp);
+      if (f) previaYSubir(el, f);
+    });
+    inp.click();
+  }
+
+  function previaYSubir(el, f) {
+    var esVideo = /^video\//.test(f.type);
+    //  Si ya habia una previa puesta -escogio, se lo penso, escogio otra-
+    //  aquella se suelta antes de reservar esta.
+    soltarLocal();
+    var url = URL.createObjectURL(f);
+    urlLocal = url;
+    var medio = esVideo
+      ? '<video src="' + url + '" muted playsinline controls preload="metadata"></video>'
+      : '<img src="' + url + '" alt="">';
+
+    abrir('Tu ' + (esVideo ? 'video' : 'foto'),
+      '<div class="sm-prev cargando" id="smUpP">' + medio +
+      '<p class="sm-prev-pie" id="smUpQ">' + IC.up + '<span>Guardándola en tu Biblioteca…</span></p></div>' +
+      '<div class="sm-err" id="smUpE" role="alert">' + <?= json_encode(ico('bolt')) ?> + '<p></p></div>' +
+      '<div class="pie2" id="smUpB"></div>');
+
+    var fd = new FormData();
+    fd.append('ajax', '1'); fd.append('csrf', CSRF);
+    fd.append('accion', esVideo ? 'video_directo' : 'foto_directa');
+    fd.append('id', el.dataset.id);
+    //  LA SUBIDA NO TOCA LA PUBLICACION. Esta es la mitad que siempre acaba
+    //  bien: pase lo que pase después, el archivo ya es suyo.
+    fd.append('solo_subir', '1');
+    fd.append(esVideo ? 'video' : 'imagen', f);
+
+    fetch(APROBAR, { method: 'POST', body: fd, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var cont = $('#smUpP'); if (cont) cont.classList.remove('cargando');
+        if (!j || !j.ok) {
+          var q = $('#smUpQ'); if (q) q.parentNode.removeChild(q);
+          hojaErr('#smUpE', (j && j.err) ? j.err : 'No pude guardar el archivo.');
+          pieUp('<button type="button" class="sm-bt sec" id="smUpC">Cerrar</button>');
+          return;
+        }
+        //  YA ES SUYO, y se dice: eso es lo que acaba de pasar de verdad.
+        var q = $('#smUpQ');
+        if (q) q.innerHTML = IC.up + '<span><b>Ya está en tu Biblioteca.</b></span>';
+
+        //  ¿CABE EN ESTA PUBLICACION? El servidor dijo qué admite la pieza y
+        //  qué acaba de subir. Si no encaja, la primaria no se ofrece: mejor
+        //  no ofrecer que ofrecer y rechazar.
+        var tipo = String(j.tipo || (esVideo ? 'video' : 'imagen'));
+        var cabe = tipo === 'video' ? !!el.dataset.matVideo : true;
+        if (cabe) {
+          pieUp('<button type="button" class="sm-bt pri" id="smUpU">' +
+                  (tipo === 'video' ? 'Usar este video aquí' : 'Usar esta foto aquí') + '</button>' +
+                '<div class="sm-dos"><button type="button" class="sm-bt sec" id="smUpC">' +
+                  'Dejarla solo en mi Biblioteca</button></div>');
+          $('#smUpU').addEventListener('click', function () {
+            var b = $('#smUpU'); b.disabled = true; b.textContent = 'Poniéndola…';
+            guardar(el, 'usar_activo', { activo_id: j.activo_id }, '#smUpE',
+                    'No pude ponerla en esta publicación.', function (r) {
+              pintarMedia(el, r.img, tipo === 'video');
+              el.dataset.matHay = '1';
+              el.dataset.matOrigen = 'biblioteca';
+              el.dataset.matFrase = tipo === 'video' ? 'Ahora lleva tu video.' : 'Ahora lleva tu foto.';
+              cerrar();
+            });
+          });
+        } else {
+          //  Y SE DICE POR QUE, no «formato no válido». El video se queda
+          //  guardado: sirve para otra publicación que sí lo admita.
+          hojaErr('#smUpE', 'Esta publicación necesita una imagen. Tu video se quedó guardado en la Biblioteca.');
+          pieUp('<button type="button" class="sm-bt sec" id="smUpC">Entendido</button>');
+        }
+      })
+      .catch(function () {
+        var cont = $('#smUpP'); if (cont) cont.classList.remove('cargando');
+        hojaErr('#smUpE', 'Se cayó la conexión. No se guardó nada.');
+        pieUp('<button type="button" class="sm-bt sec" id="smUpC">Cerrar</button>');
+      });
+
+    function pieUp(html) {
+      var b = $('#smUpB'); if (!b) return;
+      b.innerHTML = html;
+      var c = $('#smUpC'); if (c) c.addEventListener('click', cerrar);
+    }
+  }
+
+  /*  ── MEJORAR SU FOTO ─────────────────────────────────────────────────
+      UNA UNIDAD POR UNA INTENCION, Y SE DICE ANTES. Esto sí gasta: el motor
+      cuenta `realce` porque hay una foto real de entrada (subirla cuesta 0,
+      transformarla cuesta 1). Así que el precio se dice ANTES de tocar nada,
+      no después en un aviso de error.
+
+      Y NO SE PUEDE GASTAR DOS. El botón se desarma al primer toque, y por
+      debajo la reserva lleva llave idempotente con la pieza dentro: dos
+      peticiones por la misma publicación reusan el mismo asiento en vez de
+      abrir dos. La guarda de la pantalla evita el susto; la del libro evita
+      el cobro.  */
+  function mejorarFoto(el) {
+    abrir('Mejorar tu foto',
+      '<p class="completo">El corillo toma tu foto y la deja lista para publicar: ' +
+      'luz, encuadre y limpieza. La original se queda en tu Biblioteca.</p>' +
+      '<p class="sm-nota" style="margin-top:12px">' + IC.img24 +
+      '<span>Gasta 1 de las imágenes de tu mes.</span></p>' +
+      '<div class="sm-err" id="smMjE" role="alert">' + <?= json_encode(ico('bolt')) ?> + '<p></p></div>' +
+      '<div class="pie2"><button type="button" class="sm-bt pri" id="smMjG">Mejorarla</button>' +
+      '<div class="sm-dos"><button type="button" class="sm-bt sec" id="smMjC">Dejarla como está</button></div></div>');
+    $('#smMjC').addEventListener('click', cerrar);
+    $('#smMjG').addEventListener('click', function () {
+      var b = $('#smMjG');
+      if (b.disabled) return;
+      b.disabled = true; b.textContent = 'El corillo está en eso…';
+
+      var fd = new FormData();
+      fd.append('ajax', '1'); fd.append('csrf', CSRF);
+      fd.append('accion', 'arte'); fd.append('id', el.dataset.id);
+      fd.append('mejorar', '1');
+      fetch(APROBAR, { method: 'POST', body: fd, credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (j && j.ok && j.img) {
+            pintarMedia(el, j.img, false);
+            //  SIGUE SIENDO SU FOTO, TRABAJADA. El servidor CONSERVA la traza
+            //  en un realce —de esa foto salio lo que se ve— asi que la tarjeta
+            //  dice lo mismo que la base. Decir «arte del corillo» aqui seria
+            //  borrarle de la pantalla que la foto era suya.
+            el.dataset.matHay = '1';
+            el.dataset.matFrase = 'Ahora lleva tu foto realzada.';
+            cerrar();
+            return;
+          }
+          b.disabled = false; b.textContent = 'Mejorarla';
+          hojaErr('#smMjE', mensajeArte(j));
+        })
+        .catch(function () {
+          b.disabled = false; b.textContent = 'Mejorarla';
+          //  NO SE PUEDE PROMETER QUE NO SE GASTO. Un realce tarda, y si lo que
+          //  se cayo fue la respuesta -no la peticion- la imagen puede haberse
+          //  hecho igual. Decir «no se gastó nada» seria afirmar algo que desde
+          //  aqui no se sabe. Se dice lo que SI es cierto: que mire.
+          hojaErr('#smMjE', 'Se cortó la conexión. Si alcanzó a hacerse, la verás al recargar.');
+        });
+    });
+  }
+
+  /*  LOS «err» DEL HANDLER, EN CRISTIANO. `paywall`, `post_limite` y `limite`
+      son claves internas: enseñárselas al dueño es enseñarle nuestro código.
+      Y cuando el servidor ya redactó el aviso de cuota, se usa el suyo — dos
+      redacciones del mismo límite acaban diciendo cifras distintas.  */
+  function mensajeArte(j) {
+    if (!j) return 'No pude mejorarla. No se gastó nada.';
+    if (j.limite && j.err) return j.err;
+    var e = String(j.err || '');
+    if (e === 'paywall')     return 'Esto va con el plan completo.';
+    if (e === 'post_limite') return 'Ya probaste esta publicación varias veces. Deja que descanse.';
+    if (e === 'limite')      return 'Llegaste al máximo de imágenes de la semana' +
+                                    (j.reset ? '. Vuelve el ' + j.reset + '.' : '.');
+    return e || 'No pude mejorarla. No se gastó nada.';
+  }
+
+  /*  ── OTRA IMAGEN · ¿QUÉ QUIERES CAMBIAR? ─────────────────────────────
+      DOS OPCIONES, NO UN PANEL DE AJUSTES. «Otra versión» y «otra idea» no
+      son la misma cosa con más o menos intensidad: son dos encargos. Y cada
+      una dice su CONSECUENCIA, que es lo que el dueño necesita para decidir —
+      no cómo funciona por dentro.
+
+      El precio se dice ANTES. Generar consume una imagen del mes aunque
+      después se quede con la que tenía, y eso no se descubre en un aviso de
+      error: se dice aquí, antes de pulsar.  */
+  function menuOtraImagen(el) {
+    abrir('¿Qué quieres cambiar?',
+      '<button type="button" class="sm-opc" data-i="misma_idea">' +
+        '<b>Otra versión de esta idea</b>' +
+        '<span>Mantendré el concepto, pero cambiaré composición, detalles y estilo.</span>' +
+      '</button>' +
+      '<button type="button" class="sm-opc" data-i="idea_diferente">' +
+        '<b>Una idea visual diferente</b>' +
+        '<span>Buscaré otro concepto para comunicar el mismo mensaje.</span>' +
+      '</button>' +
+      '<label style="display:block;margin-top:14px;font-size:14px;color:var(--muted)">' +
+        'Si quieres, dime algo que prefieras evitar' +
+        '<input type="text" class="sm-evitar" id="smEv" maxlength="200" ' +
+          'placeholder="Ej. sin personas, sin café, sin texto dentro de la imagen">' +
+      '</label>' +
+      '<p class="sm-nota" style="margin-top:14px">' + IC.img24 +
+        '<span>Generar otra imagen usa 1 imagen de tu cuota, aunque después te quedes con la que tienes.</span></p>' +
+      '<div class="sm-err" id="smOtE" role="alert">' + <?= json_encode(ico('bolt')) ?> + '<p></p></div>' +
+      '<div class="pie2"><div class="sm-dos">' +
+        '<button type="button" class="sm-bt sec" id="smOtC">Ahora no</button></div></div>');
+    $('#smOtC').addEventListener('click', cerrar);
+    $$('.sm-opc', hojaC).forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (b.disabled) return;
+        $$('.sm-opc', hojaC).forEach(function (o) { o.disabled = true; });
+        b.querySelector('b').textContent = 'Empezando…';
+        pedirOtra(el, b.dataset.i, ($('#smEv') || {}).value || '');
+      });
+    });
+  }
+
+  /*  ABRIR LA INTENCIÓN. El servidor arbitra: si ya había una viva devuelve
+      LA MISMA y no dispara nada. Por eso aquí no hay que protegerse del doble
+      clic con un candado de pantalla — el candado de verdad está en la base.  */
+  function pedirOtra(el, intencion, evitar) {
+    var fd = new FormData();
+    fd.append('ajax', '1'); fd.append('csrf', CSRF);
+    fd.append('accion', 'otra_imagen'); fd.append('id', el.dataset.id);
+    fd.append('intencion', intencion); fd.append('evitar', evitar);
+    fetch(APROBAR, { method: 'POST', body: fd, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j && j.ok) {
+          el.dataset.candGen = String(j.gen);
+          el.dataset.candEstado = String(j.estado || 'queued');
+          preparando(el);
+          return;
+        }
+        hojaErr('#smOtE', (j && j.err) ? j.err : 'No pude empezar.');
+        $$('.sm-opc', hojaC).forEach(function (o) { o.disabled = false; });
+      })
+      .catch(function () {
+        //  No se promete que no se gastó: si lo que se cayó fue la respuesta,
+        //  la intención puede haberse abierto igual. Se dice lo que sí es
+        //  cierto — que vuelva a mirar.
+        hojaErr('#smOtE', 'Se cortó la conexión. Vuelve a abrir esta pantalla para ver si empezó.');
+        $$('.sm-opc', hojaC).forEach(function (o) { o.disabled = false; });
+      });
+  }
+
+  /*  PREPARANDO. La imagen que tiene SIGUE VISIBLE detrás: no se le quita
+      nada mientras se cocina lo otro. Y se puede salir — el trabajo no vive
+      en esta pantalla, vive en la base.  */
+  var candTimer = null;
+  function preparando(el) {
+    abrir('Estoy preparando otra opción',
+      (el.dataset.arte
+        ? '<div class="sm-prev"><img src="' + esc(el.dataset.arte) + '" alt="">' +
+          '<p class="sm-prev-pie">' + IC.image + '<span>Esta es la que tienes ahora. No se toca.</span></p></div>'
+        : '') +
+      '<p class="completo">Puedes salir de aquí. Cuando esté, te la enseño al volver.</p>' +
+      '<div class="sm-err" id="smPrE" role="alert">' + <?= json_encode(ico('bolt')) ?> + '<p></p></div>' +
+      '<div class="pie2"><div class="sm-dos">' +
+        '<button type="button" class="sm-bt sec" id="smPrC">Seguir con lo mío</button></div></div>');
+    $('#smPrC').addEventListener('click', function () { pararSondeo(); cerrar(); });
+    sondear(el, 0);
+  }
+  function pararSondeo() { if (candTimer) { clearTimeout(candTimer); candTimer = null; } }
+
+  /*  EL SONDEO SOLO PREGUNTA. No genera, no dispara y no decide. Un sondeo que
+      produce trabajo multiplica el gasto por pestaña abierta.
+
+      Y NO GIRA PARA SIEMPRE: a los ~2 minutos deja de preguntar y lo dice. Un
+      spinner eterno es una pantalla que miente sobre lo que está pasando.  */
+  function sondear(el, intento) {
+    pararSondeo();
+    if (intento > 40) {
+      hojaErr('#smPrE', 'Está tardando más de lo normal. Vuelve en un rato: no se pierde.');
+      return;
+    }
+    var fd = new FormData();
+    fd.append('ajax', '1'); fd.append('csrf', CSRF);
+    fd.append('accion', 'cand_estado'); fd.append('id', el.dataset.id);
+    fetch(APROBAR, { method: 'POST', body: fd, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.ok || !j.hay) { cerrar(); return; }
+        el.dataset.candGen = String(j.gen);
+        el.dataset.candEstado = String(j.estado);
+        el.dataset.candNueva = String(j.nueva || '');
+        if (j.fallo) {
+          //  UN FALLO NO PUEDE DEJARLE EN UN CALLEJON. Se dice lo que pasó
+          //  —sin enseñarle el mensaje crudo del proveedor, que no le dice
+          //  nada— y se le dan las dos salidas que sí tiene: volver a
+          //  intentarlo, o quedarse con la suya, que sigue donde estaba.
+          fallo(el, 'No me salió esta vez. Tu imagen sigue como estaba.');
+          return;
+        }
+        if (j.lista) { comparar(el, j.actual, j.nueva, j.gen); return; }
+        candTimer = setTimeout(function () { sondear(el, intento + 1); }, 3000);
+      })
+      .catch(function () {
+        candTimer = setTimeout(function () { sondear(el, intento + 1); }, 5000);
+      });
+  }
+
+  /*  LA COMPARACIÓN. Las dos, y la que TIENE va primero: es la referencia
+      contra la que se juzga la otra. La primaria es «usar la nueva» porque es
+      lo que se vino a hacer, pero quedarse con la suya está al lado y cuesta
+      un toque igual.  */
+  function comparar(el, actual, nueva, gen) {
+    pararSondeo();
+    abrir('¿Cuál te gusta más?',
+      '<div class="sm-comp">' +
+        (actual ? '<figure><img class="mk" src="' + esc(actual) + '" alt="">' +
+                  '<figcaption>La que tienes</figcaption></figure>' : '') +
+        '<figure><img class="mk nueva" src="' + esc(nueva) + '" alt="">' +
+        '<figcaption>La nueva opción</figcaption></figure>' +
+      '</div>' +
+      '<div class="sm-err" id="smCmE" role="alert">' + <?= json_encode(ico('bolt')) ?> + '<p></p></div>' +
+      '<div class="pie2">' +
+        '<button type="button" class="sm-bt pri" id="smCmU">Usar la nueva</button>' +
+        '<div class="sm-dos">' +
+          '<button type="button" class="sm-bt sec" id="smCmQ">Quedarme con la actual</button>' +
+        '</div></div>');
+    $('#smCmU').addEventListener('click', function () { decidirCand(el, gen, 'elegida', nueva); });
+    $('#smCmQ').addEventListener('click', function () { decidirCand(el, gen, 'descartada', ''); });
+  }
+
+  function decidirCand(el, gen, decision, nueva) {
+    var u = $('#smCmU'), q = $('#smCmQ');
+    if (u.disabled || q.disabled) return;
+    u.disabled = true; q.disabled = true;
+    (decision === 'elegida' ? u : q).textContent = 'Un segundo…';
+    var fd = new FormData();
+    fd.append('ajax', '1'); fd.append('csrf', CSRF);
+    fd.append('accion', 'cand_decidir'); fd.append('id', el.dataset.id);
+    fd.append('gen', String(gen)); fd.append('decision', decision);
+    fetch(APROBAR, { method: 'POST', body: fd, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.ok) {
+          u.disabled = false; q.disabled = false;
+          u.textContent = 'Usar la nueva'; q.textContent = 'Quedarme con la actual';
+          hojaErr('#smCmE', (j && j.err) ? j.err : 'No pude guardar tu decisión.');
+          return;
+        }
+        //  Manda lo que dice el SERVIDOR, no lo que se pulsó: si otra pestaña
+        //  decidió primero, la decisión que vale es aquella.
+        el.dataset.candGen = ''; el.dataset.candEstado = ''; el.dataset.candNueva = '';
+        if (j.decision === 'elegida' && j.img) {
+          pintarMedia(el, j.img, false);
+          el.dataset.matHay = '1';
+          el.dataset.matOrigen = 'generado_o_desconocido';
+          el.dataset.matMejorable = '';
+          el.dataset.matFrase = 'Ahora lleva arte del corillo.';
+        }
+        cerrar();
+      })
+      .catch(function () {
+        u.disabled = false; q.disabled = false;
+        u.textContent = 'Usar la nueva'; q.textContent = 'Quedarme con la actual';
+        hojaErr('#smCmE', 'Se cortó la conexión. Vuelve a abrir para ver cómo quedó.');
+      });
+  }
+
+  /*  EL FALLO, CON SALIDA. Tres cosas y ninguna es un callejón: qué pasó, que
+      su imagen sigue ahí, y qué puede hacer ahora. Reintentar es un gesto
+      DELIBERADO —vuelve a costar una— y se dice; quedarse no cuesta nada.  */
+  function fallo(el, msg) {
+    pararSondeo();
+    abrir('No pude preparar la otra opción',
+      (el.dataset.arte
+        ? '<div class="sm-prev"><img src="' + esc(el.dataset.arte) + '" alt="">' +
+          '<p class="sm-prev-pie">' + IC.image + '<span><b>Tu imagen sigue como estaba.</b></span></p></div>'
+        : '') +
+      '<p class="completo">' + esc(msg) + '</p>' +
+      '<div class="pie2">' +
+        '<button type="button" class="sm-bt pri" id="smFaR">Intentar otra vez</button>' +
+        '<div class="sm-dos">' +
+          '<button type="button" class="sm-bt sec" id="smFaB">Usar algo de mi Biblioteca</button>' +
+          '<button type="button" class="sm-bt sec" id="smFaQ">Quedarme con la actual</button>' +
+        '</div></div>');
+    $('#smFaQ').addEventListener('click', cerrar);
+    $('#smFaB').addEventListener('click', function () {
+      if (el.dataset.bib) location.href = el.dataset.bib; else cerrar();
+    });
+    $('#smFaR').addEventListener('click', function () {
+      //  Reintentar abre una intención NUEVA: la anterior quedó fallida, y una
+      //  fallida no es una candidata esperando. Vuelve a costar una imagen y
+      //  por eso se pasa por la hoja que lo dice, no directo al trabajo.
+      el.dataset.candGen = ''; el.dataset.candEstado = '';
+      menuOtraImagen(el);
+    });
+  }
+
+  /*  LA CUOTA AGOTADA TAMPOCO ES UN CALLEJÓN. No se puede generar, pero sí
+      hacer otras dos cosas — y ninguna promete que se devuelva una unidad ya
+      confirmada, porque no se devuelve.  */
+  function sinCuota(el, frase) {
+    abrir('Este mes ya usaste tus imágenes',
+      '<p class="completo">' + esc(frase || 'Este mes ya usaste tus imágenes con IA.') + '</p>' +
+      '<p class="sm-nota" style="margin-top:12px">' + IC.img24 +
+        '<span>Las imágenes que ya se generaron siguen contando, aunque no las hayas usado.</span></p>' +
+      '<div class="pie2">' +
+        '<button type="button" class="sm-bt pri" id="smSqB">Usar algo de mi Biblioteca</button>' +
+        '<div class="sm-dos">' +
+          '<button type="button" class="sm-bt sec" id="smSqQ">Quedarme con la actual</button>' +
+        '</div></div>');
+    $('#smSqQ').addEventListener('click', cerrar);
+    $('#smSqB').addEventListener('click', function () {
+      if (el.dataset.bib) location.href = el.dataset.bib; else cerrar();
+    });
+  }
+
+  /*  VOLVER A UNA CANDIDATA QUE YA ESTABA. Salir y regresar, o recargar, tiene
+      que devolverte donde estabas — y sobre todo NO generar otra. Lo que hay
+      vive en la base, así que basta con preguntar.  */
+  function verCandidata(el) {
+    if (el.dataset.candEstado === 'completed' && el.dataset.candNueva) {
+      comparar(el, el.dataset.arte || '', el.dataset.candNueva, el.dataset.candGen);
+      return;
+    }
+    if (el.dataset.candEstado === 'failed') {
+      fallo(el, 'No me salió esta vez. Tu imagen sigue como estaba.');
+      return;
+    }
+    preparando(el);
+  }
+
+  /*  LA TARJETA SE ENTERA. Sin esto, el dueño pone la foto, cierra la hoja y
+      la tarjeta sigue enseñando «Todavía sin imagen»: la acción funcionó y la
+      pantalla dice que no.  */
+  function pintarMedia(el, url, esVideo) {
+    var m = $('.sm-media', el);
+    if (!m || !url) return;
+    m.classList.remove('falta');
+    var v = $('.vacio', m); if (v) v.parentNode.removeChild(v);
+    var viejo = m.querySelector('img, video'); if (viejo) viejo.parentNode.removeChild(viejo);
+    var nuevo;
+    if (esVideo) {
+      nuevo = document.createElement('video');
+      nuevo.muted = true; nuevo.playsInline = true; nuevo.preload = 'metadata';
+    } else {
+      nuevo = document.createElement('img'); nuevo.alt = '';
+    }
+    nuevo.src = url;
+    m.insertBefore(nuevo, m.firstChild);
+    el.dataset.arte = url;
   }
 
   // ── AJUSTE · TEXTO. Handler `editar` de aprobar2 (y de paso aprende). ──
@@ -855,8 +1534,20 @@ foreach ($sm['items'] as $i => $it) {
 
   // ── AJUSTE · FECHA Y HORA. Handler `fecha` de aprobar2. ──
   function editarFecha(el) {
+    /*  LA CONSECUENCIA, DICHA CON LA FRASE DEL SERVIDOR. La redacta
+        semana_frase_cuando() y viaja en la tarjeta; al guardar, el handler
+        devuelve la nueva y se pega tal cual. Aqui NO se formatea ninguna fecha
+        a mano: dos redacciones del mismo dato acaban diciendo cosas distintas,
+        y esta es la que el dueño usa para decidir.
+
+        Mientras escoge no se promete nada: prometer sobre un valor que aun no
+        guardo seria adelantarse a una decision que todavia no tomo.  */
     abrir('¿Cuándo quieres que salga?',
       '<input type="datetime-local" id="smFe" value="' + esc(el.dataset.fecha) + '">' +
+      (el.dataset.cuandoTx
+        ? '<p class="sm-nota" id="smFeQ" style="margin-top:12px">' + IC.clock +
+          '<span>' + esc(el.dataset.cuandoTx) + '</span></p>'
+        : '') +
       '<p class="sm-nota" style="margin-top:12px">' + IC.clock + '<span>' + esc(HORA_NOTA) + '</span></p>' +
       '<div class="sm-err" id="smFeE" role="alert">' + <?= json_encode(ico('bolt')) ?> + '<p></p></div>' +
       '<div class="pie2"><button type="button" class="sm-bt pri" id="smFeG">Guardar la fecha</button>' +
@@ -865,8 +1556,9 @@ foreach ($sm['items'] as $i => $it) {
     $('#smFeG').addEventListener('click', function () {
       var v = $('#smFe').value;
       if (!v) { hojaErr('#smFeE', 'Escoge un día y una hora.'); return; }
-      guardar(el, 'fecha', { fecha: v.replace('T', ' ') }, '#smFeE', 'No pude mover la fecha.', function () {
+      guardar(el, 'fecha', { fecha: v.replace('T', ' ') }, '#smFeE', 'No pude mover la fecha.', function (j) {
         el.dataset.fecha = v;
+        if (j && j.cuando) el.dataset.cuandoTx = j.cuando;
         var d = new Date(v);
         var dia  = d.toLocaleDateString('es-PR', { weekday: 'long', day: 'numeric' });
         var hora = d.toLocaleTimeString('es-PR', { hour: 'numeric', minute: '2-digit' });
@@ -891,7 +1583,10 @@ foreach ($sm['items'] as $i => $it) {
     fetch(APROBAR, { method: 'POST', body: fd, credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
-        if (j && j.ok) { alTerminar(); return; }
+        //  La respuesta viaja hasta el final: trae frases ya redactadas por el
+        //  servidor -la consecuencia de la fecha, por ejemplo- y volver a
+        //  escribirlas aqui seria tener dos versiones del mismo dato.
+        if (j && j.ok) { alTerminar(j); return; }
         hojaErr(errSel, (j && j.err) ? j.err : msg);
       })
       .catch(function () { hojaErr(errSel, 'Se cayó la conexión. Nada cambió.'); });

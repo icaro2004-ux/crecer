@@ -290,9 +290,227 @@ try {
   di('FECHA_LINEA', (await txt('.sm-p.on .sm-linea')).replace(/\s+/g, ' ').trim());
   di('FECHA_SIGO_EN_POS', (await txt('#smPaso')).trim());
 
-  // ══ 4 · SALIR A LA IMAGEN Y VOLVER A LA MISMA PUBLICACION ══════
+  // ══ 4 · LA HOJA DE IMAGEN, Y LA SALIDA QUE SIGUE VOLVIENDO ═════
+  //
+  //  «Imagen o video» YA NO TE SACA DE LA SEMANA. Abre una segunda hoja con
+  //  los tres caminos —usar una tuya, subir una, que la haga el corillo— y
+  //  arriba dice qué lleva ahora, redactado por el servidor. La salida a la
+  //  pieza sigue existiendo, un toque más adentro, y sigue teniendo que
+  //  volver a ESTA publicación: eso es lo que se comprueba abajo.
   await clicSel('.sm-p.on [data-ajustar]');
   await clicSel('#smHojaC .sm-fila[data-a="arte"]');
+  await dormir(200);
+  di('MAT_HOJA_TITULO', (await txt('#smHojaT')).trim());
+  di('MAT_HOJA_CAMINOS', await ev(
+    'document.querySelectorAll("#smHojaC .sm-fila[data-m]").length'));
+  di('MAT_HOJA_DICE_QUE_LLEVA', await ev(
+    '(document.querySelector("#smHojaC .sm-nota span")||{}).textContent || ""'));
+  di('MAT_HOJA_SIGO_EN_LA_SEMANA', await ev('/vista=semana/.test(location.search)'));
+  //  LA HOJA ES LA PANTALLA MIENTRAS ESTA ABIERTA, asi que se mide como tal:
+  //  con el velo puesto, MEDIR mira la hoja y no lo que quedo detras.
+  di('MED_MAT_360', await ev(MEDIR).then(JSON.stringify));
+  await tirar('03b_material_360', 360, 800);
+  await ev('(function(){var x=document.getElementById("smCerrar"); if(x) x.click();})()');
+  await dormir(200);
+
+  //  LA PRIMARIA DE «FALTA TU FOTO» ABRE LA MISMA HOJA. Es el momento de
+  //  material mas frecuente que hay, y hasta ahora sacaba al dueño de la
+  //  semana. Se mira en TODA la lista, no solo en la publicacion abierta:
+  //  la que espera material puede ser cualquiera.
+  const hayFalta = await ev(
+    'document.querySelectorAll(".sm-p [data-material]").length');
+  di('FALTA_PRIMARIAS', hayFalta);
+  if (Number(hayFalta) > 0) {
+    await ev('(function(){var b=document.querySelector(".sm-p [data-material]");'
+           + ' if(b){ b.closest(".sm-p").classList.add("on"); b.click(); }})()');
+    await dormir(300);
+    di('FALTA_ABRE_HOJA', await ev(
+      '(document.getElementById("smHojaT")||{}).textContent === "Imagen o video"'));
+    di('FALTA_SIN_SALIR', await ev('/vista=semana/.test(location.search)'));
+    await ev('(function(){var x=document.getElementById("smCerrar"); if(x) x.click();})()');
+    await dormir(200);
+  }
+  // ══ 4b · EL RECORRIDO DE VERDAD · Biblioteca → previa → usar → volver ══
+  //
+  //  ESTO NO SE COMPRUEBA MIRANDO HTML. Se pulsa lo que pulsa el dueño y se
+  //  mira DONDE acaba y QUE quedo en la base. Un `href` correcto no prueba que
+  //  el viaje funcione; probar el viaje, si.
+  await clicSel('.sm-p.on [data-ajustar]');
+  await clicSel('#smHojaC .sm-fila[data-a="arte"]');
+  await dormir(200);
+  di('BIB_HAY_CAMINO', await ev('!!document.querySelector("#smHojaC .sm-fila[data-m=\'bib\']")'));
+  await clicSel('#smHojaC .sm-fila[data-m="bib"]');
+  await listo();
+  const uBib = await url();
+  di('BIB_URL', uBib);
+  di('BIB_LLEVA_PIEZA', /pieza=\d+/.test(uBib) && /volver=meta/.test(uBib) && /pos=2/.test(uBib));
+  await cerrarRecibimiento(ev);
+
+  //  LA VISTA PREVIA ES LA PROPIA TARJETA: se ve lo que se va a poner.
+  di('BIB_TILES_CON_PREVIA', await ev(
+    'document.querySelectorAll(".bib-tile .bib-pick").length'));
+  di('BIB_PREVIA_PINTADA', await ev(
+    '(function(){var t=document.querySelector(".bib-tile:has(.bib-pick)");'
+    + ' if(!t) return false; var m=t.querySelector("img,video");'
+    + ' return !!m && !!(m.getAttribute("src")||"").length;})()'));
+  di('BIB_PRIMARIA_DESARMADA', await ev(
+    '(document.getElementById("bibUsar")||{}).disabled === true'));
+
+  //  Se escoge, y la primaria se arma sola.
+  await ev('(function(){var r=document.querySelector(".bib-pick input[type=radio]");'
+         + ' if(r){ r.checked = true; r.dispatchEvent(new Event("change",{bubbles:true})); }})()');
+  await dormir(250);
+  di('BIB_PRIMARIA_ARMADA', await ev(
+    '(document.getElementById("bibUsar")||{}).disabled === false'));
+  di('BIB_TARJETA_RESALTADA', await ev(
+    '!!document.querySelector(".bib-tile.bib-on")'));
+  await tirar('08_biblioteca_seleccion_360', 360, 800);
+
+  //  Y se confirma. El destino lo construye el servidor.
+  await clicSel('#bibUsar');
+  await listo();
+  const uVuelta = await url();
+  di('BIB_VUELVE_A', uVuelta);
+  di('BIB_VUELVE_A_META', /meta\.php/.test(uVuelta) && /pos=2/.test(uVuelta));
+  await cerrarRecibimiento(ev);
+  di('BIB_MISMA_PUBLICACION', (await txt('#smPaso')).trim());
+  di('BIB_PIEZA_CON_IMAGEN', await ev(
+    '!!document.querySelector(".sm-p.on .sm-media img, .sm-p.on .sm-media video")'));
+  di('BIB_CAPTION', (await txt('.sm-p.on .sm-cap')).trim().slice(0, 60));
+  await tirar('09_foto_aplicada_360', 360, 800);
+
+  //  Y la hoja ahora dice OTRA cosa: que lleva su foto, con su nombre.
+  await clicSel('.sm-p.on [data-ajustar]');
+  await clicSel('#smHojaC .sm-fila[data-a="arte"]');
+  await dormir(200);
+  di('MAT_DICE_TU_FOTO', await ev(
+    '(document.querySelector("#smHojaC .sm-nota span")||{}).textContent || ""'));
+  di('MAT_OFRECE_MEJORAR', await ev(
+    '!!document.querySelector("#smHojaC .sm-fila[data-m=\'mejorar\']")'));
+  await tirar('10_material_con_foto_360', 360, 800);
+
+  // ══ 4c · MEJORAR · lo que cuesta se dice ANTES ═════════════════
+  //
+  //  NO SE CONFIRMA CONTRA EL PROVEEDOR DE VERDAD. El servidor de pruebas
+  //  corre con las llaves reales, asi que confirmar aqui seria pagar una
+  //  imagen por cada vuelta de la suite. Lo que SI se comprueba en vivo es lo
+  //  que el dueño ve antes de decidir —el precio, dicho antes— y, mas abajo,
+  //  que con el mes agotado el servidor corta ANTES de llamar a nadie.
+  //  La mejora que de verdad genera se prueba con el proveedor sustituido en
+  //  tests/test_material_mejorar.php y tests/test_material_transiciones.php.
+  if (await ev('!!document.querySelector("#smHojaC .sm-fila[data-m=\'mejorar\']")')) {
+    await clicSel('#smHojaC .sm-fila[data-m="mejorar"]');
+    await dormir(250);
+    di('MEJORA_TITULO', (await txt('#smHojaT')).trim());
+    di('MEJORA_DICE_PRECIO', await ev(
+      '/Gasta 1 de las im[aá]genes de tu mes/.test(document.getElementById("smHojaC").textContent)'));
+    di('MEJORA_DICE_QUE_GUARDA_ORIGINAL', await ev(
+      '/Biblioteca/.test(document.getElementById("smHojaC").textContent)'));
+    di('MED_MEJORA_360', await ev(MEDIR).then(JSON.stringify));
+    await tirar('11_mejorar_360', 360, 800);
+    //  Se sale por «Dejarla como está»: cancelar no puede escribir nada.
+    await clicSel('#smMjC');
+    await dormir(200);
+    di('MEJORA_CANCELA_CIERRA', await ev(
+      '!document.querySelector("#smVelo").classList.contains("on")'));
+  }
+
+  // ══ 4d · OTRA IMAGEN · tipo de cambio, preparando y comparación ══
+  //
+  //  NO SE CONFIRMA CONTRA EL PROVEEDOR. La candidata entregada la siembra la
+  //  suite antes de arrancar el navegador: aquí se prueba la PANTALLA —que se
+  //  ofrezca, que diga lo que cuesta, que compare y que decida— sin pagar una
+  //  imagen por cada vuelta de la suite.
+  await clicSel('.sm-p.on [data-ajustar]');
+  await clicSel('#smHojaC .sm-fila[data-a="arte"]');
+  await dormir(200);
+  const hayOtra = await ev(
+    'document.querySelectorAll("#smHojaC .sm-fila[data-m=\'otra\'], #smHojaC .sm-fila[data-m=\'cand\']").length');
+  di('OTRA_HAY_FILA', hayOtra);
+
+  if (Number(hayOtra) > 0) {
+    const esCand = await ev('!!document.querySelector("#smHojaC .sm-fila[data-m=\'cand\']")');
+    di('OTRA_ES_CANDIDATA', esCand);
+    if (esCand === 'true' || esCand === true) {
+      //  Ya hay una esperando: la fila lleva a la comparación, no a empezar otra.
+      await clicSel('#smHojaC .sm-fila[data-m="cand"]');
+      await dormir(400);
+    } else {
+      await clicSel('#smHojaC .sm-fila[data-m="otra"]');
+      await dormir(250);
+      di('CAMBIO_TITULO', (await txt('#smHojaT')).trim());
+      di('CAMBIO_OPCIONES', await ev('document.querySelectorAll("#smHojaC .sm-opc").length'));
+      di('CAMBIO_DICE_MISMA', await ev(
+        '/Mantendr[ée] el concepto/.test(document.getElementById("smHojaC").textContent)'));
+      di('CAMBIO_DICE_DIFERENTE', await ev(
+        '/otro concepto para comunicar el mismo mensaje/.test(document.getElementById("smHojaC").textContent)'));
+      di('CAMBIO_DICE_CUOTA', await ev(
+        '/usa 1 imagen de tu cuota/.test(document.getElementById("smHojaC").textContent)'));
+      di('CAMBIO_HAY_EVITAR', await ev('!!document.getElementById("smEv")'));
+      di('MED_CAMBIO_360', await ev(MEDIR).then(JSON.stringify));
+      await tirar('12_tipo_de_cambio_360', 360, 800);
+      //  Se escribe algo a evitar y se pide «otra idea».
+      await ev('(function(){var e=document.getElementById("smEv"); if(e) e.value="sin personas";})()');
+      await clicSel('#smHojaC .sm-opc[data-i="idea_diferente"]');
+      await dormir(900);
+      di('PREP_TITULO', (await txt('#smHojaT')).trim());
+      di('PREP_ENSENA_LA_SUYA', await ev(
+        '!!document.querySelector("#smHojaC .sm-prev img")'));
+      di('PREP_DEJA_SALIR', await ev('!!document.getElementById("smPrC")'));
+      di('MED_PREP_360', await ev(MEDIR).then(JSON.stringify));
+      await tirar('13_preparando_360', 360, 800);
+      await ev('(function(){var b=document.getElementById("smPrC"); if(b) b.click();})()');
+      await dormir(300);
+    }
+  }
+
+  //  ── LA COMPARACIÓN. Se llega a ella volviendo a la hoja: si hay una
+  //     candidata entregada, la fila lleva ahí. Eso ES la prueba de que salir
+  //     y volver recupera el estado — no se guarda en el navegador.
+  await ir(SEM + '&pos=2');
+  await cerrarRecibimiento(ev);
+  await clicSel('.sm-p.on [data-ajustar]');
+  await clicSel('#smHojaC .sm-fila[data-a="arte"]');
+  await dormir(250);
+  const vuelveCand = await ev('!!document.querySelector("#smHojaC .sm-fila[data-m=\'cand\']")');
+  di('VUELVE_A_LA_CANDIDATA', vuelveCand);
+  if (vuelveCand === 'true' || vuelveCand === true) {
+    await clicSel('#smHojaC .sm-fila[data-m="cand"]');
+    await dormir(500);
+    di('COMP_TITULO', (await txt('#smHojaT')).trim());
+    di('COMP_DOS_IMAGENES', await ev('document.querySelectorAll("#smHojaC .sm-comp img").length'));
+    di('COMP_ETIQUETAS', await ev(
+      '[].map.call(document.querySelectorAll("#smHojaC .sm-comp figcaption"),'
+      + ' function(f){return f.textContent.trim();}).join(" | ")'));
+    di('COMP_UNA_PRIMARIA', await ev('document.querySelectorAll("#smHojaC .sm-bt.pri").length'));
+    di('MED_COMP_360', await ev(MEDIR).then(JSON.stringify));
+    await tirar('14_comparacion_360', 360, 800);
+
+    //  En escritorio las dos caben a lo ancho: es donde comparar se hace de un
+    //  vistazo, y donde una hoja de móvil estirada se vería como una tira.
+    await cmd('Emulation.setDeviceMetricsOverride',
+              { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+    await dormir(500);
+    di('MED_COMP_1440', await ev(MEDIR).then(JSON.stringify));
+    await tirar('15_comparacion_1440', 1440, 900);
+    await cmd('Emulation.setDeviceMetricsOverride',
+              { width: 360, height: 800, deviceScaleFactor: 1, mobile: true });
+    await dormir(400);
+
+    //  Y SE DECIDE: quedarse con la actual. Es la que no cambia nada, así que
+    //  se puede comprobar en la base que de verdad no cambió nada.
+    await clicSel('#smCmQ');
+    await dormir(900);
+    di('DECIDIO_CIERRA', await ev(
+      '!document.querySelector("#smVelo").classList.contains("on")'));
+    di('DECIDIO_SIGO_EN_POS', (await txt('#smPaso')).trim());
+  }
+
+  await clicSel('.sm-p.on [data-ajustar]');
+  await clicSel('#smHojaC .sm-fila[data-a="arte"]');
+  await dormir(200);
+  //  Y la puerta a la pieza, desde dentro de la hoja.
+  await clicSel('#smHojaC .sm-fila[data-m="arte"]');
   await listo();
   const uArte = await url();
   di('ARTE_URL', uArte);
@@ -409,12 +627,28 @@ try {
   await dormir(600);
   di('MED_414', await ev(MEDIR).then(JSON.stringify));
   await tirar('06_semana_414', 414, 896);
+  //  LA HOJA TAMBIEN VIVE EN LAS OTRAS DOS. Medirla solo a 360 dejaba sin
+  //  mirar justo donde cambia: en 1440 una hoja de movil estirada a lo ancho
+  //  es una tira de texto de 1400px que no se lee.
+  await clicSel('.sm-p.on [data-ajustar]');
+  await clicSel('#smHojaC .sm-fila[data-a="arte"]');
+  await dormir(250);
+  di('MED_MAT_414', await ev(MEDIR).then(JSON.stringify));
+  await tirar('06b_material_414', 414, 896);
+  await ev('(function(){var x=document.getElementById("smCerrar"); if(x) x.click();})()');
+  await dormir(250);
 
   await cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await dormir(600);
   di('MED_1440', await ev(MEDIR).then(JSON.stringify));
   di('ESCRITORIO_LISTA', await ev('document.querySelectorAll("#smLista .sm-li").length'));
   await tirar('07_semana_1440', 1440, 900);
+
+  await clicSel('.sm-p.on [data-ajustar]');
+  await clicSel('#smHojaC .sm-fila[data-a="arte"]');
+  await dormir(250);
+  di('MED_MAT_1440', await ev(MEDIR).then(JSON.stringify));
+  await tirar('07b_material_1440', 1440, 900);
 
   di('ERRORES', await errs());
   di('OK', 1);

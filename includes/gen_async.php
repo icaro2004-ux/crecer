@@ -59,7 +59,36 @@ function gen_procesar(PDO $pdo, int $id): void {
     @set_time_limit(0);
     $g = $pdo->query("SELECT * FROM crecer_generaciones WHERE id=" . (int)$id)->fetch(PDO::FETCH_ASSOC);
     if (!$g || $g['estado'] === 'completed') return;
+
+    //  ── RECLAMAR LA FILA, Y QUE SOLO LA RECLAME UNO ────────────────────
+    //
+    //  Mirar `estado` y seguir no impide nada: dos workers disparados a la
+    //  vez leen 'queued' los dos y los dos llaman al proveedor. El paso de
+    //  queued → directing va como UPDATE CONDICIONADO: solo una fila cambia,
+    //  y quien no la cambio se va sin llamar a nadie.
+    //
+    //  Un job en vuelo que se quedo a medias no se reclama por reloj desde
+    //  aqui: si esta en 'directing' o 'generating' es que alguien lo tiene.
+    try {
+        $rec = $pdo->prepare("UPDATE crecer_generaciones SET estado='directing', updated_at=NOW()
+                                WHERE id=? AND estado='queued'");
+        $rec->execute([$id]);
+        if ($rec->rowCount() !== 1) return;   // otro worker lo tiene
+    } catch (Throwable $e) { return; }
+
     $mid = (int)$g['marca_id']; $copy = (string)$g['copy_text'];
+
+    //  ── ¿ES UNA CANDIDATA DE UNA PUBLICACION? ──────────────────────────
+    //
+    //  Se distingue por lo que la fila TRAE, no por una bandera aparte: una
+    //  candidata de pieza nace con `contenido_id` y con su instruccion ya
+    //  escrita (la arma el dominio en cand_abrir(), con el caption, el porque,
+    //  la meta y lo que el dueño pidio evitar). Este worker no tiene que
+    //  volver a inventarla — y no debe: esa instruccion es el contrato que el
+    //  dueño acepto al pulsar, y reescribirla aqui seria cambiarselo.
+    $cid   = (int)($g['contenido_id'] ?? 0);
+    $instr = trim((string)($g['prompt_narrativo'] ?? ''));
+    $es_candidata = ($cid > 0 && $instr !== '');
     $t_all = microtime(true);
     require_once __DIR__ . '/agentes.php';
     require_once __DIR__ . '/image_messenger.php';
@@ -68,6 +97,15 @@ function gen_procesar(PDO $pdo, int $id): void {
     catch (Throwable $e) { _gen_set($pdo, $id, ['estado'=>'failed', 'error_msg'=>'marca: ' . substr($e->getMessage(),0,300)]); return; }
 
     // 1) DIRECTING — gpt-5.5 escribe la escena (strict: sin fallback).
+    //
+    //  SALVO QUE YA VENGA ESCRITA. Una candidata de pieza trae su contrato
+    //  desde el dominio; pasarla otra vez por el director costaria una
+    //  llamada de texto y, peor, podria devolver algo que ya no cumple lo
+    //  que se le prometio al dueño («otra idea» acabando en la misma).
+    if ($es_candidata) {
+        $escena = $instr;
+        _gen_set($pdo, $id, ['estado'=>'generating']);
+    } else {
     _gen_set($pdo, $id, ['estado'=>'directing']);
     $b = image_messenger_build($pdo, $mid, $m, $copy);
     $modelo_cfg = defined('IMAGE_CREATIVE_MODEL') ? IMAGE_CREATIVE_MODEL : 'openai:creative';
@@ -83,6 +121,7 @@ function gen_procesar(PDO $pdo, int $id): void {
     if ($escena === '') { _gen_set($pdo, $id, ['estado'=>'failed', 'modelo_texto'=>$d['modelo']??$modelo_cfg, 'error_msg'=>'texto vacío']); return; }
     _gen_set($pdo, $id, ['modelo_texto'=>$d['modelo']??'', 'prompt_narrativo'=>$escena,
         'dur_texto_ms'=>$d['dur_ms']??null, 'fallback'=>!empty($d['fallback'])?1:0, 'estado'=>'generating']);
+    }
 
     // 2) GENERATING — gpt-image-1 DIRECTO (sin motor_imagen ni fallback a Gemini).
     $ti = microtime(true);
@@ -90,11 +129,27 @@ function gen_procesar(PDO $pdo, int $id): void {
         //  RUTA 8 — la muestra del gateway. Cuenta 1 como cualquier arte: es
         //  una imagen que la IA pinta para un negocio concreto.
         require_once __DIR__ . '/cuota_imagenes.php';
-        $img = openai_imagen($escena, ['aspect'=>'1:1',
-            'cuota' => CuotaCtx::de($pdo, $mid, 'muestra', 'gen_async',
-                       ['origen_tipo' => 'muestra', 'origen_id' => (int)$id, 'costo' => 0.17])]);
+        //  LA UNIDAD VA A NOMBRE DE QUIEN LA PIDE. La muestra del gateway se
+        //  cuenta como 'muestra' contra su propia generacion; una candidata
+        //  de una publicacion se cuenta como el arte que es, y a nombre de
+        //  ESA pieza — o dos publicaciones compartirian llave y la segunda
+        //  saldria sin pagar.
+        $cuota = $es_candidata
+            ? CuotaCtx::de($pdo, $mid, 'arte_post', 'candidata_otra_imagen',
+                           ['origen_tipo' => 'contenido', 'origen_id' => $cid, 'costo' => 0.17])
+            : CuotaCtx::de($pdo, $mid, 'muestra', 'gen_async',
+                           ['origen_tipo' => 'muestra', 'origen_id' => (int)$id, 'costo' => 0.17]);
+        $img = openai_imagen($escena, ['aspect'=>'1:1', 'marca_id'=>$mid, 'cuota'=>$cuota]);
     } catch (Throwable $e) {
         $http = null; if (preg_match('/HTTP (\d{3})/', $e->getMessage(), $mm)) $http = (int)$mm[1];
+        //  LA UNIDAD VUELVE. El punto de proveedor reserva ANTES de llamar —tiene
+        //  que hacerlo, o dos peticiones simultaneas se saltarian el tope— asi
+        //  que un fallo aqui deja la unidad retenida para siempre: el dueño
+        //  pagando del mes una imagen que no recibio. Se cierra donde se sabe
+        //  que no llego nada.
+        try { CuotaImg::liberarPorCtx($cuota ?? null,
+                  'no entregó: ' . mb_substr($e->getMessage(), 0, 100)); }
+        catch (Throwable $e2) { error_log('gen_procesar liberar: ' . $e2->getMessage()); }
         _gen_set($pdo, $id, ['estado'=>'failed', 'modelo_imagen'=>'gpt-image-1', 'http_status'=>$http,
             'error_msg'=>'imagen: ' . substr($e->getMessage(),0,400),
             'dur_imagen_ms'=>(int)round((microtime(true)-$ti)*1000), 'dur_total_ms'=>(int)round((microtime(true)-$t_all)*1000)]);
@@ -108,6 +163,17 @@ function gen_procesar(PDO $pdo, int $id): void {
     @mkdir(dirname($abs), 0775, true);
     @file_put_contents($abs, $img['data']);
     $url = rtrim(UPLOADS_URL, '/') . '/' . $rel;
+
+    //  LA ENTREGA NO TOCA LA PUBLICACION. Se guarda el archivo y se marca
+    //  'completed' — y ahi se para. `grafica_path` y `material_activo_id`
+    //  siguen como estaban hasta que el dueño escoja, que es justo lo que
+    //  antes no pasaba: la imagen nueva pisaba la suya sin preguntarle.
+    //  Y SI LLEGO, LA UNIDAD SE CONSUME. Sin esto el asiento se queda en
+    //  'reservado' para siempre: el total del mes sale bien pero el estado
+    //  miente, y la llave no se retira — o sea que un ciclo posterior
+    //  deliberado reusaria aquella reserva y saldria gratis.
+    try { CuotaImg::confirmarPorCtx($cuota ?? null, 0.17); }
+    catch (Throwable $e) { error_log('gen_procesar confirmar: ' . $e->getMessage()); }
 
     _gen_set($pdo, $id, ['estado'=>'completed', 'modelo_imagen'=>$img['modelo']??'gpt-image-1',
         'dur_imagen_ms'=>$dur_img, 'archivo'=>$url, 'dur_total_ms'=>(int)round((microtime(true)-$t_all)*1000)]);

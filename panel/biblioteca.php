@@ -12,6 +12,13 @@
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/iconos.php';
+//  EL DOMINIO DEL MATERIAL, ARRIBA Y A LA VISTA. Estaba incluido dentro
+//  de los handlers, justo antes de cada llamada, y basto que UNO se
+//  quedara sin su require para que la entrega de arte muriera con un
+//  fatal en la ruta que mas se usa. Cargarlo aqui quita la clase entera
+//  de fallo: no depende de que rama se ejecute ni de que otra pagina lo
+//  haya cargado antes.
+require_once __DIR__ . '/../includes/material.php';
 requiere_login();
 require_once __DIR__ . '/../includes/panel_guard.php';
 requiere_suscripcion($pdo, isset($_GET['marca']) ? (int)$_GET['marca'] : null);
@@ -39,6 +46,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accion = $_POST['accion'] ?? '';
 
     // Subir uno o varios archivos.
+    //  ══ USAR ESTE MATERIAL ══════════════════════════════════════════
+    //  El unico escritor de esta pantalla sobre una publicacion, y no escribe
+    //  el: llama al dominio. Las guardas —marca, vida del recurso, formato,
+    //  estado de la pieza— viven en material_aplicar() para que esta puerta y
+    //  la del editor no puedan divergir.
+    if ($accion === 'usar_material') {
+        require_once __DIR__ . '/../core/Meta/MetaRetorno.php';
+        $pieza  = (int)($_POST['pieza'] ?? 0);
+        $activo = (int)($_POST['activo_id'] ?? 0);
+        $pos    = MetaRetorno::posicion($_POST);
+
+        $r = material_aplicar($pdo, (int)$marca_id, $pieza, $activo);
+
+        //  EL DESTINO SE CONSTRUYE. Aunque llegue una URL en el POST, no se
+        //  mira: se arma con la marca de la sesion y una posicion validada.
+        $destino = MetaRetorno::url((int)$marca_id, '', $pos);
+        if (!empty($_POST['ajax'])) {
+            echo json_encode($r + ['destino' => $destino], JSON_UNESCAPED_UNICODE); exit;
+        }
+        //  Sin JS tambien funciona: el formulario navega y el error viaja en la
+        //  URL de vuelta a esta misma pantalla, no a una generica.
+        if (empty($r['ok'])) {
+            $volver = '?marca=' . (int)$marca_id . MetaRetorno::marcador($pos)
+                    . '&pieza=' . $pieza . '&err=' . rawurlencode((string)($r['err'] ?? ''));
+            header('Location: ' . $volver); exit;
+        }
+        header('Location: ' . $destino); exit;
+    }
+
     if ($accion === 'subir') {
         @set_time_limit(0);
         if (!is_dir($UP_PATH)) @mkdir($UP_PATH, 0775, true);
@@ -198,6 +234,10 @@ foreach ($activos as $a) {
     $ts = strtotime((string)$a['created_at']) ?: 0;
     $items[] = [
         'kind' => 'subida', 'filtro' => 'subidas', 'id' => (int)$a['id'],
+        //  El tipo REAL del recurso viaja con el item: el modo seleccion lo
+        //  necesita para no imprimir siquiera lo que no cabe en la pieza.
+        //  Imprimirlo y taparlo con CSS es enseñarselo a quien mire el fuente.
+        'tipo' => (string)$a['tipo'],
         'url' => $UP_URL . '/' . basename($a['archivo']), 'video' => ($a['tipo'] === 'video'),
         'titulo' => (string)$a['nombre'], 'nota' => (string)$a['nota'], 'badge' => '',
         'ts' => $ts, 'ym' => date('Y-m', $ts), 'corta' => $fecha_corta($a['created_at']), 'fecha' => 'Subido el ' . $fecha_larga($a['created_at']),
@@ -216,6 +256,138 @@ $page_title = 'Biblioteca';
 $guia = null; // La galería se usa sola: tap → fullscreen → swipe. Sin explicación.
 require __DIR__ . '/_shell.php';
 ?>
+<?php
+// ══════════════════════════════════════════════════════════════════════
+//  MODO SELECCION — Biblioteca abierta DESDE una publicacion
+//
+//  Entrar aqui desde el ajuste de una publicacion era un viaje de ida: se
+//  perdia de que pieza venia el dueño, en que posicion de la semana estaba, y
+//  no habia forma de elegir una foto y volver con ella. Acababa en su galeria,
+//  mirando fotos, sin publicacion y sin camino de vuelta.
+//
+//  EL DESTINO SE CONSTRUYE, NO SE COPIA. Lo arma MetaRetorno con la marca de la
+//  sesion y una posicion ya validada — nunca con una URL que venga en la
+//  peticion, que seria un redirect abierto con otro nombre.
+//
+//  Y ABIERTA DESDE EL MENU NO CAMBIA NADA: sin retorno valido, todo esto no se
+//  pinta y la galeria es la de siempre.
+// ══════════════════════════════════════════════════════════════════════
+require_once __DIR__ . '/../core/Meta/MetaRetorno.php';
+
+$bib_pieza = 0; $bib_pos = null; $bib_tipos = []; $bib_pieza_fila = null;
+if (MetaRetorno::vieneDeMeta($_GET)) {
+    $bib_pos   = MetaRetorno::posicion($_GET);
+    $bib_pieza = (int)($_GET['pieza'] ?? 0);
+    if ($bib_pieza > 0) {
+        //  La pieza tiene que ser SUYA. Sin esta consulta, cualquiera podria
+        //  abrir la seleccion apuntando a la publicacion de otro negocio.
+        $q = $pdo->prepare("SELECT id, tipo, caption FROM crecer_contenido
+                             WHERE id=? AND marca_id=?");
+        $q->execute([$bib_pieza, $marca_id]);
+        $bib_pieza_fila = $q->fetch(PDO::FETCH_ASSOC) ?: null;
+        if (!$bib_pieza_fila) $bib_pieza = 0;
+        else $bib_tipos = material_compatible((string)$bib_pieza_fila['tipo']);
+    }
+}
+$bib_selecc = $bib_pieza > 0;
+$bib_volver = MetaRetorno::url((int)$marca_id, '', $bib_pos);
+?>
+<?php if ($bib_selecc): ?>
+<?php /*  UN FORMULARIO DE VERDAD, no un botón que espera al JavaScript.
+          Las tarjetas llevan un <input type=radio> real: sin JS el dueño
+          escoge y envía igual, y el JS solo añade el resaltado. Un selector
+          que solo existe en JavaScript es un selector que no existe cuando
+          falla el JavaScript — y aquí falla en el móvil de la repostera, no
+          en el nuestro.  */ ?>
+<form class="bib-selform" id="bibForm" method="post"
+      action="?marca=<?= (int)$marca_id ?>">
+  <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES) ?>">
+  <input type="hidden" name="accion" value="usar_material">
+  <input type="hidden" name="pieza" value="<?= (int)$bib_pieza ?>">
+  <?php if ($bib_pos !== null): ?>
+    <input type="hidden" name="<?= htmlspecialchars(MetaRetorno::POS, ENT_QUOTES) ?>"
+           value="<?= (int)$bib_pos ?>">
+  <?php endif; ?>
+
+  <div class="bib-sel" id="bibSel"
+       data-pieza="<?= (int)$bib_pieza ?>"
+       data-volver="<?= htmlspecialchars($bib_volver, ENT_QUOTES) ?>"
+       data-tipos="<?= htmlspecialchars(implode(',', $bib_tipos), ENT_QUOTES) ?>">
+    <p class="bib-sel-t">Elige material para esta publicación</p>
+    <p class="bib-sel-s"><?= htmlspecialchars(
+        $bib_tipos === ['imagen']
+          ? 'Puedes usar una foto que ya guardaste.'
+          : 'Puedes usar una foto o un video que ya guardaste.', ENT_QUOTES) ?></p>
+    <?php if (trim((string)($_GET['err'] ?? '')) !== ''): ?>
+      <p class="bib-sel-err on"><?= htmlspecialchars(mb_substr((string)$_GET['err'], 0, 160), ENT_QUOTES) ?></p>
+    <?php endif; ?>
+    <div class="bib-sel-pie">
+      <button type="submit" class="bib-sel-usar" id="bibUsar" disabled>Usar este material</button>
+      <a class="bib-sel-x" href="<?= htmlspecialchars($bib_volver, ENT_QUOTES) ?>">Cancelar</a>
+    </div>
+  </div>
+</form>
+<style>
+  /*  La barra de seleccion. Va arriba y se queda: es el contexto de por que
+      esta aqui, y sin ella la galeria no dice nada.  */
+  .bib-sel{position:sticky;top:0;z-index:30;background:var(--card,#fff);
+    border:1px solid var(--line);border-radius:12px;padding:14px;margin:10px 0 14px}
+  .bib-sel-t{margin:0;font-size:16px;font-weight:600;color:var(--tinta)}
+  .bib-sel-s{margin:4px 0 0;font-size:14px;line-height:1.5;color:var(--muted)}
+  .bib-sel-pie{display:flex;gap:9px;align-items:center;margin-top:12px}
+  .bib-sel-usar{flex:1;min-height:48px;border:0;border-radius:10px;background:#D42A5C;
+    color:#fff;font:600 16px/1 inherit;cursor:pointer}
+  .bib-sel-usar[disabled]{background:#E4DED7;color:#8D857C;cursor:not-allowed}
+  .bib-sel-x{display:inline-flex;align-items:center;justify-content:center;min-height:48px;
+    padding:0 16px;border:1px solid var(--line);border-radius:10px;color:var(--tinta);
+    text-decoration:none;font:600 15px/1 inherit}
+  .bib-item.bib-on{outline:3px solid #D42A5C;outline-offset:2px;border-radius:12px}
+  .bib-sel-err{margin:10px 0 0;font-size:14px;line-height:1.5;color:#8A5310;display:none}
+  .bib-sel-err.on{display:block}
+
+  /*  LA MARCA DE SELECCION. El radio de verdad esta ahi, tapado pero
+      alcanzable con el teclado: el foco se ve en la marca.  */
+  .bib-pick{position:absolute;inset:0;z-index:5;cursor:pointer;margin:0}
+  .bib-pick input{position:absolute;opacity:0;width:44px;height:44px;top:6px;left:6px;margin:0;cursor:pointer}
+  .bib-pick-mk{position:absolute;top:8px;left:8px;width:28px;height:28px;border-radius:99px;
+    border:2px solid #fff;background:rgba(24,20,28,.35);box-shadow:0 1px 4px rgba(0,0,0,.25)}
+  .bib-pick input:checked ~ .bib-pick-mk{background:#D42A5C;border-color:#fff}
+  .bib-pick input:checked ~ .bib-pick-mk::after{content:'';position:absolute;left:9px;top:5px;
+    width:7px;height:13px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}
+  .bib-pick input:focus-visible ~ .bib-pick-mk{outline:3px solid #231F20;outline-offset:2px}
+  .bib-tile:has(.bib-pick input:checked){outline:3px solid #D42A5C;outline-offset:2px;border-radius:12px}
+</style>
+<script>
+/*  EL JS SOLO MEJORA. El formulario ya funciona sin el: los radios son reales
+    y el boton envia. Esto añade dos cosas — habilitar la primaria en cuanto
+    hay eleccion, y resaltar la tarjeta en navegadores sin :has().  */
+(function () {
+  var form = document.getElementById('bibForm');
+  var usar = document.getElementById('bibUsar');
+  if (!form || !usar) return;
+  var radios = function () { return document.querySelectorAll('.bib-pick input[type=radio]'); };
+  function pintar() {
+    var hay = false;
+    [].forEach.call(radios(), function (r) {
+      var tile = r.closest('.bib-tile');
+      if (tile) tile.classList.toggle('bib-on', r.checked);
+      if (r.checked) hay = true;
+    });
+    usar.disabled = !hay;
+  }
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.matches('.bib-pick input[type=radio]')) pintar();
+  });
+  //  Un solo envio: el doble clic en «Usar» no manda dos veces.
+  form.addEventListener('submit', function () {
+    usar.disabled = true; usar.textContent = 'Poniéndola…';
+  });
+  pintar();
+})();
+</script>
+<p class="bib-sel-err" id="bibErr" role="alert"></p>
+<?php endif; ?>
+
 <?php /*  LA VUELTA AL WIZARD DE LA META.
           El paso «tu material» invita a venir aqui a subir fotos, y esta
           pantalla no tenia forma de volver: era un viaje de ida y el dueño
@@ -382,6 +554,23 @@ require __DIR__ . '/_shell.php';
         <figure class="bib-tile<?= $sub ? '' : ' pub' ?>" data-filtro="<?= $h($it['filtro']) ?>" data-kind="<?= $h($it['kind']) ?>"
           data-id="<?= (int)$it['id'] ?>" data-url="<?= $h($it['url']) ?>" data-nombre="<?= $h($it['titulo']) ?>"
           data-nota="<?= $h($it['nota'] ?? '') ?>" data-fecha="<?= $h($it['fecha']) ?>"<?= $car ? ' data-href="'.$h($it['href']).'"' : '' ?>>
+          <?php
+            /*  EL RADIO SOLO SI DE VERDAD SIRVE. Se imprime unicamente para
+                material del dueño (`subida`, que tiene fila en crecer_activos)
+                y de un tipo que la pieza admita. Lo que no cabe no se pinta
+                seleccionable: taparlo con CSS seria enseñarselo igual a quien
+                mire el fuente, y ofrecer algo que el servidor va a rechazar.  */
+            $bib_puede = $bib_selecc && $sub
+                      && in_array((string)($it['tipo'] ?? ''), $bib_tipos, true);
+          ?>
+          <?php if ($bib_puede): ?>
+            <label class="bib-pick">
+              <input type="radio" name="activo_id" form="bibForm" value="<?= (int)$it['id'] ?>"
+                     data-tipo="<?= $h((string)$it['tipo']) ?>"
+                     aria-label="<?= $h('Usar ' . $it['titulo']) ?>">
+              <span class="bib-pick-mk" aria-hidden="true"></span>
+            </label>
+          <?php endif; ?>
           <?php if (!empty($it['badge'])): ?><span class="bib-badge"><?= $h($it['badge']) ?></span><?php endif; ?>
           <?php if (!$it['video']): ?>
             <img src="<?= $h($it['url']) ?>" alt="" loading="lazy">

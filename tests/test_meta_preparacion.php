@@ -330,6 +330,13 @@ try {
        stripos($h_prep, 'meta_plan_generar') === false && stripos($h_prep, 'ia_') === false);
 
 } finally {
+    //  CUANTAS LINEAS DE LOG DEJO EL PIPELINE — leidas ANTES de limpiar.
+    //  La fixture ahora se lleva sus propias filas de `crecer_ia_log` (que
+    //  es lo correcto: son evidencia, y las de prueba ensucian la de
+    //  verdad), asi que mirarlas DESPUES daba cero y esta prueba se ponia
+    //  roja afirmando que el pipeline no habia corrido. Habia corrido: lo
+    //  que cambio es quien recoge.
+    $ia_durante = $cnt('crecer_ia_log');
     foreach ($limpiar as $m) {
         try { $pdo->prepare("DELETE FROM crecer_meta_jobs WHERE marca_id=?")->execute([$m]); } catch (Throwable $e) {}
         try { Fixture::limpiar($pdo, $m); } catch (Throwable $e) {}
@@ -345,7 +352,10 @@ ok('cero llamadas reales al modelo',
    $cnt('crecer_ia_log', "modelo <> 'mock'") === $real_antes,
    ($cnt('crecer_ia_log', "modelo <> 'mock'") - $real_antes) . ' llamadas de verdad');
 ok('lo que se registró fue mock',
-   $cnt('crecer_ia_log') > $ia_antes, 'el pipeline sí corrió, con proveedor falso');
+   $ia_durante > $ia_antes, 'el pipeline sí corrió, con proveedor falso');
+ok('y no quedó ni una línea de prueba en el log',
+   $cnt('crecer_ia_log') === $ia_antes,
+   ($cnt('crecer_ia_log') - $ia_antes) . ' líneas sobrevivieron · el log de IA es evidencia: las de fixture no pueden quedarse ahí');
 ok('cero imágenes y cero cuota',
    $cnt('crecer_img_cuota_asiento') === $img_antes,
    ($cnt('crecer_img_cuota_asiento') - $img_antes) . ' asientos nuevos');

@@ -151,3 +151,13 @@ $as = $a->fetch(PDO::FETCH_ASSOC) ?: [];
 $di('ASIENTO_ESTADO',   (string)($as['estado'] ?? '(ninguno)'));
 $di('ASIENTO_LLAMADAS', (string)($as['llamadas'] ?? '0'));
 $di('PIEZA_GRAFICA', (string)($p['grafica_path'] ?? ''));
+//  LA TRAZA DEL MATERIAL, para poder afirmar la transicion: una entrega de IA
+//  desde cero tiene que dejarla VACIA. Si la pieza llevaba una foto del dueño y
+//  encima cae lo generado, conservar el id seria decir «tu foto» sobre algo que
+//  ya no es suyo.
+try {
+    $qm = $pdo->prepare("SELECT material_activo_id FROM crecer_contenido WHERE id=? AND marca_id=?");
+    $qm->execute([$post, $marca]);
+    $mv = $qm->fetchColumn();
+    $di('PIEZA_MATERIAL', $mv === null || $mv === false ? '' : (string)(int)$mv);
+} catch (Throwable $e) { $di('PIEZA_MATERIAL', '(sin columna)'); }

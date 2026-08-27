@@ -390,7 +390,9 @@ function ia_ejecutar(PDO $pdo, string $agente, string $accion, string $prompt, a
     }
 
     $latencia_ms = (int)round((microtime(true) - $t0) * 1000);
-    $costo = ia_costo($modelo, $tokens_in, $tokens_out);
+    //  Y el texto igual: en modo prueba el costo es cero porque es cero.
+    $costo = ia_costo_real(ia_costo($modelo, $tokens_in, $tokens_out));
+    $accion = ia_accion_marcada($accion);
 
     $stmt = $pdo->prepare(
         "INSERT INTO crecer_ia_log
@@ -1128,6 +1130,24 @@ function motor_imagen(string $prompt, array $opts = []): array {
  * Wrapper: genera imagen, la guarda en uploads/$destino_rel y la registra en
  * crecer_ia_log. Devuelve ['archivo'=>url, 'costo', 'modelo'].
  */
+//  ── UNA PRUEBA NO CUESTA DINERO, Y EL LOG NO PUEDE DECIR QUE SI ──────────
+//
+//  `crecer_ia_log` no es un log de depuracion: es la EVIDENCIA del gasto —la
+//  que se le enseña al jurado y la que sostiene el margen que se le promete al
+//  cliente—. Y hasta ahora una corrida con el transporte sustituido escribia
+//  sus lineas con el precio estimado del modelo, exactamente igual que una
+//  llamada de verdad: en un solo dia habia $4.55 de imagenes que nunca se
+//  pidieron, indistinguibles de las que si.
+//
+//  En modo prueba el costo es CERO —porque es cero— y la accion lo dice, para
+//  que cualquier consulta de evidencia pueda apartarlas sin adivinar.
+function ia_es_prueba(): bool {
+    return defined('CRECER_TEST_MODE') && CRECER_TEST_MODE;
+}
+function ia_costo_real(float $costo): float { return ia_es_prueba() ? 0.0 : $costo; }
+function ia_accion_marcada(string $accion): string {
+    return ia_es_prueba() ? mb_substr('[prueba] ' . $accion, 0, 80) : $accion;
+}
 function ia_imagen(PDO $pdo, string $agente, string $accion, string $prompt, string $destino_rel, array $opts = []): array {
     $t0 = microtime(true); $estado = 'ok'; $err = null; $modelo = 'gemini-2.5-flash-image'; $rel = null; $razon = null;
 
@@ -1178,10 +1198,35 @@ function ia_imagen(PDO $pdo, string $agente, string $accion, string $prompt, str
         : 0;
     // La decisión del Director de Arte queda en la acción (evidencia del ruteo).
     // OJO: crecer_ia_log.accion es VARCHAR(80) → truncar para no romper el INSERT.
-    $accion_log = mb_substr($razon ? ($accion . ' · ' . $razon) : $accion, 0, 80);
+    $accion_log = ia_accion_marcada(
+        mb_substr($razon ? ($accion . ' · ' . $razon) : $accion, 0, 68));
+    $costo = ia_costo_real($costo);
     $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,costo_usd,latencia_ms,estado,error_msg)
                    VALUES (?,?,?,?,?,?,?,?,?,?)")
         ->execute([$opts['marca_id'] ?? null, $agente, $accion_log, $modelo, $prompt, $rel, $costo, $lat, $estado, $err]);
+    //  ── LA UNIDAD SE CIERRA AQUI ──────────────────────────────────
+    //
+    //  Esta funcion RESERVABA y no cerraba nunca. En exito el asiento se
+    //  quedaba «reservado» —el total del mes salia bien, pero el estado mentia:
+    //  contaba como retenida una imagen que el dueño ya tenia en pantalla— y
+    //  la llave idempotente no se retiraba, asi que un segundo intento
+    //  deliberado sobre la misma pieza reusaba aquel asiento y salia gratis
+    //  para siempre. En el FALLO era peor: la unidad no volvia al cubo, o sea
+    //  que el dueño pagaba del mes una imagen que nunca recibio.
+    //
+    //  El asiento se busca por el propio contexto porque el punto de proveedor
+    //  reserva con una copia (enPunto() clona) y aqui nunca llega el id.
+    //
+    //  Cerrar dos veces es inofensivo: confirmar() y liberar() solo tocan
+    //  asientos vivos, asi que el respaldo que ya cerro no se pisa con este.
+    try {
+        if (class_exists('CuotaImg') && ($opts['cuota'] ?? null) instanceof CuotaCtx) {
+            if ($estado === 'ok') CuotaImg::confirmarPorCtx($opts['cuota'], $costo);
+            else                  CuotaImg::liberarPorCtx($opts['cuota'],
+                                       'sin imagen: ' . mb_substr((string)$err, 0, 120));
+        }
+    } catch (Throwable $e) { error_log('ia_imagen cerrar cuota: ' . $e->getMessage()); }
+
     if ($estado === 'error') throw new IaError($err);
     return ['archivo' => $rel, 'costo' => $costo, 'modelo' => $modelo];
 }

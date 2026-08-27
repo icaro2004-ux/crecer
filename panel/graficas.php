@@ -6,6 +6,13 @@
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/auth.php';
 require __DIR__ . '/../includes/agentes.php';
+//  EL DOMINIO DEL MATERIAL, ARRIBA Y A LA VISTA. Estaba incluido dentro
+//  de los handlers, justo antes de cada llamada, y basto que UNO se
+//  quedara sin su require para que la entrega de arte muriera con un
+//  fatal en la ruta que mas se usa. Cargarlo aqui quita la clase entera
+//  de fallo: no depende de que rama se ejecute ni de que otra pagina lo
+//  haya cargado antes.
+require_once __DIR__ . '/../includes/material.php';
 require __DIR__ . '/../includes/suscripcion.php';
 requiere_login();
 require_once __DIR__ . '/../includes/panel_guard.php';
@@ -79,11 +86,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     ? implode('+', array_map('strval', $_POST['estilo_arte']))
                                     : ($_POST['estilo_arte'] ?? 'realista')) ?: 'realista',   // combinable
                 'instrucciones'=> trim($_POST['instrucciones'] ?? ''),
+                //  La unidad lleva el nombre de la pieza, o dos publicaciones
+                //  distintas comparten reserva y la segunda sale sin pagar.
+                'contenido_id' => (int)$post_id,
             ]);
             // Si vino de un post del calendario, le pegamos el arte
             if ($post_id) {
                 $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")
                     ->execute([$r['archivo'], $post_id, $marca_id]);
+                //  LA PIEZA DEJA DE DECIR QUE LLEVA MATERIAL SUYO. Esto pinta desde
+                //  cero, asi que si la pieza venia con una foto del dueño aplicada, la
+                //  referencia que la trazaba ya no es cierta: se muestra arte generado
+                //  y el origen seguiria diciendo «tu foto». Soltarla es barato — un
+                //  UPDATE que no hace nada si no habia nada — y evita la unica mentira
+                //  que esta columna puede contar.
+                material_soltar($pdo, (int)$marca_id, (int)$post_id);
                 header("Location: /crecer/panel/aprobar2.php?marca={$marca_id}"); exit;
             }
         } catch (Throwable $e) { $err = 'No se pudo crear el arte: ' . substr($e->getMessage(), 0, 120); }

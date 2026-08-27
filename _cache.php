@@ -742,6 +742,109 @@ try {
     //     pagado -> archivo -> huérfano  se generó y nadie lo usa (dinero tirado)
     //     pagado -> sin archivo          se cobró y no hay nada (fuga)
     //   Sin esto, "gasté $70" es un número sin contraparte.
+    if ($__test === 'cuota_historica') {   // SOLO LECTURA · ya estás dentro como admin
+        //  QUE SON LOS ASIENTOS VIVOS QUE LLEVAN AHI MESES.
+        //
+        //  Un asiento en 'reservado' RETIENE una unidad del mes del dueño. Si la
+        //  imagen llego y nadie cerro la unidad, volvera a pagarla la proxima vez
+        //  que intente esa pieza; si NO llego y nadie la devolvio, esta pagando
+        //  algo que no recibio. Desde fuera los dos casos se ven igual.
+        //
+        //  ESTO NO ESCRIBE NADA. Ni una fila, ni un archivo, ni una llamada a
+        //  ningun proveedor. Lee, clasifica y dice lo que HARIA. Reconciliar es
+        //  otra decision, de otro dia, con esta salida delante.
+        require_once __DIR__ . '/includes/cuota_historica.php';
+        $mid  = isset($_GET['marca']) ? (int)$_GET['marca'] : null;
+        $tope = (int)($_GET['tope'] ?? 200);
+        $R = cuota_hist_leer($pdo, ['marca_id' => $mid, 'tope' => $tope]);
+
+        echo "\n=== CUOTA HISTORICA · SOLO LECTURA ===\n";
+        echo 'base de datos : ' . $R['base'] . "\n";
+        echo 'hora de MySQL : ' . $R['ahora'] . "\n";
+        echo 'umbral de caducidad (del dominio): ' . cuota_hist_umbral_min() . " min\n";
+        echo 'se cuenta VIVO: ' . implode(' + ', cuota_hist_estados_vivos()) . "\n";
+        if ($mid) echo 'filtrado a la marca ' . $mid . "\n";
+        if ($R['huecos']) {
+            echo "\n-- HUECOS DE ESQUEMA (lo que esta base no tiene) --\n";
+            foreach ($R['huecos'] as $h) echo '  · ' . $h . "\n";
+        }
+
+        echo "\n-- ASIENTOS POR ESTADO --\n";
+        foreach ($R['resumen']['por_estado'] as $e => $t)
+            printf("  %-12s asientos=%-6d unidades=%d\n", $e, $t['asientos'], $t['unidades']);
+        printf("  %-12s asientos=%-6d unidades=%d\n", 'VIVOS',
+               $R['resumen']['vivos'], $R['resumen']['unidades_vivas']);
+        printf("  edad de los vivos (min): min=%s  max=%s  media=%s\n",
+               var_export($R['resumen']['edad_min_min'], true),
+               var_export($R['resumen']['edad_max_min'], true),
+               var_export($R['resumen']['edad_med_min'], true));
+
+        $oc = $R['resumen']['origen_cero'];
+        echo "\n-- OPERACIONES POR PIEZA CON origen_id = 0 --\n";
+        printf("  total=%d  vivos=%d  cerrados=%d  antes del arreglo=%d  DESPUES=%d\n",
+               $oc['total'], $oc['vivos'], $oc['cerrados'], $oc['antes'], $oc['despues']);
+        if ($oc['despues'] > 0) echo "  *** ATENCION: los creados DESPUES del arreglo son una regresion ***\n";
+
+        echo "\n-- CLASIFICACION DE LOS VIVOS --\n";
+        printf("  %-30s %-9s %-9s %-18s %s\n", 'CLASE', 'ASIENTOS', 'UNIDADES', 'NIVEL', 'ACCION SUGERIDA');
+        foreach (cuota_hist_por_clase($R['filas']) as $c => $t)
+            printf("  %-30s %-9d %-9d %-18s %s\n", $c, $t['asientos'], $t['unidades'], $t['nivel'], $t['accion']);
+
+        echo "\n-- CUBO POR MARCA (hipotetico, NO se escribe) --\n";
+        printf("  %-8s %-10s %-7s %-7s %-6s %-6s %-6s %-6s %-6s %s\n",
+               'MARCA', 'CUBO', 'LIMITE', 'USADAS', 'CONF', 'VIVAS', 'LIBER', 'DIF', 'BAJAN', 'USADAS DESPUES');
+        foreach ($R['cubos'] as $c)
+            printf("  %-8d %-10s %-7d %-7d %-6d %-6d %-6d %-6d %-6d %d\n",
+                   $c['marca_id'], $c['cubo'], $c['limite'], $c['usadas'], $c['confirmadas'],
+                   $c['vivas'], $c['liberadas'], $c['diferencia'], $c['bajarian'], $c['usadas_despues']);
+        echo "  (DIF = usadas - (confirmadas + vivas). BAJAN = solo los casos seguros de devolucion.)\n";
+        echo "  (Estas son UNIDADES del plan, no dinero cobrado.)\n";
+
+        echo "\n-- UNO A UNO --\n";
+        foreach ($R['filas'] as $f) {
+            $a = $f['asiento'];
+            $ev = $f['ev'];
+            $edad = $ev['ahora'] && $a['created_at']
+                  ? (int)floor((strtotime($ev['ahora']) - strtotime((string)$a['created_at'])) / 60) : -1;
+            printf("\n  #%-7d marca=%-6d cubo=%-9s %s u=%d\n", (int)$a['id'], (int)$a['marca_id'],
+                   (string)$a['cubo'], (string)$a['estado'], (int)$a['unidades']);
+            printf("     op=%-10s origen=%s#%-8d ruta=%-24s punto=%s\n", (string)$a['operacion'],
+                   (string)($a['origen_tipo'] ?: '-'), (int)$a['origen_id'],
+                   (string)($a['ruta'] ?: '-'), (string)($a['punto'] ?: '-'));
+            printf("     creado=%s  actualizado=%s  edad=%d min  exencion=%s\n",
+                   (string)$a['created_at'], (string)($a['updated_at'] ?: '-'), $edad,
+                   (string)($a['exencion'] ?: 'ninguna'));
+            //  El job y la llave se recortan: identifican sin volcar el dato entero.
+            printf("     job=%-14s idem=%-14s costo anotado (potencial, no cobrado)=%s\n",
+                   $a['provider_job_id'] ? mb_substr((string)$a['provider_job_id'], 0, 12) . '…' : '-',
+                   mb_substr((string)$a['idem'], 0, 12) . '…',
+                   (string)$a['costo_usd']);
+            if (!empty($ev['pieza'])) {
+                $p = $ev['pieza'];
+                printf("     pieza #%d estado=%s grafica=%s img_estado=%s job=%s clase=%s\n",
+                       (int)$p['id'], (string)($p['estado'] ?? '?'),
+                       trim((string)($p['grafica_path'] ?? '')) !== '' ? 'SI' : 'no',
+                       (string)($p['img_estado'] ?? '-'),
+                       trim((string)($p['img_job'] ?? '')) !== '' ? 'SI' : 'no',
+                       (string)($p['img_error_clase'] ?? '-'));
+                printf("     job_at=%s  proximo sondeo=%s  tactica=%s plan=%s\n",
+                       (string)($p['img_job_at'] ?? '-'), (string)($p['img_next_poll_at'] ?? '-'),
+                       (string)($p['tactica_id'] ?? '-'), (string)($p['plan_id'] ?? '-'));
+            } elseif (!empty($ev['slide'])) {
+                $sl = $ev['slide'];
+                printf("     slide #%d de la pieza #%s · estado de la pieza=%s · imagen del slide=%s\n",
+                       (int)$sl['id'], (string)($sl['contenido_id'] ?? '?'),
+                       (string)($sl['contenido_estado'] ?? '?'),
+                       trim((string)($sl['grafica_path'] ?? '')) !== '' ? 'SI' : 'no');
+            } else {
+                echo "     sin atribucion estructurada · no se inventa pieza\n";
+            }
+            printf("     CLASE: %s  ·  nivel: %s\n", $f['clase'], $f['nivel']);
+            printf("     accion sugerida: %s\n", $f['accion']);
+            foreach ($f['evidencia'] as $e) echo '     evidencia: ' . $e . "\n";
+        }
+        echo "\n=== FIN · no se escribio nada, no se llamo a ningun proveedor ===\n";
+    }
     if ($__test === 'conciliar') {   // solo lectura · ya estás dentro como admin
         $dias = max(1, min(400, (int)($_GET['dias'] ?? 120)));
         echo "\n--- CONCILIACIÓN: LO PAGADO CONTRA LO RECIBIDO (últimos {$dias} días) ---\n";

@@ -67,6 +67,13 @@ $MIGRACIONES = [
     //  del gasto: dos peticiones a la vez pagarian dos veces.
     '2026-08-22_crecer_plan_solicitud.sql',      // crecer_meta_plan.solicitud
     '2026-08-22_crecer_plan_solicitud_libro.sql',// crecer_plan_solicitud
+    //  MATERIAL · de donde salio la imagen de una publicacion. Aditiva y
+    //  NULL-able: sin ella, aplicar una foto de Biblioteca sigue guardando la
+    //  ruta y la trazabilidad estructurada no existe — apagada, no rota.
+    '2026-08-26_crecer_contenido_material.sql',  // crecer_contenido.material_activo_id
+    //  La entrega y la decision son dos ejes distintos: `estado` dice si la
+    //  imagen se genero; `decision_dueno`, que hizo el dueño con ella.
+    '2026-08-26_crecer_generacion_decision.sql', // crecer_generaciones.decision_dueno
 ];
 $DIR = dirname(__DIR__) . '/migrations/';
 $PRESENTES = array_values(array_filter($MIGRACIONES, fn($m) => is_file($DIR . $m)));
@@ -97,6 +104,11 @@ $CREA = [
     '2026-08-22_crecer_plan_solicitud.sql'   => [['crecer_meta_plan', 'solicitud']],
     '2026-08-22_crecer_plan_solicitud_libro.sql'
                                             => [['crecer_plan_solicitud', null]],
+    '2026-08-26_crecer_contenido_material.sql'
+                                            => [['crecer_contenido', 'material_activo_id']],
+    '2026-08-26_crecer_generacion_decision.sql'
+                                            => [['crecer_generaciones', 'decision_dueno'],
+                                                ['crecer_generaciones', 'decidida_at']],
 ];
 $hay_pieza = function (string $tabla, ?string $col) use ($pdo): bool {
     try {

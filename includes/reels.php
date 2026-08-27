@@ -17,6 +17,13 @@
 
 require_once __DIR__ . '/ia.php';
 require_once __DIR__ . '/render.php';
+//  EL DOMINIO DEL MATERIAL, ARRIBA Y A LA VISTA. Estaba incluido dentro
+//  de los handlers, justo antes de cada llamada, y basto que UNO se
+//  quedara sin su require para que la entrega de arte muriera con un
+//  fatal en la ruta que mas se usa. Cargarlo aqui quita la clase entera
+//  de fallo: no depende de que rama se ejecute ni de que otra pagina lo
+//  haya cargado antes.
+require_once __DIR__ . '/material.php';
 
 // ── PRESETS ─────────────────────────────────────────────────
 // Cada preset es un PAQUETE de estilo (no un filtro): ritmo de
@@ -957,8 +964,22 @@ function reels_cerrar_pieza(PDO $pdo, int $reel_id): bool {
 
     // El caption: si el dueño ya tenía uno escrito por el corillo, se respeta.
     // El copy que generó el motor de reels solo entra si la pieza venía vacía.
-    $sets = ["grafica_path=?", "necesita_material=NULL", "tipo='reel'", "updated_at=NOW()"];
-    $par  = [(string)$r['video_url']];
+    //
+    //  LA MEDIA YA NO SE ESCRIBE AQUI. Este era el ultimo sitio que ponia
+    //  `grafica_path` a pelo para material del dueño: el reel se pegaba a la
+    //  pieza y de su Biblioteca no se enteraba nadie, asi que el video que
+    //  acabamos de montar con SUS clips no aparecia entre sus cosas y la pieza
+    //  no podia decir de donde salio.
+    //
+    //  Ahora el reel se registra como material suyo —`origen = 'reel'`, que es
+    //  la verdad: lo montamos nosotros con lo que el grabo— y se aplica por el
+    //  dominio, con las mismas guardas que la seleccion y la subida.
+    //
+    //  El orden importa: primero `tipo='reel'`, porque material_aplicar()
+    //  comprueba si la pieza admite video MIRANDO su tipo. Al reves, rechazaria
+    //  su propio video.
+    $sets = ["necesita_material=NULL", "tipo='reel'", "updated_at=NOW()"];
+    $par  = [];
     if (trim((string)$c['caption']) === '' && trim((string)($r['copy_post'] ?? '')) !== '') {
         $sets[] = "caption=?"; $par[] = (string)$r['copy_post'];
     }
@@ -966,6 +987,32 @@ function reels_cerrar_pieza(PDO $pdo, int $reel_id): bool {
     try {
         $pdo->prepare("UPDATE crecer_contenido SET " . implode(',', $sets) . " WHERE id=? AND marca_id=?")->execute($par);
     } catch (Throwable $e) { return false; }
+
+    $rel = material_rel_de_url((string)$r['video_url']);
+    if ($rel !== '') {
+        //  Registrar es idempotente por ruta: cerrar el mismo reel dos veces
+        //  —un reintento, el sweep que lo recoge otra vez— no deja dos filas
+        //  apuntando al mismo video.
+        $reg = material_registrar_archivo($pdo, $mid, $rel, 'video',
+                                          'Reel del ' . date('j/n'), 'reel');
+        if (!empty($reg['ok'])) {
+            $ap = material_aplicar($pdo, $mid, $cid, (int)$reg['activo_id']);
+            if (empty($ap['ok'])) {
+                error_log('reels_cerrar_pieza: no se pudo aplicar · ' . ($ap['motivo'] ?? ''));
+                return false;
+            }
+        }
+    } else {
+        //  El video no cuelga de uploads: no es material registrable. Se pega
+        //  la ruta como antes y se suelta cualquier referencia vieja, que ya no
+        //  seria cierta.
+        try {
+            $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW()
+                            WHERE id=? AND marca_id=?")
+                ->execute([(string)$r['video_url'], $cid, $mid]);
+        } catch (Throwable $e) { return false; }
+        material_soltar($pdo, $mid, $cid);
+    }
 
     // Avisar: el dueño subió los clips hace rato y probablemente ya se fue.
     try {

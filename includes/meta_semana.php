@@ -43,6 +43,11 @@
 require_once __DIR__ . '/meta_negocio.php';
 require_once __DIR__ . '/meta_ejecutar.php';
 require_once __DIR__ . '/meta_cambio.php';
+require_once __DIR__ . '/material.php';
+//  La candidata de imagen: la vista pregunta si se puede ofrecer «otra» y si
+//  hay alguna esperando decision. Arriba, no dentro de una rama — un helper
+//  llamado sin su require delante no es un aviso, es un fatal.
+require_once __DIR__ . '/candidata.php';
 
 /** Estados de pieza que el publicador puede tomar (publicador.php:427). */
 const SEMANA_PUBLICABLES = ['aprobado', 'programado'];
@@ -417,6 +422,98 @@ function semana_nota_hora(PDO $pdo, int $marca_id): string
     return $hay
         ? 'Esta hora coincide con tu mejor rendimiento reciente.'
         : 'Te sugerimos esta hora para comenzar. La ajustaremos con tus resultados.';
+}
+
+/**
+ * QUE IMAGEN LLEVA ESTA PUBLICACION, Y DE DONDE SALIO.
+ *
+ * La hoja de «Imagen o video» tiene que abrir diciendo la verdad de lo que hay
+ * ahora: si es una foto suya, cual; si la pinto el corillo, que lo diga; y si
+ * no hay nada, que no finja que si. Sin esto, la hoja abre igual en los tres
+ * casos y el dueño decide a ciegas — «mejorar» sobre nada, o «poner una tuya»
+ * cuando la suya ya esta puesta.
+ *
+ * TAMBIEN DICE QUE CABE. Un reel no admite una foto y un post no admite un
+ * video: no lo convierte nadie. Ofrecer las dos opciones y rechazar despues es
+ * hacerle perder el viaje, asi que la hoja pregunta antes de pintarse.
+ *
+ * Y SI SE PUEDE TOCAR. Lo que ya salio no se cambia. Esa regla vive en
+ * material_aplicar() y aqui solo se lee, para no enseñar una puerta cerrada.
+ *
+ * @return array{
+ *   origen:string, nombre:string, frase:string, hay:bool,
+ *   admite:array, admite_video:bool, editable:bool, activo_id:int,
+ *   mat_tipo:string, mejorable:bool, realzada:bool
+ * }
+ */
+function semana_material(PDO $pdo, int $marca_id, ?array $p): array
+{
+    $vacia = ['origen' => 'sin_pieza', 'nombre' => '', 'frase' => '', 'hay' => false,
+              'admite' => ['imagen'], 'admite_video' => false, 'editable' => false,
+              'activo_id' => 0, 'mat_tipo' => '', 'mejorable' => false, 'realzada' => false];
+    if (!$p || (int)($p['id'] ?? 0) <= 0) return $vacia;
+
+    $tipo   = (string)($p['tipo'] ?? 'post');
+    $admite = material_compatible($tipo);
+    //  Lo que ya salio -o esta saliendo- no se toca. Es la misma lista que
+    //  guarda material_aplicar(); leerla aqui solo evita enseñar la puerta.
+    $editable = !in_array((string)($p['estado'] ?? ''), SEMANA_HISTORIAL, true);
+    $hay_arte = trim((string)($p['grafica_path'] ?? '')) !== '';
+
+    $o   = material_origen($pdo, $marca_id, (int)$p['id']);
+    $act = $o['activo'] ?? null;
+    $nom = $act ? trim((string)($act['nombre'] ?? '')) : '';
+
+    //  ¿LO QUE SE VE ES EL ARCHIVO SUYO, O ALGO SACADO DE EL? La traza dice de
+    //  donde salio; la ruta dice que se enseña. Cuando no coinciden, es un
+    //  realce — y eso se cuenta, no se calla.
+    $ruta_act = $act ? ltrim(str_replace('\\', '/', (string)($act['archivo'] ?? '')), '/') : '';
+    $realzada = $act !== null && $ruta_act !== ''
+                && !str_contains(str_replace('\\', '/', trim((string)($p['grafica_path'] ?? ''))), $ruta_act);
+
+    //  LA FRASE, EN CRISTIANO. «material_activo_id» no le dice nada a nadie;
+    //  «Ahora lleva tu foto Su bizcocho» si. Y cuando no se sabe, se dice que
+    //  no se sabe en vez de afirmar que la pinto el corillo: la columna es
+    //  nueva y todo lo de antes tiene la traza vacia sin haber hecho nada mal.
+    if (!$hay_arte) {
+        $frase = $admite === ['imagen']
+            ? 'Todavía no tiene imagen.'
+            : 'Todavía no tiene imagen ni video.';
+    } elseif (($o['origen'] ?? '') === 'biblioteca') {
+        $suyo  = (string)($act['tipo'] ?? 'imagen') === 'video' ? 'tu video' : 'tu foto';
+        //  «TU FOTO» Y «TU FOTO REALZADA» NO SON LO MISMO, y la pieza tiene con
+        //  que distinguirlas sin columna nueva: un realce conserva la traza
+        //  —de esa foto salio lo que se ve— pero la ruta que se muestra ya NO
+        //  es la del archivo original. Si coinciden, es la suya tal cual; si no,
+        //  es la suya trabajada. Decir «tu foto» a secas sobre una realzada
+        //  seria decirle que no le hicimos nada.
+        $frase = $realzada
+            ? ($nom !== '' ? "Ahora lleva {$suyo} realzada: «{$nom}»." : "Ahora lleva {$suyo} realzada.")
+            : ($nom !== '' ? "Ahora lleva {$suyo}: «{$nom}»." : "Ahora lleva {$suyo}.");
+    } elseif (($o['origen'] ?? '') === 'sin_columna') {
+        $frase = 'Ahora lleva una imagen.';
+    } else {
+        $frase = 'Ahora lleva arte del corillo.';
+    }
+
+    return [
+        'origen'       => (string)($o['origen'] ?? 'generado_o_desconocido'),
+        'nombre'       => $nom,
+        'frase'        => $frase,
+        'hay'          => $hay_arte,
+        'admite'       => $admite,
+        'admite_video' => in_array('video', $admite, true),
+        'editable'     => $editable,
+        'activo_id'    => $act ? (int)$act['id'] : 0,
+        'mat_tipo'     => $act ? (string)($act['tipo'] ?? '') : '',
+        //  MEJORAR SOLO TIENE SENTIDO SOBRE UNA FOTO SUYA. Sobre arte generado
+        //  no se «mejora» nada: se vuelve a pintar, que es otra cosa, cuesta lo
+        //  mismo y ya tiene su propia fila. Ofrecerlo en los dos sitios seria
+        //  cobrar dos veces por la misma palabra.
+        'mejorable'    => $editable && $act !== null
+                          && (string)($act['tipo'] ?? '') === 'imagen',
+        'realzada'     => $realzada,
+    ];
 }
 
 /**
@@ -872,6 +969,34 @@ function semana_frase_puerta(array $r): string
 function semana_cuantas(int $n): string
 {
     return $n === 1 ? '1 publicación' : $n . ' publicaciones';
+}
+
+/**
+ * QUE VA A PASAR SI GUARDA ESTA FECHA, dicho antes de pulsar.
+ *
+ *     «Se publicará el martes 26 a las 10:00 a. m.»
+ *
+ * Vive aqui y no en la hoja por lo de siempre: la escriben dos sitios —la hoja
+ * al abrirse y el servidor al contestar— y dos redacciones del mismo dato
+ * acaban diciendo cosas distintas. Sin fecha devuelve cadena vacia: no hay nada
+ * que prometer, y prometerlo igual seria inventarse un compromiso.
+ */
+function semana_frase_cuando(?string $fecha): string
+{
+    $f = trim((string)$fecha);
+    if ($f === '') return '';
+    $ts = strtotime($f);
+    if ($ts === false) return '';
+
+    $dias  = ['Sunday'=>'domingo','Monday'=>'lunes','Tuesday'=>'martes','Wednesday'=>'miércoles',
+              'Thursday'=>'jueves','Friday'=>'viernes','Saturday'=>'sábado'];
+    $dia   = $dias[date('l', $ts)] ?? '';
+    $num   = (int)date('j', $ts);
+    $h     = (int)date('g', $ts);
+    $min   = date('i', $ts);
+    $ampm  = date('a', $ts) === 'am' ? 'a. m.' : 'p. m.';
+
+    return 'Se publicará el ' . $dia . ' ' . $num . ' a las ' . $h . ':' . $min . ' ' . $ampm . '.';
 }
 
 /** «2 acciones» / «1 acción». Lo que le toca a EL, contado aparte. */

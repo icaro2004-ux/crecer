@@ -10,6 +10,13 @@
 
 require_once __DIR__ . '/ia.php';
 require_once __DIR__ . '/memoria.php';   // El Cerebro del Negocio (RAG + escritura)
+//  EL DOMINIO DEL MATERIAL, ARRIBA Y A LA VISTA. Estaba incluido dentro
+//  de los handlers, justo antes de cada llamada, y basto que UNO se
+//  quedara sin su require para que la entrega de arte muriera con un
+//  fatal en la ruta que mas se usa. Cargarlo aqui quita la clase entera
+//  de fallo: no depende de que rama se ejecute ni de que otra pagina lo
+//  haya cargado antes.
+require_once __DIR__ . '/material.php';
 
 if (!defined('CRECER_COPILOTO_HORA'))       define('CRECER_COPILOTO_HORA', 25);        // mensajes por negocio / hora con plan
 if (!defined('CRECER_COPILOTO_DIA'))        define('CRECER_COPILOTO_DIA', 120);        // mensajes por negocio / dia con plan
@@ -991,7 +998,7 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
     //    de más → cae a Gemini para no trabar la fábrica. ──
     if (!$tiene_foto && function_exists('img_resp_activo') && img_resp_activo()) {
         $estilo_raw = (trim($opts['estilo_arte'] ?? 'realista') ?: 'realista');
-        $rr = generar_grafica_responses($pdo, $marca_id, $m, $copy, $con_texto, ($con_logo && $logo_abs) ? $logo_abs : null, $fname, $estilo_raw, $instr, (int)($opts['contenido_id'] ?? 0));
+        $rr = generar_grafica_responses($pdo, $marca_id, $m, $copy, $con_texto, ($con_logo && $logo_abs) ? $logo_abs : null, $fname, $estilo_raw, $instr, (int)($opts['origen_id'] ?? ($opts['contenido_id'] ?? 0)), (string)($opts['origen_tipo'] ?? 'contenido'));
         if ($rr) {
             $pdo->prepare("INSERT INTO crecer_graficas (marca_id, archivo, copy_text) VALUES (?,?,?)")
                 ->execute([$marca_id, $rr['archivo'], $copy]);
@@ -1004,11 +1011,18 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
     //  RUTA 2. Cuenta 1: es arte nuevo o un realce con IA de la foto del dueño.
     //  Subir la foto cuesta 0 —no pasa por proveedor—; transformarla, 1.
     require_once __DIR__ . '/cuota_imagenes.php';
+    //  DE QUE ES ESTA UNIDAD. La llave idempotente se arma con el origen, asi
+    //  que un origen vacio es la MISMA llave para toda la marca: la segunda
+    //  pieza reusaba la reserva de la primera y salia sin pagar. Por defecto el
+    //  origen es la publicacion; el carrusel manda el suyo porque su unidad es
+    //  el slide, no la pieza — cinco slides son cinco imagenes.
+    $org_tipo = (string)($opts['origen_tipo'] ?? 'contenido');
+    $org_id   = (int)($opts['origen_id'] ?? ($opts['contenido_id'] ?? 0));
     $r = ia_imagen($pdo, 'creador', 'Crear arte de post', $prompt, $fname, [
         'marca_id'  => $marca_id,
         'cuota'     => CuotaCtx::de($pdo, $marca_id, $tiene_foto ? 'realce' : 'arte_post',
-                                    'crear_arte_post', ['origen_tipo' => 'contenido',
-                                    'origen_id' => (int)($opts['contenido_id'] ?? 0), 'costo' => 0.17]),
+                                    'crear_arte_post', ['origen_tipo' => $org_tipo,
+                                    'origen_id' => $org_id, 'costo' => 0.17]),
         'modelo'    => $modelo,
         'imagenes'  => $imagenes,
         'foto_real' => $tiene_foto,               // foto real → Gemini (fiel)
@@ -1030,7 +1044,7 @@ function generar_grafica(PDO $pdo, int $marca_id, ?string $foto_abs, array $opts
 //  asi que el respaldo NO reusa la reserva del encolado original — abre otra, y
 //  el dueño paga dos por la misma imagen. Salio al probar el respaldo del
 //  credito agotado: dos asientos extra con origen=0.
-function generar_grafica_responses(PDO $pdo, int $marca_id, array $m, string $copy, bool $con_texto, ?string $logo_abs, string $fname, string $estilo = 'realista', string $extra = '', int $contenido_id = 0): ?array {
+function generar_grafica_responses(PDO $pdo, int $marca_id, array $m, string $copy, bool $con_texto, ?string $logo_abs, string $fname, string $estilo = 'realista', string $extra = '', int $contenido_id = 0, string $origen_tipo = 'contenido'): ?array {
     require_once __DIR__ . '/img_responses.php';
     if (!function_exists('openai_configurado') || !openai_configurado()) return null;
     $logo = null;
@@ -1055,7 +1069,7 @@ function generar_grafica_responses(PDO $pdo, int $marca_id, array $m, string $co
         require_once __DIR__ . '/cuota_imagenes.php';
         $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1']
             + ['cuota' => CuotaCtx::de($pdo, $marca_id, 'arte_post', 'crear_arte_post_responses',
-                          ['origen_tipo' => 'contenido', 'origen_id' => $contenido_id,
+                          ['origen_tipo' => $origen_tipo, 'origen_id' => $contenido_id,
                            'costo' => 0.17])]
             + ($logo ? ['logo' => $logo] : []));
     } catch (Throwable $e) { error_log('generar_grafica_responses crear: ' . $e->getMessage()); return null; }
@@ -1485,13 +1499,69 @@ SYS;
  * vocabulario/voz boricua y la añade al glosario del negocio (para no repetirla).
  * No rompe la edición si la IA falla.
  */
-function aprender_de_edicion(PDO $pdo, int $marca_id, string $original, string $editado): ?string {
+/**
+ * APUNTA LA EDICION, SIN LLAMAR A NADIE.
+ *
+ * `aprender_de_edicion()` vivia dentro del guardado del caption: cada coma que
+ * el dueño corregia costaba una llamada al modelo, y ademas lo dejaba esperando
+ * a que un proveedor contestara para ver su propio texto guardado. Aprender de
+ * lo que reescribe sigue siendo la señal mas valiosa que da — pero el sitio de
+ * digerirla es la corrida del Aprendiz, no el dedo del dueño en la pantalla.
+ *
+ * Aqui solo se deja la nota cruda: `estado = pendiente_revision`, que NO es
+ * `activa`, asi que nada la lee como si fuera ya una preferencia aprendida.
+ * Sin tabla nueva: `crecer_memoria` ya tiene `datos_json` y `fuente_id`.
+ *
+ * Falla en silencio a proposito: el texto del dueño YA quedo guardado, y perder
+ * la nota no puede convertirse en perder su edicion.
+ */
+function edicion_anotar(PDO $pdo, int $marca_id, int $contenido_id,
+                        string $original, string $editado): bool {
+    if (trim($original) === trim($editado) || trim($editado) === '') return false;
+    try {
+        $pdo->prepare(
+            "INSERT INTO crecer_memoria
+               (marca_id, tipo, titulo, detalle, porque, fuente, fuente_id,
+                confianza, peso, estado, visible_usuario, editable_usuario, datos_json)
+             VALUES (?, 'edicion_cruda', ?, ?, ?, 'edicion', ?, 0, 0,
+                     'pendiente_revision', 0, 0, ?)")
+            ->execute([
+                $marca_id,
+                mb_strimwidth('Editó un caption: ' . trim($editado), 0, 120, '…'),
+                mb_substr(trim($editado), 0, 2000),
+                'El dueño reescribió este texto. Falta digerir qué enseña.',
+                $contenido_id,
+                json_encode(['original' => mb_substr($original, 0, 2000),
+                             'editado'  => mb_substr($editado, 0, 2000)],
+                            JSON_UNESCAPED_UNICODE),
+            ]);
+        return true;
+    } catch (Throwable $e) {
+        error_log('edicion_anotar: ' . get_class($e));
+        return false;
+    }
+}
+
+function aprender_de_edicion(PDO $pdo, int $marca_id, string $original, string $editado,
+                            array $opts = []): ?string {
+    //  $opts existe para que el DIGESTOR pueda reusar este prompt sin copiarlo,
+    //  y son dos cosas concretas:
+    //
+    //   · `mock_texto`  — con las llaves en blanco, ia_ejecutar() contesta con
+    //     el texto de reserva. El de aqui es 'NINGUNA', que es lo correcto para
+    //     la ruta viva: sin modelo, no se inventa una leccion. Pero una prueba
+    //     del ciclo necesita poder decir «supon que el Aprendiz contesto esto».
+    //   · `propagar`    — esta funcion se traga sus errores a proposito: nacio
+    //     dentro del guardado del caption, y alli un fallo del modelo no podia
+    //     tumbar la escritura del dueño. El digestor SI necesita distinguir «no
+    //     hay nada que aprender» de «el modelo fallo»: lo primero cierra la
+    //     nota, lo segundo la deja para reintentar.
     if (trim($original) === trim($editado) || trim($editado) === '') return null;
     $prompt = "El dueño de un negocio boricua editó el caption de un post. Compara el ORIGINAL con el EDITADO y extrae SOLO lecciones de VOCABULARIO o VOZ boricua para no repetir el error (ej: 'usa china, no naranja'; 'evita platicar, di hablar'). Máximo 2 viñetas muy cortas. Si el cambio NO es de vocabulario/voz (solo cambió datos o contenido), responde EXACTAMENTE: NINGUNA.\n\nORIGINAL:\n{$original}\n\nEDITADO:\n{$editado}";
     try {
         $r = ia_ejecutar($pdo, 'aprendiz', 'Aprender de edicion', $prompt, [
             'marca_id' => $marca_id, 'thinking_budget' => 0, 'max_tokens' => 200, 'temperatura' => 0.3,
-            'mock_texto' => 'NINGUNA',
+            'mock_texto' => (string)($opts['mock_texto'] ?? 'NINGUNA'),
         ]);
         $leccion = trim($r['texto']);
         if ($leccion === '' || stripos($leccion, 'NINGUNA') !== false) return null;
@@ -1514,7 +1584,235 @@ function aprender_de_edicion(PDO $pdo, int $marca_id, string $original, string $
             memoria_consolidar($pdo, $marca_id);
         }
         return $leccion;
-    } catch (Throwable $e) { return null; }
+    } catch (Throwable $e) {
+        if (!empty($opts['propagar'])) throw $e;
+        return null;
+    }
+}
+
+/**
+ * EL DIGESTOR — el que convierte las notas crudas en algo que el corillo sabe.
+ *
+ * POR QUE EXISTE. Al sacar la llamada al modelo del guardado del caption
+ * quedaron filas `edicion_cruda` en `pendiente_revision`… y nadie que las
+ * leyera. Una cola que nadie consume no es trabajo diferido: es trabajo
+ * perdido. Esto la consume, FUERA de la pantalla del dueño — lo llama el cron
+ * del corillo, no una carga de pagina.
+ *
+ * LOS ESTADOS SALEN DEL ESQUEMA QUE HAY, sin DDL. `crecer_memoria.estado` es un
+ * enum de cuatro valores y no tiene «en proceso» ni «procesada», asi que:
+ *
+ *   pendiente      → estado='pendiente_revision' y sin lease vivo
+ *   en proceso     → sigue 'pendiente_revision', con `valid_until` en el futuro
+ *                    (el LEASE: quien lo pone, la tiene reclamada)
+ *   procesada      → estado='superseded' y `superseded_by` = id de la leccion.
+ *                    Es literalmente lo que paso: la nota cruda quedo
+ *                    reemplazada por lo que se aprendio de ella.
+ *   fallo recuperable → vuelve a 'pendiente_revision', lease liberado, y el
+ *                    numero de intentos apuntado en `datos_json`
+ *   fallo terminal → estado='descartada' con el porque escrito. No se borra:
+ *                    una nota que fallo cinco veces es justo la que hay que
+ *                    poder mirar.
+ *
+ * LA CARRERA LA ARBITRA EL LEASE, no un «creada hace menos de N minutos». El
+ * UPDATE lleva la condicion en el WHERE y se mira `rowCount()`: dos crones
+ * simultaneos entran los dos, pero solo uno mueve la fila — el otro se va sin
+ * llamar a nadie. Eso es lo que impide pagar dos veces por la misma leccion.
+ *
+ * @return array{digeridas:int, fallidas:int, llamadas:int, sin_leccion:int}
+ */
+/**
+ * CUANTO PUEDE COSTAR UNA CORRIDA DE APRENDIZAJE.
+ *
+ * `edicion_digerir()` nacio con LIMIT, pero POR MARCA: el cron le pasaba 10 a
+ * cada una. Con veinte marcas que hubieran corregido captions, una sola corrida
+ * del corillo disparaba doscientas llamadas al modelo — sin que nadie lo pidiera
+ * y sin que nadie lo viera venir, porque la cola se llena con el uso normal.
+ *
+ * El arreglo no es una cola nueva: es un techo. Uno GLOBAL por corrida, para
+ * que el gasto de una noche sea predecible, y uno POR MARCA menor que el
+ * global, para que la primera de la lista no se lo coma entero. Lo que no cupo
+ * se queda pendiente y lo drena la corrida siguiente: aprender de una edicion
+ * no es urgente, y gastar de golpe si es caro.
+ *
+ * Se configuran como todo aqui: una constante que gana si esta definida.
+ */
+function aprendiz_tope_corrida(): int {
+    return max(1, (int)(defined('CRECER_APRENDIZ_TOPE_CORRIDA')
+        ? CRECER_APRENDIZ_TOPE_CORRIDA : 5));
+}
+function aprendiz_tope_marca(): int {
+    //  Siempre por debajo del global: si fueran iguales, la primera marca
+    //  vaciaria la bolsa y las demas no verian una corrida en su vida.
+    $g = aprendiz_tope_corrida();
+    $m = (int)(defined('CRECER_APRENDIZ_TOPE_MARCA') ? CRECER_APRENDIZ_TOPE_MARCA : 2);
+    return max(1, min($m, max(1, $g - 1)));
+}
+
+if (!function_exists('aprendiz_leccion')) {
+/**
+ * EL BORDE DEL APRENDIZ, sustituible — el mismo patron que ia_http_post_retry()
+ * y openai_responses_crear_bg(). Por aqui sale la unica llamada al modelo del
+ * digestor, asi que es el sitio donde un runner puede poner su doble y probar
+ * el ciclo entero —incluido el fallo— sin llamar a nadie.
+ *
+ * Por dentro no hay nada nuevo: es aprender_de_edicion(), el prompt de siempre,
+ * con `propagar` puesto para que el digestor pueda distinguir «no hay nada que
+ * aprender» de «el modelo fallo».
+ */
+function aprendiz_leccion(PDO $pdo, int $marca_id, string $original,
+                          string $editado, array $opts = []): ?string {
+    return aprender_de_edicion($pdo, $marca_id, $original, $editado,
+                               $opts + ['propagar' => true]);
+}
+}
+
+function edicion_digerir(PDO $pdo, int $marca_id, ?int $tope = null, &$bolsa = null): array
+{
+    require_once __DIR__ . '/memoria.php';
+    $out = ['digeridas' => 0, 'fallidas' => 0, 'llamadas' => 0, 'sin_leccion' => 0];
+    if ($marca_id <= 0) return $out;
+
+    //  LA BOLSA ES EL TECHO GLOBAL DE LA CORRIDA, y va por referencia a
+    //  proposito: el cron la crea UNA vez y se la pasa a todas las marcas. Si
+    //  cada una creara la suya, el techo global se multiplicaria por el numero
+    //  de marcas — que es exactamente el problema que esto cierra.
+    if ($bolsa === null) $bolsa = ['restantes' => aprendiz_tope_corrida()];
+    if (!is_array($bolsa) || (int)($bolsa['restantes'] ?? 0) <= 0) return $out;
+
+    //  Y EL TECHO DE ESTA MARCA: lo menor entre lo que pidan, su tope y lo que
+    //  quede en la bolsa. Nunca se leen mas filas de las que se van a procesar:
+    //  reclamar una fila que no se va a tocar la deja bloqueada diez minutos
+    //  para todo el mundo.
+    $tope = $tope !== null ? max(0, $tope) : aprendiz_tope_marca();
+    $tope = min($tope, aprendiz_tope_marca(), (int)$bolsa['restantes']);
+    if ($tope <= 0) return $out;
+
+    $MAX_INTENTOS = 3;
+    $LEASE_MIN    = 10;   // minutos que se reserva una fila reclamada
+
+    try {
+        $q = $pdo->prepare(
+            "SELECT id, fuente_id, datos_json FROM crecer_memoria
+              WHERE marca_id = ? AND tipo = 'edicion_cruda'
+                AND estado = 'pendiente_revision'
+                AND (valid_until IS NULL OR valid_until < NOW())
+              ORDER BY id ASC LIMIT {$tope}");
+        $q->execute([$marca_id]);
+        $filas = $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable $e) {
+        error_log('edicion_digerir (lectura): ' . get_class($e));
+        return $out;
+    }
+
+    foreach ($filas as $f) {
+        //  La bolsa se mira ANTES de reclamar: quedarse sin presupuesto a
+        //  mitad no puede dejar una fila con el lease puesto.
+        if ((int)$bolsa['restantes'] <= 0) break;
+        $id = (int)$f['id'];
+
+        //  1 · RECLAMAR. El lease va en el WHERE: si otro llego primero, aqui
+        //      se mueven cero filas y esta corrida ni mira el contenido.
+        try {
+            $u = $pdo->prepare(
+                "UPDATE crecer_memoria
+                    SET valid_until = DATE_ADD(NOW(), INTERVAL {$LEASE_MIN} MINUTE),
+                        updated_at = NOW()
+                  WHERE id = ? AND marca_id = ? AND estado = 'pendiente_revision'
+                    AND (valid_until IS NULL OR valid_until < NOW())");
+            $u->execute([$id, $marca_id]);
+            if ($u->rowCount() === 0) continue;   // otro la tiene
+        } catch (Throwable $e) {
+            error_log('edicion_digerir (reclamar): ' . get_class($e));
+            continue;
+        }
+
+        $d        = json_decode((string)($f['datos_json'] ?? ''), true) ?: [];
+        $original = (string)($d['original'] ?? '');
+        $editado  = (string)($d['editado'] ?? '');
+        $intentos = (int)($d['intentos'] ?? 0);
+
+        //  2 · DIGERIR. Es el prompt del Aprendiz de siempre, no uno nuevo.
+        $leccion = null; $fallo = null;
+        try {
+            //  El turno se gasta al INTENTARLO, salga bien o mal. Un fallo que
+            //  no descontara dejaria a una marca rota consumiendo la corrida
+            //  entera a base de reintentos.
+            $out['llamadas']++;
+            $bolsa['restantes'] = (int)$bolsa['restantes'] - 1;
+            $leccion = aprendiz_leccion($pdo, $marca_id, $original, $editado);
+        } catch (Throwable $e) {
+            $fallo = get_class($e) . ': ' . mb_substr($e->getMessage(), 0, 120);
+        }
+
+        if ($fallo !== null) {
+            //  3a · FALLO. Se suelta el lease y se apunta el intento. A la
+            //       tercera se deja de insistir, pero NO se borra.
+            $intentos++;
+            $d['intentos'] = $intentos;
+            $terminal = $intentos >= $MAX_INTENTOS;
+            try {
+                $pdo->prepare(
+                    "UPDATE crecer_memoria
+                        SET estado = ?, valid_until = NULL, datos_json = ?,
+                            porque = ?, updated_at = NOW()
+                      WHERE id = ? AND marca_id = ?")
+                    ->execute([
+                        $terminal ? 'descartada' : 'pendiente_revision',
+                        json_encode($d, JSON_UNESCAPED_UNICODE),
+                        $terminal
+                            ? 'No pude aprender de esta edición después de ' . $intentos
+                              . ' intentos. La dejo aquí por si hace falta mirarla.'
+                            : 'Falló al digerirla; se reintenta en la próxima corrida.',
+                        $id, $marca_id]);
+            } catch (Throwable $e) { error_log('edicion_digerir (fallo): ' . get_class($e)); }
+            $out['fallidas']++;
+            continue;
+        }
+
+        //  3b · SIN LECCION. El modelo miro y no habia nada de voz que
+        //       aprender —solo cambio un dato—. Eso NO es un fallo: la nota se
+        //       cierra igual, o volveria a costar en cada corrida.
+        if ($leccion === null || trim((string)$leccion) === '') {
+            try {
+                $pdo->prepare(
+                    "UPDATE crecer_memoria
+                        SET estado='superseded', valid_until=NULL,
+                            porque='Miré esta edición y no cambiaba nada de la voz.',
+                            updated_at=NOW()
+                      WHERE id=? AND marca_id=?")->execute([$id, $marca_id]);
+            } catch (Throwable $e) { error_log('edicion_digerir (sin leccion): ' . get_class($e)); }
+            $out['sin_leccion']++;
+            continue;
+        }
+
+        //  3c · LECCION. aprender_de_edicion() ya la escribio con
+        //       memoria_escribir() —la misma que lee memoria_relevante() y por
+        //       tanto cerebro_negocio()—. Aqui solo se ata la nota cruda a ella
+        //       para poder decir de donde salio.
+        $lid = 0;
+        try {
+            $b = $pdo->prepare(
+                "SELECT id FROM crecer_memoria
+                  WHERE marca_id=? AND fuente='edicion' AND estado='activa'
+                    AND tipo='preferencia'
+                  ORDER BY id DESC LIMIT 1");
+            $b->execute([$marca_id]);
+            $lid = (int)$b->fetchColumn();
+        } catch (Throwable $e) { /* la leccion esta; el enlace es contexto */ }
+
+        try {
+            $pdo->prepare(
+                "UPDATE crecer_memoria
+                    SET estado='superseded', valid_until=NULL, superseded_by=?,
+                        porque='Ya la digerí: de aquí salió lo que aprendí.',
+                        updated_at=NOW()
+                  WHERE id=? AND marca_id=?")->execute([$lid ?: null, $id, $marca_id]);
+        } catch (Throwable $e) { error_log('edicion_digerir (cerrar): ' . get_class($e)); }
+        $out['digeridas']++;
+    }
+
+    return $out;
 }
 
 /**
@@ -1755,8 +2053,16 @@ function crear_post_muestra(PDO $pdo, int $marca_id): int {
         // rechazado_confirmado: no quedó nada creado. El motor viejo puede correr.
     }
     try {
-        $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => false]);
+        $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => false,
+                                                     'contenido_id' => (int)$cid]);
         if (!empty($g['archivo'])) $pdo->prepare("UPDATE crecer_contenido SET grafica_path=? WHERE id=?")->execute([$g['archivo'], $cid]);
+        //  LA PIEZA DEJA DE DECIR QUE LLEVA MATERIAL SUYO. Esto pinta desde
+        //  cero, asi que si la pieza venia con una foto del dueño aplicada, la
+        //  referencia que la trazaba ya no es cierta: se muestra arte generado
+        //  y el origen seguiria diciendo «tu foto». Soltarla es barato — un
+        //  UPDATE que no hace nada si no habia nada — y evita la unica mentira
+        //  que esta columna puede contar.
+        material_soltar($pdo, (int)$marca_id, (int)$cid);
     } catch (Throwable $e) {}
     return $cid;
 }
@@ -2374,11 +2680,19 @@ function trabajo_autonomo(PDO $pdo, int $marca_id, string $enfoque = ''): array 
         }
         if ($cap !== '' && $meta_id !== null) {
             try {
-                $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => true, 'instrucciones' => $visual]);
+                $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => true, 'instrucciones' => $visual,
+                                                             'contenido_id' => (int)$cid]);
                 if (!empty($g['archivo'])) {
                     $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")
                         ->execute([$g['archivo'], $cid, $marca_id]);
-                }
+                                //  LA PIEZA DEJA DE DECIR QUE LLEVA MATERIAL SUYO. Esto pinta desde
+                //  cero, asi que si la pieza venia con una foto del dueño aplicada, la
+                //  referencia que la trazaba ya no es cierta: se muestra arte generado
+                //  y el origen seguiria diciendo «tu foto». Soltarla es barato — un
+                //  UPDATE que no hace nada si no habia nada — y evita la unica mentira
+                //  que esta columna puede contar.
+                material_soltar($pdo, (int)$marca_id, (int)$cid);
+            }
             } catch (Throwable $e) { error_log('relevo arte: ' . $e->getMessage()); }
         }
         // Repartir en los próximos días (look "te dejé la semana lista")
@@ -2615,11 +2929,19 @@ function gerente_despachar(PDO $pdo, int $marca_id, string $peticion, bool $pued
             try { $rr = redactar_pieza($pdo, $cid); $cap = (string)($rr['caption'] ?? ''); $visual = (string)($rr['debate']['visual'] ?? ''); $ok++; } catch (Throwable $e) {}
             if ($cap !== '') {   // deja el arte listo también (post completo), con el concepto del corillo
                 try {
-                    $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => true, 'instrucciones' => $visual]);
+                    $g = generar_grafica($pdo, $marca_id, null, ['copy' => $cap, 'con_texto' => false, 'con_logo' => true, 'instrucciones' => $visual,
+                                                                 'contenido_id' => (int)$cid]);
                     if (!empty($g['archivo'])) {
                         $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, updated_at=NOW() WHERE id=? AND marca_id=?")
                             ->execute([$g['archivo'], $cid, $marca_id]);
-                    }
+                                        //  LA PIEZA DEJA DE DECIR QUE LLEVA MATERIAL SUYO. Esto pinta desde
+                    //  cero, asi que si la pieza venia con una foto del dueño aplicada, la
+                    //  referencia que la trazaba ya no es cierta: se muestra arte generado
+                    //  y el origen seguiria diciendo «tu foto». Soltarla es barato — un
+                    //  UPDATE que no hace nada si no habia nada — y evita la unica mentira
+                    //  que esta columna puede contar.
+                    material_soltar($pdo, (int)$marca_id, (int)$cid);
+                }
                 } catch (Throwable $e) { error_log('gerente arte: ' . $e->getMessage()); }
             }
             $reprog->execute([date('Y-m-d 10:00:00', strtotime('+' . (++$i) . ' day')), $cid, $marca_id]);
