@@ -553,6 +553,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'activo_id'=>(int)$reg['activo_id'], 'aplicado'=>true], JSON_UNESCAPED_UNICODE); exit;
     }
 
+    // ── OTRA IMAGEN, SIN PERDER LA QUE TIENE ──────────────────────────────
+    //
+    //  Tres puertas para un solo recorrido: abrir la intencion, preguntar como
+    //  va, y decidir. Ninguna de las tres pisa `grafica_path` — solo la ultima,
+    //  y solo cuando el dueño dice que si.
+    //
+    //  EL DISPARO VA FUERA DE LA TRANSACCION. cand_abrir() cierra su candado
+    //  antes de volver; el trabajo se lanza despues. Tener una transaccion
+    //  abierta mientras se espera a la red es como se bloquea una base entera.
+    if ($accion === 'otra_imagen') {
+        require_once __DIR__ . '/../includes/candidata.php';
+        header('Content-Type: application/json');
+
+        $intencion = (string)($_POST['intencion'] ?? '');
+        $evitar    = (string)($_POST['evitar'] ?? '');
+        $r = cand_abrir($pdo, (int)$marca_id, (int)$id, $intencion, $evitar);
+        if (empty($r['ok'])) {
+            echo json_encode(['ok'=>false, 'motivo'=>$r['motivo'] ?? '',
+                              'err'=>$r['err'] ?? 'No pude empezar.'], JSON_UNESCAPED_UNICODE); exit;
+        }
+        $gen = $r['gen'];
+        //  SOLO SE DISPARA LO QUE ACABA DE NACER. Si se reuso una intencion
+        //  viva, el trabajo ya esta corriendo: volver a dispararlo seria
+        //  exactamente el doble POST que el arbitraje existe para impedir.
+        if (empty($r['reusada']) && (string)$gen['estado'] === 'queued') {
+            require_once __DIR__ . '/../includes/gen_async.php';
+            gen_disparar((int)$gen['id']);
+        }
+        echo json_encode(['ok'=>true, 'gen'=>(int)$gen['id'],
+                          'estado'=>(string)$gen['estado'],
+                          'reusada'=>!empty($r['reusada'])], JSON_UNESCAPED_UNICODE); exit;
+    }
+
+    //  SOLO CONSULTA. El sondeo no genera, no dispara y no decide: pregunta.
+    //  Un sondeo que produce trabajo multiplica el gasto por pestaña abierta.
+    if ($accion === 'cand_estado') {
+        require_once __DIR__ . '/../includes/candidata.php';
+        header('Content-Type: application/json');
+        $p = cand_pendiente($pdo, (int)$marca_id, (int)$id);
+        if (empty($p['hay'])) { echo json_encode(['ok'=>true, 'hay'=>false]); exit; }
+        $g = $p['gen'];
+        //  NI EL PROMPT NI EL ERROR CRUDO SALEN DE AQUI. El primero es nuestro;
+        //  el segundo es del proveedor y no le dice nada al dueño.
+        echo json_encode([
+            'ok'=>true, 'hay'=>true, 'gen'=>(int)$g['id'],
+            'estado'=>(string)$g['estado'],
+            'lista'=>(string)$g['estado'] === 'completed',
+            'fallo'=>(string)$g['estado'] === 'failed',
+            'nueva'=>(string)($g['archivo'] ?? ''),
+            'actual'=>(string)($p['actual'] ?? ''),
+        ], JSON_UNESCAPED_UNICODE); exit;
+    }
+
+    //  DECIDIR. Aqui y solo aqui cambia la publicacion.
+    if ($accion === 'cand_decidir') {
+        require_once __DIR__ . '/../includes/candidata.php';
+        header('Content-Type: application/json');
+        $gid = (int)($_POST['gen'] ?? 0);
+        $dec = (string)($_POST['decision'] ?? '');
+        $r = cand_decidir($pdo, (int)$marca_id, (int)$id, $gid, $dec);
+        if (empty($r['ok'])) {
+            echo json_encode(['ok'=>false, 'motivo'=>$r['motivo'] ?? '',
+                              'err'=>$r['err'] ?? 'No pude guardar tu decisión.'],
+                             JSON_UNESCAPED_UNICODE); exit;
+        }
+        echo json_encode(['ok'=>true, 'decision'=>(string)$r['decision'],
+                          'ya_estaba'=>!empty($r['ya_estaba']),
+                          'img'=>(string)($r['img'] ?? '')], JSON_UNESCAPED_UNICODE); exit;
+    }
+
     // ── USAR ALGO QUE YA ES SUYO ──────────────────────────────────────────
     //
     //  LA SEGUNDA MITAD DE UNA SUBIDA. `foto_directa` con `solo_subir` deja el

@@ -31,6 +31,11 @@
 
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/cuota_imagenes.php';
+//  EL DOMINIO DEL MATERIAL, ARRIBA. Al aplicar una candidata hay que soltar la
+//  traza del material del dueño, y ese helper vive alli. Cargarlo dentro de la
+//  rama que lo usa es como se murio una entrega de arte hace dos dias: un
+//  material_*() sin su require delante no es un aviso, es un fatal.
+require_once __DIR__ . '/material.php';
 
 /** Las dos intenciones que el dueño puede pedir. No hay una tercera. */
 const CAND_MISMA_IDEA    = 'misma_idea';
@@ -160,11 +165,19 @@ function cand_abrir(PDO $pdo, int $marca_id, int $contenido_id,
 
         //  ¿YA HAY UNA VIVA? Dentro del candado, asi que la respuesta es firme.
         $en_vuelo = "'" . implode("','", CAND_EN_VUELO) . "'";
+        //  LECTURA CON CANDADO, y no es adorno. Una lectura normal dentro de
+        //  una transaccion REPEATABLE READ ve la foto del momento en que se
+        //  abrio la vista, no lo que hay AHORA: el segundo proceso podia
+        //  quedarse mirando un instante anterior al INSERT del primero y
+        //  concluir que no habia ninguna. Salio en la prueba de concurrencia
+        //  con dos procesos de verdad: dos filas, dos trabajos, dos unidades.
+        //  Con FOR UPDATE se lee lo ultimo confirmado, que es la unica lectura
+        //  sobre la que se puede decidir si crear otra.
         $qv = $pdo->prepare("SELECT * FROM crecer_generaciones
                               WHERE marca_id=? AND contenido_id=?
                                 AND ( estado IN ({$en_vuelo})
                                    OR (estado='completed' AND decision_dueno IS NULL) )
-                           ORDER BY id DESC LIMIT 1");
+                           ORDER BY id DESC LIMIT 1 FOR UPDATE");
         $qv->execute([$marca_id, $contenido_id]);
         if ($ya = $qv->fetch(PDO::FETCH_ASSOC)) {
             if ($propia) $pdo->commit();
@@ -410,7 +423,6 @@ function cand_decidir(PDO $pdo, int $marca_id, int $contenido_id,
             }
             //  Arte pintado desde cero: no hay material del dueño detras. La
             //  traza se suelta o la pieza seguiria diciendo «tu foto».
-            require_once __DIR__ . '/material.php';
             material_soltar($pdo, $marca_id, $contenido_id);
         }
 

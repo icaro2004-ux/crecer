@@ -44,6 +44,10 @@ require_once __DIR__ . '/meta_negocio.php';
 require_once __DIR__ . '/meta_ejecutar.php';
 require_once __DIR__ . '/meta_cambio.php';
 require_once __DIR__ . '/material.php';
+//  La candidata de imagen: la vista pregunta si se puede ofrecer «otra» y si
+//  hay alguna esperando decision. Arriba, no dentro de una rama — un helper
+//  llamado sin su require delante no es un aviso, es un fatal.
+require_once __DIR__ . '/candidata.php';
 
 /** Estados de pieza que el publicador puede tomar (publicador.php:427). */
 const SEMANA_PUBLICABLES = ['aprobado', 'programado'];
