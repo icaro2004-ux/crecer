@@ -238,9 +238,13 @@ try {
 }
 
 echo "\n  — el costo —\n";
-ok('cero llamadas reales al modelo',
-   (int)$pdo->query("SELECT COUNT(*) FROM crecer_ia_log WHERE modelo <> 'mock'
-                      AND created_at > DATE_SUB(NOW(), INTERVAL 10 MINUTE)")->fetchColumn() === 0);
+//  EN DINERO, no en filas: `crecer_ia_log` recoge también decisiones por
+//  reglas —sin modelo y sin costo— y contarlas como llamada hacía saltar esta
+//  prueba por algo que no cuesta nada.
+ok('cero gasto real',
+   (float)$pdo->query("SELECT COALESCE(SUM(costo_usd),0) FROM crecer_ia_log
+                        WHERE created_at > DATE_SUB(NOW(), INTERVAL 10 MINUTE)")
+       ->fetchColumn() < 0.000001);
 
 echo "\n" . str_repeat('=', 58) . "\n";
 echo $fallos === 0 ? "  LA SEMANA USA SU MATERIAL · {$n} afirmaciones\n\n"

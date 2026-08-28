@@ -53,4 +53,22 @@ return [
     'Mi negocio'                                                                  => 'Mi negocio',
     'Más'                                                                         => 'Más',
     'Conectar redes'                                                              => 'Conectar redes',
+
+    //  ── FASE 6 · los cinco conceptos y «Mi negocio» ──
+    'Mi equipo'                                                     => 'Mi equipo',
+    'Canales y conexiones'                                          => 'Canales y conexiones',
+    'Operación'                                                     => 'Operación',
+    'Así entiende el corillo tu negocio.'                           => 'Así entiende el corillo tu negocio.',
+    'Si algo cambia, ajústalo aquí y lo tendremos en cuenta en el próximo trabajo.' => 'Si algo cambia, ajústalo aquí y lo tendremos en cuenta en el próximo trabajo.',
+    'cosas que sabe de ti'                                          => 'cosas que sabe de ti',
+    'Identidad y voz'                                               => 'Identidad y voz',
+    'Logo y colores'                                                => 'Logo y colores',
+    'Público y oferta'                                              => 'Público y oferta',
+    'Ajustar'                                                       => 'Ajustar',
+    'Todavía sin describir.'                                        => 'Todavía sin describir.',
+    'Sin logo todavía.'                                             => 'Sin logo todavía.',
+    'Logo puesto.'                                                  => 'Logo puesto.',
+    'Puedes ponerles nombre.'                                       => 'Puedes ponerles nombre.',
+    'Sin conectar todavía.'                                         => 'Sin conectar todavía.',
+    'Volver a %s'                                                   => 'Volver a %s',
 ];

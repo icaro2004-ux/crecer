@@ -13,7 +13,7 @@
 import { abrirChrome, dormir, cerrarRecibimiento } from './_chrome.mjs';
 import fs from 'node:fs';
 
-const [shotsArg, sid, marca] = process.argv.slice(2);
+const [shotsArg, sid, marca, modo] = process.argv.slice(2);
 const shots = (shotsArg && shotsArg !== '-') ? shotsArg : '';
 const BASE  = 'http://localhost/crecer/panel';
 const di = (k, v) => console.log(k + '=' + String(v).replace(/\r?\n/g, ' '));
@@ -140,6 +140,64 @@ try {
   await cmd('Page.addScriptToEvaluateOnNewDocument', { source: SONDA });
   await cmd('Network.setCookie', { name: 'PHPSESSID', value: sid, domain: 'localhost', path: '/' });
   const URL = `${BASE}/index.php?marca=${marca}`;
+
+  //  MODO «NAV» (Fase 6). El menú del móvil, «Mi negocio» y el lateral de
+  //  escritorio: las tres cosas que hay que MIRAR, porque un menú se juzga
+  //  viéndolo, no leyendo su array.
+  if (modo === 'nav') {
+    await tam(360, 800);
+    await ir(URL);
+    //  Se abre como lo abre el dueño: tocando.
+    await ev(`(function(){var b=document.getElementById('burger'); if(b) b.click();})()`);
+    await dormir(420);
+    di('MENU', await ev(`JSON.stringify((function(){
+      var side = document.getElementById('side');
+      var abierto = !!(side && side.className.indexOf('open') >= 0);
+      var vis = function(el){ var r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && getComputedStyle(el).display !== 'none'; };
+      var links = [].filter.call(side.querySelectorAll('nav a'), vis).map(function(a){
+        var r = a.getBoundingClientRect();
+        return { t: (a.textContent||'').replace(/\s+/g,' ').trim(),
+                 h: a.getAttribute('href'), alto: Math.round(r.height),
+                 //  ¿se corta el rótulo? Es el defecto clásico a 360.
+                 cortado: a.scrollWidth > a.clientWidth + 1 };
+      });
+      var grupos = [].filter.call(side.querySelectorAll('.side-gt'), vis)
+                     .map(function(g){ return (g.textContent||'').trim(); });
+      return { abierto: abierto, links: links, grupos: grupos,
+               horiz: Math.max(0, document.documentElement.scrollWidth - innerWidth) };
+    })())`));
+    await dormir(200);
+    if (shots) {
+      const png = await cmd('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      fs.writeFileSync(`${shots}/menu_movil_360.png`, Buffer.from(png.data, 'base64'));
+    }
+
+    //  MI NEGOCIO, en el teléfono.
+    await ir(`${BASE}/genoma.php?marca=${marca}`);
+    di('NEGOCIO', await ev(`JSON.stringify((function(){
+      var f = [].map.call(document.querySelectorAll('.ng-fila'), function(x){
+        var r = x.getBoundingClientRect();
+        var b = x.querySelector('b'), i = x.querySelector('i');
+        return { t: b ? b.textContent.trim() : '', v: i ? i.textContent.trim() : '',
+                 h: x.getAttribute('href'), alto: Math.round(r.height) };
+      });
+      return { filas: f, horiz: Math.max(0, document.documentElement.scrollWidth - innerWidth),
+               texto: (document.body.innerText||'').replace(/\s+/g,' ').trim().slice(0,300) };
+    })())`));
+    await tirar('mi_negocio_360');
+
+    //  Y EL LATERAL DE ESCRITORIO, que es donde se ve la jerarquía entera.
+    await tam(1440, 900, 1);
+    await ir(URL);
+    await tirar('menu_escritorio_1440');
+
+    di('ALERTAS', await ev('window.__alertas || 0'));
+    di('ERRORES', await ev('JSON.stringify(window.__errs || [])'));
+    di('OK', 1);
+    cerrar();
+    process.exit(0);
+  }
 
   for (const [n, w, h, e] of [['360', 360, 800, 2], ['414', 414, 896, 2], ['1440', 1440, 900, 1]]) {
     await tam(w, h, e);

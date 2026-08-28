@@ -23,6 +23,25 @@ $USUARIO_ID = (int)$usuario['id'];
 $marca = marca_del_usuario($pdo, $USUARIO_ID, isset($_GET['marca']) ? (int)$_GET['marca'] : null);
 if (!$marca) { header('Location: /crecer/onboarding.php'); exit; }
 $marca_id = (int)$marca['id'];
+
+// ══════════════════════════════════════════════════════════════════════
+//  ESTA PANTALLA SE MUDÓ A RESULTADOS (Fase 6).
+//
+//  Enseñaba lo mismo que `resultados.php` con otra cara: ventas, posts
+//  publicados y lo que hizo el corillo. Dos pantallas contestando la misma
+//  pregunta acaban dando dos respuestas —basta con que una arregle un cálculo
+//  y la otra no— y el dueño no tiene forma de saber cuál creer.
+//
+//  No se borra: la ruta sigue viva y redirige, para que un enlace guardado o
+//  un correo viejo lleguen a donde ahora se contesta esa pregunta. Se conserva
+//  la marca; el `?ajax=insight` se deja pasar para no romper una llamada en
+//  vuelo. Lo de abajo queda inalcanzable a propósito, no huérfano: si mañana
+//  hiciera falta una vista avanzada, el código está.
+// ══════════════════════════════════════════════════════════════════════
+if (($_GET['ajax'] ?? '') === '') {
+    header('Location: /crecer/panel/resultados.php?marca=' . $marca_id, true, 302);
+    exit;
+}
 $BASE = '/crecer/panel';
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 

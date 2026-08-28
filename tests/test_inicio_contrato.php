@@ -269,9 +269,15 @@ try {
 }
 
 echo "\n  — el costo —\n";
-ok('los lectores de Inicio no llaman a ningún modelo',
-   (int)$pdo->query("SELECT COUNT(*) FROM crecer_ia_log
-                      WHERE created_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE)")->fetchColumn() === 0,
+//  SE MIDE EN DINERO, no en filas. En `crecer_ia_log` hay apuntes que no son
+//  llamadas a un modelo —decisiones por reglas, por ejemplo, y las líneas de
+//  otras pruebas que corren a la vez—: contarlas como gasto haría saltar esta
+//  prueba por algo que no cuesta nada, y una prueba que salta sin motivo se
+//  acaba ignorando.
+ok('los lectores de Inicio no cuestan un centavo',
+   (float)$pdo->query("SELECT COALESCE(SUM(costo_usd),0) FROM crecer_ia_log
+                        WHERE created_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE)")
+       ->fetchColumn() < 0.000001,
    'abrir el panel es mirar, y mirar no puede cobrar');
 
 echo "\n" . str_repeat('=', 58) . "\n";

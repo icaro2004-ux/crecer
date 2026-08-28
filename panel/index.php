@@ -23,13 +23,18 @@ $marca_id = (int)$marca['id'];
 $BASE = '/crecer/panel';
 $mid  = "marca={$marca_id}";
 
-// ── AJAX: Idea del día (async; el front la pide al cargar) ──
-// Recoge imágenes que terminaron en background + notifica (el worker muere en Hostinger).
-if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    try { require_once __DIR__ . '/../includes/img_responses.php'; img_sweep_pendientes($pdo, $marca_id); } catch (Throwable $e) {}
-    try { require_once __DIR__ . '/../includes/carrusel.php'; if (function_exists('carrusel_sweep_pendientes')) carrusel_sweep_pendientes($pdo, $marca_id); } catch (Throwable $e) {}
-    try { require_once __DIR__ . '/../includes/analista.php'; analista_vigilar($pdo, $marca_id); } catch (Throwable $e) {}   // ADR-0004: el Analista vigila los KPIs y detecta señales
-}
+//  LOS TRES BARRIDOS SE FUERON AL CRON (Fase 6). Estaban aqui por una razon
+//  historica que ya no se sostiene: el worker se muere en Hostinger, asi que
+//  recoger el trabajo terminado dependia de que alguien abriera la portada.
+//
+//  Ya no. `cron_ayudante` recoge imagenes y carruseles de TODAS las marcas cada
+//  vuelta —incluida la cuenta que nadie visita, que era justo la que se quedaba
+//  con el trabajo pagado sin recoger— y `cron_corillo` corre al Analista. Nada
+//  deja de avanzar: se avanza en mas cuentas que antes.
+//
+//  Y donde el dueño SI esta esperando su imagen —`aprobar2.php`, `carrusel.php`,
+//  el gateway— el barrido sigue en su sitio. Lo que se quita es escribir en la
+//  base por el mero hecho de mirar la portada.
 
 // Marcar una señal del Analista (aceptada al ir a la acción · descartada al "Ahora no").
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'analista_marcar') {
