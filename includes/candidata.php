@@ -331,6 +331,17 @@ function cand_instruccion(PDO $pdo, int $marca_id, array $pieza,
                                   'la composición actual'];
     }
     if ($evitar !== '') $contrato['evitar'][] = $evitar;
+
+    //  Y LA MEMORIA DEL NEGOCIO, no solo la de esta pieza. «Otra idea» que
+    //  evita el concepto actual pero cae en el de la semana pasada no es otra
+    //  idea: es la misma rotacion de siempre. Aqui entran los conceptos, las
+    //  metaforas y la utileria que este negocio ya gasto, lo que el dueño
+    //  descarto, y los cliches —solo si aparecen en LO SUYO—.
+    try {
+        require_once __DIR__ . '/variedad_visual.php';
+        $hist = trim(variedad_evitar_txt($pdo, $marca_id, 6));
+        if ($hist !== '') $contrato['historial'] = mb_substr($hist, 0, 1400);
+    } catch (Throwable $e) { /* sin memoria se genera igual, sin prometer nada */ }
     if ($concepto !== '') $contrato['concepto_actual'] = mb_substr($concepto, 0, 700);
 
     //  EL TEXTO. Se arma con secciones nombradas, no como un parrafo: el motor
@@ -355,6 +366,7 @@ function cand_instruccion(PDO $pdo, int $marca_id, array $pieza,
             : 'CONCEPTO QUE SE ESTÁ USANDO (NO lo repitas, busca otro distinto): '
               . $contrato['concepto_actual'];
     }
+    if (isset($contrato['historial'])) $L[] = $contrato['historial'];
     $L[] = $intencion === CAND_MISMA_IDEA
         ? 'LIBERTAD: dentro del mismo concepto, decide tú la mejor manera de mostrarlo.'
         : 'LIBERTAD: el concepto lo eliges tú, siempre que comunique lo mismo.';

@@ -123,6 +123,59 @@ function jugadas_sincronizar_marca(PDO $pdo, int $marca_id): int {
  *
  * @return array{fecha:string, porque:string, apura:bool}
  */
+/**
+ * EL SIGUIENTE HUECO LIBRE a partir de una fecha, mirando el calendario REAL.
+ *
+ * QUE CUENTA COMO CHOQUE: otra publicacion de la misma marca —suya o del
+ * plan, da igual— dentro de las mismas 4 horas. No se mira solo la hora
+ * exacta: dos posts con veinte minutos de diferencia compiten entre ellos, y
+ * el segundo se lo come el primero.
+ *
+ * LO QUE YA ESTA PROGRAMADO NO SE TOCA. Mover contenido que el dueño puso —o
+ * que ya aprobo— sin preguntarle seria decidir por el. Se corre lo nuevo.
+ *
+ * @throws Throwable si no se puede leer el calendario. A proposito: quien
+ *         llama tiene que poder distinguir «no habia choque» de «no pude
+ *         mirar», porque solo en el primer caso se le puede decir al dueño
+ *         que le dejamos espacio.
+ */
+function meta_fecha_libre(PDO $pdo, int $marca_id, string $fecha, string $limite = '',
+                          int $horas = 4, int $intentos = 14): string
+{
+    $q = $pdo->prepare(
+        "SELECT fecha_programada FROM crecer_contenido
+          WHERE marca_id=? AND estado NOT IN ('rechazado','fallido')
+            AND fecha_programada IS NOT NULL
+            AND fecha_programada BETWEEN ? AND ?");
+    $q->execute([$marca_id,
+                 date('Y-m-d H:i:s', strtotime($fecha . ' -1 day')),
+                 date('Y-m-d H:i:s', strtotime($fecha . ' +' . ($intentos + 2) . ' day'))]);
+    $ocupadas = [];
+    foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $f) {
+        $ts = strtotime((string)$f);
+        if ($ts) $ocupadas[] = $ts;
+    }
+    if (!$ocupadas) return $fecha;
+
+    $margen = max(1, $horas) * 3600;
+    $cand   = strtotime($fecha);
+    $tope   = $limite !== '' ? strtotime($limite . ' 23:59:59') : null;
+    for ($i = 0; $i <= $intentos; $i++) {
+        $choca = false;
+        foreach ($ocupadas as $o) { if (abs($o - $cand) < $margen) { $choca = true; break; } }
+        if (!$choca) {
+            //  Nunca despues de su fecha limite: mejor apretado que tarde.
+            if ($tope !== null && $cand > $tope) return $fecha;
+            return date('Y-m-d H:i:s', $cand);
+        }
+        $cand = strtotime('+1 day', $cand);
+    }
+    //  Catorce dias seguidos ocupados es una agenda llena de verdad: se
+    //  devuelve la fecha pedida y que el dueño decida. Inventar un hueco
+    //  donde no lo hay seria peor.
+    return $fecha;
+}
+
 function meta_fecha_sugerida(PDO $pdo, int $marca_id, int $orden = 1, int $semana = 1): array {
     $hora = 10;
     try {
@@ -154,13 +207,31 @@ function meta_fecha_sugerida(PDO $pdo, int $marca_id, int $orden = 1, int $seman
         $topado = true;
     }
 
-    if ($topado)      $porque = 'Es lo más tarde que puede salir sin pasarse de tu fecha límite.';
+    //  ── QUE NO CHOQUE CON LO QUE YA TIENE ───────────────────────────────
+    //  Hasta aqui la fecha salia de una cuenta —semana, orden, hora buena— sin
+    //  mirar el calendario. Dos piezas del plan podian caer sobre el post que
+    //  el dueño ya habia programado a mano para esa hora, y el que quedaba mal
+    //  con su gente era el.
+    //
+    //  NO SE MUEVE NADA SUYO: se busca el siguiente hueco. Y si el calendario
+    //  no se puede leer, no se afirma que este coordinada — se devuelve la
+    //  fecha calculada y `coordinada` en false.
+    $coordinada = false; $movida = false;
+    try {
+        $libre = meta_fecha_libre($pdo, $marca_id, $fecha, $limite);
+        $coordinada = true;
+        if ($libre !== $fecha) { $fecha = $libre; $movida = true; }
+    } catch (Throwable $e) { $coordinada = false; }
+
+    if ($movida)      $porque = 'La corrí un poco: a esa hora ya tenías algo programado.';
+    elseif ($topado)  $porque = 'Es lo más tarde que puede salir sin pasarse de tu fecha límite.';
     elseif ($apura && $d === 0 && !$tarde) $porque = 'Vas atrasado para tu meta: esto sale HOY, a la hora que mejor te funciona.';
     elseif ($apura && $tarde)   $porque = 'Vas atrasado, pero hoy ya se hizo tarde: sale mañana a primera hora buena.';
     elseif ($apura)   $porque = 'Vas atrasado para tu meta: las piezas salen un día tras otro.';
     else              $porque = 'Vas en ritmo: esta es la hora que mejor te ha funcionado.';
 
-    return ['fecha' => $fecha, 'porque' => $porque, 'apura' => (bool)$apura, 'hora' => $hora];
+    return ['fecha' => $fecha, 'porque' => $porque, 'apura' => (bool)$apura, 'hora' => $hora,
+            'coordinada' => $coordinada, 'movida' => $movida];
 }
 
 /** "hoy 10:00 AM" · "mañana 10:00 AM" · "el sábado 10:00 AM" — como lo diría una persona. */
@@ -522,7 +593,7 @@ function jugada_ejecutar(PDO $pdo, int $marca_id, int $tactica_id): array {
 
     // ── 1. INVENTARIO: qué hay ya ──
     $inv = jugada_inventario($pdo, $marca_id, $t, $faltan);
-    $ids = []; $recicladas = 0; $notas = []; $pide_video = 0;
+    $ids = []; $recicladas = 0; $notas = []; $pide_video = 0; $usadas_suyas = 0;
     if ($apura) { $notas[] = $__f1["porque"]; }
 
     // ── 2. LA GAVETA: piezas listas que nadie publicó, puestas a trabajar ──
@@ -558,6 +629,15 @@ function jugada_ejecutar(PDO $pdo, int $marca_id, int $tactica_id): array {
             $plat = in_array($idea['plataforma'] ?? '', ['instagram','facebook'], true) ? $idea['plataforma']
                   : ($t['canal'] === 'facebook' ? 'facebook' : 'instagram');
             $tipo = in_array($idea['tipo'] ?? '', ['post','story','reel','carrusel'], true) ? $idea['tipo'] : 'post';
+            //  EL FORMATO QUE PROMETIO LA JUGADA MANDA. El plan dijo «un reel»
+            //  y el modelo de ideas devolvia «post»: salia un post, y el dueño
+            //  leia en su plan un reel que nunca existio. Si la jugada declaro
+            //  un formato concreto, ese es el que se produce; `mixto` es la
+            //  unica que deja elegir, porque para eso se declaro mixta.
+            $fmt_jugada = (string)($t['formato'] ?? '');
+            if (in_array($fmt_jugada, ['post','reel','carrusel','historia'], true)) {
+                $tipo = $fmt_jugada === 'historia' ? 'story' : $fmt_jugada;
+            }
             $txt  = trim((string)($idea['tema'] ?? '') . ' — ' . (string)($idea['idea'] ?? ''));
             if ($txt === '—') $txt = (string)$t['que_hacer'];
             $fecha = $fecha_de($dia);
@@ -622,6 +702,21 @@ function jugada_ejecutar(PDO $pdo, int $marca_id, int $tactica_id): array {
             //  se resolvía generando una imagen y llamándola reel — mentira que
             //  el dueño descubría al ir a publicar.
             if ($tipo === 'reel') {
+                //  SI YA TIENE EL VIDEO, no se le pide que grabe otro. La
+                //  Estratega pudo elegir un clip suyo de la Biblioteca: se
+                //  enlaza y la pieza no nace pidiendo material.
+                $aid_reel = (int)($t['activo_id'] ?? 0);
+                if ($aid_reel > 0) {
+                    try {
+                        require_once __DIR__ . '/material.php';
+                        $apv = material_aplicar($pdo, $marca_id, (int)$cid, $aid_reel);
+                        if (!empty($apv['ok']) && (string)($apv['tipo'] ?? '') === 'video') {
+                            $ids[] = $cid; $faltan--; $dia++;
+                            $notas[] = 'Para el reel usé un video que ya tenías en tu Biblioteca.';
+                            continue;
+                        }
+                    } catch (Throwable $e) { error_log('jugada reel material: ' . $e->getMessage()); }
+                }
                 $guion = jugada_guion_reel($pdo, $marca_id, $t, $txt);
                 try {
                     $pdo->prepare("UPDATE crecer_contenido SET necesita_material='video', guion=?, updated_at=NOW()
@@ -637,9 +732,50 @@ function jugada_ejecutar(PDO $pdo, int $marca_id, int $tactica_id): array {
                 continue;   // NO se le genera arte: lo que falta es el video del dueño
             }
 
+            // ── EL MATERIAL QUE LA ESTRATEGA ELIGIÓ ──────────────────────
+            //  Si la jugada trae un activo concreto, ESE se usa: se enlaza tal
+            //  cual, sin pasar por el modelo de imagen. Antes «usar tus fotos»
+            //  significaba mandarla a Gemini como base —costaba una unidad de
+            //  cuota y encima se soltaba la trazabilidad, así que la pieza
+            //  acababa diciendo «arte del corillo»—. Lo real gana y sale gratis.
+            $usado_suyo = false;
+            $aid_jugada = (int)($t['activo_id'] ?? 0);
+            if ($cap !== '' && $aid_jugada > 0) {
+                try {
+                    require_once __DIR__ . '/material.php';
+                    $ap = material_aplicar($pdo, $marca_id, (int)$cid, $aid_jugada);
+                    if (!empty($ap['ok'])) {
+                        $usado_suyo = true;
+                        $usadas_suyas++;
+                        //  Queda en la memoria visual: el material propio también
+                        //  es un antecedente, y repetir la misma foto tres semanas
+                        //  seguidas es repetirse igual.
+                        try {
+                            require_once __DIR__ . '/variedad_visual.php';
+                            variedad_registrar($pdo, $marca_id, 'foto:' . $aid_jugada,
+                                ['primary_subject' => 'material real del negocio',
+                                 'concepto'        => mb_substr((string)$t['titulo'], 0, 180),
+                                 'composition'     => mb_substr($cap, 0, 80)], (int)$cid);
+                        } catch (Throwable $e) {}
+                    } else {
+                        //  NO SE PONE OTRA COSA EN SILENCIO. Si el activo ya no
+                        //  está, es de otra marca o no le sirve a este formato, la
+                        //  pieza queda pidiendo material suyo: es la verdad, y él
+                        //  puede resolverla en un toque desde su Biblioteca.
+                        try {
+                            $pdo->prepare("UPDATE crecer_contenido SET necesita_material='foto', updated_at=NOW()
+                                            WHERE id=? AND marca_id=?")->execute([(int)$cid, $marca_id]);
+                        } catch (Throwable $e) {}
+                        $notas[] = 'La foto que tenía pensada ya no estaba disponible: te dejé la publicación esperando una tuya.';
+                        $ids[] = $cid; $faltan--; $dia++;
+                        continue;
+                    }
+                } catch (Throwable $e) { error_log('jugada material: ' . $e->getMessage()); }
+            }
+
             // El arte: FOTO REAL del negocio si la hay (gana siempre y no gasta
             // cuota de imágenes); si no, se genera con la memoria anti-repetición.
-            if ($cap !== '') {
+            if ($cap !== '' && !$usado_suyo) {
                 $foto_abs = null; $foto_id = null;
                 if (!empty($idea['usa_foto']) && $fotos_disp) {
                     $f = array_shift($fotos_disp);
@@ -681,12 +817,17 @@ function jugada_ejecutar(PDO $pdo, int $marca_id, int $tactica_id): array {
 
     $nuevas = count($ids) - $recicladas;
     if ($nuevas > 0) {
-        $con_foto = count($inv['fotos']) > 0;
+        //  LO QUE SE DICE ES LO QUE PASO. Antes bastaba con que la Biblioteca
+        //  tuviera fotos para escribir «usando tus propias fotos» — aunque
+        //  ninguna se hubiera usado. Ahora se cuenta lo que de verdad se enlazó.
         $escritas = $nuevas - $pide_video;
         if ($escritas > 0) {
-            $notas[] = $escritas === 1
-                ? 'Escribí 1 pieza nueva' . ($con_foto ? ' usando tus propias fotos' : '') . '.'
-                : "Escribí {$escritas} piezas nuevas" . ($con_foto ? ' y usé tus propias fotos donde pegaban' : '') . '.';
+            $notas[] = $escritas === 1 ? 'Escribí 1 pieza nueva.' : "Escribí {$escritas} piezas nuevas.";
+        }
+        if ($usadas_suyas > 0) {
+            $notas[] = $usadas_suyas === 1
+                ? 'Usé una foto que dejaste en tu Biblioteca.'
+                : "Usé {$usadas_suyas} fotos que dejaste en tu Biblioteca.";
         }
         // Los reels se dicen aparte: ahí falta algo que solo él puede dar.
         if ($pide_video > 0) {

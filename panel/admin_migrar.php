@@ -77,6 +77,9 @@ $MIGRACIONES = [
     //  El libro de las semanas: sin el, dos clics preparan dos veces la misma
     //  semana — y cada preparación cuesta una llamada al modelo.
     '2026-08-27_crecer_meta_semana.sql',         // crecer_meta_semana
+    //  UN SOLO CEREBRO: donde viaja el activo que la Estratega eligio, y el
+    //  concepto de una imagen (no solo su encuadre) para no repetirse.
+    '2026-08-28_crecer_contexto_unico.sql',      // tactica.activo_id + huella.concepto
 ];
 $DIR = dirname(__DIR__) . '/migrations/';
 $PRESENTES = array_values(array_filter($MIGRACIONES, fn($m) => is_file($DIR . $m)));
@@ -113,6 +116,10 @@ $CREA = [
                                             => [['crecer_generaciones', 'decision_dueno'],
                                                 ['crecer_generaciones', 'decidida_at']],
     '2026-08-27_crecer_meta_semana.sql'      => [['crecer_meta_semana', null]],
+    '2026-08-28_crecer_contexto_unico.sql'   => [['crecer_meta_tactica', 'activo_id'],
+                                                ['crecer_visual_huella', 'concepto'],
+                                                ['crecer_visual_huella', 'metafora'],
+                                                ['crecer_visual_huella', 'utileria']],
 ];
 $hay_pieza = function (string $tabla, ?string $col) use ($pdo): bool {
     try {
@@ -220,6 +227,11 @@ $piezas = [
     //  no la comprobaba nunca. Una migracion que se corre pero no se verifica
     //  es una que se da por buena sin mirar.
     ['crecer_meta_semana',     'tabla',  null],
+    // ── Fase 4 · un solo cerebro ──
+    ['crecer_meta_tactica',    'col',    'activo_id'],
+    ['crecer_visual_huella',   'col',    'concepto'],
+    ['crecer_visual_huella',   'col',    'metafora'],
+    ['crecer_visual_huella',   'col',    'utileria'],
 ];
 $estado = [];
 foreach ($piezas as [$tabla, $tipo, $col]) {

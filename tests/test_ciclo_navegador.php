@@ -26,6 +26,9 @@
 
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/meta_ciclo.php';
+require_once __DIR__ . '/../includes/meta_ejecutar.php';
+require_once __DIR__ . '/../includes/material.php';
+require_once __DIR__ . '/_png.php';
 require_once __DIR__ . '/_fixture.php';
 
 $fallos = 0; $n = 0;
@@ -229,15 +232,12 @@ try {
     //  Con el modelo simulado ese rato dura milisegundos: pillarlo pulsando el
     //  boton es una carrera perdida. Se siembra el estado -que es justo lo que
     //  el dueño se encuentra si vuelve mientras el corillo trabaja- y se mira.
-    echo "
-  — mientras el corillo trabaja —
-";
+    echo "\n  — mientras el corillo trabaja —\n";
     $pdo->prepare("UPDATE crecer_meta_semana SET estado='preparando'
                     WHERE plan_id=? AND semana=1")->execute([$PLAN]);
     $salida2 = (string)shell_exec($cmd . ' espera 2>&1');
     $R2 = [];
-    foreach (explode("
-", $salida2) as $l) {
+    foreach (explode("\n", $salida2) as $l) {
         $l = trim($l); $i = strpos($l, '=');
         if ($i > 0) $R2[substr($l, 0, $i)] = substr($l, $i + 1);
     }
@@ -264,6 +264,87 @@ try {
        "antes {$ia_tras_preparar} · ahora {$ia_esp}");
     $pdo->prepare("UPDATE crecer_meta_semana SET estado='preparada'
                     WHERE plan_id=? AND semana=1")->execute([$PLAN]);
+
+    // ── LA LLEGADA DICE LO QUE TOMÓ EN CUENTA ────────────────
+    //  El corillo ya preparó la semana; aquí se produce UNA de sus jugadas con
+    //  una foto que el dueño había dejado en su Biblioteca —que es lo que hace el
+    //  worker en producción—. Sin esto no se puede comprobar la promesa entera:
+    //  que la pantalla diga «usé tu foto» SOLO cuando de verdad la usó.
+    echo "\n  — la llegada dice lo que tomó en cuenta —\n";
+    $dir = rtrim(defined('UPLOADS_PATH') ? UPLOADS_PATH : dirname(__DIR__) . '/uploads', '/\\')
+         . DIRECTORY_SEPARATOR . 'marca_' . $M;
+    if (!is_dir($dir)) @mkdir($dir, 0777, true);
+    file_put_contents($dir . DIRECTORY_SEPARATOR . 'vitrina.jpg', png_solido(600, 600, 220, 120, 160));
+    $pdo->prepare("INSERT INTO crecer_activos (marca_id, tipo, archivo, nombre, nota, origen, estado)
+                   VALUES (?, 'imagen', ?, 'La vitrina llena', '', 'subida', 'activo')")
+        ->execute([$M, "marca_{$M}/vitrina.jpg"]);
+    $FOTO = (int)$pdo->lastInsertId();
+
+    $qt = $pdo->prepare("SELECT id FROM crecer_meta_tactica
+                          WHERE plan_id=? AND semana=2 AND clase='produccion'
+                       ORDER BY orden ASC LIMIT 1");
+    $qt->execute([$PLAN]);
+    $TAC2 = (int)($qt->fetchColumn() ?: 0);
+    ok('la semana nueva trae una jugada de producción', $TAC2 > 0, (string)$TAC2);
+    //  LA VALLA, OTRA VEZ. `jugada_ejecutar()` corre AQUÍ dentro, y aquí no
+    //  existe CRECER_TEST_MODE: sin esto llamaría al proveedor de verdad con la
+    //  clave de verdad. El centinela solo cuenta en localhost, así que se dice
+    //  que este proceso es el servidor local —que es la verdad: la prueba y el
+    //  sitio comparten máquina y base—. Y se COMPRUEBA antes de producir nada.
+    $_SERVER['HTTP_HOST'] = 'localhost';
+    require_once __DIR__ . '/../includes/ia.php';
+    ok('el transporte está en simulado', ia_transporte() === 'mock',
+       ia_transporte() . ' — si no, producir aquí costaría dinero de verdad');
+    if (ia_transporte() !== 'mock') { throw new RuntimeException('sin centinela: no se produce'); }
+
+    if ($TAC2 > 0) {
+        $pdo->prepare("UPDATE crecer_meta_tactica SET activo_id=?, piezas_meta=1, formato='post' WHERE id=?")
+            ->execute([$FOTO, $TAC2]);
+        $rp = jugada_ejecutar($pdo, $M, $TAC2);
+        ok('se produce con su foto', !empty($rp['ok']), json_encode($rp));
+        $CP = (int)($rp['ids'][0] ?? 0);
+        $pz = $CP > 0 ? $pdo->query("SELECT * FROM crecer_contenido WHERE id={$CP}")->fetch(PDO::FETCH_ASSOC) : [];
+        ok('y la pieza queda enlazada a su activo',
+           (int)($pz['material_activo_id'] ?? 0) === $FOTO, json_encode($pz['material_activo_id'] ?? null));
+        //  APROBADA: es lo que hace el dueño, y es lo que la manda al Calendario.
+        if ($CP > 0) {
+            $pdo->prepare("UPDATE crecer_contenido SET estado='aprobado' WHERE id=? AND marca_id=?")
+                ->execute([$CP, $M]);
+        }
+    }
+
+    $salida3 = (string)shell_exec($cmd . ' cta 2>&1');
+    $R3 = [];
+    foreach (explode("\n", $salida3) as $l3) {
+        $l3 = trim($l3); $i3 = strpos($l3, '=');
+        if ($i3 > 0) $R3[substr($l3, 0, $i3)] = substr($l3, $i3 + 1);
+    }
+    ok('el navegador ve la llegada', ($R3['OK'] ?? '0') === '1', substr($salida3, -400));
+    $CTA  = json_decode((string)($R3['CTA'] ?? '{}'), true) ?: [];
+    $CTA2 = json_decode((string)($R3['CTA_ABIERTA'] ?? '{}'), true) ?: [];
+    $CAL  = json_decode((string)($R3['CALENDARIO'] ?? '{}'), true) ?: [];
+
+    ok('hay resumen de lo que tomó en cuenta', !empty($CTA['hay']), json_encode($CTA));
+    ok('con su título',
+       mb_stripos((string)($CTA['titulo'] ?? ''), 'tomé en cuenta') !== false, (string)($CTA['titulo'] ?? ''));
+    ok('tres renglones como máximo',
+       count((array)($CTA['lineas'] ?? [])) <= 3, json_encode($CTA['lineas'] ?? []));
+    ok('y uno dice que usó su Biblioteca',
+       str_contains(mb_strtolower(implode(' ', (array)($CTA['lineas'] ?? []))), 'biblioteca'),
+       json_encode($CTA['lineas'] ?? []));
+
+    //  NADA DE NOMBRES INTERNOS: el dueño no conoce a «la Estratega» ni le
+    //  importa qué modelo lo hizo. Le importa su negocio.
+    $txt_cta = mb_strtolower(implode(' ', (array)($CTA['lineas'] ?? [])) . ' ' . (string)($CTA2['hojaTexto'] ?? ''));
+    foreach (['estratega', 'director de arte', 'gemini', 'openai', 'prompt'] as $palabra) {
+        ok("no nombra «{$palabra}»", mb_strpos($txt_cta, $palabra) === false, $txt_cta);
+    }
+    ok('el detalle está escondido al llegar', empty($CTA['hojaAbierta']), json_encode($CTA));
+    ok('hay un «Ver por qué»', !empty($CTA['porque']), json_encode($CTA));
+    ok('y al tocarlo se abre',   !empty($CTA2['hojaAbierta']), json_encode($CTA2));
+    ok('con una explicación de verdad',
+       mb_strlen((string)($CTA2['hojaTexto'] ?? '')) > 40, (string)($CTA2['hojaTexto'] ?? ''));
+    ok('el Calendario abre',     !empty($CAL['tieneAlgo']), json_encode($CAL));
 
     // ── LA MEDIDA A 360 ───────────────────────────────────────────
     echo "\n  — se toca y se lee, a 360px —\n";

@@ -607,6 +607,16 @@ SYS;
     // que no funcionó. Si un plan anterior movió el número, se dice; si no, también.
     $lecciones = meta_lecciones_para_prompt($pdo, $meta_id);
 
+    //  EL MISMO CONTEXTO QUE LEE LA SEMANA. Tres copias parecidas de la misma
+    //  consulta acaban siendo tres verdades distintas, y la que se le enseña al
+    //  dueño es siempre la equivocada. Aqui entra su Biblioteca, lo que ya
+    //  tiene programado, como le fue de verdad y lo que ya dijo que no.
+    $ctx_uno = '';
+    try {
+        require_once __DIR__ . '/contexto.php';
+        $ctx_uno = ctx_para_prompt(ctx_estrategico($pdo, $marca_id, ['meta' => $meta]));
+    } catch (Throwable $e) { $ctx_uno = ''; }
+
     $prompt = "NEGOCIO:\n{$ctx}\n\n"
         . "LA META DEL DUEÑO:\n"
         . "- Objetivo: {$def['titulo']} ({$def['verbo']})\n"
@@ -616,6 +626,7 @@ SYS;
         . ($contexto !== '' ? "- Con qué cuenta: {$contexto}\n" : '')
         . "\nSEÑALES REALES DEL NEGOCIO:\n" . ($senales ? '- ' . implode("\n- ", $senales) : '- Todavía sin historial.') . "\n"
         . ($lecciones !== '' ? "\n{$lecciones}" : '')
+        . ($ctx_uno !== '' ? "\n" . $ctx_uno . "\n" : '')
         . "\nCADA JUGADA ES EJECUTABLE, NO UN CONSEJO. Declara su CLASE, porque de eso depende\n"
         . "cómo se da por cumplida (el dueño NO marca checkboxes de lo que hacemos nosotros):\n"
         . "  · \"produccion\"   = la ejecuta el corillo produciendo contenido. Di CUÁNTAS piezas\n"
@@ -633,7 +644,9 @@ SYS;
         . '"tipo":"contenido|distribucion|pauta|oferta|alianza|operacion","titulo":"4-8 palabras",'
         . '"que_hacer":"la instrucción concreta, 1-2 frases","por_que":"por qué mueve ESTE número, 1 frase",'
         . '"canal":"instagram|facebook|whatsapp|ambas|fisico","cta":"qué se le pide exactamente a la gente",'
-        . '"inversion":null,"quien":"corillo|dueno","semana":1}]}' . "\n"
+        . '"inversion":null,"quien":"corillo|dueno","activo_id":null,"semana":1}]}' . "\n"
+        . "- `activo_id`: si una jugada encaja con algo que él ya subió a su Biblioteca, pon su número.\n"
+        . "  Solo de la lista de arriba y solo si de verdad pega; si no, null y el corillo hace el arte.\n"
         . "- `piezas`: SOLO en clase \"produccion\" (1-4, cuántas piezas produce el corillo). En las demás, 0.\n"
         . "- PROPORCIÓN OBLIGATORIA: al menos la MITAD de las jugadas son \"produccion\". Máximo DOS de\n"
         . "  \"accion_dueno\" en todo el plan, y máximo UNA \"regla\". El dueño nos paga para no tener\n"
@@ -883,7 +896,29 @@ function meta_plan_guardar_tacticas(PDO $pdo, int $meta_id, int $marca_id, ?int 
         if ($cols_ejec) { $fila[] = $clase; $fila[] = $piezas; $fila[] = $formato; }
 
         $ins->execute($fila);
-        $guardadas[] = ['id' => (int)$pdo->lastInsertId(), 'tipo' => $tipo, 'titulo' => $fila[5],
+        $tid = (int)$pdo->lastInsertId();
+
+        //  EL ACTIVO QUE ELIGIO LA ESTRATEGA. Va en un UPDATE aparte y no en el
+        //  INSERT a proposito: la columna es de Fase 4 y puede no estar. Asi,
+        //  sin migracion, la jugada nace igual —solo que sin foto asignada— en
+        //  vez de no nacer.
+        $aid = (int)($t['activo_id'] ?? 0);
+        if ($tid > 0 && $aid > 0 && $clase === 'produccion') {
+            try {
+                //  Y TIENE QUE SER SUYO Y ESTAR VIVO. Un id inventado por el
+                //  modelo, o de otra marca, se ignora en silencio: la jugada
+                //  sigue, el corillo genera el arte y nadie promete nada falso.
+                $ok = $pdo->prepare("SELECT COUNT(*) FROM crecer_activos
+                                      WHERE id=? AND marca_id=? AND estado='activo'");
+                $ok->execute([$aid, $marca_id]);
+                if ((int)$ok->fetchColumn() > 0) {
+                    $pdo->prepare("UPDATE crecer_meta_tactica SET activo_id=? WHERE id=?")
+                        ->execute([$aid, $tid]);
+                }
+            } catch (Throwable $e) { /* sin columna: se sigue sin activo */ }
+        }
+
+        $guardadas[] = ['id' => $tid, 'tipo' => $tipo, 'titulo' => $fila[5],
                         'que_hacer' => $fila[6], 'por_que' => $fila[7], 'canal' => $fila[8],
                         'cta' => $fila[9], 'inversion' => $fila[10], 'quien' => $fila[11], 'semana' => $fila[3],
                         'clase' => $clase, 'piezas_meta' => $piezas, 'formato' => $formato];

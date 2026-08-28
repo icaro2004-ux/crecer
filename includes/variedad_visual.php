@@ -111,11 +111,36 @@ function variedad_lentes(): array {
     ];
 }
 
+/**
+ * ¿Guarda ya esta base el CONCEPTO de una imagen, o solo su encuadre?
+ *
+ * Comparar cadenas de prompts no sirve: «una varita magica sobre el bizcocho»
+ * y «un destello magico que toca el postre» no se parecen como texto y son la
+ * misma imagen. Lo que se repite es la IDEA.
+ */
+function variedad_hay_concepto(PDO $pdo, bool $refrescar = false): bool
+{
+    static $hay = null;
+    if ($hay !== null && !$refrescar) return $hay;
+    try {
+        $q = $pdo->query("SELECT COUNT(*) FROM information_schema.COLUMNS
+                            WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='crecer_visual_huella'
+                              AND COLUMN_NAME='concepto'");
+        return $hay = ((int)$q->fetchColumn() > 0);
+    } catch (Throwable $e) { return $hay = false; }
+}
+
 /** Las últimas huellas visuales de esta marca (lo que YA hizo). */
 function variedad_ultimas(PDO $pdo, int $marca_id, int $n = 6): array {
     $filas = [];
     try {
-        $q = $pdo->prepare("SELECT lente, sujeto, composicion, escenario, resumen, created_at
+        //  El concepto, la metafora y la utileria solo estan si la migracion
+        //  de Fase 4 entro. Sin ellas se sigue leyendo el encuadre: memoria
+        //  mas pobre, pero memoria.
+        $cols = variedad_hay_concepto($pdo)
+            ? 'lente, concepto, metafora, utileria, sujeto, composicion, escenario, resumen, created_at'
+            : 'lente, sujeto, composicion, escenario, resumen, created_at';
+        $q = $pdo->prepare("SELECT {$cols}
                               FROM crecer_visual_huella WHERE marca_id=? ORDER BY id DESC LIMIT " . max(1, min(20, $n)));
         $q->execute([$marca_id]);
         $filas = $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -197,36 +222,137 @@ function variedad_lente_asignado(PDO $pdo, int $marca_id, ?string $forzar = null
 }
 
 /**
- * EL TEXTO DE "NO REPITAS ESTO" que se le enseña al Director de Arte.
- * Es lo que le faltaba: memoria de sus propias composiciones.
+ * LA LISTA DE EXCLUSION que se le pone delante al Director de Arte.
+ *
+ * Antes esto era «no repitas el encuadre». Se repetia igual, porque lo que se
+ * repite no es el encuadre: es la IDEA. Tres marcas distintas acabaron con la
+ * misma varita magica, la misma mano trigueña y el mismo hombre con cafe —
+ * atractores del modelo, no decisiones de nadie.
+ *
+ * Ahora se le enseñan cuatro cosas, y las cuatro salen de SU historial:
+ *   · los conceptos y metaforas que ya uso;
+ *   · la utileria que sale una y otra vez;
+ *   · las ideas que el dueño DESCARTO (esas pesan doble);
+ *   · y los cliches conocidos, SOLO si aparecen en lo suyo.
+ *
+ * Lo ultimo importa: prohibir la varita magica a un negocio que nunca la ha
+ * usado es gastar instrucciones en un fantasma, y de paso vetarle un recurso
+ * que a lo mejor le pega. Se veta lo que se repite, no lo que suena mal.
  */
-function variedad_evitar_txt(PDO $pdo, int $marca_id, int $n = 6): string {
+function variedad_evitar_txt(PDO $pdo, int $marca_id, int $n = 6): string
+{
     $ult = variedad_ultimas($pdo, $marca_id, $n);
-    if (!$ult) return '';
+
+    //  LO QUE EL DUEÑO DESCARTO. Una idea rechazada que vuelve al dia siguiente
+    //  es la forma mas rapida de que deje de mirar lo que le proponemos.
+    $rech = [];
+    try {
+        $q = $pdo->prepare("SELECT prompt_narrativo FROM crecer_generaciones
+                              WHERE marca_id=? AND decision_dueno='descartada'
+                                AND prompt_narrativo IS NOT NULL AND prompt_narrativo <> ''
+                           ORDER BY id DESC LIMIT 4");
+        $q->execute([$marca_id]);
+        foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $t) $rech[] = mb_substr(trim((string)$t), 0, 160);
+    } catch (Throwable $e) { $rech = []; }
+
+    if (!$ult && !$rech) return '';
+
     $lineas = [];
+    $texto_todo = '';
     foreach ($ult as $u) {
-        $t = trim((string)($u['resumen'] ?? ''));
-        if ($t === '') {
-            $t = trim(implode(' · ', array_filter([
-                (string)($u['sujeto'] ?? ''), (string)($u['composicion'] ?? ''), (string)($u['escenario'] ?? ''),
-            ])));
-        }
-        if ($t !== '') $lineas[] = '- ' . mb_substr($t, 0, 180);
+        //  La idea primero: concepto y metafora son lo que de verdad se repite.
+        $idea = trim(implode(' · ', array_filter([
+            (string)($u['concepto'] ?? ''), (string)($u['metafora'] ?? ''),
+        ])));
+        $forma = trim(implode(' · ', array_filter([
+            (string)($u['sujeto'] ?? ''), (string)($u['composicion'] ?? ''),
+            (string)($u['escenario'] ?? ''), (string)($u['utileria'] ?? ''),
+        ])));
+        $t = trim($idea . ($idea !== '' && $forma !== '' ? ' — ' : '') . $forma);
+        if ($t === '') $t = trim((string)($u['resumen'] ?? ''));
+        if ($t !== '') { $lineas[] = '- ' . mb_substr($t, 0, 180); $texto_todo .= ' ' . $t; }
     }
-    if (!$lineas) return '';
-    return "LO QUE YA HICISTE PARA ESTE NEGOCIO (está PROHIBIDO repetirlo — ni el sujeto, ni el gesto, ni el encuadre):\n"
-         . implode("\n", $lineas) . "\n"
-         . "Si en esas imágenes hubo manos sosteniendo algo, en esta NO puede haber manos sosteniendo nada. "
-         . "Si hubo primer plano del producto, esta va abierta. Repetir la fórmula anterior es el peor resultado posible.\n";
+
+    $out = '';
+    if ($lineas) {
+        $out .= "LO QUE YA HICISTE PARA ESTE NEGOCIO (está PROHIBIDO repetirlo — ni la idea, ni el sujeto, ni el gesto, ni el encuadre):
+"
+              . implode("
+", $lineas) . "
+";
+    }
+    if ($rech) {
+        $out .= "IDEAS QUE EL DUEÑO YA DESCARTÓ (no vuelvas a proponerlas):
+- "
+              . implode("
+- ", $rech) . "
+";
+    }
+
+    //  LOS CLICHES, SOLO SI SON SUYOS. La lista es corta a proposito: son los
+    //  tres que de verdad han salido una y otra vez en produccion.
+    $cliches = [
+        'varita'  => ['varita', 'magic wand', 'destello mágico', 'chispas mágicas'],
+        'mano'    => ['mano trigueña', 'manos sosteniendo', 'hand holding', 'mano sosteniendo'],
+        'cafe'    => ['hombre puertorriqueño con café', 'taza de café en la mano', 'man with coffee'],
+    ];
+    $ban = [];
+    $hay = mb_strtolower($texto_todo . ' ' . implode(' ', $rech));
+    foreach ($cliches as $clave => $formas) {
+        foreach ($formas as $f) {
+            if (mb_strpos($hay, mb_strtolower($f)) !== false) { $ban[] = $clave; break; }
+        }
+    }
+    if ($ban) {
+        $etq = ['varita' => 'varitas mágicas, destellos o chispas de magia',
+                'mano'   => 'manos sosteniendo el producto (de cualquier tono de piel)',
+                'cafe'   => 'la taza de café como recurso emocional'];
+        $out .= "RECURSOS QUEMADOS EN ESTE NEGOCIO — no pueden volver a salir: "
+              . implode('; ', array_map(fn($k) => $etq[$k] ?? $k, $ban)) . ".
+";
+    }
+
+    if ($out !== '') {
+        $out .= "Cambiar el color o mover el producto NO es cambiar de idea: cambia el CONCEPTO. "
+              . "Repetir la fórmula anterior es el peor resultado posible.
+";
+    }
+    return $out;
 }
 
-/** Registra la huella de la imagen recién diseñada. Best-effort. */
+/**
+ * Registra la huella de la imagen recién diseñada. Best-effort.
+ *
+ * GUARDA LA IDEA, no solo el encuadre: el concepto, la metafora y la utileria
+ * salen del MISMO brief que el Director ya devolvio — cero llamadas de mas por
+ * clasificar una imagen. Si la migracion de Fase 4 no entro, se escribe lo de
+ * siempre y la memoria queda mas pobre, no rota.
+ */
 function variedad_registrar(PDO $pdo, int $marca_id, string $lente, array $brief, ?int $contenido_id = null): void {
     try {
         $sujeto = mb_substr(trim((string)($brief['primary_subject'] ?? '')), 0, 190);
         $comp   = mb_substr(trim((string)($brief['composition'] ?? ($brief['camera'] ?? ''))), 0, 190);
         $escena = mb_substr(trim((string)($brief['background'] ?? '')), 0, 190);
         $resumen= mb_substr(trim(($sujeto !== '' ? $sujeto : 'imagen') . ($comp !== '' ? ' — ' . $comp : '')), 0, 255);
+
+        if (variedad_hay_concepto($pdo)) {
+            $concepto = mb_substr(trim((string)($brief['concepto'] ?? ($brief['visual_story'] ?? ''))), 0, 190);
+            $metafora = mb_substr(trim((string)($brief['metafora'] ?? '')), 0, 120);
+            //  La utileria puede venir como lista (secondary_elements) o como
+            //  frase. Las dos formas se guardan igual: texto corto y legible.
+            $ut = $brief['utileria'] ?? ($brief['secondary_elements'] ?? '');
+            if (is_array($ut)) $ut = implode(', ', array_map('strval', $ut));
+            $utileria = mb_substr(trim((string)$ut), 0, 190);
+            $pdo->prepare("INSERT INTO crecer_visual_huella
+                    (marca_id, contenido_id, lente, concepto, metafora, utileria,
+                     sujeto, composicion, escenario, resumen)
+                  VALUES (?,?,?,?,?,?,?,?,?,?)")
+                ->execute([$marca_id, $contenido_id, mb_substr($lente, 0, 40),
+                           $concepto ?: null, $metafora ?: null, $utileria ?: null,
+                           $sujeto ?: null, $comp ?: null, $escena ?: null, $resumen ?: null]);
+            return;
+        }
+
         $pdo->prepare("INSERT INTO crecer_visual_huella (marca_id, contenido_id, lente, sujeto, composicion, escenario, resumen)
                        VALUES (?,?,?,?,?,?,?)")
             ->execute([$marca_id, $contenido_id, mb_substr($lente, 0, 40), $sujeto ?: null, $comp ?: null, $escena ?: null, $resumen ?: null]);

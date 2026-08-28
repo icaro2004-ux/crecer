@@ -123,7 +123,16 @@ function director_creativo_visual(PDO $pdo, int $marca_id, string $que_vende, st
          . "clara). Si el negocio vende variedad o por docenas, muestra un SURTIDO generoso. "
          . "Respeta la guía de estilo. Devuelve SOLO JSON con: emotion, visual_story, primary_subject, secondary_elements (array), "
          . "background, lighting, camera, lens, composition, focus, color_palette (array), textures (array), mood, visual_style, "
-         . "quality, negative (array). {$extra_txt}";
+         . "quality, negative (array). "
+         //  TRES CAMPOS MAS, EN LA MISMA RESPUESTA. Son la memoria creativa: sin
+         //  ellos, no repetirse se queda en comparar cadenas de prompts —y «una
+         //  varita sobre el bizcocho» y «un destello magico en el postre» no se
+         //  parecen como texto y son la misma imagen. Pedirlos aqui no cuesta otra
+         //  llamada: el Director ya esta pensando justo eso.
+         . "Añade además TRES campos cortos, en español, que resumen la IDEA de esta imagen para no repetirla después: "
+         . "\"concepto\" (la idea en una frase, ej. «el pedido saliendo por la puerta»), "
+         . "\"metafora\" (el recurso emocional, ej. «manos que cuidan», «antes y después»; vacío si no hay), "
+         . "\"utileria\" (los objetos que salen, separados por comas). {$extra_txt}";
     // ANTI-SLOP: el estilo de marca se respeta, pero la IDEA tiene que ser otra.
     // El lente asignado (rotación determinística) manda sobre el atractor del
     // modelo, y la memoria de lo ya hecho le cierra la puerta a repetirse.
