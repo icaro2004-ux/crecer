@@ -9,7 +9,7 @@
 //  que solo uno diga `aria-current`.
 //
 //    node tests/_dock_probe.mjs <carpeta|-> <sid> <marca> [modo]
-//      modo: recorrido (por defecto) · hover · sinjs
+//      modo: recorrido (por defecto) · flash · hover · sinjs
 // ============================================================
 
 import { abrirChrome, dormir, cerrarRecibimiento } from './_chrome.mjs';
@@ -142,6 +142,86 @@ try {
   await cmd('Page.addScriptToEvaluateOnNewDocument', { source: SONDA });
   await cmd('Network.setCookie', { name: 'PHPSESSID', value: sid, domain: 'localhost', path: '/' });
 
+  if (modo === 'flash') {
+    //  LOS PRIMEROS CUADROS, QUE ES DONDE VIVÍA EL DEFECTO.
+    //
+    //  Mirar el estado final no servía de nada: el dock acababa bien SIEMPRE.
+    //  Lo que el dueño veía era el camino — la barra desordenada y luego el
+    //  activo deslizándose desde la izquierda— y eso solo se caza muestreando
+    //  mientras la página se pinta.
+    const MUESTRA = `(function () {
+      var d = document.getElementById('dock');
+      if (!d) return null;
+      var cs = getComputedStyle(d);
+      if (cs.display === 'none') return null;
+      var rd = d.getBoundingClientRect();
+      if (rd.height <= 0) return null;
+      var its = [].map.call(d.querySelectorAll('.dk-i'), function (a) {
+        var r = a.getBoundingClientRect();
+        return { k: a.getAttribute('data-k'), act: a.classList.contains('act'),
+                 x: r.left + r.width / 2, y: r.top + r.height / 2,
+                 l: r.left, r2: r.right };
+      });
+      var act = its.filter(function (i) { return i.act; })[0] || null;
+      return { t: Math.round(performance.now()),
+               n: its.length,
+               alto: Math.round(rd.height), top: Math.round(rd.top),
+               desvio: act ? +(act.x - (rd.left + rd.width / 2)).toFixed(1) : null,
+               actY: act ? +act.y.toFixed(1) : null,
+               actK: act ? act.k : '',
+               current: d.querySelectorAll('[aria-current="page"]').length,
+               fuera: its.filter(function (i) { return i.l < -0.5 || i.r2 > innerWidth + 0.5; }).length,
+               horiz: Math.max(0, document.documentElement.scrollWidth - innerWidth) };
+    })()`;
+
+    //  Se muestrea CRUDO, sin esperar a `load`: en cuanto haya algo pintado.
+    const muestrear = async (ms = 500) => {
+      const out = [];
+      const t0 = Date.now();
+      while (Date.now() - t0 < ms) {
+        try {
+          const r = await cmd('Runtime.evaluate', { expression: MUESTRA, returnByValue: true });
+          const v = r?.result?.value;
+          if (v) out.push(v);
+        } catch (e) { /* el documento todavía no existe: no es una muestra */ }
+        await dormir(25);
+      }
+      return out;
+    };
+
+    //  UNA VUELTA DE CALENTAMIENTO ANTES DE MEDIR. La primera carga del
+    //  proceso arranca PHP en frío y puede pasar de medio segundo: las
+    //  muestras salen vacías por eso y no por el dock. Lo que se quiere
+    //  medir es una recarga de verdad, no el primer arranque del servidor.
+    for (const [, arch] of RUTAS) {
+      await ir(`${BASE}/${arch}?marca=${marca}`);
+    }
+
+    for (const [n, w, h] of [['360', 360, 800], ['414', 414, 896]]) {
+      await tam(w, h);
+      for (const [k, arch] of RUTAS) {
+        //  RECARGA DURA: se navega y se empieza a mirar de inmediato.
+        await cmd('Page.navigate', { url: `${BASE}/${arch}?marca=${marca}` });
+        di(`F_${n}_${k}`, JSON.stringify(await muestrear(500)));
+        await listo();
+        await cerrarRecibimiento(ev);
+      }
+
+      //  ATRÁS Y ADELANTE: el navegador devuelve la página tal cual, y tiene
+      //  que aparecer quieta — no terminando una animación de hace dos
+      //  páginas.
+      await ev('history.back()');
+      di(`F_${n}_atras`, JSON.stringify(await muestrear(400)));
+      await ev('history.forward()');
+      di(`F_${n}_adelante`, JSON.stringify(await muestrear(400)));
+    }
+
+    di('ERRORES', await ev('JSON.stringify(window.__errs || [])'));
+    di('OK', 1);
+    cerrar();
+    process.exit(0);
+  }
+
   if (modo === 'sinjs') {
     //  SIN JAVASCRIPT los enlaces tienen que seguir navegando. Es la prueba de
     //  que el dock es navegación y no una animación con enlaces dentro.
@@ -158,6 +238,17 @@ try {
     const url = await cmd('Runtime.evaluate', { expression: 'location.href' })
       .then(r => r?.result?.value || '').catch(() => '');
     di('SINJS_URL', url);
+    //  Y SIN JS TAMBIÉN SALE ASENTADO: la geometría la pinta el servidor, así
+    //  que aquí no hay nada que esperar.
+    const cen = await cmd('Runtime.evaluate', { expression: `(function(){
+      var d = document.getElementById('dock'); if (!d) return null;
+      var rd = d.getBoundingClientRect();
+      var a = d.querySelector('.dk-i.act'); if (!a) return null;
+      var r = a.getBoundingClientRect();
+      return JSON.stringify({ desvio: +(r.left + r.width/2 - (rd.left + rd.width/2)).toFixed(1),
+                              k: a.getAttribute('data-k'), alto: Math.round(rd.height) });
+    })()`, returnByValue: true }).then(r => r?.result?.value || '{}').catch(() => '{}');
+    di('SINJS_CENTRO', cen);
     await cmd('Emulation.setScriptExecutionDisabled', { value: false });
     di('OK', 1);
     cerrar();

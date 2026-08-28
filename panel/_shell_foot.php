@@ -38,11 +38,34 @@ $dk_items = [
     ['k' => 'meta',       'ic' => 'compass',  'lb' => t('Tu Meta'),    'hr' => "{$BASE}/meta.php?marca={$marca_id}"],
     ['k' => 'resultados', 'ic' => 'chart',    'lb' => t('Resultados'), 'hr' => "{$BASE}/resultados.php?marca={$marca_id}"],
 ];
+//  EL ORDEN CIRCULAR LO DECIDE EL SERVIDOR, no el navegador.
+//
+//  Aquí está el arreglo del parpadeo: hasta ahora el HTML salía en cuatro
+//  columnas iguales y JavaScript las recolocaba al cargar, así que el dueño
+//  veía la barra desordenada y después el activo deslizándose desde la
+//  izquierda hasta el centro. En cada página. Ahora el primer cuadro ya es
+//  el definitivo.
+//
+//  El DOM NO se reordena —Inicio, Calendario, Tu Meta, Resultados, siempre,
+//  para el tabulador y el lector de pantalla—: lo que viaja es el `order`
+//  de cada uno, que es presentación. Alrededor del activo: el anterior a la
+//  izquierda y los dos siguientes a la derecha, dando la vuelta.
+$dk_i = 0;
+foreach ($dk_items as $k => $d) { if ($d['k'] === $dk_act) { $dk_i = $k; break; } }
+$dk_orden = [];   //  clave => [order, ¿es el de la izquierda?]
+$dk_orden[$dk_items[($dk_i + 3) % 4]['k']] = [1, true];
+$dk_orden[$dk_items[$dk_i]['k']]           = [2, false];
+$dk_orden[$dk_items[($dk_i + 1) % 4]['k']] = [3, false];
+$dk_orden[$dk_items[($dk_i + 2) % 4]['k']] = [4, false];
 ?>
-<nav class="botnav dock" id="dock" aria-label="<?= $h(t('Navegación principal')) ?>">
-  <?php foreach ($dk_items as $d): $on = ($d['k'] === $dk_act); ?>
+<nav class="botnav dock dock-inicial" id="dock" aria-label="<?= $h(t('Navegación principal')) ?>">
+  <?php foreach ($dk_items as $d):
+    $on = ($d['k'] === $dk_act);
+    [$ord, $izq] = $dk_orden[$d['k']] ?? [2, false];
+  ?>
     <a href="<?= $h($d['hr']) ?>" data-k="<?= $h($d['k']) ?>"
-       class="dk-i<?= $on ? ' act' : '' ?>"
+       class="dk-i<?= $on ? ' act' : '' ?><?= $izq ? ' dk-izq' : '' ?>"
+       style="order:<?= (int)$ord ?>"
        <?= $on ? 'aria-current="page"' : '' ?>>
       <span class="dk-b"><?= ico($d['ic']) ?></span>
       <span class="dk-l"><?= $h($d['lb']) ?></span>
@@ -182,86 +205,44 @@ $dk_items = [
   }, true);
 </script>
 <script>
-/*  EL DOCK, MEDIDO ─────────────────────────────────────────────────────────
+/*  EL DOCK ─────────────────────────────────────────────────────────────────
  *
- *  La geometría se MIDE, no se adivina: con cuatro destinos y el activo en el
- *  centro exacto, no hay reparto simétrico posible —haría falta uno y medio a
- *  cada lado— así que se calcula con los anchos reales y se coloca cada uno
- *  donde de verdad cabe, sin solaparse.
+ *  LA COLOCACIÓN YA VINO HECHA. El servidor pinta el orden circular y el CSS
+ *  reparte los pesos: el activo sale centrado en el primer cuadro, sin medir
+ *  nada. Este script NO coloca el dock — si lo hiciera, volvería el parpadeo
+ *  que vino a quitar.
  *
- *  EL ARREGLO ES CIRCULAR: el activo al centro, el que va antes a su
- *  izquierda y los dos siguientes a su derecha, dando la vuelta. Así el orden
- *  relativo se conserva mires donde mires, y ningún lado se queda vacío
- *  cuando el activo es el primero o el último.
- *
- *  SI ESTO NO CORRE, NO PASA NADA: sin `medido` el dock es un flex de cuatro
- *  columnas con el activo igual de prominente, y los enlaces navegan solos.
+ *  Solo quedan tres cosas, y las tres son interacción:
+ *    · encender las transiciones cuando la página ya está pintada;
+ *    · la magnificación con puntero (hover);
+ *    · el empujón hacia el centro al tocar otro destino, antes de navegar.
  */
 (function () {
   var dock = document.getElementById('dock');
   if (!dock) return;
   var items = [].slice.call(dock.querySelectorAll('.dk-i'));
-  if (items.length !== 4) return;
-
   var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   var fino   = window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches;
 
-  function colocar() {
-    //  El dock solo existe en móvil; por encima manda el menú lateral.
-    if (getComputedStyle(dock).display === 'none') { dock.classList.remove('medido'); return; }
-
-    var act = items.findIndex(function (a) { return a.classList.contains('act'); });
-    if (act < 0) { dock.classList.remove('medido'); return; }
-
-    //  SE MIDE EN `medido`, NO ANTES. Fuera de ahí los cuatro son `flex:1` y
-    //  todos miden lo mismo —el ancho de una columna, no el suyo—, y con esa
-    //  cifra inflada el reparto salía mal: los dos de la derecha se pisaban
-    //  por unos pocos píxeles. En `medido` cada uno mide lo que de verdad
-    //  ocupa su rótulo.
-    dock.classList.add('medido');
-    var W  = dock.clientWidth;
-    var cs = getComputedStyle(dock);
-    var padL = parseFloat(cs.paddingLeft) || 0, padR = parseFloat(cs.paddingRight) || 0;
-    var anchos = items.map(function (a) { return a.getBoundingClientRect().width; });
-
-    var centro = W / 2;
-    var mitadAct = anchos[act] / 2;
-    var GAP = 4;   //  aire mínimo entre el activo y su vecino
-
-    //  Orden circular: [anterior, ACTIVO, siguiente, siguiente+1].
-    var izq = [(act + 3) % 4];
-    var der = [(act + 1) % 4, (act + 2) % 4];
-
-    var x = [];
-    x[act] = centro;
-
-    //  IZQUIERDA: un solo destino, centrado en lo que queda.
-    var iniI = padL, finI = centro - mitadAct - GAP;
-    x[izq[0]] = Math.max(iniI + anchos[izq[0]] / 2,
-                         Math.min(finI - anchos[izq[0]] / 2, (iniI + finI) / 2));
-
-    //  DERECHA: dos, repartidos por igual en su tramo.
-    var iniD = centro + mitadAct + GAP, finD = W - padR;
-    var tramo = (finD - iniD) / 2;
-    der.forEach(function (k, n) {
-      var c = iniD + tramo * (n + 0.5);
-      x[k] = Math.max(iniD + anchos[k] / 2, Math.min(finD - anchos[k] / 2, c));
+  //  LAS TRANSICIONES SE ENCIENDEN DESPUÉS, y sin mover nada. Dos cuadros:
+  //  uno para que el navegador pinte, otro para que el cambio de clase no
+  //  entre en el mismo lote de estilo que el primer pintado.
+  function asentar() {
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { dock.classList.remove('dock-inicial'); });
     });
-
-    items.forEach(function (a, k) { a.style.setProperty('--dk-x', x[k].toFixed(1) + 'px'); });
   }
+  asentar();
 
-  //  Se coloca al cargar y cuando cambie el tamaño (girar el teléfono).
-  colocar();
-  addEventListener('resize', function () {
-    clearTimeout(colocar._t); colocar._t = setTimeout(colocar, 120);
-  }, { passive: true });
-  //  Las fuentes cambian los anchos al terminar de cargar.
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(colocar).catch(function () {});
+  //  VOLVER ATRÁS (bfcache) devuelve la página tal cual estaba. Si veníamos de
+  //  un toque, el elemento se quedó con su empujón puesto: se limpia y se
+  //  vuelve a asentar, para que aparezca quieto y no terminando una animación
+  //  de hace dos páginas.
+  addEventListener('pageshow', function (e) {
+    items.forEach(function (a) { a.style.transform = ''; a.classList.remove('vec'); });
+    if (e.persisted) { dock.classList.add('dock-inicial'); asentar(); }
+  });
 
-  //  MAGNIFICACIÓN estilo dock: crece el de debajo del puntero y un poco sus
-  //  vecinos. Solo con puntero fino, y solo con transform — la caja no se
-  //  mueve, así que nada salta.
   if (fino && !reduce) {
     items.forEach(function (a, k) {
       a.addEventListener('mouseenter', function () {
@@ -273,10 +254,13 @@ $dk_items = [
     });
   }
 
-  //  AL TOCAR OTRO: se desliza hacia el centro y se navega. Corto de verdad
-  //  —160 ms— porque una animación que retrasa la navegación se siente como
-  //  una aplicación lenta, no como una aplicación cuidada. Y si algo falla en
-  //  el camino, el enlace ya iba a navegar solo.
+  //  AL TOCAR OTRO: se empuja hacia el centro y se navega. El empujón es un
+  //  `transform` —no toca el layout— y se mide en ese instante, que es una
+  //  interacción y no el pintado inicial.
+  //
+  //  160 ms, ni uno más: una animación que retrasa la navegación se siente
+  //  como una aplicación lenta, no como una cuidada. Y si algo falla por el
+  //  camino, el enlace ya iba a navegar solo.
   if (!reduce) {
     dock.addEventListener('click', function (e) {
       var a = e.target.closest('.dk-i');
@@ -284,10 +268,10 @@ $dk_items = [
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
       if (getComputedStyle(dock).display === 'none') return;
       e.preventDefault();
-      var centro = dock.clientWidth / 2;
-      a.style.setProperty('--dk-x', centro.toFixed(1) + 'px');
-      a.classList.add('act');
-      items.forEach(function (b) { if (b !== a) b.classList.remove('act'); });
+      var r = a.getBoundingClientRect();
+      var rd = dock.getBoundingClientRect();
+      var dx = (rd.left + rd.width / 2) - (r.left + r.width / 2);
+      a.style.transform = 'translateX(' + dx.toFixed(1) + 'px) scale(1.06)';
       setTimeout(function () { location.href = a.href; }, 160);
     });
   }

@@ -65,12 +65,10 @@ if ($ay_marca_id <= 0 || !function_exists('csrf_token') || empty($_SESSION['usua
      pone body.modal-abierto y lo quita al cerrar. */
   body.modal-abierto .ay-fab{display:none !important}
   /*  AYUDA POR ENCIMA DEL DOCK. Estaba a 24px del borde: justo dentro de la
-      barra de abajo, tapando un destino y compitiendo con la navegación. Se
-      sube por encima de su zona segura —alto del dock más el margen del
-      teléfono— y ahí se queda. Su función no cambia: solo deja de estorbar. */
-  @media (max-width:860px){
-    .ay-fab{bottom:calc(78px + env(safe-area-inset-bottom));right:16px}
-  }
+      barra de abajo, tapando un destino. Se sube por encima de su zona
+      segura —el alto del dock, que vive en `--dock-alto`, más el margen del
+      teléfono—. La regla está abajo, en el bloque de móvil que manda.
+      Su función no cambia: solo deja de estorbar. */
   .ay-fab:hover{transform:translateY(-2px) scale(1.02)}
   .ay-fab:active{transform:translateY(1px) scale(.99)}
   .ay-fab.abierto{transform:scale(.9);opacity:0}
@@ -133,7 +131,11 @@ if ($ay_marca_id <= 0 || !function_exists('csrf_token') || empty($_SESSION['usua
 
   /* ── MÓVIL: hoja que sube. Pulgar arriba del bottom-nav, chat a pantalla casi completa ── */
   @media(max-width:860px){
-    .ay-fab{right:16px;bottom:calc(78px + env(safe-area-inset-bottom));padding:12px 17px 12px 14px;font-size:13.5px}
+    /*  POR ENCIMA DEL DOCK, con SU alto. Este bloque va después del de
+        arriba y por eso manda: mantener aquí un 78 fijo era tener el número
+        en dos sitios, y cuando la barra creció, Ayuda se le metió dentro. */
+    .ay-fab{right:16px;bottom:calc(var(--dock-alto, 80px) + 14px + env(safe-area-inset-bottom));
+      padding:12px 17px 12px 14px;font-size:13.5px}
     .ay-panel{right:0;left:0;bottom:0;width:auto;max-height:none;height:88dvh;border-radius:22px 22px 0 0;
       border-left:0;border-right:0;border-bottom:0;transform:translateY(100%) scale(1)}
     .ay-panel.show{transform:none}
