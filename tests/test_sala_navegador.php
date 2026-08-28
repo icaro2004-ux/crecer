@@ -257,6 +257,18 @@ try {
         ok('captura ' . $img,          is_file($ruta) && filesize($ruta) > 9000,
            is_file($ruta) ? filesize($ruta) . ' bytes' : 'no existe');
     }
+    //  Y QUE SEAN CINCO MOMENTOS, no cuatro y una repetida. La tarjeta de
+    //  elección aparece a los pocos milisegundos de la respuesta: sin cuidado,
+    //  la foto de «la propuesta» y la de «la elección» salían idénticas byte a
+    //  byte, y el paquete de evidencia enseñaba dos veces lo mismo.
+    $huellas = [];
+    foreach (['sala_propuesta_360', 'sala_eleccion_360', 'sala_repercusion_360',
+              'crear_contexto_360', 'meta_oportunidad_360'] as $img) {
+        $r = $SHOTS . '/' . $img . '.png';
+        if (is_file($r)) $huellas[$img] = md5_file($r);
+    }
+    ok('las cinco enseñan cosas distintas', count(array_unique($huellas)) === 5,
+       json_encode(array_map(fn($x) => substr($x, 0, 8), $huellas)));
 
     //  EL GASTO, con las marcas todavía vivas y SOLO las de esta prueba.
     $en = implode(',', array_map('intval', $limpiar));
