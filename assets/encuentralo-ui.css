@@ -344,25 +344,109 @@ body.lb-abierto{overflow:hidden}
 .botnav{display:none}
 .fab-corillo{display:none}
 @media (max-width:860px){
+  /* ══ EL DOCK ═══════════════════════════════════════════════════════════
+     Cuatro destinos, y el que estás mirando SIEMPRE en el centro.
+
+     LO QUE HABÍA: cuatro columnas rígidas con Tu Meta flotando encima como
+     un botón aparte. Dos problemas, y el segundo es el grave. El primero,
+     que se veía pegado. El segundo, que el trato especial era de Tu Meta y
+     de nadie más: en Calendario o en Resultados el dueño no tenía forma de
+     saber de un vistazo dónde estaba, porque lo único que gritaba era una
+     pestaña donde NO estaba.
+
+     Ahora el trato es del ACTIVO, sea cual sea: se ancla al centro, crece,
+     toma el color de su sección y se levanta un poco sobre la barra. Los
+     otros tres se acomodan alrededor con una transición corta.
+
+     EL ORDEN DEL DOM NO SE TOCA — Inicio, Calendario, Tu Meta, Resultados —
+     y la posición se pinta encima. Así el tabulador sigue un orden estable
+     aunque el orden visual rote, que es justo lo que se rompe cuando alguien
+     reordena nodos para colocar cosas.
+
+     SIN JAVASCRIPT SIGUE SIENDO UN DOCK: la base es un flex de cuatro, el
+     activo mantiene su prominencia y los enlaces navegan. El JS solo mide y
+     centra. Nada cuelga de él.
+     ══════════════════════════════════════════════════════════════════════ */
   .botnav{display:flex;position:fixed;bottom:0;left:0;width:100%;z-index:45;
     background:var(--card);border-top:1px solid var(--line);
-    justify-content:space-around;align-items:center;padding:8px 6px;
-    padding-bottom:calc(8px + env(safe-area-inset-bottom));
-    box-shadow:0 -6px 20px rgba(20,20,30,.06)}
-  /*  12px, no 10. El rotulo de una pestaña se lee de reojo y con el
-      pulgar encima: a 10px no se lee, se adivina. A 12 los cinco siguen
-      cabiendo en 360 -medido- bajando el peso de 800 a 700, que a este
-      tamaño ademas se lee mejor. */
-  /*  44 DE ALTO DE VERDAD. Medidos en el navegador salian 43.x: por encima del
-      umbral en el CSS y por debajo en el dedo. El pulgar no redondea. */
+    align-items:center;justify-content:space-around;
+    padding:7px 6px;padding-bottom:calc(7px + env(safe-area-inset-bottom));
+    box-shadow:0 -6px 20px rgba(20,20,30,.06);
+    /* Alto fijo: el dock no puede cambiar la altura de la página al navegar. */
+    /*  BORDER-BOX, Y NO ES DETALLE. Con `content-box`, `width:100%` más el
+        padding daban 372px de caja en una pantalla de 360: el motor medía
+        372, ponía el centro en 186 y el último rótulo se salía por el borde
+        derecho. Se veía en la captura y ninguna afirmación lo cazaba —
+        ahora hay una que mira que todos quepan dentro de la pantalla. */
+    /*  72, NO 62. El activo es más alto que un inactivo —burbuja de 50 más su
+        rótulo— y con la barra a 62 su etiqueta se salía por debajo del canto
+        de la pantalla: se leía «Resultad». La barra la dimensiona el elemento
+        más alto que puede contener, no el más común. */
+    min-height:72px;box-sizing:border-box}
+
   .botnav a{display:flex;flex-direction:column;align-items:center;justify-content:center;
-    gap:2px;flex:1;min-height:44px;
+    gap:3px;flex:1;min-width:0;min-height:44px;
     text-decoration:none;color:var(--muted);font-size:12px;font-weight:700;
-    letter-spacing:.01em;transition:color .15s}
-  .botnav a .ic{width:23px;height:23px;display:block}
-  .botnav a.on{color:var(--terracota-700)}
-  .botnav a:active{transform:scale(.92)}
-  .botnav .slot-fab{flex:0 0 64px}            /* hueco para el FAB central */
+    letter-spacing:.01em;
+    /* Nada de rótulos partidos: si no cabe, no se parte — se acorta el hueco. */
+    white-space:nowrap;
+    transition:color .2s var(--ease,ease),transform .28s cubic-bezier(.4,0,.2,1)}
+  .botnav a .ic{width:22px;height:22px;display:block;transition:width .2s,height .2s}
+  .botnav a:focus-visible{outline:2px solid var(--tinta);outline-offset:3px;border-radius:12px}
+
+  /* — LA BURBUJA. Existe siempre; en los inactivos es transparente, así que
+       crecer no cambia la caja: solo se pinta. — */
+  .dk-b{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;
+    background:transparent;color:inherit;
+    transition:width .26s cubic-bezier(.4,0,.2,1),height .26s cubic-bezier(.4,0,.2,1),
+               background-color .22s ease,box-shadow .26s ease,transform .26s cubic-bezier(.4,0,.2,1)}
+  /*  EL ROTULO INACTIVO PESA MENOS — y ocupa menos. No es estetica: con
+      cuatro destinos y el activo clavado en el centro, dos rotulos tienen
+      que caber en la mitad de la barra. A 800 no cabian y se pisaban; a 600
+      caben enteros, que es mejor que caber con puntos suspensivos. */
+  .dk-l{line-height:1.1;max-width:76px;overflow:hidden;text-overflow:ellipsis;
+    font-weight:600;letter-spacing:0}
+
+  /* — EL ACTIVO. Cada sección con su color: el dueño aprende el sitio por el
+       color antes que por la palabra. Todos pasan AA sobre blanco. — */
+  .botnav a.act{color:var(--dk-c,var(--terracota-700))}
+  .botnav a.act .dk-b{width:50px;height:50px;background:var(--dk-c,var(--terracota-700));color:#fff;
+    box-shadow:0 8px 20px -8px color-mix(in srgb,var(--dk-c,#D62E61) 65%,transparent);
+    transform:translateY(-5px)}
+  .botnav a.act .ic{width:26px;height:26px}
+  .botnav a.act .dk-l{font-weight:800;transform:translateY(-3px)}
+  .botnav a[data-k="inicio"]     {--dk-c:#D62E61}
+  .botnav a[data-k="calendario"] {--dk-c:#0F766E}
+  .botnav a[data-k="meta"]       {--dk-c:#00827E}
+  .botnav a[data-k="resultados"] {--dk-c:#8A5310}
+
+  /* — MEDIDO. Con JS, cada uno va donde toca: el activo clavado en el centro
+       y los demás repartidos alrededor. `left:0` + translate para que la
+       transición sea de transform y no de layout. — */
+  .botnav.medido{display:block;position:fixed;justify-content:normal}
+  /*  Y CENTRADOS EN VERTICAL. Con `top:auto` los absolutos se quedaban
+      colgando del borde de arriba y el más alto sobresalía por abajo. */
+  .botnav.medido a{position:absolute;left:0;top:50%;flex:none;
+    transform:translateX(calc(var(--dk-x,50vw) - 50%)) translateY(-50%) scale(var(--dk-s,1))}
+  .botnav.medido a.act{z-index:2}
+
+  /* — MAGNIFICACIÓN. Solo donde hay puntero: en un teléfono no hay hover, y
+       fingirlo deja iconos grandes pegados después de tocar. — */
+  @media (hover:hover) and (pointer:fine){
+    .botnav.medido a:hover{--dk-s:1.14}
+    .botnav.medido a.vec{--dk-s:1.06}
+  }
+  /* Al tocar: respuesta inmediata, sin rebote. */
+  .botnav a:active .dk-b{transform:scale(.94) translateY(-2px)}
+  .botnav a.act:active .dk-b{transform:scale(.94) translateY(-5px)}
+
+  @media (prefers-reduced-motion:reduce){
+    /* Se quedan la jerarquía y el color; se va el movimiento. */
+    .botnav a,.botnav a .ic,.dk-b{transition:none}
+    .botnav.medido a{--dk-s:1 !important}
+    .botnav a.act .dk-b,.botnav a.act .dk-l{transform:none}
+  }
+
   .fab-corillo{display:flex;position:fixed;left:50%;transform:translateX(-50%);
     bottom:calc(26px + env(safe-area-inset-bottom));z-index:46;
     width:60px;height:60px;border-radius:50%;align-items:center;justify-content:center;

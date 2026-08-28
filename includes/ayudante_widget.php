@@ -64,6 +64,13 @@ if ($ay_marca_id <= 0 || !function_exists('csrf_token') || empty($_SESSION['usua
      tapaba controles y contenido de la vista previa. Quien abra un modal
      pone body.modal-abierto y lo quita al cerrar. */
   body.modal-abierto .ay-fab{display:none !important}
+  /*  AYUDA POR ENCIMA DEL DOCK. Estaba a 24px del borde: justo dentro de la
+      barra de abajo, tapando un destino y compitiendo con la navegación. Se
+      sube por encima de su zona segura —alto del dock más el margen del
+      teléfono— y ahí se queda. Su función no cambia: solo deja de estorbar. */
+  @media (max-width:860px){
+    .ay-fab{bottom:calc(78px + env(safe-area-inset-bottom));right:16px}
+  }
   .ay-fab:hover{transform:translateY(-2px) scale(1.02)}
   .ay-fab:active{transform:translateY(1px) scale(.99)}
   .ay-fab.abierto{transform:scale(.9);opacity:0}

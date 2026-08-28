@@ -71,4 +71,7 @@ return [
     'Puedes ponerles nombre.'                                       => 'Puedes ponerles nombre.',
     'Sin conectar todavía.'                                         => 'Sin conectar todavía.',
     'Volver a %s'                                                   => 'Volver a %s',
+
+    //  El nombre accesible del dock: lo lee quien navega con lector de pantalla.
+    'Navegación principal'  => 'Navegación principal',
 ];
