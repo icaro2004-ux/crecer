@@ -208,6 +208,13 @@ $piezas = [
     ['crecer_carrusel',        'col',    'idioma'],
     ['crecer_meta_plan',       'col',    'solicitud'],
     ['crecer_plan_solicitud',  'tabla',  null],
+    // ── Fase 2 · editar publicaciones ──
+    //  Ya corridas en produccion, pero sin comprobar aqui: la pagina las daba
+    //  por buenas sin mirar. La entrega y la decision son dos ejes distintos,
+    //  asi que se verifican las dos columnas, no solo una.
+    ['crecer_contenido',       'col',    'material_activo_id'],
+    ['crecer_generaciones',    'col',    'decision_dueno'],
+    ['crecer_generaciones',    'col',    'decidida_at'],
     // ── Fase 3 · el ciclo semanal ──
     //  Estaba en $MIGRACIONES y en $CREA pero no aqui: la pagina la ofrecia y
     //  no la comprobaba nunca. Una migracion que se corre pero no se verifica
