@@ -68,9 +68,19 @@ function sala_procesar(PDO $pdo, int $id): void {
 
     try {
         $r = sala_responder($pdo, $mid, mb_substr($mensaje, 0, 1000), $historial, $puede);
+
+        //  LA PROPUESTA SE SEPARA DE LA CONVERSACIÓN. El agente la manda al
+        //  final de su respuesta, en la misma llamada; aquí se corta —el dueño
+        //  nunca ve un JSON— y se guarda en ESTE turno, que es lo que después
+        //  permite ejecutarla sin volver a preguntarle al modelo.
+        require_once __DIR__ . '/sala_oportunidad.php';
+        $sep = sala_op_extraer((string)($r['respuesta'] ?? ''));
+        $op  = sala_op_normalizar($pdo, $mid, $sep['bruto']);
+        sala_op_guardar($pdo, $id, $mid, $op);
+
         _sala_set($pdo, $id, [
             'estado'    => 'done',
-            'respuesta' => (string)($r['respuesta'] ?? ''),
+            'respuesta' => $sep['texto'],
             'accion'    => (string)($r['accion'] ?? 'conversar'),
             'aprendido' => json_encode($r['aprendido'] ?? null, JSON_UNESCAPED_UNICODE),
         ]);
@@ -80,8 +90,15 @@ function sala_procesar(PDO $pdo, int $id): void {
 }
 
 /** Estado de un job (para el polling del front). Verifica dueño por marca_id. */
+//  LA OPORTUNIDAD VIAJA CON EL ESTADO: el front la necesita para pintar la
+//  elección, y pedirla aparte sería otra petición para algo que ya está aquí.
 function sala_job_estado(PDO $pdo, int $id, int $marca_id): ?array {
-    $q = $pdo->prepare("SELECT estado, respuesta, accion, aprendido, error_msg
+    //  La columna es de Fase 9: sin la migración se pide sin ella y La Sala
+    //  conversa igual, solo que sin poder llevar la idea al trabajo.
+    require_once __DIR__ . '/sala_oportunidad.php';
+    $cols = 'estado, respuesta, accion, aprendido, error_msg'
+          . (sala_op_hay_libro($pdo) ? ', oportunidad' : '');
+    $q = $pdo->prepare("SELECT {$cols}
                           FROM crecer_sala_jobs WHERE id=? AND marca_id=?");
     $q->execute([$id, $marca_id]);
     $r = $q->fetch(PDO::FETCH_ASSOC);

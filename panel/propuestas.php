@@ -469,6 +469,32 @@ require __DIR__ . '/_shell.php';
 //  El wizard de crear postea a aprobar2.php desde AQUI, asi que el token tiene
 //  que ponerse solo tambien en esta pagina: sin esto, sus 16 llamadas llegarian
 //  sin token y el candado nuevo las rechazaria — la ruta vieja se rompe.
+  /*  LA OPORTUNIDAD QUE VIENE DE LA SALA. Llega por `?sala=<id>` — solo el
+      número de la conversación, nunca la idea entera en la URL— y se lee de
+      la base comprobando que esa conversación es de ESTA marca.
+
+      Se precarga como texto editable: el dueño puede cambiarlo todo. Y lo que
+      salga de aquí NO lleva `meta_id` ni `tactica_id`: decir que cumple una
+      jugada del plan cuando no la cumple es contarle un avance que no existe. */
+  $sala_idea = '';
+  $sala_job  = isset($_GET['sala']) ? (int)$_GET['sala'] : 0;
+  if ($sala_job > 0) {
+      try {
+          require_once __DIR__ . '/../includes/sala_oportunidad.php';
+          $op_sala = sala_op_leer($pdo, $sala_job, $marca_id);
+          if ($op_sala) {
+              $sala_idea = trim((string)($op_sala['titulo'] ?? ''));
+              if (trim((string)($op_sala['que_hacer'] ?? '')) !== '') {
+                  $sala_idea .= ' — ' . $op_sala['que_hacer'];
+              }
+          }
+      } catch (Throwable $e) { $sala_idea = ''; }
+  }
+?>
+<?php if ($sala_idea !== ''): ?>
+  <script>window.CRECER_SALA_IDEA = <?= json_encode($sala_idea, JSON_UNESCAPED_UNICODE) ?>;</script>
+<?php endif; ?>
+<?php
 require __DIR__ . '/../includes/csrf_js.php';
 include __DIR__ . '/_crear_wizard.php';
 ?>

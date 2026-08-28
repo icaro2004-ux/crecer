@@ -24,9 +24,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json; charset=utf-8');
     if (!csrf_ok()) { echo json_encode(['ok'=>false,'err'=>'Sesión expiró. Recarga la página.']); exit; }
     require_once __DIR__ . '/../includes/sala_async.php';
+    require_once __DIR__ . '/../includes/i18n.php';
+    $BASE = '/crecer/panel';
 
     // (a) POLLING: el front pregunta por el estado de un job.
-    if (isset($_POST['job'])) {
+    //
+    //  EL `!isset($_POST['oportunidad'])` NO SOBRA. Las decisiones sobre una
+    //  oportunidad tambien mandan `job` —es la conversacion de la que salieron—,
+    //  y sin esta condicion caian aqui: el servidor contestaba «done» a lo que
+    //  era «anadela a mi Meta», el front no veia opciones y la tarjeta de
+    //  eleccion no aparecia nunca. En PHP no se notaba; se vio en el navegador.
+    if (isset($_POST['job']) && !isset($_POST['oportunidad'])) {
         $st = sala_job_estado($pdo, (int)$_POST['job'], $marca_id);
         if (!$st) { echo json_encode(['ok'=>false,'err'=>'No encuentro ese mensaje.']); exit; }
         if ($st['estado'] === 'done') {
@@ -35,6 +43,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'respuesta'=>(string)$st['respuesta'],
                 'accion'=>(string)($st['accion'] ?? 'conversar'),
                 'aprendido'=>json_decode((string)($st['aprendido'] ?? 'null'), true),
+                //  ¿ESE TURNO TRAJO UNA OPORTUNIDAD EJECUTABLE? Solo se dice que
+                //  sí o que no: los datos se leen después, cuando el dueño
+                //  pregunta qué pasaría — y se leen del servidor, no de aquí.
+                'oportunidad'=>(trim((string)($st['oportunidad'] ?? '')) !== ''),
+                'job'=>(int)$_POST['job'],
             ], JSON_UNESCAPED_UNICODE);
         } elseif ($st['estado'] === 'failed') {
             echo json_encode(['ok'=>true, 'estado'=>'failed', 'err'=>(string)($st['error_msg'] ?? 'Se trabó el equipo.')], JSON_UNESCAPED_UNICODE);
@@ -42,6 +55,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode(['ok'=>true, 'estado'=>'working']);
         }
         exit;
+    }
+
+    // ── LA OPORTUNIDAD: DE LA CONVERSACIÓN AL TRABAJO ────────────────────
+    //
+    //  Aquí NO se llama a ningún modelo. La propuesta ya vino estructurada en
+    //  el mismo turno que la produjo; esto solo escribe lo que ya se decidió.
+    //
+    //  Y NADA DE ESTO CONFÍA EN LO QUE MANDE EL NAVEGADOR: el `job` se lee con
+    //  `marca_id` en el WHERE, así que adivinar un número no sirve para
+    //  añadirle una jugada al plan de otro negocio.
+    if (isset($_POST['oportunidad'])) {
+        require_once __DIR__ . '/../includes/sala_oportunidad.php';
+        $job = (int)($_POST['job'] ?? 0);
+        $que = (string)$_POST['oportunidad'];
+        $op  = sala_op_leer($pdo, $job, $marca_id);
+        if (!$op) { echo json_encode(['ok'=>false, 'err'=>'No encuentro esa idea.']); exit; }
+        $ev = sala_op_evaluar($pdo, $marca_id, $op);
+
+        //  (a) VER LA REPERCUSIÓN. Se pregunta ANTES de escribir: el dueño tiene
+        //      derecho a saber en qué semana entra y qué NO se mueve.
+        if ($que === 'ver') {
+            $c = sala_op_consecuencia($pdo, $marca_id, $op, $ev);
+            $o = sala_op_opciones($pdo, $marca_id, $op, $ev, $BASE);
+            echo json_encode([
+                'ok' => true, 'puede' => $ev['puede'], 'motivo' => $ev['motivo'],
+                'titulo' => $op['titulo'], 'formato' => $op['formato'],
+                'lineas' => $c['lineas'], 'opciones' => $o['opciones'], 'nota' => $o['nota'],
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        //  (b) AÑADIRLA A LA META. Idempotente por conversación: dos clics
+        //      devuelven la misma jugada.
+        if ($que === 'meta') {
+            $r = sala_op_a_meta($pdo, $marca_id, $job);
+            if (empty($r['ok'])) { echo json_encode(['ok'=>false, 'err'=>$r['err']], JSON_UNESCAPED_UNICODE); exit; }
+            echo json_encode([
+                'ok' => true, 'ya' => $r['ya'],
+                'texto' => $r['ya']
+                    ? t('Esta idea ya estaba añadida.')
+                    : t('La añadí a tu Meta. Estoy preparando la publicación.'),
+                'accion' => t('Ver en Tu Meta'),
+                //  AL PLAN, NO A «revisar mi semana». Lo que acaba de nacer es
+                //  una JUGADA, y `vista=semana` repasa PIEZAS una por una: el
+                //  dueño confirmaba, pulsaba «Ver en Tu Meta» y aterrizaba en
+                //  una pantalla donde lo que acababa de añadir no estaba por
+                //  ningún lado. En el plan sí se ve, con su semana.
+                //  Y AL SITIO EXACTO. Un plan de seis jugadas es media
+                //  pantalla de scroll: sin el ancla, el dueño aterrizaba en la
+                //  jugada de turno y la suya quedaba más abajo, sin señal.
+                'href'   => $BASE . '/meta.php?marca=' . $marca_id . '&vista=plan'
+                            . ((int)($r['tactica_id'] ?? 0) > 0 ? '#j' . (int)$r['tactica_id'] : ''),
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        //  (c) CREARLA APARTE. No escribe nada: dice a dónde ir. La idea NO
+        //      viaja por la URL — Crear la lee de la conversación, que ya está
+        //      guardada y es de esta marca.
+        if ($que === 'crear') {
+            echo json_encode([
+                'ok' => true, 'href' => sala_op_url_crear($marca_id, $job, $BASE),
+                'texto' => t('Se creará fuera del plan. No cambiará tu semana ni las tareas de la Meta.'),
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        //  (d) SEGUIR CONVERSANDO no escribe nada, y por eso no tiene rama: la
+        //      conversación ya está guardada y el dueño puede decidir después.
+        echo json_encode(['ok'=>true, 'texto'=>'']); exit;
     }
 
     // (b) ENVIAR: encolar el mensaje y disparar el worker.
@@ -139,6 +222,57 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   /* El bottom-nav (≤860px) es fijo abajo: subimos el compositor para que no lo tape */
   @media(max-width:860px){
     .sc-composer{bottom:calc(60px + env(safe-area-inset-bottom))}
+    /*  Y AYUDA, POR ENCIMA DEL COMPOSITOR. El botón flotante se coloca sobre
+        el dock, que aquí es exactamente donde vive la caja de escribir: en un
+        teléfono de 360 se montaba encima de «Enviar». Es la única pantalla con
+        algo fijo en esa banda, así que la corrección vive aquí y no en el
+        widget.
+        La clase va repetida a propósito: el estilo del widget se imprime al
+        final de la página, así que a igual especificidad ganaba él. */
+    .ay-fab.ay-fab{bottom:calc(var(--dock-alto, 80px) + 76px + env(safe-area-inset-bottom))}
+    /*  Y EL HILO TIENE QUE ACABAR ANTES. Subir el compositor 60px no crea
+        sitio: su hueco en el flujo sigue al final del documento, detras de la
+        barra, asi que al llegar abajo del todo tapa los ultimos ~60px del
+        hilo. Con burbujas daba igual —se leian igual dos lineas mas arriba—,
+        pero la tarjeta de eleccion acaba en BOTONES: la tercera salida,
+        «Seguir conversando», quedaba entera debajo del compositor y no habia
+        forma de llegar a ella. Ningun scroll lo arregla: hay que devolver el
+        sitio que la barra se lleva. */
+    .sc-thread{padding-bottom:calc(150px + env(safe-area-inset-bottom))}
+  }
+  /* — LA ELECCIÓN. Botones grandes con la consecuencia dentro: el dueño
+       decide sin abrir nada. — */
+  /*  `scroll-margin-bottom` es la pieza que hace que esto funcione. El
+      compositor esta pegado al fondo, asi que `scrollIntoView({block:'end'})`
+      alineaba el final de la tarjeta con el borde de la pantalla y lo dejaba
+      DEBAJO de el: la tercera salida —«Seguir conversando»— no se veia, y en
+      la capa de confirmacion se perdian los dos botones. Con este margen el
+      navegador para antes, justo encima del compositor. */
+  .sc-op{align-self:flex-start;max-width:92%;margin:6px 0 2px;padding:13px 14px;
+    scroll-margin-bottom:110px;
+    background:var(--card,#fff);border:1px solid var(--line,#E9E7E4);border-radius:12px}
+  .sc-op > b{display:block;font-size:15px;color:var(--tinta,#231F20);margin-bottom:10px}
+  .sc-op-nota{font-size:14px;line-height:1.5;color:var(--muted,#6E6A67);margin:0 0 10px}
+  .sc-op-cons{margin:0 0 12px;padding-left:18px}
+  .sc-op-cons li{font-size:14px;line-height:1.55;color:var(--muted,#6E6A67);margin-bottom:3px}
+  .sc-op-b{display:block;width:100%;text-align:left;min-height:44px;margin-bottom:8px;
+    padding:11px 13px;border:1px solid var(--line,#E9E7E4);border-radius:10px;
+    background:#fff;cursor:pointer;font:inherit}
+  .sc-op-b:last-child{margin-bottom:0}
+  .sc-op-b:hover{border-color:var(--teal,#00A49F)}
+  .sc-op-b:disabled{opacity:.5;cursor:default}
+  .sc-op-b b{display:block;font-size:15px;color:var(--tinta,#231F20)}
+  .sc-op-b i{display:block;font-style:normal;font-size:14px;line-height:1.45;
+    color:var(--muted,#6E6A67);margin-top:2px}
+  .sc-op-b.pri{background:var(--teal,#00A49F);border-color:var(--teal,#00A49F)}
+  .sc-op-b.pri b{color:#fff}
+  /*  DESPUES de la regla base a proposito: los bloques `@media` de arriba
+      estan antes en el fichero y, a igual especificidad, gana el ultimo. Un
+      override alli se perdia en silencio y la tarjeta paraba 40px demasiado
+      abajo. Aqui el compositor va encima de la barra de navegacion, asi que
+      tapa mas que en escritorio. */
+  @media(max-width:860px){
+    .sc-op{scroll-margin-bottom:calc(150px + env(safe-area-inset-bottom))}
   }
 </style>
 
@@ -209,6 +343,67 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
     msgs.appendChild(d); scroll(d);
   }
 
+  //  ── CÓMO QUIERES TRABAJAR ESTA IDEA ──────────────────────────────────
+  //
+  //  Una decisión por pantalla y la consecuencia DENTRO de cada opción: el
+  //  dueño tiene que poder elegir sin abrir nada ni leer un formulario.
+  //
+  //  Aquí no se llama a ningún modelo. La propuesta ya vino en el turno que la
+  //  produjo; esto pregunta al servidor qué pasaría y después escribe.
+  function elegir(job){
+    var fd=new FormData(); fd.append('csrf',CSRF); fd.append('oportunidad','ver'); fd.append('job',job);
+    fetch(URL,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+      if(!d || !d.ok || !d.opciones || !d.opciones.length) return;
+      var caja=document.createElement('div'); caja.className='sc-op'; caja.setAttribute('data-job',job);
+      var h='<b>¿Cómo quieres trabajar esta idea?</b>';
+      if(d.nota) h+='<p class="sc-op-nota">'+esc(d.nota)+'</p>';
+      d.opciones.forEach(function(o){
+        h+='<button type="button" class="sc-op-b" data-q="'+esc(o.clave)+'"'
+         + (o.href?' data-href="'+esc(o.href)+'"':'')+'>'
+         + '<b>'+esc(o.titulo)+'</b><i>'+esc(o.sub)+'</i></button>';
+      });
+      caja.innerHTML=h;
+      msgs.appendChild(caja); scroll(caja);
+
+      caja.addEventListener('click',function(e){
+        var b=e.target.closest('.sc-op-b'); if(!b) return;
+        var q=b.getAttribute('data-q');
+        //  SEGUIR CONVERSANDO no escribe nada: se quita la pregunta y ya.
+        if(q==='seguir'){ caja.remove(); input.focus(); return; }
+        //  Establecer una Meta es irse a otra pantalla, no una decisión aquí.
+        if(q==='meta_nueva'){ location.href=b.getAttribute('data-href'); return; }
+
+        //  LA REPERCUSIÓN, ANTES DE ESCRIBIR. El dueño ve en qué semana entra
+        //  y qué NO se mueve; solo entonces confirma.
+        if(q==='meta' && !caja.classList.contains('confirmar')){
+          caja.classList.add('confirmar');
+          var l=(d.lineas||[]).map(function(x){return '<li>'+esc(x)+'</li>';}).join('');
+          caja.innerHTML='<b>'+esc(d.titulo||'Esta idea')+'</b><ul class="sc-op-cons">'+l+'</ul>'
+            + '<button type="button" class="sc-op-b pri" data-q="meta-ok"><b>Añadirla a mi Meta</b></button>'
+            + '<button type="button" class="sc-op-b" data-q="seguir"><b>Ahora no</b></button>';
+          scroll(caja); return;
+        }
+
+        //  Y AL CONFIRMAR SE ESCRIBE. El botón se apaga —sin esto un doble
+        //  toque son dos peticiones— aunque la base ya arbitra por conversación.
+        var accion = (q==='meta-ok') ? 'meta' : q;
+        [].forEach.call(caja.querySelectorAll('button'),function(x){ x.disabled=true; });
+        var f2=new FormData(); f2.append('csrf',CSRF); f2.append('oportunidad',accion); f2.append('job',job);
+        fetch(URL,{method:'POST',body:f2}).then(function(r){return r.json();}).then(function(r2){
+          if(!r2 || !r2.ok){ caja.remove(); iaBubble((r2&&r2.err)||'No pude con eso. Intenta otra vez.'); return; }
+          if(accion==='crear'){ location.href=r2.href; return; }
+          caja.remove();
+          iaBubble(r2.texto);
+          if(r2.href){
+            var c=document.createElement('div'); c.className='sc-cta';
+            c.innerHTML='<a href="'+esc(r2.href)+'">'+esc(r2.accion||'Ver')+'</a>';
+            msgs.appendChild(c); scroll(c);
+          }
+        }).catch(function(){ caja.remove(); iaBubble('Se cayó la conexión. Nada cambió.'); });
+      });
+    }).catch(function(){});
+  }
+
   // ── VOZ: que el corillo lea su respuesta (se activa con el 🔈) ──
   var speakOn=false, spk=document.getElementById('sc-speak');
   spk.addEventListener('click',function(){ speakOn=!speakOn; spk.classList.toggle('on',speakOn); if(!speakOn&&window.speechSynthesis)speechSynthesis.cancel(); });
@@ -245,6 +440,10 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
           iaBubble('Se me trabó el equipo a mitad. Dame un momento y pídemelo otra vez.'); return; }
         if(d.estado==='done'){ clearInterval(iv); load.remove(); reactivar();
           learn(d.aprendido); iaBubble(d.respuesta); hist.push({rol:'ia',texto:d.respuesta}); decir(d.respuesta);
+          //  Y SI LO QUE TRAJO ES UNA OPORTUNIDAD, se le pregunta cómo
+          //  quiere trabajarla. Una decisión por pantalla, con la
+          //  consecuencia dentro de cada opción — no un formulario.
+          if(d.oportunidad) elegir(d.job);
           if(d.accion==='campana') cta(); return; }
         // sigue trabajando: a los ~10s subimos el aviso para producciones largas
         if(intentos===5){ var b=load.querySelector('.sc-bubble'); if(b) b.lastChild.textContent=' el corillo está armando tu contenido… (esto puede tomar un momento)'; }

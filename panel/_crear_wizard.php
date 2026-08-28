@@ -356,7 +356,11 @@ if (!isset($redes_conectadas)) {
     document.querySelectorAll('#wizov .wiz-dot').forEach(function(d){ d.classList.toggle('on', (+d.dataset.s)<=n); });
     var b=document.querySelector('#wizov .wiz-box'); if(b) b.scrollTop=0;
   }
-  window.wizAbrir=function(){
+  //  `sinIdeas` — el que llega con el tema ya decidido no necesita que se lo
+  //  sugieran, y sugerirle cuesta: `sugerir_temas` es una llamada al modelo por
+  //  cada apertura. Quien viene de La Sala ya conversó la idea; el carrusel
+  //  competía con ella y encima se pagaba.
+  window.wizAbrir=function(sinIdeas){
     wizInit();
     wizId=null; wizImg='';
     document.getElementById('wiz-tema').value='';
@@ -364,7 +368,12 @@ if (!isset($redes_conectadas)) {
     document.getElementById('wiz-next2').style.display='none';
     wizPaso(1);
     document.getElementById('wizov').classList.add('show');
-    wizCargarIdeas();
+    if(sinIdeas){
+      //  Ni sugerencias ni el hueco donde iban: el tema ya está escrito, y
+      //  «Escribe tu idea abajo» sería mentirle.
+      var _c=document.getElementById('wiz-ideas'); if(_c){ _c.className=''; _c.innerHTML=''; }
+      var _h=document.getElementById('wiz-hint'); if(_h) _h.style.display='none';
+    } else wizCargarIdeas();
   };
   window.wizCerrar=function(){ document.getElementById('wizov').classList.remove('show'); };
   // ── Entrada directa a CREAR: ?crear=1 abre el wizard; &idea=… lo prellena ──
@@ -373,8 +382,13 @@ if (!isset($redes_conectadas)) {
     var qs=new URLSearchParams(location.search);
     if(qs.get('crear')!=='1') return;
     function go(){
-      try{ wizAbrir(); }catch(_){ return; }
       var idea=qs.get('idea');
+      //  Y LA OPORTUNIDAD DE LA SALA: la idea NO viaja por la URL —solo el
+      //  número de la conversación—, así que el servidor ya la puso aquí
+      //  después de comprobar que esa conversación es de esta marca.
+      if(!idea && window.CRECER_SALA_IDEA) idea = window.CRECER_SALA_IDEA;
+      //  Con tema decidido no se piden sugerencias: ni se leen ni se pagan.
+      try{ wizAbrir(!!idea); }catch(_){ return; }
       if(idea){ var t=document.getElementById('wiz-tema'); if(t){ t.value=idea; try{t.focus();}catch(e){} } }
     }
     if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', go); else go();
@@ -385,7 +399,7 @@ if (!isset($redes_conectadas)) {
   function wizRenderIdeas(ideas){
     var cont=document.getElementById('wiz-ideas'); var hint=document.getElementById('wiz-hint');
     cont.innerHTML='';
-    if(!ideas || !ideas.length){ cont.className=''; if(hint) hint.style.display='none'; cont.innerHTML='<div class="wiz-load">Escribe tu idea abajo 👇</div>'; return; }
+    if(!ideas || !ideas.length){ cont.className=''; if(hint) hint.style.display='none'; cont.innerHTML='<div class="wiz-load">Escribe tu idea aquí abajo</div>'; return; }
     cont.className='wiz-car';
     if(hint) hint.style.display = ideas.length>1 ? 'block' : 'none';
     ideas.forEach(function(it,i){
@@ -430,7 +444,7 @@ if (!isset($redes_conectadas)) {
     if(!force && wizIdeasCache){ wizRenderIdeas(wizIdeasCache); return; }   // reusar caché
     var _h=document.getElementById('wiz-hint'); if(_h) _h.style.display='none';
     document.getElementById('wiz-ideas').className='';
-    document.getElementById('wiz-ideas').innerHTML='<div class="wiz-load">💭 Pensando ideas para tu negocio…</div>';
+    document.getElementById('wiz-ideas').innerHTML='<div class="wiz-load">Pensando ideas para tu negocio…</div>';
     var fd=new FormData(); fd.append('ajax','1'); fd.append('accion','sugerir_temas');
     fetch(WIZ_EP,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
       if(d.ok && d.ideas && d.ideas.length){ wizIdeasCache=d.ideas; wizRenderIdeas(d.ideas); }

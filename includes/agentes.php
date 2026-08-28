@@ -791,6 +791,12 @@ SYS;
         . "Snapshot operacional actual:\n{$snapshot}\n\n"
         . "El dueño pregunta/plantea:\n\"{$pregunta}\"\n\n"
         . "Responde como copiloto ejecutivo de Encuentralo: diagnostico breve, proximo paso y, si hace falta, una pregunta.";
+    //  Y LA OPORTUNIDAD, EN EL MISMO TURNO. Si lo que el dueño trae se puede
+    //  convertir en una publicación, el agente añade los datos al final de su
+    //  respuesta —una llamada, no dos— y el código los corta antes de enseñar
+    //  nada. Si no viene, se conversa igual y no se ofrece ejecutar.
+    require_once __DIR__ . '/sala_oportunidad.php';
+    $sistema .= sala_op_instruccion();
     $r = ia_ejecutar($pdo, 'estratega', 'Consejo de negocio', $prompt, [
         'marca_id' => $marca_id, 'sistema' => $sistema,
         'modelo' => CRECER_COPILOTO_MODEL,

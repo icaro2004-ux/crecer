@@ -516,6 +516,10 @@ try {
         //  una jugada, y el CONCEPTO de una imagen —no solo su encuadre— para
         //  poder no repetirse. Dos ALTER aditivos y NULL-ables.
         '2026-08-28_crecer_contexto_unico.sql',
+        //  La oportunidad que llega por La Sala: donde se guarda la propuesta
+        //  ejecutable del turno, y de que conversacion nacieron la jugada y la
+        //  pieza. Tres ALTER aditivos y NULL-ables, sin FK ni backfill.
+        '2026-08-28_crecer_sala_oportunidad.sql',
     ];
     ok('declara exactamente las pendientes que hay', $decl === $esperadas,
        'declaradas: ' . implode(' · ', $decl));
