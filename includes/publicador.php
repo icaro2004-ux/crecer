@@ -538,12 +538,14 @@ function finalizar_pieza(PDO $pdo, int $contenido_id, string $tok, bool $ok, arr
                 : '/crecer/panel/aprobar2.php?ver=' . $contenido_id . '&marca=' . $mid_f;
             //  `notif_crear` no repite mientras siga sin leer: el mismo fallo no
             //  llena la campanita aunque el cron pase cada diez minutos.
-            if (function_exists('notif_crear')) {
-                notif_crear($pdo, $mid_f, 'pub_fallo', $av['titulo'], $av['mensaje'], $link, 'bolt');
-            }
-            //  Y CORREO, UNA VEZ. Solo lo que necesita su mano: si no hace nada,
-            //  esa publicación no sale.
-            if (!empty($av['correo'])) pub_correo_fallo($pdo, $mid_f, $contenido_id, $av, $clase);
+            //  `notif_crear` dice si de verdad lo creó: mientras el aviso siga
+            //  sin leer, el mismo fallo no repite ni en la campanita ni en el
+            //  correo, aunque el cron pase cada diez minutos.
+            $nuevo = function_exists('notif_crear')
+                && notif_crear($pdo, $mid_f, 'pub_fallo', $av['titulo'], $av['mensaje'], $link, 'bolt');
+            //  Y CORREO, UNA VEZ Y SOLO CON EL AVISO NUEVO. Lo que necesita su
+            //  mano: si no hace nada, esa publicación no sale.
+            if ($nuevo && !empty($av['correo'])) pub_correo_fallo($pdo, $mid_f, $contenido_id, $av, $clase);
         } catch (Throwable $e) { error_log('aviso fallo #' . $contenido_id . ': ' . $e->getMessage()); }
     }
 
@@ -561,32 +563,38 @@ function finalizar_pieza(PDO $pdo, int $contenido_id, string $tok, bool $ok, arr
  */
 function pub_correo_fallo(PDO $pdo, int $marca_id, int $contenido_id, array $av, string $clase): void
 {
-    //  UNA SOLA VEZ POR PIEZA Y CLASE. La marca es la propia notificación: si
-    //  ya se creó una de este tipo hace poco, el correo ya salió con ella.
-    try {
-        $q = $pdo->prepare(
-            "SELECT COUNT(*) FROM crecer_notificaciones
-              WHERE marca_id=? AND tipo='pub_fallo' AND link LIKE ?
-                AND created_at > (NOW() - INTERVAL 1 DAY)");
-        $q->execute([$marca_id, '%ver=' . $contenido_id . '%']);
-        if ((int)$q->fetchColumn() > 1) return;   // ya hubo una antes de esta
-    } catch (Throwable $e) {}
+    //  QUIEN DECIDE QUE ESTO ES LA PRIMERA VEZ es quien llama: manda el
+    //  correo solo si `notif_crear` acababa de crear el aviso. Aquí había un
+    //  guardia que contaba filas de notificaciones para adivinarlo, y en
+    //  cuanto cambió el criterio de duplicado dejó de cuadrar: salían dos
+    //  correos por el mismo fallo. Adivinar era el error.
 
-    $destino = ''; $nombre = '';
+    //  ── LA PREFERENCIA Y LA DIRECCIÓN SON DOS COSAS ──────────────────────
+    //  `crecer_marca.reporte_email` es un INTERRUPTOR (TINYINT 1/0), no una
+    //  dirección: es la casilla de «avísame por correo» de Configuración. La
+    //  dirección vive en `usuarios.email`, y punto.
+    //
+    //  Leerlo como si fuera un correo —que es lo que hacía este código— acaba
+    //  intentando escribirle a «1». No llegaba a pasar porque `filter_var` lo
+    //  rechazaba justo después, así que el fallo no se veía: simplemente el
+    //  dueño no recibía NUNCA el aviso de que su publicación no salió.
+    $optin = 1; $destino = '';
     try {
-        $q = $pdo->prepare("SELECT m.nombre_negocio, m.reporte_email, u.email
+        $q = $pdo->prepare("SELECT COALESCE(m.reporte_email, 1) AS opt, u.email
                               FROM crecer_marca m
                          LEFT JOIN usuarios u ON u.id = m.usuario_id
                              WHERE m.id=?");
         $q->execute([$marca_id]);
         $f = $q->fetch(PDO::FETCH_ASSOC) ?: [];
-        $nombre  = (string)($f['nombre_negocio'] ?? '');
-        //  `reporte_email` es la preferencia del dueño: si la dejó vacía a
-        //  propósito, no se le escribe.
-        $destino = trim((string)($f['reporte_email'] ?? '')) !== ''
-            ? (string)$f['reporte_email'] : (string)($f['email'] ?? '');
-    } catch (Throwable $e) { return; }
-    if (!filter_var($destino, FILTER_VALIDATE_EMAIL)) return;
+        $optin   = (int)($f['opt'] ?? 1);
+        $destino = trim((string)($f['email'] ?? ''));
+    } catch (Throwable $e) {
+        //  Sin poder leer la preferencia no se asume que dijo que sí: el aviso
+        //  in-app ya salió y es el que no se pierde.
+        return;
+    }
+    if ($optin !== 1) return;                                    // dijo que no
+    if (!filter_var($destino, FILTER_VALIDATE_EMAIL)) return;    // o no hay a dónde
 
     try {
         require_once __DIR__ . '/notificaciones.php';

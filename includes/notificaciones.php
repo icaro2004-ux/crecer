@@ -28,6 +28,12 @@ function crecer_cargar_phpmailer(): bool {
  * que sí entrega a Gmail/Yahoo. Las credenciales SMTP_* viven en el config de prod
  * (crecer-config.local.php). Si no hay SMTP o falla, cae a mail() (local/último recurso).
  */
+//  ENVUELTO EN `function_exists` A PROPOSITO. Es el unico sitio por donde sale
+//  un correo, asi que es el unico sitio donde hay que ponerse delante para
+//  probar los avisos sin escribirle a nadie. Una prueba declara su doble antes
+//  de cargar esto y comprueba a quien se escribe y cuando NO se escribe — que
+//  es la mitad que se olvida. Mismo patron que el borde de la IA y el de Meta.
+if (!function_exists('crecer_enviar_email')) {
 function crecer_enviar_email(string $para, string $asunto, string $cuerpo_html): bool {
     if (!$para || !filter_var($para, FILTER_VALIDATE_EMAIL)) return false;
 
@@ -63,6 +69,7 @@ function crecer_enviar_email(string $para, string $asunto, string $cuerpo_html):
     $headers .= "From: Crecer · Encuéntralo <$from>\r\n";
     return @mail($para, '=?UTF-8?B?' . base64_encode($asunto) . '?=', $cuerpo_html, $headers);
 }
+}   // fin del envoltorio function_exists
 
 /**
  * Envoltura de email con MARCA Crecer (logo + colores). Email-safe: tablas +

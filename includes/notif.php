@@ -25,22 +25,40 @@
  * Si la consulta de comprobación falla por lo que sea, se inserta igual: más
  * vale una notificación de más que perder un aviso de verdad.
  */
-function notif_crear(PDO $pdo, int $marca_id, string $tipo, string $titulo, ?string $mensaje = null, ?string $link = null, ?string $icono = null): void {
+//  DEVUELVE SI DE VERDAD LO CREO. Antes no devolvia nada, y quien queria
+//  hacer algo «solo la primera vez» —mandar un correo, por ejemplo— tenia que
+//  adivinarlo contando filas por su cuenta. Contar es fragil: en cuanto el
+//  criterio de duplicado cambio, la cuenta dejo de cuadrar y salieron dos
+//  correos. Lo sabe esta funcion; que lo diga ella.
+function notif_crear(PDO $pdo, int $marca_id, string $tipo, string $titulo, ?string $mensaje = null, ?string $link = null, ?string $icono = null): bool {
     $titulo = mb_substr($titulo, 0, 160);
     try {
+        //  EL OBJETO CUENTA. Antes se comparaba marca + tipo + titulo, y eso
+        //  fusiona dos cosas distintas que se llaman igual: si a un dueño le
+        //  fallan DOS publicaciones, las dos traen el titulo «No pude
+        //  publicar» — y la segunda desaparecia. Se enteraba de una y la otra
+        //  se quedaba callada esperando a que la descubriera sola.
+        //
+        //  El `link` ya identifica el objeto (lleva su id), asi que sirve de
+        //  llave sin inventar columnas: mismo enlace es el mismo hecho;
+        //  enlace distinto es otro aviso que el dueño tiene que poder tocar.
+        //  Cuando no hay link —avisos generales— se compara como siempre.
         $dup = $pdo->prepare(
             "SELECT 1 FROM crecer_notificaciones
               WHERE marca_id=? AND tipo=? AND titulo=?
+                AND (? IS NULL OR link <=> ?)
                 AND (leida=0 OR created_at > (NOW() - INTERVAL 10 MINUTE))
               LIMIT 1");
-        $dup->execute([$marca_id, $tipo, $titulo]);
-        if ($dup->fetchColumn()) return;
+        $dup->execute([$marca_id, $tipo, $titulo, $link, $link]);
+        if ($dup->fetchColumn()) return false;
     } catch (Throwable $e) { /* si no se puede comprobar, se inserta */ }
 
     try {
         $pdo->prepare("INSERT INTO crecer_notificaciones (marca_id, tipo, icono, titulo, mensaje, link) VALUES (?,?,?,?,?,?)")
             ->execute([$marca_id, $tipo, $icono, $titulo, $mensaje !== null ? mb_substr($mensaje, 0, 400) : null, $link]);
+        return true;
     } catch (Throwable $e) { error_log('notif_crear: ' . $e->getMessage()); }
+    return false;
 }
 
 /** Cuenta de no leídas (para la campanita). */
