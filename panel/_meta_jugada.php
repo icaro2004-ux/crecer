@@ -18,6 +18,7 @@
 // ============================================================
 ?>
           <details class="jg <?= $hecha?'hecha':'' ?> <?= $clase==='regla'?'regla':'' ?> <?= $es_turno?'turno':'' ?>"
+                   id="j<?= (int)$t['id'] ?>"
                    data-id="<?= (int)$t['id'] ?>" <?= $es_turno ? 'open' : '' ?>>
             <summary class="jg-sum">
               <span class="jg-tipo <?= $h($t['tipo']) ?>"><?= $h($tipo_lbl) ?></span>

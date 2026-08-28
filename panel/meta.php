@@ -874,8 +874,10 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
   .plan-gt .n{font-size:14px;color:var(--muted);font-weight:500;letter-spacing:0;text-transform:none}
 
   /* — una jugada — */
+  /*  `scroll-margin-top`: al llegar desde La Sala con `#j<id>` el navegador
+      dejaba la jugada justo debajo de la cabecera pegada. */
   .jg{border:1px solid var(--line);border-radius:var(--tm-r);background:var(--card,#fff);
-    margin-bottom:10px;overflow:hidden}
+    margin-bottom:10px;overflow:hidden;scroll-margin-top:84px}
   .jg[open]{border-color:var(--raya-firme,#D8D3CC)}
   .jg.turno{border-color:var(--tm-rosa);box-shadow:0 0 0 1px var(--tm-rosa)}
   .jg.hecha{background:var(--crema,#FAF7F4)}

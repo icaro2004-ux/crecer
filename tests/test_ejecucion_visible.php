@@ -232,6 +232,14 @@ try {
     ok('que es la hora guardada',
        date('g:i A', strtotime($manana)) === '10:00 AM', $manana);
 
+    //  EL COSTO SE MIDE AQUÍ, con las marcas todavía vivas y SOLO las de esta
+    //  prueba: un cronómetro global sobre `crecer_ia_log` recoge también lo que
+    //  haya hecho cualquier otra cosa —abrir La Sala en un navegador, por
+    //  ejemplo, que sí llama al modelo— y entonces la afirmación no dice nada.
+    $__en = implode(',', array_map('intval', $limpiar));
+    $gasto = $__en === '' ? 0.0 : (float)$pdo->query(
+        "SELECT COALESCE(SUM(costo_usd),0) FROM crecer_ia_log WHERE marca_id IN ({$__en})")->fetchColumn();
+
 } catch (Throwable $e) {
     $fallos++; $n++;
     echo "  FALLA excepción\n         → " . get_class($e) . ': ' . $e->getMessage()
@@ -243,8 +251,9 @@ try {
 
 echo "\n  — el costo —\n";
 ok('leer la ejecución no cuesta un centavo',
-   (float)$pdo->query("SELECT COALESCE(SUM(costo_usd),0) FROM crecer_ia_log
-                        WHERE created_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE)")->fetchColumn() < 0.000001);
+   isset($gasto) && $gasto < 0.000001,
+   'la ejecución se lee de la base: mirar el trabajo no es rehacerlo'
+   . (isset($gasto) ? ' · gastó ' . number_format($gasto, 6) : ' · no se llegó a medir'));
 
 echo "\n" . str_repeat('=', 58) . "\n";
 echo $fallos === 0 ? "  LA EJECUCIÓN SE VE · {$n} afirmaciones\n\n"

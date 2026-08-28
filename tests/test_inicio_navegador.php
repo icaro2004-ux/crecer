@@ -42,6 +42,17 @@ if (!is_file($CHROME)) { echo "\n  SALTADO · no hay Chrome\n\n"; exit(0); }
 $SHOTS = __DIR__ . '/_capturas/inicio';
 if (!is_dir($SHOTS)) @mkdir($SHOTS, 0777, true);
 
+//  EL CENTINELA. Este recorrido pasa por Resultados y por Tu Meta, y esas
+//  pantallas despiertan agentes: la peticion entra por Apache, donde
+//  CRECER_TEST_MODE no existe, asi que la llamada iria a Gemini con la clave
+//  de verdad. Se vio como una afirmacion de costo que fallaba a veces —solo
+//  cuando al Analista le tocaba hablar—, que es la peor forma de verlo. Con
+//  este fichero, y solo en localhost, el transporte es `mock`.
+$CENT = __DIR__ . '/../includes/_SIN_CREDENCIALES';
+file_put_contents($CENT, "prueba de navegador · " . date('c') . "
+");
+register_shutdown_function(function () use ($CENT) { @unlink($CENT); });
+
 $M = 0;
 try {
     $fx = Fixture::crear($pdo, 'inav', true, 'admin');
@@ -206,6 +217,7 @@ try {
 } finally {
     if ($M > 0) { try { Fixture::limpiar($pdo, $M); echo "\n  (fixture limpiada)\n"; }
                   catch (Throwable $e) {} }
+    @unlink($CENT);
 }
 
 echo "\n" . str_repeat('=', 58) . "\n";

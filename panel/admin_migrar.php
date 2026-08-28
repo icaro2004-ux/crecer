@@ -80,6 +80,9 @@ $MIGRACIONES = [
     //  UN SOLO CEREBRO: donde viaja el activo que la Estratega eligio, y el
     //  concepto de una imagen (no solo su encuadre) para no repetirse.
     '2026-08-28_crecer_contexto_unico.sql',      // tactica.activo_id + huella.concepto
+    //  La oportunidad que se conversa en La Sala tiene que poder llegar al
+    //  trabajo: propuesta estructurada + de donde nacio cada cosa.
+    '2026-08-28_crecer_sala_oportunidad.sql',    // sala_jobs.oportunidad + sala_job_id
 ];
 $DIR = dirname(__DIR__) . '/migrations/';
 $PRESENTES = array_values(array_filter($MIGRACIONES, fn($m) => is_file($DIR . $m)));
@@ -120,6 +123,9 @@ $CREA = [
                                                 ['crecer_visual_huella', 'concepto'],
                                                 ['crecer_visual_huella', 'metafora'],
                                                 ['crecer_visual_huella', 'utileria']],
+    '2026-08-28_crecer_sala_oportunidad.sql' => [['crecer_sala_jobs', 'oportunidad'],
+                                                ['crecer_meta_tactica', 'sala_job_id'],
+                                                ['crecer_contenido', 'sala_job_id']],
 ];
 $hay_pieza = function (string $tabla, ?string $col) use ($pdo): bool {
     try {
@@ -232,6 +238,10 @@ $piezas = [
     ['crecer_visual_huella',   'col',    'concepto'],
     ['crecer_visual_huella',   'col',    'metafora'],
     ['crecer_visual_huella',   'col',    'utileria'],
+    // ── Fase 9 · la oportunidad de La Sala ──
+    ['crecer_sala_jobs',       'col',    'oportunidad'],
+    ['crecer_meta_tactica',    'col',    'sala_job_id'],
+    ['crecer_contenido',       'col',    'sala_job_id'],
 ];
 $estado = [];
 foreach ($piezas as [$tabla, $tipo, $col]) {
