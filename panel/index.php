@@ -903,6 +903,13 @@ $credito  = $has_deck
   .hz-hi{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
   .hz-hi-l{min-width:0}
   .hz-wx{flex:none;display:flex;flex-direction:column;align-items:center;text-align:center;padding-top:6px;margin-right:clamp(12px,9vw,64px)}
+  /*  EL `hidden` NO ESTABA HACIENDO NADA. La caja nace con el atributo puesto
+      y el JS se lo quita cuando el clima contesta — pero `display:flex` de la
+      linea de arriba gana al atributo, asi que el marcador de posicion «--°»
+      se veia SIEMPRE hasta que llegara el dato. Y si no llega —el cliente sin
+      datos, la API caida, una red que bloquea el dominio— se queda ahi para
+      siempre: un hueco roto en lo primero que el dueño mira cada mañana. */
+  .hz-wx[hidden]{display:none}
   .hz-wx .wx-ic svg{width:30px;height:30px}
   .hz-wx .wx-t{font-family:var(--font-display);font-weight:800;font-size:24px;letter-spacing:-.02em;color:var(--tinta);line-height:1.1}
   .hz-wx .wx-c{font-size:11.5px;font-weight:700;color:var(--muted)}

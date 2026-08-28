@@ -85,8 +85,15 @@ const MEDIR = `(function () {
   if (pri.length) {
     var r = pri[0].getBoundingClientRect();
     var bn = document.querySelector('.botnav');
-    var techo = innerHeight - (bn && vis(bn) ? bn.getBoundingClientRect().height : 0);
+    //  CON EL VELO PUESTO, LA BARRA DE ABAJO NO ESTORBA: esta DETRAS de la
+    //  capa. Descontar su alto igual —como se hacia— daba «no se ve» por dos
+    //  pixeles en las hojas mas altas, y la captura enseñaba el boton entero.
+    //  Es la misma regla que el resto de las medidas: si hay capa, la capa es
+    //  la pantalla.
+    var techo = velo ? innerHeight
+              : innerHeight - (bn && vis(bn) ? bn.getBoundingClientRect().height : 0);
     out.primVisible = r.top >= 0 && r.bottom <= techo + 1;
+    out.primBottom = Math.round(r.bottom); out.primTecho = Math.round(techo);
     var c = document.elementFromPoint(r.left + r.width / 2, Math.min(r.top + r.height / 2, techo - 2));
     out.primTapada = !(c && (c === pri[0] || pri[0].contains(c)));
   }

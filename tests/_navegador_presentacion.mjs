@@ -380,7 +380,11 @@ try {
     var H = window.innerHeight, alto = document.documentElement.scrollHeight, choques = [];
     var esperar = function(ms){ return new Promise(function(r){ setTimeout(r, ms); }); };
     for (var y = 0; y <= alto; y += 80) {
-      window.scrollTo(0, y); await esperar(90);
+      //  APARTARSE ES UNA TRANSICION DE 0.2s. Con 90ms se fotografiaba al FAB
+      //  A MEDIO CAMINO —todavia opaco y todavia encima del control— y se
+      //  apuntaba un choque que el dueño no llega a ver nunca. Se espera a que
+      //  la regla termine de moverlo.
+      window.scrollTo(0, y); await esperar(320);
       var f = document.querySelector('.ay-fab'); if (!f) continue;
       var cs = getComputedStyle(f);
       if (cs.display === 'none' || parseFloat(cs.opacity) < 0.05) continue;

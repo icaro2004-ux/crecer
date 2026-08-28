@@ -3296,7 +3296,15 @@ function analista_resultados(PDO $pdo, int $marca_id, array $d): array {
     $r = ia_ejecutar($pdo, 'analista', 'Resultados: lectura de KPIs', $prompt, [
         'marca_id' => $marca_id, 'sistema' => $sys, 'json' => true,
         'temperatura' => 0.6, 'max_tokens' => 1500, 'thinking_budget' => 0,
-        'mock_texto' => '{"resumen":{"lectura":"Este mes publicaste con constancia y tu alcance viene subiendo.","reco":"Sigue publicando lo que más guardan y prueba un post extra los fines de semana."}}',
+        //  EL TEXTO SIMULADO TAMBIEN TIENE QUE DECIR LA VERDAD. El de antes
+        //  afirmaba «tu alcance viene subiendo» — una lectura de rendimiento sin
+        //  un solo numero detras. Se veia en Resultados justo DEBAJO de «todavia
+        //  no traje los numeros», que es la contradiccion en una misma pantalla.
+        //  Y no es solo cosa de pruebas: este es el texto que sale siempre que no
+        //  hay credenciales —una clave caducada en produccion, por ejemplo— y
+        //  ademas se GUARDA en `crecer_analisis_kpi`, asi que la afirmacion falsa
+        //  sobrevive a que las credenciales vuelvan.
+        'mock_texto' => '{"resumen":{"lectura":"Todavía no tengo números suficientes para decirte cómo va el mes.","reco":"Cuando Instagram y Facebook reporten, te digo qué funcionó y qué conviene repetir."}}',
     ]);
     $j = json_decode((string)($r['texto'] ?? ''), true);
     if (!is_array($j)) $j = [];

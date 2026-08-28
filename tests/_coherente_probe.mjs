@@ -33,8 +33,13 @@ const SONDA = `
 //    Inicio   → .norte     (la tarjeta de la meta)
 //    Llegada  → .pr
 const TEXTO = `(function () {
+  //  «.plan» ES LA CAPA 2, y faltaba. Sin ella se caia a document.body, cuyo
+  //  innerText empieza por el cajon lateral entero: los primeros 700
+  //  caracteres eran el menu y la afirmacion decia que el plan estaba vacio
+  //  cuando lo que pasaba es que no se habia llegado a leer.
   var c = document.querySelector('.ah') || document.querySelector('.norte')
-       || document.querySelector('.pr') || document.body;
+       || document.querySelector('.pr') || document.querySelector('.plan')
+       || document.body;
   return (c.innerText || '').replace(/\\s+/g, ' ').trim();
 })()`;
 

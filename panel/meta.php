@@ -1566,6 +1566,23 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
       $g_ahora = []; $g_hecho = []; $g_despues = [];
       foreach ($tacticas as $t) {
           if ((string)$t['estado'] === 'hecha')            { $g_hecho[] = $t; continue; }
+          //  DESCARTADA NO ES PENDIENTE, y esto lo decia al reves.
+          //
+          //  Una jugada descartada caia en «Después» como trabajo que al dueño
+          //  le queda por hacer — justo debajo del contador «X de Y hechas»,
+          //  que en la MISMA pantalla ya la cuenta como resuelta («el dueño
+          //  decidió no hacerla»). Y con las SUSTITUIDAS era peor: salian ahi
+          //  al lado de su reemplazo, asi que el plan enseñaba el mismo trabajo
+          //  dos veces. La semana lleva tiempo saltandoselas por esa razon
+          //  exacta; el plan no se habia enterado.
+          //
+          //  La sustituida sube a «Hecho», donde su sello —«Sustituida — no
+          //  tenías video»— sigue explicando que paso. La descartada a secas no
+          //  se lista: el dueño ya dijo que no, y el contador ya la tiene.
+          if ((string)$t['estado'] === 'descartada') {
+              if (meta_fue_sustituida($t)) $g_hecho[] = $t;
+              continue;
+          }
           if ((int)$t['id'] === $__turno_id)               { $g_ahora[] = $t; continue; }
           $g_despues[] = $t;
       }
