@@ -38,4 +38,7 @@ return [
     'Este plan ya estaba creado — es la versión %s'                       => 'Este plan ya estaba creado — es la versión %s',
     'No se creó otro: tu petición ya se había atendido.'                  => 'No se creó otro: tu petición ya se había atendido.',
     'El anterior queda guardado en el historial. Esto es lo que hay ahora.'  => 'El anterior queda guardado en el historial. Esto es lo que hay ahora.',
+
+    //  ── FASE 5 · el centro de mando y el menú por grupos ──
+    'Ver imagen completa'                                                         => 'Ver imagen completa',
 ];

@@ -48,4 +48,10 @@ return [
     // ── Shell controls ──
     'Abrir menú'            => 'Open menu',
     'Cerrar'                => 'Close',
+
+    //  ── FASE 5 · los títulos de grupo del menú lateral ──
+    'Crear y contenido'     => 'Create and content',
+    'Mi negocio'            => 'My business',
+    'Más'                   => 'More',
+    'Conectar redes'        => 'Connect accounts',
 ];

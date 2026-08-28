@@ -34,4 +34,6 @@ return [
     'Este plan ya estaba creado — es la versión %s'                       => 'This plan already existed — it is version %s',
     'No se creó otro: tu petición ya se había atendido.'                  => 'No second one was created: your request had already been handled.',
     'El anterior queda guardado en el historial. Esto es lo que hay ahora.'  => 'The previous one is kept in your history. This is what you have now.',
+
+    'Ver imagen completa'   => 'See full image',
 ];
