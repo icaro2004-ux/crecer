@@ -629,3 +629,48 @@ body.lb-abierto{overflow:hidden}
 .stysel .sty:has(input:checked) .sty-sw{outline-color:var(--magenta);transform:translateY(-2px) scale(1.04)}
 .stysel .sty:has(input:checked) .sty-lb{color:var(--tinta)}
 .stysel .sty:has(input:checked) .sty-ck{opacity:1;transform:scale(1)}
+
+/* ══ LA TRANSICIÓN ENTRE PÁGINAS ═══════════════════════════════════════════
+   Crecer navega de verdad: cada destino es un documento, no una vista de una
+   SPA. Eso no se toca. Lo que se añade es que el navegador sepa llevar el
+   dock de una página a la siguiente en vez de destruirlo y volverlo a pintar.
+
+   POR QUÉ ASÍ Y NO CON JAVASCRIPT. El intento anterior simulaba el viaje
+   —empujar el destino al centro y navegar 160 ms después— y no podía salir
+   bien: la animación ocurría en el documento que se estaba yendo, así que al
+   llegar el nuevo el dock aparecía de golpe en su sitio. Dos movimientos por
+   navegación y un salto en medio. Aquí lo hace el navegador, que es el único
+   que ve los dos documentos a la vez.
+
+   SI EL NAVEGADOR NO LO SOPORTA no pasa nada: navega como siempre y el dock
+   llega ya colocado, porque la geometría la pinta el servidor. Esto es un
+   añadido, no un requisito.
+   ══════════════════════════════════════════════════════════════════════════ */
+@view-transition { navigation: auto; }
+
+/*  CADA DESTINO SE RECONOCE A SÍ MISMO entre documentos. Es lo que permite
+    que «Calendario» viaje desde donde estaba hasta el centro, crezca y tome
+    su color, en vez de desaparecer aquí y reaparecer allá. El nombre tiene
+    que ser único en la página y el MISMO en las dos. */
+.dk-i[data-k="inicio"]    {view-transition-name:dk-inicio}
+.dk-i[data-k="calendario"]{view-transition-name:dk-calendario}
+.dk-i[data-k="meta"]      {view-transition-name:dk-meta}
+.dk-i[data-k="resultados"]{view-transition-name:dk-resultados}
+
+/*  El viaje: corto y sin rebote. Lo que se mueve es el destino, no la
+    pantalla — el resto del documento hace su fundido de siempre. */
+::view-transition-group(dk-inicio),
+::view-transition-group(dk-calendario),
+::view-transition-group(dk-meta),
+::view-transition-group(dk-resultados){
+  animation-duration:260ms;
+  animation-timing-function:cubic-bezier(.4,0,.2,1);
+}
+
+/*  Y QUIEN PIDE NO MOVERSE, NO SE MUEVE. `prefers-reduced-motion` apaga la
+    transición entera: se cambia de página y ya. */
+@media (prefers-reduced-motion:reduce){
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*){animation:none !important}
+}

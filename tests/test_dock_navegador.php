@@ -162,17 +162,14 @@ try {
        str_contains((string)($T['url'] ?? ''), 'calendario.php'), (string)($T['url'] ?? ''));
     ok('y conserva la marca',
        str_contains((string)($T['url'] ?? ''), 'marca=' . $M), (string)($T['url'] ?? ''));
-    //  LA ESPERA SE LEE EN LA FUENTE, no con un cronómetro. Desde fuera no se
-    //  puede separar «lo que tarda la animación» de «lo que tarda el servidor
-    //  en devolver la página siguiente»: el reloj mide las dos cosas juntas y
-    //  la afirmación se vuelve un sorteo. La promesa es del código —animar
-    //  poco y navegar— y ahí es donde se comprueba.
+    //  Y JAVASCRIPT YA NO SE METE EN MEDIO. Retrasar la navegación para animar
+    //  era el error de raíz: la animación pasaba en el documento que se iba,
+    //  así que al llegar el nuevo el dock aparecía de golpe. Ahora el viaje lo
+    //  hace el navegador y el enlace navega cuando el dueño lo toca.
     $foot = (string)file_get_contents(dirname(__DIR__) . '/panel/_shell_foot.php');
-    preg_match('/location\.href = a\.href; \}, (\d+)\)/', $foot, $ms);
-    ok('la animación no pasa de 200ms',
-       isset($ms[1]) && (int)$ms[1] > 0 && (int)$ms[1] <= 200,
-       ($ms[1] ?? 'no encontrado') . 'ms — una animación que retrasa la navegación'
-       . ' se siente como una aplicación lenta, no como una cuidada');
+    ok('el script del dock no retrasa la navegación',
+       !str_contains($foot, 'location.href = a.href'),
+       'el viaje lo hace el navegador, no un temporizador');
     ok('cero errores en consola',
        in_array(trim((string)($R['ERRORES'] ?? '[]')), ['[]', ''], true), (string)($R['ERRORES'] ?? ''));
 
@@ -232,6 +229,41 @@ try {
     }
     ok('cero errores de consola al cargar',
        in_array(trim((string)($F['ERRORES'] ?? '[]')), ['[]', ''], true), (string)($F['ERRORES'] ?? ''));
+
+    // ══════════════════════════════════════════════════════════════
+    //  LA TRANSICIÓN ENTRE DOCUMENTOS
+    // ══════════════════════════════════════════════════════════════
+    //  Que el CSS lo pida no basta: hay que comprobar que OCURRE. La señal
+    //  honesta es `pagereveal`, que llega en el documento NUEVO y trae la
+    //  transición viva cuando el navegador la hizo de verdad.
+    echo "
+  — el dock viaja de una página a la otra —
+";
+    $V = $correr('vt');
+    ok('la pasada de transición corrió', ($V['OK'] ?? '0') === '1',
+       substr((string)$V['_raw'], -400));
+    $sop = json_decode((string)($V['SOPORTE'] ?? '{}'), true) ?: [];
+    ok('el navegador sabe hacerlo',  !empty($sop['css']) && !empty($sop['evento']),
+       json_encode($sop));
+    //  CADA DESTINO SE RECONOCE A SÍ MISMO entre documentos: sin nombre propio
+    //  no hay a quién llevar de una página a la otra, y sin nombres ÚNICOS el
+    //  navegador descarta la transición entera.
+    $nom = (array)($sop['nombres'] ?? []);
+    ok('los cuatro tienen nombre propio', count($nom) === 4, json_encode($nom));
+    ok('y ninguno repetido',
+       count(array_unique($nom)) === count($nom) && !in_array('none', array_map(
+           fn($x) => explode(':', $x)[1] ?? 'none', $nom), true),
+       json_encode($nom));
+
+    foreach (['calendario', 'meta', 'resultados', 'inicio'] as $k) {
+        $r = json_decode((string)($V['VT_' . $k] ?? '{}'), true) ?: [];
+        ok("al tocar {$k} · el navegador hace la transición", ($r['vt'] ?? null) === true,
+           json_encode($r) . ' — si es false, navegó de golpe');
+        ok("al tocar {$k} · y llega con {$k} activo", ($r['act'] ?? '') === $k,
+           json_encode($r));
+    }
+    ok('cero errores durante las transiciones',
+       in_array(trim((string)($V['ERRORES'] ?? '[]')), ['[]', ''], true), (string)($V['ERRORES'] ?? ''));
 
     // ══════════════════════════════════════════════════════════════
     //  HOVER · y el escritorio de verdad

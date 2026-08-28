@@ -207,15 +207,22 @@ $dk_orden[$dk_items[($dk_i + 2) % 4]['k']] = [4, false];
 <script>
 /*  EL DOCK ─────────────────────────────────────────────────────────────────
  *
- *  LA COLOCACIÓN YA VINO HECHA. El servidor pinta el orden circular y el CSS
- *  reparte los pesos: el activo sale centrado en el primer cuadro, sin medir
- *  nada. Este script NO coloca el dock — si lo hiciera, volvería el parpadeo
- *  que vino a quitar.
+ *  AQUÍ YA NO SE COLOCA NADA, Y TAMPOCO SE ANIMA LA NAVEGACIÓN.
  *
- *  Solo quedan tres cosas, y las tres son interacción:
- *    · encender las transiciones cuando la página ya está pintada;
- *    · la magnificación con puntero (hover);
- *    · el empujón hacia el centro al tocar otro destino, antes de navegar.
+ *  · La posición la pinta el servidor: el `order` circular sale de PHP y el
+ *    reparto lo hace el CSS por pesos de flex. El primer cuadro ya es el
+ *    definitivo, con o sin este script.
+ *  · El viaje de un destino al centro cuando cambias de página lo hace el
+ *    NAVEGADOR, con la transición entre documentos (`@view-transition`).
+ *
+ *  El intento anterior movía el destino aquí y navegaba 160 ms después. No
+ *  podía salir bien: la animación pasaba en el documento que se estaba
+ *  yendo, así que al llegar el nuevo el dock aparecía de golpe en su sitio —
+ *  dos movimientos por navegación y un salto en medio. Quien ve los dos
+ *  documentos a la vez es el navegador, así que el trabajo es suyo.
+ *
+ *  Lo que queda es de esta página y solo de esta página: encender las
+ *  transiciones cuando ya está pintada, y la magnificación con puntero.
  */
 (function () {
   var dock = document.getElementById('dock');
@@ -234,12 +241,10 @@ $dk_orden[$dk_items[($dk_i + 2) % 4]['k']] = [4, false];
   }
   asentar();
 
-  //  VOLVER ATRÁS (bfcache) devuelve la página tal cual estaba. Si veníamos de
-  //  un toque, el elemento se quedó con su empujón puesto: se limpia y se
-  //  vuelve a asentar, para que aparezca quieto y no terminando una animación
-  //  de hace dos páginas.
+  //  VOLVER ATRÁS devuelve la página tal cual estaba; se vuelve a asentar
+  //  para que aparezca quieta.
   addEventListener('pageshow', function (e) {
-    items.forEach(function (a) { a.style.transform = ''; a.classList.remove('vec'); });
+    items.forEach(function (a) { a.classList.remove('vec'); });
     if (e.persisted) { dock.classList.add('dock-inicial'); asentar(); }
   });
 
@@ -251,28 +256,6 @@ $dk_orden[$dk_items[($dk_i + 2) % 4]['k']] = [4, false];
       a.addEventListener('mouseleave', function () {
         items.forEach(function (b) { b.classList.remove('vec'); });
       });
-    });
-  }
-
-  //  AL TOCAR OTRO: se empuja hacia el centro y se navega. El empujón es un
-  //  `transform` —no toca el layout— y se mide en ese instante, que es una
-  //  interacción y no el pintado inicial.
-  //
-  //  160 ms, ni uno más: una animación que retrasa la navegación se siente
-  //  como una aplicación lenta, no como una cuidada. Y si algo falla por el
-  //  camino, el enlace ya iba a navegar solo.
-  if (!reduce) {
-    dock.addEventListener('click', function (e) {
-      var a = e.target.closest('.dk-i');
-      if (!a || a.classList.contains('act')) return;
-      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-      if (getComputedStyle(dock).display === 'none') return;
-      e.preventDefault();
-      var r = a.getBoundingClientRect();
-      var rd = dock.getBoundingClientRect();
-      var dx = (rd.left + rd.width / 2) - (r.left + r.width / 2);
-      a.style.transform = 'translateX(' + dx.toFixed(1) + 'px) scale(1.06)';
-      setTimeout(function () { location.href = a.href; }, 160);
     });
   }
 })();
