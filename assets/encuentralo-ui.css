@@ -344,6 +344,11 @@ body.lb-abierto{overflow:hidden}
 .botnav{display:none}
 .fab-corillo{display:none}
 @media (max-width:860px){
+  /*  EL ALTO DEL DOCK, EN UN SOLO SITIO. Lo usan la barra y el botón de
+      Ayuda, que tiene que quedar por encima: cuando esto era un número
+      suelto en cada uno, la barra creció y Ayuda se le metió dentro. */
+  :root{--dock-alto:80px}
+
   /* ══ EL DOCK ═══════════════════════════════════════════════════════════
      Cuatro destinos, y el que estás mirando SIEMPRE en el centro.
 
@@ -382,7 +387,7 @@ body.lb-abierto{overflow:hidden}
         rótulo— y con la barra a 62 su etiqueta se salía por debajo del canto
         de la pantalla: se leía «Resultad». La barra la dimensiona el elemento
         más alto que puede contener, no el más común. */
-    min-height:72px;box-sizing:border-box}
+    min-height:var(--dock-alto);box-sizing:border-box}
 
   .botnav a{display:flex;flex-direction:column;align-items:center;justify-content:center;
     gap:3px;flex:1;min-width:0;min-height:44px;
@@ -420,30 +425,52 @@ body.lb-abierto{overflow:hidden}
   .botnav a[data-k="meta"]       {--dk-c:#00827E}
   .botnav a[data-k="resultados"] {--dk-c:#8A5310}
 
-  /* — MEDIDO. Con JS, cada uno va donde toca: el activo clavado en el centro
-       y los demás repartidos alrededor. `left:0` + translate para que la
-       transición sea de transform y no de layout. — */
-  .botnav.medido{display:block;position:fixed;justify-content:normal}
-  /*  Y CENTRADOS EN VERTICAL. Con `top:auto` los absolutos se quedaban
-      colgando del borde de arriba y el más alto sobresalía por abajo. */
-  .botnav.medido a{position:absolute;left:0;top:50%;flex:none;
-    transform:translateX(calc(var(--dk-x,50vw) - 50%)) translateY(-50%) scale(var(--dk-s,1))}
-  .botnav.medido a.act{z-index:2}
+  /* — EL REPARTO, SIN MEDIR NADA ────────────────────────────────────────
+       El activo queda EXACTAMENTE en el centro por aritmética de flex, no
+       por un cálculo en JavaScript: a su izquierda va un destino con peso 2,
+       a su derecha van dos con peso 1 cada uno. Dos unidades a cada lado, y
+       el del medio tiene el ancho que necesita. Sale centrado a cualquier
+       ancho, sin `getBoundingClientRect`, sin esperar a nadie.
+
+       ESTO ES EL ARREGLO DEL PARPADEO. Antes el HTML llegaba en cuatro
+       columnas iguales y JavaScript los recolocaba después: el dueño veía la
+       barra desordenada y luego el activo deslizándose desde la izquierda
+       hasta el centro, en CADA página. Ahora el orden lo pinta PHP y el
+       reparto lo hace el CSS, así que el primer cuadro ya es el definitivo.
+
+       El `order` de cada uno lo escribe el servidor (orden circular:
+       anterior · ACTIVO · siguiente · siguiente+1). — */
+  .botnav a{flex:1 1 0}
+  .botnav a.dk-izq{flex:2 1 0}      /* el de la izquierda vale por dos */
+  .botnav a.act{flex:0 0 auto}      /* y el activo, lo que ocupe */
 
   /* — MAGNIFICACIÓN. Solo donde hay puntero: en un teléfono no hay hover, y
-       fingirlo deja iconos grandes pegados después de tocar. — */
+       fingirlo deja iconos grandes pegados después de tocar. Es transform y
+       nada más: la caja no se mueve, así que nadie se recoloca. — */
   @media (hover:hover) and (pointer:fine){
-    .botnav.medido a:hover{--dk-s:1.14}
-    .botnav.medido a.vec{--dk-s:1.06}
+    .botnav a{transform:scale(var(--dk-s,1))}
+    .botnav a:hover{--dk-s:1.14}
+    .botnav a.vec{--dk-s:1.06}
   }
   /* Al tocar: respuesta inmediata, sin rebote. */
   .botnav a:active .dk-b{transform:scale(.94) translateY(-2px)}
   .botnav a.act:active .dk-b{transform:scale(.94) translateY(-5px)}
 
+  /* — EL PRIMER CUADRO NO SE ANIMA ───────────────────────────────────────
+       El servidor pinta el dock ya asentado, así que no hay nada que animar
+       al llegar: `dock-inicial` apaga las transiciones hasta que la página
+       está pintada. Se quita a los dos cuadros SIN tocar ninguna posición —
+       si al quitarla algo se moviera, sería que la geometría no venía hecha
+       del servidor, que es justo el defecto que esto cierra. — */
+  .botnav.dock-inicial,
+  .botnav.dock-inicial a,
+  .botnav.dock-inicial .dk-b,
+  .botnav.dock-inicial .ic{transition:none !important}
+
   @media (prefers-reduced-motion:reduce){
     /* Se quedan la jerarquía y el color; se va el movimiento. */
     .botnav a,.botnav a .ic,.dk-b{transition:none}
-    .botnav.medido a{--dk-s:1 !important}
+    .botnav a{--dk-s:1 !important}
     .botnav a.act .dk-b,.botnav a.act .dk-l{transform:none}
   }
 

@@ -177,6 +177,63 @@ try {
        in_array(trim((string)($R['ERRORES'] ?? '[]')), ['[]', ''], true), (string)($R['ERRORES'] ?? ''));
 
     // ══════════════════════════════════════════════════════════════
+    //  LOS PRIMEROS CUADROS · aquí vivía el parpadeo
+    // ══════════════════════════════════════════════════════════════
+    //  El estado final siempre estuvo bien. Lo que el dueño veía era el
+    //  CAMINO: la barra llegaba en cuatro columnas iguales y JavaScript la
+    //  recolocaba después, así que el activo se deslizaba desde la izquierda
+    //  hasta el centro en cada página. Mirar el final no lo cazaba; hay que
+    //  muestrear mientras se pinta.
+    echo "\n  — los primeros 500ms de cada carga —\n";
+    $F = $correr('flash');
+    ok('el navegador muestreó las cargas', ($F['OK'] ?? '0') === '1',
+       substr((string)$F['_raw'], -400));
+
+    $revisar = function (string $clave, string $nombre) use ($F, &$fallos, &$n) {
+        $ms = json_decode((string)($F[$clave] ?? '[]'), true) ?: [];
+        if (!$ms) { ok("{$nombre} · hay muestras del dock", false, 'ninguna'); return; }
+        ok("{$nombre} · el dock se ve desde la primera muestra", count($ms) >= 3,
+           count($ms) . ' muestras');
+
+        //  DESDE LA PRIMERA MUESTRA VISIBLE, ya centrado. Sin margen para
+        //  «se coloca en la segunda».
+        $desvios = array_map(fn($m) => abs((float)($m['desvio'] ?? 999)), $ms);
+        ok("{$nombre} · centrado desde el primer cuadro", max($desvios) <= 2.0,
+           'peor desvío ' . round(max($desvios), 1) . 'px · primero '
+           . round($desvios[0], 1) . 'px');
+
+        //  Y QUIETO: ni horizontal ni verticalmente.
+        $xs = array_map(fn($m) => (float)($m['desvio'] ?? 0), $ms);
+        $ys = array_map(fn($m) => (float)($m['actY'] ?? 0), $ms);
+        ok("{$nombre} · sin moverse a lo ancho", (max($xs) - min($xs)) <= 2.0,
+           'varía ' . round(max($xs) - min($xs), 1) . 'px');
+        ok("{$nombre} · sin moverse a lo alto", (max($ys) - min($ys)) <= 2.0,
+           'varía ' . round(max($ys) - min($ys), 1) . 'px');
+
+        $altos = array_unique(array_map(fn($m) => (int)$m['alto'], $ms));
+        ok("{$nombre} · la barra no cambia de altura", count($altos) === 1,
+           json_encode(array_values($altos)));
+        ok("{$nombre} · los cuatro destinos, siempre",
+           array_unique(array_map(fn($m) => (int)$m['n'], $ms)) === [4],
+           json_encode(array_values(array_unique(array_map(fn($m) => (int)$m['n'], $ms)))));
+        ok("{$nombre} · un solo aria-current en todo momento",
+           array_unique(array_map(fn($m) => (int)$m['current'], $ms)) === [1],
+           json_encode(array_values(array_unique(array_map(fn($m) => (int)$m['current'], $ms)))));
+        ok("{$nombre} · nadie se sale de la pantalla",
+           array_sum(array_map(fn($m) => (int)$m['fuera'], $ms)) === 0);
+        ok("{$nombre} · cero scroll horizontal",
+           array_sum(array_map(fn($m) => (int)$m['horiz'], $ms)) === 0);
+    };
+
+    foreach (['360', '414'] as $w) {
+        foreach (array_keys($RUTAS) as $k) $revisar("F_{$w}_{$k}", "@{$w} {$k}");
+        $revisar("F_{$w}_atras",    "@{$w} atrás");
+        $revisar("F_{$w}_adelante", "@{$w} adelante");
+    }
+    ok('cero errores de consola al cargar',
+       in_array(trim((string)($F['ERRORES'] ?? '[]')), ['[]', ''], true), (string)($F['ERRORES'] ?? ''));
+
+    // ══════════════════════════════════════════════════════════════
     //  HOVER · y el escritorio de verdad
     // ══════════════════════════════════════════════════════════════
     echo "\n  — con puntero encima —\n";
@@ -201,6 +258,13 @@ try {
     ok('los enlaces siguen navegando',
        str_contains((string)($J['SINJS_URL'] ?? ''), 'calendario.php'),
        (string)($J['SINJS_URL'] ?? '') . ' — el dock es navegación, no una animación con enlaces dentro');
+    //  Y ASENTADO. Sin JavaScript no hay quien coloque nada, así que si sale
+    //  centrado es porque la geometría venía del servidor — que es justo lo
+    //  que se arregló.
+    $sc = json_decode((string)($J['SINJS_CENTRO'] ?? '{}'), true) ?: [];
+    ok('y el activo sale centrado sin JavaScript',
+       abs((float)($sc['desvio'] ?? 999)) <= 2.0,
+       'desvío ' . ($sc['desvio'] ?? '?') . 'px · ' . ($sc['k'] ?? ''));
 
     echo "\n  capturas en tests/_capturas/dock/*.png\n";
 
