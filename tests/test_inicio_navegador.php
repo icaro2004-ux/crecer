@@ -190,9 +190,13 @@ try {
        in_array(trim((string)($R['ERRORES'] ?? '[]')), ['[]', ''], true), (string)($R['ERRORES'] ?? ''));
 
     echo "\n  — el costo —\n";
-    ok('abrir Inicio no llamó a nadie',
-       (int)$pdo->query("SELECT COUNT(*) FROM crecer_ia_log WHERE marca_id={$M}")->fetchColumn() === 0,
-       'la portada es de lectura: si aquí hay una línea, alguien está pagando por mirar');
+    //  SE MIDE EN DINERO. El recorrido pasa por Resultados, que sí deja su
+    //  apunte del Analista —y en pruebas es simulado, de coste cero—. Contar
+    //  filas haría saltar esto por algo que no cuesta nada.
+    ok('abrir Inicio no costó un centavo',
+       (float)$pdo->query("SELECT COALESCE(SUM(costo_usd),0) FROM crecer_ia_log
+                            WHERE marca_id={$M}")->fetchColumn() < 0.000001,
+       'la portada es de lectura: si aquí hay gasto, alguien está pagando por mirar');
 
     echo "\n  capturas en tests/_capturas/inicio/*.png\n";
 

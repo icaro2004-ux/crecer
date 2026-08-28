@@ -49,7 +49,8 @@ const LEER = `(function () {
     bloques:  bloques,
     //  Lo que el dueño puede tocar sin abrir el menú.
     botnav:   [].map.call(document.querySelectorAll('.botnav a'), function (a) {
-      return { t: txt(a), href: a.getAttribute('href'), on: a.className.indexOf('on') >= 0 };
+      return { t: txt(a), href: a.getAttribute('href'),
+               on: a.className.indexOf('on') >= 0 || a.classList.contains('act') };
     }),
     menu:     [].map.call(document.querySelectorAll('.side nav a'), function (a) {
       return { t: txt(a), href: a.getAttribute('href'),
@@ -110,7 +111,7 @@ const MEDIR = `(function () {
   if (b1) { var rb = b1.getBoundingClientRect(); out.pistaAsoma = rb.top < techo; }
 
   //  DOS ACTIVOS A LA VEZ EN LA NAVEGACIÓN es decirle que está en dos sitios.
-  out.activosBar  = document.querySelectorAll('.botnav a.on').length;
+  out.activosBar  = document.querySelectorAll('.botnav a.on, .botnav a.act').length;
   out.activosMenu = document.querySelectorAll('.side nav a.on').length;
   return out;
 })()`;
@@ -227,7 +228,7 @@ try {
     await ir(u);
     di(k, await ev(`JSON.stringify({ url: location.href,
       ok: !/Fatal error/.test(document.body.innerText||''),
-      activos: document.querySelectorAll('.botnav a.on').length,
+      activos: document.querySelectorAll('.botnav a.on, .botnav a.act').length,
       texto: (document.body.innerText||'').replace(/\\s+/g,' ').trim().slice(0,140) })`));
   }
 

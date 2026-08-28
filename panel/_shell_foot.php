@@ -2,39 +2,52 @@
   </div><!-- /.main -->
 </div><!-- /.layout -->
 
-<!-- Bottom nav (solo móvil) · EXACTAMENTE 4 destinos, sin FAB central · Perfil vive en el avatar del top-bar -->
-<nav class="botnav botnav-crear">
-  <a href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='inicio'?'on':'' ?>"><?= ico('home') ?><?= $h(t('Inicio')) ?></a>
-  <a href="<?= $BASE ?>/calendario.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='calendario'?'on':'' ?>"><?= ico('calendar') ?><?= $h(t('Calendario')) ?></a>
-  <?php
-    /*  EL SITIO DEL PULGAR ES PARA TU META, NO PARA CREAR.
-     *
-     *  La decisión de 2026-08-12 fue la contraria —«la meta se pone una vez
-     *  por semana, gastar un slot en un ritual semanal es caro»— y era
-     *  razonable ENTONCES: la meta se ponía y ya. Ya no. Con la revisión
-     *  semanal, el material y la comparación de imágenes, Tu Meta es donde
-     *  el dueño decide TODOS los días. Crear, en cambio, es una herramienta
-     *  que se usa a ratos.
-     *
-     *  Crear NO se elimina: baja al menú lateral, con su URL, su flag y su
-     *  marca intactos. Y Tu Meta no se duplica — la entrada del lateral
-     *  lleva `.dup`, que la esconde solo en móvil.
-     */
-    $meta_url_bn = $BASE . '/meta.php?marca=' . $marca_id;
-    //  ACTIVA EN TODO EL RECORRIDO, no solo en la portada: semana,
-    //  preparación, ajuste y sustitución son Tu Meta. Que se apague al
-    //  entrar en la semana le diría al dueño que se ha ido de donde está.
-    $meta_on_bn = in_array(($active ?? ''), ['meta', 'semana', 'preparacion',
-                                             'ajustar', 'sustituir'], true)
-                  || strpos($_SERVER['SCRIPT_NAME'] ?? '', 'meta.php') !== false;
-  ?>
-  <a href="<?= $h($meta_url_bn) ?>" class="bn-crear <?= $meta_on_bn ? 'on' : '' ?>"><span class="ci"><?= ico('compass') ?></span><span class="cl"><?= $h(t('Tu Meta')) ?></span></a>
-  <a href="<?= $BASE ?>/resultados.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='resultados'?'on':'' ?>"><?= ico('chart') ?><?= $h(t('Resultados')) ?></a>
-  <?php /*  CUATRO DESTINOS, NO CINCO. La Sala salió de aquí en la Fase 5 y
-            baja al menú lateral: la barra del pulgar es para el circuito que el
-            dueño recorre a diario —Inicio, Calendario, Tu Meta, Resultados— y
-            con cinco entradas los rótulos se apretaban hasta no leerse.
-            No desaparece del producto: sigue en el menú, con su URL intacta.  */ ?>
+<?php
+/*  EL DOCK · cuatro destinos, y el que estás mirando en el centro.
+ *
+ *  QUIÉN ESTÁ ACTIVO LO DICE LA RUTA, no una variable que cada página pone
+ *  como puede. `$active` se sigue mirando —hay vistas internas que lo ajustan
+ *  y aciertan— pero manda el archivo que se está ejecutando: si el fichero es
+ *  `meta.php`, el dueño está en Tu Meta, diga lo que diga cualquier otra cosa.
+ *
+ *  Y EL ORDEN DEL DOM NO SE TOCA. Siempre Inicio · Calendario · Tu Meta ·
+ *  Resultados, en ese orden, para que el tabulador y el lector de pantalla
+ *  encuentren siempre lo mismo. Al centro se llega pintando, no reordenando
+ *  nodos.
+ */
+$dk_arch = basename((string)($_SERVER['SCRIPT_NAME'] ?? ''));
+$dk_por_ruta = [
+    'index.php'      => 'inicio',
+    'calendario.php' => 'calendario',
+    'meta.php'       => 'meta',
+    'resultados.php' => 'resultados',
+];
+//  Las vistas internas que SON esa sección aunque vivan en otro archivo.
+$dk_por_activo = [
+    'inicio'     => 'inicio',
+    'calendario' => 'calendario',
+    'meta'       => 'meta',   'semana'    => 'meta',  'preparacion' => 'meta',
+    'ajustar'    => 'meta',   'sustituir' => 'meta',  'cerrar'      => 'meta',
+    'resultados' => 'resultados',
+];
+$dk_act = $dk_por_ruta[$dk_arch] ?? ($dk_por_activo[(string)($active ?? '')] ?? '');
+
+$dk_items = [
+    ['k' => 'inicio',     'ic' => 'home',     'lb' => t('Inicio'),     'hr' => "{$BASE}/index.php?marca={$marca_id}"],
+    ['k' => 'calendario', 'ic' => 'calendar', 'lb' => t('Calendario'), 'hr' => "{$BASE}/calendario.php?marca={$marca_id}"],
+    ['k' => 'meta',       'ic' => 'compass',  'lb' => t('Tu Meta'),    'hr' => "{$BASE}/meta.php?marca={$marca_id}"],
+    ['k' => 'resultados', 'ic' => 'chart',    'lb' => t('Resultados'), 'hr' => "{$BASE}/resultados.php?marca={$marca_id}"],
+];
+?>
+<nav class="botnav dock" id="dock" aria-label="<?= $h(t('Navegación principal')) ?>">
+  <?php foreach ($dk_items as $d): $on = ($d['k'] === $dk_act); ?>
+    <a href="<?= $h($d['hr']) ?>" data-k="<?= $h($d['k']) ?>"
+       class="dk-i<?= $on ? ' act' : '' ?>"
+       <?= $on ? 'aria-current="page"' : '' ?>>
+      <span class="dk-b"><?= ico($d['ic']) ?></span>
+      <span class="dk-l"><?= $h($d['lb']) ?></span>
+    </a>
+  <?php endforeach; ?>
 </nav>
 
 <?php /*  EL VISOR DE IMAGEN · uno solo para todo el producto.
@@ -167,6 +180,118 @@
       e.stopPropagation(); _lbCerrar();
     }
   }, true);
+</script>
+<script>
+/*  EL DOCK, MEDIDO ─────────────────────────────────────────────────────────
+ *
+ *  La geometría se MIDE, no se adivina: con cuatro destinos y el activo en el
+ *  centro exacto, no hay reparto simétrico posible —haría falta uno y medio a
+ *  cada lado— así que se calcula con los anchos reales y se coloca cada uno
+ *  donde de verdad cabe, sin solaparse.
+ *
+ *  EL ARREGLO ES CIRCULAR: el activo al centro, el que va antes a su
+ *  izquierda y los dos siguientes a su derecha, dando la vuelta. Así el orden
+ *  relativo se conserva mires donde mires, y ningún lado se queda vacío
+ *  cuando el activo es el primero o el último.
+ *
+ *  SI ESTO NO CORRE, NO PASA NADA: sin `medido` el dock es un flex de cuatro
+ *  columnas con el activo igual de prominente, y los enlaces navegan solos.
+ */
+(function () {
+  var dock = document.getElementById('dock');
+  if (!dock) return;
+  var items = [].slice.call(dock.querySelectorAll('.dk-i'));
+  if (items.length !== 4) return;
+
+  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var fino   = window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+  function colocar() {
+    //  El dock solo existe en móvil; por encima manda el menú lateral.
+    if (getComputedStyle(dock).display === 'none') { dock.classList.remove('medido'); return; }
+
+    var act = items.findIndex(function (a) { return a.classList.contains('act'); });
+    if (act < 0) { dock.classList.remove('medido'); return; }
+
+    //  SE MIDE EN `medido`, NO ANTES. Fuera de ahí los cuatro son `flex:1` y
+    //  todos miden lo mismo —el ancho de una columna, no el suyo—, y con esa
+    //  cifra inflada el reparto salía mal: los dos de la derecha se pisaban
+    //  por unos pocos píxeles. En `medido` cada uno mide lo que de verdad
+    //  ocupa su rótulo.
+    dock.classList.add('medido');
+    var W  = dock.clientWidth;
+    var cs = getComputedStyle(dock);
+    var padL = parseFloat(cs.paddingLeft) || 0, padR = parseFloat(cs.paddingRight) || 0;
+    var anchos = items.map(function (a) { return a.getBoundingClientRect().width; });
+
+    var centro = W / 2;
+    var mitadAct = anchos[act] / 2;
+    var GAP = 4;   //  aire mínimo entre el activo y su vecino
+
+    //  Orden circular: [anterior, ACTIVO, siguiente, siguiente+1].
+    var izq = [(act + 3) % 4];
+    var der = [(act + 1) % 4, (act + 2) % 4];
+
+    var x = [];
+    x[act] = centro;
+
+    //  IZQUIERDA: un solo destino, centrado en lo que queda.
+    var iniI = padL, finI = centro - mitadAct - GAP;
+    x[izq[0]] = Math.max(iniI + anchos[izq[0]] / 2,
+                         Math.min(finI - anchos[izq[0]] / 2, (iniI + finI) / 2));
+
+    //  DERECHA: dos, repartidos por igual en su tramo.
+    var iniD = centro + mitadAct + GAP, finD = W - padR;
+    var tramo = (finD - iniD) / 2;
+    der.forEach(function (k, n) {
+      var c = iniD + tramo * (n + 0.5);
+      x[k] = Math.max(iniD + anchos[k] / 2, Math.min(finD - anchos[k] / 2, c));
+    });
+
+    items.forEach(function (a, k) { a.style.setProperty('--dk-x', x[k].toFixed(1) + 'px'); });
+  }
+
+  //  Se coloca al cargar y cuando cambie el tamaño (girar el teléfono).
+  colocar();
+  addEventListener('resize', function () {
+    clearTimeout(colocar._t); colocar._t = setTimeout(colocar, 120);
+  }, { passive: true });
+  //  Las fuentes cambian los anchos al terminar de cargar.
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(colocar).catch(function () {});
+
+  //  MAGNIFICACIÓN estilo dock: crece el de debajo del puntero y un poco sus
+  //  vecinos. Solo con puntero fino, y solo con transform — la caja no se
+  //  mueve, así que nada salta.
+  if (fino && !reduce) {
+    items.forEach(function (a, k) {
+      a.addEventListener('mouseenter', function () {
+        items.forEach(function (b, j) { b.classList.toggle('vec', Math.abs(j - k) === 1); });
+      });
+      a.addEventListener('mouseleave', function () {
+        items.forEach(function (b) { b.classList.remove('vec'); });
+      });
+    });
+  }
+
+  //  AL TOCAR OTRO: se desliza hacia el centro y se navega. Corto de verdad
+  //  —160 ms— porque una animación que retrasa la navegación se siente como
+  //  una aplicación lenta, no como una aplicación cuidada. Y si algo falla en
+  //  el camino, el enlace ya iba a navegar solo.
+  if (!reduce) {
+    dock.addEventListener('click', function (e) {
+      var a = e.target.closest('.dk-i');
+      if (!a || a.classList.contains('act')) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+      if (getComputedStyle(dock).display === 'none') return;
+      e.preventDefault();
+      var centro = dock.clientWidth / 2;
+      a.style.setProperty('--dk-x', centro.toFixed(1) + 'px');
+      a.classList.add('act');
+      items.forEach(function (b) { if (b !== a) b.classList.remove('act'); });
+      setTimeout(function () { location.href = a.href; }, 160);
+    });
+  }
+})();
 </script>
 </body>
 </html>
