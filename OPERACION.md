@@ -34,9 +34,26 @@ Ruta base: `domains/encuentraloahora.com/public_html/crecer/scripts/`
 | Cron | Comando | Cada | Para qué | Duración normal |
 |---|---|---|---|---|
 | Publicador | `php .../scripts/cron_publicar.php` | 10 min | Saca lo aprobado cuya hora llegó | < 30 s |
-| Corillo | `php .../scripts/cron_corillo.php` | lunes 7:00 | Prepara planes y semanas | 1–3 min |
+| Corillo | `php .../scripts/cron_corillo.php` | lunes, 7:00 **de Puerto Rico** | Prepara planes y semanas | 1–3 min |
 | Ayudante | `php .../scripts/cron_ayudante.php` | 15 min | Recoge imágenes y carruseles terminados; escala incidencias | < 60 s |
 | Métricas | `php .../scripts/cron_metricas.php` | 6 h | Trae alcance e interacciones de lo publicado | < 2 min |
+
+### La hora a la que se programan (importa en uno solo)
+
+**Esto no está verificado desde el código: hay que mirarlo en hPanel.** No sé
+en qué zona programa Hostinger los cron, y suponerlo es justo como se acaba
+preparando la semana a las 3 de la madrugada.
+
+- **Solo el Corillo depende de la zona**, porque es el único con una hora
+  concreta: tiene que correr **el lunes a las 7:00 a. m. de Puerto Rico**.
+  Si hPanel programa en UTC, eso son las **11:00 UTC**. Si programa en hora
+  local del servidor, hay que comprobar cuál es esa hora antes de escribirla.
+- **Los demás no dependen de la conversión**: «cada 10 minutos», «cada 15
+  minutos» y «cada 6 horas» significan lo mismo en cualquier zona.
+
+Cómo confirmarlo sin adivinar: después de configurarlo, mirar el latido —
+`created_at` de la última corrida de `cron_corillo` viene en hora de Puerto
+Rico, así que si dice 7:0x el lunes, está bien puesto.
 
 **Concurrencia.** Ninguno necesita candado externo: el publicador reclama cada
 pieza con un `UPDATE` atómico, así que dos corridas solapadas no publican dos
