@@ -685,7 +685,22 @@ foreach ($sm['items'] as $i => $it) {
           <a href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&amp;vista=plan"><?= ico('list') ?>Ver mi plan explicado<?= ico('chev-der') ?></a>
           <a href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>"><?= ico('target') ?>Volver a tu meta<?= ico('chev-der') ?></a>
         </nav>
+        <?php /*  Y LA PUERTA A CERRAR LA SEMANA. Solo cuando de verdad no queda
+                  nada por decidir: ofrecerla con una decisión encima seria
+                  invitarle a cerrar algo que no ha terminado. Lo decide el
+                  dominio del ciclo, no esta pantalla.  */ ?>
+        <?php
+          $sm_cerrar = false;
+          if (function_exists('ciclo_estado')) {
+              $sm_ci = ciclo_estado($pdo, $marca_id, $meta, $sm_plan);
+              $sm_cerrar = in_array((string)$sm_ci['clase'],
+                                    ['cerrar', 'preparando', 'preparada', 'fallida', 'plan_completo'], true);
+          }
+        ?>
         <div class="sm-pie">
+          <?php if ($sm_cerrar): ?>
+            <a class="sm-bt pri" href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&amp;vista=cerrar"><?= ico('check-circle') ?>Cerrar esta semana</a>
+          <?php endif; ?>
           <button type="button" class="sm-bt sec" id="smRepasar"><?= ico('refresh') ?>Repasarlas otra vez</button>
         </div>
       </div>

@@ -510,6 +510,8 @@ try {
         //  Va aparte de `estado` porque una imagen que se genero bien y que el
         //  dueño descarto no es una imagen fallida.
         '2026-08-26_crecer_generacion_decision.sql',
+        //  El libro de las semanas: una tabla, sin FK, sin backfill.
+        '2026-08-27_crecer_meta_semana.sql',
     ];
     ok('declara exactamente las pendientes que hay', $decl === $esperadas,
        'declaradas: ' . implode(' · ', $decl));

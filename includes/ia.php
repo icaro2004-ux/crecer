@@ -40,6 +40,12 @@ const CRECER_IA_PRECIOS = [
     'gemini-2.5-flash-lite' => ['in' => 0.10,  'out' => 0.40],
     'gemini-1.5-flash'      => ['in' => 0.075, 'out' => 0.30],
     'gemini-2.5-pro'        => ['in' => 1.25,  'out' => 10.00],
+    //  LA SIMULADA CUESTA CERO, PORQUE CUESTA CERO. Sin esta linea caia en
+    //  «modelo desconocido» y se cobraba al precio mas caro: una prueba de
+    //  navegador dejaba milesimas de dolar inventadas en la evidencia del
+    //  gasto —la misma que se le enseña al jurado— y ademas una linea de
+    //  error_log por cada llamada.
+    'mock'                  => ['in' => 0.0,   'out' => 0.0],
 ];
 
 // Modelo desconocido: se cobra al precio del MÁS CARO que conocemos, no a cero.
@@ -110,7 +116,30 @@ class IaHttp extends IaError
  * Detecta qué transporte usar según las credenciales disponibles.
  * @return string 'gemini_api' | 'vertex' | 'mock'
  */
+/**
+ * LA VALLA DEL NAVEGADOR. `CRECER_TEST_MODE` cierra la red cuando la prueba
+ * ES el proceso; una prueba de NAVEGADOR no lo es: entra por Apache, donde esa
+ * constante no existe. El boton «Preparar la proxima semana» llamaria al
+ * proveedor de verdad, con la clave de verdad, y eso es gasto.
+ *
+ * Con este fichero presente el transporte es `mock` — igual que si no hubiera
+ * credenciales. Dos condiciones, no una: el fichero TIENE que existir y la
+ * peticion TIENE que venir de localhost. En produccion no se cumple ninguna de
+ * las dos, asi que esto no puede apagar el motor de un cliente por accidente.
+ *
+ * Lo crea y lo borra la prueba que lo necesita (en su `finally`), nunca a mano.
+ */
+function ia_sin_credenciales_local(): bool {
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    $host = strtolower((string)($_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? ''));
+    $host = explode(':', $host)[0];
+    $local = in_array($host, ['localhost', '127.0.0.1', '::1'], true);
+    return $cache = ($local && is_file(__DIR__ . '/_SIN_CREDENCIALES'));
+}
+
 function ia_transporte(): string {
+    if (ia_sin_credenciales_local()) return 'mock';
     if (GEMINI_API_KEY !== '') return 'gemini_api';
     if (GCP_PROJECT_ID !== '' && GOOGLE_APPLICATION_CREDENTIALS !== ''
         && is_file(GOOGLE_APPLICATION_CREDENTIALS)) return 'vertex';
@@ -391,7 +420,7 @@ function ia_ejecutar(PDO $pdo, string $agente, string $accion, string $prompt, a
 
     $latencia_ms = (int)round((microtime(true) - $t0) * 1000);
     //  Y el texto igual: en modo prueba el costo es cero porque es cero.
-    $costo = ia_costo_real(ia_costo($modelo, $tokens_in, $tokens_out));
+    $costo = ia_costo_real(ia_costo($modelo, $tokens_in, $tokens_out), $modelo);
     $accion = ia_accion_marcada($accion);
 
     $stmt = $pdo->prepare(
@@ -1144,7 +1173,15 @@ function motor_imagen(string $prompt, array $opts = []): array {
 function ia_es_prueba(): bool {
     return defined('CRECER_TEST_MODE') && CRECER_TEST_MODE;
 }
-function ia_costo_real(float $costo): float { return ia_es_prueba() ? 0.0 : $costo; }
+//  DOS CAMINOS LLEVAN A COSTO CERO, y son distintos: estar en modo prueba, y
+//  que la respuesta la haya dado el transporte simulado. El segundo ocurre
+//  fuera de las pruebas —un servidor sin credenciales— y hasta ahora escribia
+//  un precio estimado que nadie pago.
+function ia_costo_real(float $costo, string $modelo = ''): float {
+    if (ia_es_prueba())   return 0.0;
+    if ($modelo === 'mock') return 0.0;
+    return $costo;
+}
 function ia_accion_marcada(string $accion): string {
     return ia_es_prueba() ? mb_substr('[prueba] ' . $accion, 0, 80) : $accion;
 }
@@ -1200,7 +1237,7 @@ function ia_imagen(PDO $pdo, string $agente, string $accion, string $prompt, str
     // OJO: crecer_ia_log.accion es VARCHAR(80) → truncar para no romper el INSERT.
     $accion_log = ia_accion_marcada(
         mb_substr($razon ? ($accion . ' · ' . $razon) : $accion, 0, 68));
-    $costo = ia_costo_real($costo);
+    $costo = ia_costo_real($costo, $modelo);
     $pdo->prepare("INSERT INTO crecer_ia_log (marca_id,agente,accion,modelo,prompt,respuesta,costo_usd,latencia_ms,estado,error_msg)
                    VALUES (?,?,?,?,?,?,?,?,?,?)")
         ->execute([$opts['marca_id'] ?? null, $agente, $accion_log, $modelo, $prompt, $rel, $costo, $lat, $estado, $err]);

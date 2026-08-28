@@ -66,8 +66,16 @@ try {
     $limpiar[] = $M = (int)$fx['marca_id'];
     $meta = meta_activa($pdo, $M);
     $plan = meta_plan_activo($pdo, (int)$meta['id']);
+    //  LA VENTANA, DE UNA SEMANA. Desde el ciclo semanal terminar una semana YA
+    //  NO cierra el plan: un plan de dos meses no se acaba el primer viernes,
+    //  se abre la semana siguiente. El plan se completa cuando la semana que
+    //  termina es la ULTIMA, y eso es lo que esta pantalla cuenta. La fecha
+    //  limite no se toca —el texto que ve el dueño sigue siendo el mismo— y se
+    //  fija el arranque una semana antes.
     $pdo->prepare("UPDATE crecer_meta SET objetivo='pedidos', cantidad=25,
-                      fecha_limite='2026-10-23' WHERE id=?")->execute([(int)$meta['id']]);
+                      fecha_limite='2026-10-23',
+                      fecha_inicio=DATE_SUB('2026-10-23', INTERVAL 6 DAY)
+                    WHERE id=?")->execute([(int)$meta['id']]);
     //  Las de la fixture, descartadas: el plan podrá completarse con la única
     //  que se siembra, que es el caso que destapó el defecto.
     $pdo->prepare("UPDATE crecer_meta_tactica SET estado='descartada' WHERE meta_id=?")

@@ -59,8 +59,15 @@ try {
     $limpiar[] = $M = (int)$fx['marca_id'];
     $meta = meta_activa($pdo, $M);
     $plan = meta_plan_activo($pdo, (int)$meta['id']);
+    //  LA VENTANA, DE UNA SEMANA. Desde el ciclo semanal terminar una semana ya
+    //  no cierra el plan: se abre la siguiente. Para que esta prueba siga
+    //  hablando de un plan COMPLETADO —que es lo suyo: que las tres pantallas
+    //  cuenten la misma historia— la semana que termina tiene que ser la
+    //  ultima. La fecha limite no se toca: el texto que ve el dueño es el mismo.
     $pdo->prepare("UPDATE crecer_meta SET objetivo='pedidos', cantidad=25,
-                      fecha_limite='2026-10-23' WHERE id=?")->execute([(int)$meta['id']]);
+                      fecha_limite='2026-10-23',
+                      fecha_inicio=DATE_SUB('2026-10-23', INTERVAL 6 DAY)
+                    WHERE id=?")->execute([(int)$meta['id']]);
     $pdo->prepare("UPDATE crecer_meta_tactica SET estado='descartada' WHERE meta_id=?")
         ->execute([(int)$meta['id']]);
     foreach ($fx['piezas'] as $p) {

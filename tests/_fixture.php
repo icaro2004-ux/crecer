@@ -194,6 +194,10 @@ final class Fixture
         $porMarca = [
             'crecer_img_cuota_asiento', 'crecer_img_cuota_cubo', 'crecer_ia_log',
             'crecer_activos', 'crecer_graficas', 'crecer_memoria',
+            //  El libro de semanas nace sin FK (regla de Hostinger), asi que
+            //  tampoco lo arrastra el borrado del usuario: sin esta linea cada
+            //  prueba del ciclo dejaba su fila de por vida.
+            'crecer_meta_semana',
         ];
         foreach ($porMarca as $t) {
             try { $pdo->prepare("DELETE FROM {$t} WHERE marca_id=?")->execute([$marca_id]); }

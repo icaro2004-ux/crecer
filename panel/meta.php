@@ -28,6 +28,9 @@ require_once __DIR__ . '/../includes/iconos.php';
 require_once __DIR__ . '/../includes/meta_negocio.php';
 require_once __DIR__ . '/../includes/meta_cambio.php';
 require_once __DIR__ . '/../includes/meta_oportunidad.php';
+//  El ciclo semanal: cerrar una semana y abrir la siguiente. Arriba y no
+//  dentro de un handler — un helper llamado sin su require es un fatal.
+require_once __DIR__ . '/../includes/meta_ciclo.php';
 requiere_login();
 require_once __DIR__ . '/../includes/panel_guard.php';
 requiere_suscripcion($pdo, isset($_GET['marca']) ? (int)$_GET['marca'] : null);
@@ -292,6 +295,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // (d) Confirmar una jugada. OJO: esto SOLO aplica a las de 'accion_dueno'
         //     (lo que pasa fuera de Crecer). Las de producción se cierran solas
         //     con la evidencia de publicación — el dueño no declara nuestro trabajo.
+        //  ── CERRAR LA SEMANA ────────────────────────────────────────────
+        //  Idempotente por (plan, semana): dos envíos del mismo formulario no
+        //  abren dos cierres. No decide nada sobre la meta.
+        if ($accion === 'cerrar_semana') {
+            $mt = meta_activa($pdo, $marca_id);
+            $pl = $mt ? meta_plan_activo($pdo, (int)$mt['id']) : null;
+            if (!$mt || !$pl) { echo json_encode(['ok'=>false,'err'=>'No encontré tu plan.']); exit; }
+            $sem = (int)($_POST['semana'] ?? 0);
+            if ($sem <= 0) $sem = semana_de_turno($pdo, (int)$mt['id'], (int)$pl['id']);
+            $r = ciclo_cerrar($pdo, $marca_id, (int)$mt['id'], (int)$pl['id'], $sem,
+                              (string)($_POST['valoracion'] ?? ''),
+                              (string)($_POST['comentario'] ?? ''),
+                              (string)($_POST['solicitud'] ?? ''));
+            echo json_encode($r + ['semana' => $sem], JSON_UNESCAPED_UNICODE); exit;
+        }
+
+        //  ── PREPARAR LA PRÓXIMA ─────────────────────────────────────────
+        //  El botón y el cron entran por la MISMA función: dos caminos con dos
+        //  reglas acaban siendo dos reglas distintas. La reclamación ocurre
+        //  antes de llamar al modelo, así que un doble clic no cuesta dos.
+        if ($accion === 'preparar_semana') {
+            @set_time_limit(0);
+            $mt = meta_activa($pdo, $marca_id);
+            $pl = $mt ? meta_plan_activo($pdo, (int)$mt['id']) : null;
+            if (!$mt || !$pl) { echo json_encode(['ok'=>false,'err'=>'No encontré tu plan.']); exit; }
+            $sem = (int)($_POST['semana'] ?? 0);
+            if ($sem <= 0) $sem = semana_de_turno($pdo, (int)$mt['id'], (int)$pl['id']);
+            $r = ciclo_preparar($pdo, $marca_id, (int)$mt['id'], (int)$pl['id'], $sem);
+            echo json_encode($r, JSON_UNESCAPED_UNICODE); exit;
+        }
+
+        //  ── SOLO CONSULTA ───────────────────────────────────────────────
+        //  Ver la pantalla nunca genera ni encola: esto pregunta y ya.
+        if ($accion === 'ciclo_estado') {
+            $mt = meta_activa($pdo, $marca_id);
+            $pl = $mt ? meta_plan_activo($pdo, (int)$mt['id']) : null;
+            $e  = ciclo_estado($pdo, $marca_id, $mt, $pl);
+            echo json_encode(['ok'=>true, 'clase'=>$e['clase'], 'semana'=>$e['semana'],
+                              'semanas'=>$e['semanas'],
+                              'creadas'=>(int)($e['fila']['creadas'] ?? 0)],
+                             JSON_UNESCAPED_UNICODE); exit;
+        }
+
         if ($accion === 'tactica') {
             //  LAS GUARDAS VIVEN EN EL DOMINIO, no aquí: este botón se pulsa
             //  desde tres sitios (la capa del plan, «lo que toca ahora» y
@@ -309,13 +355,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $r  = [];
                 $ok = meta_tactica_estado($pdo, $tid, $marca_id, $pedido);
             }
+            //  TERMINAR UNA SEMANA NO CIERRA EL PLAN. Antes sí: en cuanto no
+            //  quedaban jugadas vivas se daba el plan por completado — y con
+            //  el ciclo semanal eso pasa CADA semana. Un plan de cinco
+            //  semanas se cerraba el primer viernes.
+            //
+            //  Son tres hechos distintos: la semana se completa, el plan se
+            //  completa (llegó su última semana y no queda trabajo), y la
+            //  meta se logra (eso lo dicen sus números o el dueño).
             $completo = false;
             if ($ok) {
                 $mt = meta_activa($pdo, $marca_id);
                 $pl = $mt ? meta_plan_activo($pdo, (int)$mt['id']) : null;
                 if ($pl) {
                     $pg = meta_plan_progreso($pdo, (int)$pl['id']);
-                    if ($pg['completo']) $completo = meta_plan_cerrar($pdo, (int)$pl['id'], 'completado');
+                    if ($pg['completo']) {
+                        $semanas = ciclo_semanas_del_plan($mt);
+                        $turno   = semana_de_turno($pdo, (int)$mt['id'], (int)$pl['id']);
+                        //  Solo si de verdad era la última.
+                        if (!ciclo_hay_libro($pdo) || $turno >= $semanas) {
+                            $completo = ciclo_cerrar_plan_si_toca($pdo, $marca_id, (int)$mt['id'],
+                                                                 (int)$pl['id'], $semanas);
+                        }
+                    }
                 }
             }
             echo json_encode(['ok'=>$ok, 'plan_completo'=>$completo,
@@ -584,12 +646,26 @@ $mt_estado = MetaStateComposer::componer($mt_snap);
 //   ?vista=plan-nuevo  pedirle otro plan a la Estratega, para esta misma meta
 //   ?vista=cambiar     cerrar esta meta y estrenar la proxima, de una
 $vista = $_GET['vista'] ?? '';
-if (!in_array($vista, ['plan', 'semana', 'preparando', 'wizard', 'plan-nuevo', 'cambiar', 'ajustar', 'sustituir'], true)) $vista = 'ahora';
+if (!in_array($vista, ['plan', 'semana', 'preparando', 'wizard', 'plan-nuevo', 'cambiar', 'ajustar', 'sustituir', 'cerrar'], true)) $vista = 'ahora';
 if (!$meta && $vista === 'ahora' && !empty($_GET['nueva'])) $vista = 'wizard';
 //  Las dos delicadas piden una meta viva. Sin ella no hay nada que rehacer ni
 //  que cambiar, y mandar a un wizard vacio es como se llegaba antes a que el
 //  negocio se quedara sin norte: se vuelve a lo que toca ahora.
-if (!$meta && in_array($vista, ['plan-nuevo', 'cambiar', 'ajustar', 'sustituir', 'semana'], true)) $vista = 'ahora';
+if (!$meta && in_array($vista, ['plan-nuevo', 'cambiar', 'ajustar', 'sustituir', 'semana', 'cerrar'], true)) $vista = 'ahora';
+//  CERRAR UNA SEMANA QUE NO ESTA TERMINADA no es cerrar: es tirar a la basura
+//  decisiones que el dueño todavia no ha tomado. A esta pantalla se puede
+//  llegar por una URL guardada o por un enlace viejo, asi que la puerta se
+//  comprueba AQUI —contra la base— y no solo donde se pinta el enlace.
+//  Con una excepcion: justo despues de preparar, el estado general YA es
+//  «revisar» —la semana nueva tiene trabajo— y la pantalla del cierre es la
+//  que le dice «ya te la prepare». Ese momento no se le quita.
+if ($meta && $vista === 'cerrar') {
+    $mt_ci = ciclo_estado($pdo, $marca_id, $meta, $plan_act);
+    if ($mt_ci['clase'] === 'revisar'
+        && !ciclo_recien_preparada($pdo, (int)$mt_ci['plan_id'], (int)$mt_ci['semana'])) {
+        $vista = 'semana';
+    }
+}
 //  La preparacion SIN meta no tiene nada que preparar: o el dueño llego por una
 //  URL vieja, o su meta se cerro. Se le devuelve a lo que toca ahora, que sabe
 //  que decirle. Con meta pero sin plan, la vista SI se pinta: ese es justamente
@@ -1311,6 +1387,10 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
 <?php elseif ($meta && $vista === 'preparando'): /* ══════ PREPARANDO EL PLAN ══════ */ ?>
 
 <?php require __DIR__ . '/_meta_preparando.php'; ?>
+
+<?php elseif ($meta && $vista === 'cerrar'): /* ══════ CERRAR LA SEMANA ══════ */ ?>
+
+<?php require __DIR__ . '/_meta_cierre.php'; ?>
 
 <?php elseif ($meta && $vista === 'semana'): /* ══════ REVISAR MI SEMANA ══════ */ ?>
 

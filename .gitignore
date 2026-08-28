@@ -53,3 +53,7 @@ BRIEF-CRECER-PARA-NARRATIVA.md
 
 # Evidencia: los HTML son intermedios del generador (pl_pdf.php); el PDF es el entregable.
 evidencia/*.html
+
+# El centinela que apaga el proveedor en las pruebas de navegador (local).
+# Lo crea y lo borra la prueba: nunca debe viajar al repo ni al servidor.
+includes/_SIN_CREDENCIALES
