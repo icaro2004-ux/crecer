@@ -770,6 +770,12 @@ $credito  = $has_deck
   .in-act{list-style:none;margin:0;padding:0;display:grid;gap:9px}
   .in-act li{display:flex;align-items:flex-start;gap:9px;font-size:15px;line-height:1.5;color:var(--tinta)}
   .in-act li .ic{width:18px;height:18px;flex:none;margin-top:3px;color:var(--teal)}
+  .in-act li a{margin-left:auto;flex:none;min-height:44px;display:inline-flex;align-items:center;
+    padding:0 10px;border-radius:8px;font-size:14px;font-weight:700;color:var(--teal);
+    text-decoration:none;white-space:nowrap}
+  .in-act li a:hover{background:color-mix(in srgb,var(--teal) 9%,transparent)}
+  .in-act li.urge .ic{color:#c2410c}
+  .in-act li.urge a{color:#c2410c}
   .in-act li i{font-style:normal;font-size:14px;color:var(--muted);margin-left:auto;
     white-space:nowrap;padding-left:8px}
 
@@ -1116,7 +1122,17 @@ $credito  = $has_deck
   //  intenta explicar una sección entera aquí.
   require_once __DIR__ . '/../includes/inicio.php';
   $in_cal  = inicio_calendario($pdo, $marca_id, 3);
-  $in_act  = inicio_actividad($pdo, $marca_id, $marca, 3);
+  //  LO QUE DICE EL CORILLO, POR CONSECUENCIA. Antes era una lista de lo que
+  //  había hecho, en orden de llegada. Ahora manda lo que NO sale si el dueño
+  //  no hace nada —un fallo, su material, su tarea—, después lo que está
+  //  listo para decidir, y al final lo que ya va solo. Un bloque que enseña
+  //  seis cosas a la vez no tiene prioridad: se la deja al que mira.
+  require_once __DIR__ . '/../includes/ejecucion.php';
+  $ej_ops   = ejec_operacion($pdo, $marca_id, null);
+  //  La etapa sale de la LETRA del compositor, que ya viene en el DTO. Home
+  //  no vuelve a mirar el estado ni el snapshot: la frontera sigue en pie.
+  $ej_etapa = ejec_etapa((string)($__hm['estado'] ?? ''), $ej_ops);
+  $in_act   = ejec_mensajes($pdo, $marca_id, $marca, $BASE, $ej_ops, $ej_etapa);
   $in_sen  = inicio_senal($pdo, $marca_id, null);
   $in_pend = inicio_pendientes($pdo, $marca_id, $BASE, ['sin_redes' => !$meta_ok]);
   ?>
@@ -1154,12 +1170,20 @@ $credito  = $has_deck
             preparada, unas piezas escritas, una foto suya enlazada. Si no hay
             filas, no hay bloque — un equipo que dice que trabajó sin haber
             trabajado se descubre a la primera.  */ ?>
-  <?php if ($in_act['hay']): ?>
+  <?php if ($in_act['mensajes']): ?>
   <section class="hz-card in-blk">
-    <div class="in-h"><b><?= $h(t('%s trabajó en esto', $in_act['nombre'])) ?></b></div>
+    <div class="in-h"><b><?= $h(t('%s está trabajando', $in_act['nombre'])) ?></b></div>
     <ul class="in-act">
-      <?php foreach ($in_act['eventos'] as $e): ?>
-        <li><?= ico($e['ico']) ?><span><?= $h($e['txt']) ?></span><?php if ($e['cuando'] !== ''): ?><i><?= $h($e['cuando']) ?></i><?php endif; ?></li>
+      <?php foreach ($in_act['mensajes'] as $e): ?>
+        <li class="<?= !empty($e['urgente']) ? 'urge' : '' ?>">
+          <?= ico($e['ico']) ?>
+          <span><?= $h($e['txt']) ?></span>
+          <?php /*  Cada mensaje lleva a donde se resuelve. Uno que solo
+                    informa y no abre nada obliga al dueño a buscarlo. */ ?>
+          <?php if ($e['href'] !== ''): ?>
+            <a href="<?= $h($e['href']) ?>"><?= $h($e['accion']) ?></a>
+          <?php endif; ?>
+        </li>
       <?php endforeach; ?>
     </ul>
   </section>
