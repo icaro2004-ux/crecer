@@ -512,6 +512,10 @@ try {
         '2026-08-26_crecer_generacion_decision.sql',
         //  El libro de las semanas: una tabla, sin FK, sin backfill.
         '2026-08-27_crecer_meta_semana.sql',
+        //  Un solo cerebro: donde viaja el activo que la Estratega eligio para
+        //  una jugada, y el CONCEPTO de una imagen —no solo su encuadre— para
+        //  poder no repetirse. Dos ALTER aditivos y NULL-ables.
+        '2026-08-28_crecer_contexto_unico.sql',
     ];
     ok('declara exactamente las pendientes que hay', $decl === $esperadas,
        'declaradas: ' . implode(' · ', $decl));

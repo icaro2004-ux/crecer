@@ -50,7 +50,11 @@ if ($c_clase === 'revisar' && ciclo_recien_preparada($pdo, $c_plan, $c_semana)) 
   .cz{
     --tm-rosa-bt:#D42A5C; --tm-rosa-bt-h:#B81F4C; --tm-teal:#00A49F;
     --tm-r:12px; --tm-r-bt:10px;
-    max-width:560px;margin:0 auto;padding-bottom:var(--ah-zona,20px);
+    /*  84px de suelo, no 20. El botón flotante de Ayuda vive fijo abajo a la
+        derecha: con 20px, la acción principal de esta pantalla aterrizaba
+        justo debajo y le tapaba media palabra. `--ah-zona` sigue mandando
+        cuando existe; esto solo arregla el caso en que nadie la define.  */
+    max-width:560px;margin:0 auto;padding-bottom:var(--ah-zona,84px);
   }
   .cz-top{display:flex;align-items:center;gap:10px;min-height:44px}
   .cz-atras{display:inline-flex;align-items:center;justify-content:center;
@@ -102,6 +106,23 @@ if ($c_clase === 'revisar' && ciclo_recien_preparada($pdo, $c_plan, $c_semana)) 
   .cz-err .ic{width:18px;height:18px;flex:none;margin-top:1px}
   .cz-err p{margin:0}
 
+  /* — LO QUE TOMÉ EN CUENTA. Una nota al margen, no un informe: pequeña,
+     tranquila, y con el detalle escondido detrás de un toque. — */
+  .cz-cta{margin:6px 0 18px;padding:14px;border-radius:var(--tm-r);
+    background:var(--crema,#FAF7F4);border:1px solid var(--linea,#EDE7E1)}
+  .cz-cta h3{font-size:14px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--muted);margin:0 0 10px}
+  .cz-cta ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+  .cz-cta li{display:flex;gap:9px;align-items:flex-start;font-size:15px;line-height:1.5;color:var(--tinta)}
+  .cz-cta li .ic{width:18px;height:18px;flex:none;margin-top:2px;color:var(--tm-teal)}
+  .cz-porque{margin-top:12px;min-height:44px;padding:0 4px;background:none;border:0;
+    font:inherit;font-size:15px;font-weight:600;color:var(--tm-rosa-bt);cursor:pointer;
+    text-decoration:underline;text-underline-offset:3px}
+  .cz-porque:focus-visible{outline:2px solid var(--tinta);outline-offset:2px;border-radius:6px}
+  .cz-hoja{margin-top:10px;padding-top:12px;border-top:1px solid var(--linea,#EDE7E1)}
+  .cz-hoja p{font-size:14.5px;line-height:1.6;color:var(--muted);margin:0 0 10px}
+  .cz-hoja p:last-child{margin-bottom:0}
+
   /* — MIENTRAS TRABAJA. Sin temporizadores falsos: el estado sale de la base. — */
   .cz-espera{text-align:center;padding:30px 0}
   .cz-espera .orbe{width:64px;height:64px;margin:0 auto 18px;border-radius:999px;
@@ -144,6 +165,40 @@ if ($c_clase === 'revisar' && ciclo_recien_preparada($pdo, $c_plan, $c_semana)) 
     <h2><?= $h(t('Tu nueva semana está lista.')) ?></h2>
     <p><?= $h(t('Te dejé todo preparado para que decidas.')) ?></p>
   </div>
+
+  <?php
+    /*  LO QUE TOMÉ EN CUENTA. Tres renglones como máximo, y cada uno
+        comprobado contra la base ahora mismo: si no usó ninguna foto suya, esa
+        línea no sale. Una plantilla que dijera siempre lo mismo se leería bien
+        una vez y destruiría la confianza a la segunda.  */
+    $cz_cta = ['lineas' => [], 'detalle' => []];
+    if ($meta && $c_plan_act) {
+        try { $cz_cta = ciclo_considerado($pdo, $marca_id, $meta, $c_plan_act, $c_semana); }
+        catch (Throwable $e) { $cz_cta = ['lineas' => [], 'detalle' => []]; }
+    }
+  ?>
+  <?php if ($cz_cta['lineas']): ?>
+    <section class="cz-cta" aria-label="<?= $h(t('Lo que tomé en cuenta')) ?>">
+      <h3><?= $h(t('Lo que tomé en cuenta')) ?></h3>
+      <ul>
+        <?php foreach ($cz_cta['lineas'] as $l): ?>
+          <li><?= ico('check') ?><span><?= $h($l) ?></span></li>
+        <?php endforeach; ?>
+      </ul>
+      <?php if ($cz_cta['detalle']): ?>
+        <?php /*  El detalle NO va en el camino principal: quien quiera saber más
+                  lo abre, y quien solo quiera ver su semana no tropieza con él. */ ?>
+        <button type="button" class="cz-porque" id="czPorque"
+                aria-expanded="false" aria-controls="czHoja"><?= $h(t('Ver por qué')) ?></button>
+        <div class="cz-hoja" id="czHoja" hidden>
+          <?php foreach ($cz_cta['detalle'] as $d): ?>
+            <p><?= $h($d['texto']) ?></p>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+    </section>
+  <?php endif; ?>
+
   <div class="cz-pie">
     <a class="cz-bt pri" href="<?= $BASE ?>/meta.php?marca=<?= $marca_id ?>&amp;vista=semana"><?= ico('check-circle') ?><?= $h(t('Revisar mi semana')) ?></a>
   </div>
@@ -285,6 +340,21 @@ if ($c_clase === 'revisar' && ciclo_recien_preparada($pdo, $c_plan, $c_semana)) 
           prep.textContent = <?= json_encode(t('Preparar la próxima semana')) ?>;
           err(String(e && e.message ? e.message : 'Se cortó la conexión. Vuelve a abrir esta pantalla.'));
         });
+    });
+  }
+
+  //  EL DETALLE, DETRÁS DE UN TOQUE. Sin librerías y sin animación: abre y
+  //  cierra, y el lector de pantalla se entera.
+  var porque = $('#czPorque');
+  var hoja   = $('#czHoja');
+  if (porque && hoja) {
+    porque.addEventListener('click', function () {
+      var abierta = !hoja.hidden;
+      hoja.hidden = abierta;
+      porque.setAttribute('aria-expanded', abierta ? 'false' : 'true');
+      porque.textContent = abierta
+        ? <?= json_encode(t('Ver por qué')) ?>
+        : <?= json_encode(t('Ocultar')) ?>;
     });
   }
 

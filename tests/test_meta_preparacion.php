@@ -249,11 +249,22 @@ try {
     $gen = (string)file_get_contents(__DIR__ . '/../includes/meta_negocio.php');
     $cuerpo = substr($gen, strpos($gen, 'function meta_plan_generar'));
     $cuerpo = substr($cuerpo, 0, 40000);
-    $lee_biblio = strpos($cuerpo, 'crecer_activos') !== false;
-    $lee_cal    = strpos($cuerpo, 'crecer_calendario') !== false;
-    ok('el generador sigue SIN leer la Biblioteca', $lee_biblio === false,
-       'si ya la lee, la pantalla puede -y debe- decirlo');
-    ok('y SIN leer el Calendario', $lee_cal === false);
+    //  ESTO SE INVIRTIO EN LA FASE DEL CEREBRO UNICO, y por eso la afirmacion
+    //  cambia de signo: el generador YA no lee por su cuenta — lee el
+    //  ensamblador de contexto, que es quien mira la Biblioteca y el
+    //  Calendario. La regla de fondo es la misma de siempre y no se toca: la
+    //  pantalla solo puede decir lo que el codigo hace. Antes eso significaba
+    //  callar; ahora significa que PUEDE decirlo.
+    $ens = (string)file_get_contents(__DIR__ . '/../includes/contexto.php');
+    $usa_ensamblador = strpos($cuerpo, 'ctx_estrategico(') !== false
+                    && strpos($cuerpo, 'ctx_para_prompt(') !== false;
+    ok('el generador lee por el ensamblador único', $usa_ensamblador,
+       'tres copias de la misma consulta acaban siendo tres verdades distintas');
+    $lee_biblio = $usa_ensamblador && strpos($ens, 'crecer_activos') !== false;
+    $lee_cal    = $usa_ensamblador && strpos($ens, 'fecha_programada') !== false;
+    ok('y por ahí SÍ llega su Biblioteca', $lee_biblio,
+       'ahora la pantalla puede decirlo sin mentir');
+    ok('y lo que ya tiene programado', $lee_cal);
 
     foreach (['panel/_meta_preparando.php' => 'la pantalla de preparación',
               'panel/_meta_wizard.php'     => 'el wizard'] as $arch => $como) {

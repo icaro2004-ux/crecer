@@ -25,6 +25,14 @@
 // ============================================================
 
 require_once __DIR__ . '/db.php';
+//  UN SOLO CEREBRO: Biblioteca, Calendario, Resultados, historial y lo que el
+//  dueño dijo, leidos UNA vez y en el mismo sitio que el plan inicial.
+//
+//  ARRIBA, no dentro de la funcion que lo usa: `ciclo_considerado()` llama a
+//  `ctx_hay_columna()` dentro de un try, y una funcion inexistente lanza Error
+//  —que es Throwable—, asi que el catch se lo tragaba y devolvia CERO fotos en
+//  silencio. La pantalla dejaba de decir «usé tu foto» sin que nada fallara.
+require_once __DIR__ . '/contexto.php';
 require_once __DIR__ . '/meta_negocio.php';
 require_once __DIR__ . '/meta_semana.php';
 //  El encolado va por el helper único del proyecto: aquí no se inventa otro.
@@ -495,7 +503,10 @@ function ciclo_generar(PDO $pdo, int $marca_id, array $meta, array $plan,
     $semanas = ciclo_semanas_del_plan($meta);
     $restan  = max(0, $semanas - $semana_cerrada);
 
-    //  EL NEGOCIO, para que la tanda hable de lo suyo y no en abstracto.
+    //  EL CONTEXTO ENTERO, acotado y con el estado de cada fuente. No llama a
+    //  ningun modelo: es lectura y recorte.
+    $ctx = ctx_estrategico($pdo, $marca_id, ['meta' => $meta, 'plan' => $plan,
+                                             'semana' => $semana_cerrada]);
     $m = [];
     try { $m = leer_marca($pdo, $marca_id) ?: []; } catch (Throwable $e) { $m = []; }
 
@@ -556,6 +567,12 @@ function ciclo_generar(PDO $pdo, int $marca_id, array $meta, array $plan,
     $prompt .= "La semana {$semana_cerrada} se cerró con {$publicadas['publicadas']} publicaciones "
              . "y {$publicadas['acciones']} acciones del dueño hechas.\n";
     if ($voz !== '') $prompt .= "\n{$voz}";
+
+    //  TODO LO QUE SABE EL RESTO DE CRECER, en un solo bloque acotado: lo que
+    //  el dueño tiene en Biblioteca, lo que ya tiene programado, como le fue
+    //  de verdad, lo que ya publico y lo que ya dijo que no.
+    $ctx_txt = ctx_para_prompt($ctx);
+    if ($ctx_txt !== '') $prompt .= "\n" . $ctx_txt . "\n";
     if ($hecho) {
         $prompt .= "\nLO QUE YA SE HIZO (no lo repitas literalmente):\n- "
                  . implode("\n- ", array_slice($hecho, 0, 20)) . "\n";
@@ -573,10 +590,17 @@ function ciclo_generar(PDO $pdo, int $marca_id, array $meta, array $plan,
     if ($meta['presupuesto_pauta'] === null || (float)$meta['presupuesto_pauta'] <= 0) {
         $prompt .= "- El dueño NO tiene presupuesto de pauta: NO incluyas jugadas de tipo 'pauta'.\n";
     }
+    //  `activo_id` ES LA PROMESA DE LA BIBLIOTECA HECHA EJECUTABLE. Decir «usa
+    //  una foto del mostrador» no lo puede cumplir nadie; decir «usa la #412»,
+    //  si. Con dos frenos: solo de la lista que se le enseño, y solo si de
+    //  verdad pega — un numero inventado deja al dueño con una promesa rota.
+    $prompt .= "\n- Si alguna jugada encaja con material que él ya subió, pon su número en `activo_id`.\n"
+             . "  Solo de la lista de arriba, solo si de verdad pega, y un video SOLO en un reel.\n"
+             . "  Si ninguna pega, déjalo en null: el corillo hace el arte.\n";
     $prompt .= "\nJSON: {\"tacticas\":[{\"tipo\":\"contenido|distribucion|oferta|alianza|operacion\","
              . "\"titulo\":\"...\",\"que_hacer\":\"...\",\"por_que\":\"...\","
              . "\"canal\":\"instagram|facebook|whatsapp|ambas|fisico\",\"cta\":\"...\","
-             . "\"quien\":\"corillo|dueno\",\"semana\":{$proxima}}]}";
+             . "\"quien\":\"corillo|dueno\",\"activo_id\":null,\"semana\":{$proxima}}]}";
 
     $r = ia_ejecutar($pdo, 'estratega', "Semana {$proxima} del plan", $prompt, [
         'marca_id'        => $marca_id,
@@ -606,6 +630,113 @@ function ciclo_generar(PDO $pdo, int $marca_id, array $meta, array $plan,
     //  dueño no se le ponen ocho decisiones delante.
     return ['ok' => true, 'tacticas' => array_slice($tac, 0, 4),
             'ia_log_id' => $r['ia_log_id'] ?? null];
+}
+
+/**
+ * LO QUE TOMÉ EN CUENTA — y solo lo que es verdad.
+ *
+ * ESTA ES LA PARTE QUE SE PUEDE MENTIR SIN QUERER. Es facil escribir «usé tus
+ * fotos y respeté tu calendario» en una plantilla y que suene bien siempre;
+ * tambien es la forma mas rapida de que el dueño deje de creer lo que lee. Asi
+ * que cada linea se COMPRUEBA contra la base ahora mismo, no se recuerda de
+ * cuando se preparo la semana:
+ *
+ *   · «usé N fotos tuyas»  →  piezas de esta semana con `material_activo_id`.
+ *   · «te dejé espacio»    →  el calendario se pudo leer, HABIA algo suyo, y
+ *                             ninguna pieza nueva le cae encima.
+ *   · «miré tus resultados»→  hay cobertura de verdad (no dos filas sueltas).
+ *   · «te hice caso»       →  dijo algo al cerrar la semana anterior.
+ *
+ * Tres lineas como maximo: esto es una nota al margen, no un informe.
+ *
+ * @return array{lineas:string[], detalle:array}
+ */
+function ciclo_considerado(PDO $pdo, int $marca_id, array $meta, array $plan, int $semana): array
+{
+    $lineas = []; $det = [];
+    $plan_id = (int)$plan['id'];
+
+    //  1 · SU MATERIAL. Se cuenta lo enlazado, no lo disponible.
+    $fotos = 0;
+    try {
+        if (ctx_hay_columna($pdo, 'crecer_contenido', 'material_activo_id')) {
+            $q = $pdo->prepare(
+                "SELECT COUNT(*) FROM crecer_contenido c
+                   JOIN crecer_meta_tactica t ON t.id = c.tactica_id
+                  WHERE c.marca_id=? AND t.plan_id=? AND t.semana=?
+                    AND c.material_activo_id IS NOT NULL");
+            $q->execute([$marca_id, $plan_id, $semana]);
+            $fotos = (int)$q->fetchColumn();
+        }
+    } catch (Throwable $e) { $fotos = 0; }
+    if ($fotos > 0) {
+        $lineas[] = $fotos === 1
+            ? 'Usé una foto que dejaste en tu Biblioteca.'
+            : "Usé {$fotos} cosas que dejaste en tu Biblioteca.";
+        $det[] = ['clave' => 'biblioteca', 'texto' =>
+            'Miré tu Biblioteca antes de inventar nada. Lo tuyo siempre gana: es real, '
+          . 'es tuyo y no gasta de tu cuota de imágenes.'];
+    }
+
+    //  2 · EL CALENDARIO. Tres condiciones, y las tres se comprueban.
+    try {
+        $q = $pdo->prepare(
+            "SELECT c.id, c.fecha_programada, c.tactica_id, t.semana
+               FROM crecer_contenido c
+          LEFT JOIN crecer_meta_tactica t ON t.id = c.tactica_id
+              WHERE c.marca_id=? AND c.estado NOT IN ('rechazado','fallido')
+                AND c.fecha_programada IS NOT NULL
+                AND c.fecha_programada >= DATE_SUB(NOW(), INTERVAL 1 DAY)");
+        $q->execute([$marca_id]);
+        $todas = $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $mias = []; $ajenas = [];
+        foreach ($todas as $f) {
+            $ts = strtotime((string)$f['fecha_programada']);
+            if (!$ts) continue;
+            $de_esta = ((int)($f['semana'] ?? 0) === $semana && (int)($f['tactica_id'] ?? 0) > 0);
+            if ($de_esta) $mias[] = $ts; else $ajenas[] = $ts;
+        }
+        //  Solo se dice si HABIA algo con lo que chocar y de verdad no choca.
+        if ($mias && $ajenas) {
+            $choca = false;
+            foreach ($mias as $a) foreach ($ajenas as $b) {
+                if (abs($a - $b) < 4 * 3600) { $choca = true; break 2; }
+            }
+            if (!$choca) {
+                $lineas[] = 'Dejé espacio para lo que ya tenías programado.';
+                $det[] = ['clave' => 'calendario', 'texto' =>
+                    'Vi lo que ya tenías en el calendario —lo tuyo y lo del plan— y puse lo nuevo '
+                  . 'donde no se pisara. Lo que ya estaba no lo moví: eso lo decides tú.'];
+            }
+        }
+    } catch (Throwable $e) { /* sin calendario legible no se afirma nada */ }
+
+    //  3 · RESULTADOS, solo con cobertura.
+    try {
+        require_once __DIR__ . '/contexto.php';
+        $r = ctx_resultados($pdo, $marca_id, $plan);
+        if (($r['estado'] ?? '') === CTX_DISPONIBLE && !empty($r['confiable'])) {
+            $lineas[] = 'Miré cómo te fue con lo último que publicaste.';
+            $det[] = ['clave' => 'resultados', 'texto' =>
+                'Tienes ' . (int)$r['con_metrica'] . ' publicaciones con números de verdad en los '
+              . 'últimos ' . (int)$r['dias'] . ' días. Con eso se puede decidir; con menos, no me '
+              . 'invento un aprendizaje.'];
+        }
+    } catch (Throwable $e) {}
+
+    //  4 · LO QUE EL DUEÑO DIJO. Va al final porque es la que menos sorprende,
+    //  pero es la que mas confianza construye cuando aparece.
+    try {
+        $f = ciclo_fila($pdo, $plan_id, max(1, $semana - 1));
+        if ($f && (trim((string)($f['comentario'] ?? '')) !== '' || trim((string)($f['valoracion'] ?? '')) !== '')) {
+            $lineas[] = 'Tomé en cuenta lo que me dijiste al cerrar la semana.';
+            $det[] = ['clave' => 'tu_voz', 'texto' =>
+                'Lo que tú ves no siempre coincide con los números, y las dos cosas cuentan. '
+              . 'Si chocan, te lo digo en vez de escoger una por ti.'];
+        }
+    } catch (Throwable $e) {}
+
+    return ['lineas' => array_slice($lineas, 0, 3), 'detalle' => $det];
 }
 
 /**

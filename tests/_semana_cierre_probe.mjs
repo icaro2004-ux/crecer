@@ -127,6 +127,25 @@ const MEDIR = `(function () {
 })()`;
 
 //  LA PUERTA en la revisión semanal: ¿se ofrece cerrar, y a dónde lleva?
+//  «LO QUE TOMÉ EN CUENTA» — la sección breve de la llegada, y su detalle.
+const CTA = `(function () {
+  var c = document.querySelector('.cz-cta');
+  if (!c) return JSON.stringify({ hay: false });
+  var vis = function (el) { if (!el) return false; var r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0; };
+  var b = document.getElementById('czPorque');
+  var h = document.getElementById('czHoja');
+  return JSON.stringify({
+    hay: true,
+    titulo: (c.querySelector('h3') || {}).textContent || '',
+    lineas: [].map.call(c.querySelectorAll('li span'), function (x) { return (x.textContent || '').trim(); }),
+    porque: vis(b),
+    porqueTexto: b ? (b.textContent || '').trim() : '',
+    hojaAbierta: !!(h && !h.hidden),
+    hojaTexto: h ? (h.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 400) : ''
+  });
+})()`;
+
 //  LA PUERTA vive en la ULTIMA carta del mazo de la semana: el dueño llega a
 //  ella deslizando. Para medirla hay que ponerla delante, que es lo que hace
 //  el mazo al llegar al final; lo que se prueba aqui es la puerta, no el mazo
@@ -177,6 +196,35 @@ try {
   await cmd('Page.addScriptToEvaluateOnNewDocument', { source: SONDA });
   await cmd('Network.setCookie', { name: 'PHPSESSID', value: sid, domain: 'localhost', path: '/' });
   await tam(360, 800);
+
+  //  MODO «CTA». La llegada de la semana nueva con su resumen breve: se lee,
+  //  se abre el detalle y se comprueba que lo aprobado aparece en el Calendario.
+  //  Va aparte porque exige que la semana ya este producida, y eso lo siembra
+  //  la prueba de PHP —no el navegador—.
+  if (modo === 'cta') {
+    await ir(`${URLM}&vista=cerrar`);
+    di('CTA', await ev(CTA));
+    di('CTA_MED', await ev(MEDIR).then(JSON.stringify));
+    await tirar('08_lo_que_tome_en_cuenta_360');
+    await tocar('#czPorque');
+    await dormir(200);
+    di('CTA_ABIERTA', await ev(CTA));
+    await tirar('09_ver_por_que_360');
+
+    //  Y EL CALENDARIO: lo aprobado tiene que estar donde el dueño lo busca.
+    await ir(`${BASE}/calendario.php?marca=${marca}`);
+    di('CALENDARIO', await ev(`JSON.stringify((function () {
+      var t = (document.body.innerText || '').replace(/\s+/g, ' ');
+      return { url: location.href, tieneAlgo: t.length > 80, texto: t.slice(0, 400) };
+    })())`));
+    await tirar('10_calendario_360');
+
+    di('ALERTAS', await ev('window.__alertas || 0'));
+    di('ERRORES', await ev('JSON.stringify(window.__errs || [])'));
+    di('OK', 1);
+    cerrar();
+    process.exit(0);
+  }
 
   //  MODO «ESPERA». El rato en que el corillo trabaja dura milisegundos con
   //  el modelo simulado, asi que pillarlo pulsando el boton es una carrera
