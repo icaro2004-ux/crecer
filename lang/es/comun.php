@@ -41,4 +41,18 @@ return [
 
     //  ── FASE 5 · el centro de mando y el menú por grupos ──
     'Ver imagen completa'                                                         => 'Ver imagen completa',
+
+    //  ── FASE 7 · lo que se le dice al dueño cuando algo no pudo salir ──
+    'Se cayó la conexión con tus redes'                                 => 'Se cayó la conexión con tus redes',
+    'Tu publicación sigue guardada. Vuelve a conectar y la saco.'       => 'Tu publicación sigue guardada. Vuelve a conectar y la saco.',
+    'Reconectar'                                                        => 'Reconectar',
+    'No pude publicar'                                                  => 'No pude publicar',
+    'La red no aceptó esta publicación. Tu contenido sigue guardado.'   => 'La red no aceptó esta publicación. Tu contenido sigue guardado.',
+    'Revisar y reintentar'                                              => 'Revisar y reintentar',
+    'No sé si esta salió'                                               => 'No sé si esta salió',
+    'Se cortó la conexión al enviarla. Míralo en tu red antes de repetirla.' => 'Se cortó la conexión al enviarla. Míralo en tu red antes de repetirla.',
+    'Revisar'                                                           => 'Revisar',
+    'Lo intento otra vez'                                               => 'Lo intento otra vez',
+    'La red no respondió. Lo vuelvo a intentar solo, no tienes que hacer nada.' => 'La red no respondió. Lo vuelvo a intentar solo, no tienes que hacer nada.',
+    'Ver'                                                               => 'Ver',
 ];

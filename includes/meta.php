@@ -48,7 +48,21 @@ function meta_configurado(): bool {
 }
 
 /** Llamada cruda a la Graph API. $metodo: 'GET'|'POST'. Lanza MetaError. */
+//  ENVUELTO EN `function_exists` A PROPOSITO. Es el UNICO sitio por donde
+//  salen las llamadas a Instagram y Facebook, asi que es el unico sitio donde
+//  hay que ponerse delante para probar el publicador sin tocar la red. Un
+//  runner de prueba declara su propia `meta_api()` antes de cargar esto y
+//  ejercita el camino ENTERO —reclamar, publicar, guardar, avisar— contra su
+//  propio doble. Es el mismo patron que ya usa el borde de la IA.
+//
+//  DEFENSA EN PROFUNDIDAD: si estamos en modo prueba y ESTA es la de verdad,
+//  no sale. Un olvido no puede acabar publicando en el muro de un cliente.
+if (!function_exists('meta_api')) {
 function meta_api(string $metodo, string $path, array $params = []): array {
+    if (defined('CRECER_TEST_MODE') && CRECER_TEST_MODE
+        && !(defined('CRECER_TEST_RED_FALSA') && CRECER_TEST_RED_FALSA)) {
+        throw new MetaError('meta_api: transporte real en modo prueba.');
+    }
     $url = 'https://graph.facebook.com/' . META_GRAPH_VERSION . '/' . ltrim($path, '/');
     $ch = curl_init();
     $opts = [
@@ -78,6 +92,7 @@ function meta_api(string $metodo, string $path, array $params = []): array {
     }
     return is_array($data) ? $data : [];
 }
+}   // fin del envoltorio function_exists
 
 // ── OAUTH ────────────────────────────────────────────────────
 

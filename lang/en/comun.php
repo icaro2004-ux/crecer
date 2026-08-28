@@ -36,4 +36,18 @@ return [
     'El anterior queda guardado en el historial. Esto es lo que hay ahora.'  => 'The previous one is kept in your history. This is what you have now.',
 
     'Ver imagen completa'   => 'See full image',
+
+    //  ── FASE 7 · lo que se le dice al dueño cuando algo no pudo salir ──
+    'Se cayó la conexión con tus redes'                                 => 'Your accounts got disconnected',
+    'Tu publicación sigue guardada. Vuelve a conectar y la saco.'       => 'Your post is still saved. Reconnect and I’ll send it out.',
+    'Reconectar'                                                        => 'Reconnect',
+    'No pude publicar'                                                  => 'I couldn’t publish it',
+    'La red no aceptó esta publicación. Tu contenido sigue guardado.'   => 'The network didn’t accept this post. Your content is still saved.',
+    'Revisar y reintentar'                                              => 'Review and retry',
+    'No sé si esta salió'                                               => 'I’m not sure this one went out',
+    'Se cortó la conexión al enviarla. Míralo en tu red antes de repetirla.' => 'The connection dropped while sending it. Check your account before posting it again.',
+    'Revisar'                                                           => 'Review',
+    'Lo intento otra vez'                                               => 'I’ll try again',
+    'La red no respondió. Lo vuelvo a intentar solo, no tienes que hacer nada.' => 'The network didn’t answer. I’ll retry on my own — you don’t have to do anything.',
+    'Ver'                                                               => 'View',
 ];
