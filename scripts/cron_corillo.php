@@ -29,6 +29,20 @@ if (!$es_cli) {
 $inicio = microtime(true);
 try {
     $res = correr_corillo($pdo);
+
+    //  EL CICLO SEMANAL. El dueño cierra la semana un domingo por la noche y
+    //  se va; si la preparacion solo saliera de su boton, la semana siguiente
+    //  se quedaria sin empezar hasta que volviera a abrir la aplicacion.
+    //
+    //  Entra por la MISMA funcion que el boton, que reclama antes de llamar
+    //  al modelo: si el dueño pulso hace un segundo, esto se encuentra la fila
+    //  reclamada y se va sin gastar nada. Va en su propio try porque una marca
+    //  rara no puede tumbar la corrida del corillo.
+    $ciclo = ['revisadas' => 0, 'preparadas' => 0, 'creadas' => 0];
+    try {
+        require_once __DIR__ . '/../includes/meta_ciclo.php';
+        $ciclo = ciclo_barrer($pdo);
+    } catch (Throwable $e) { error_log('cron_corillo ciclo: ' . $e->getMessage()); }
     // ADR-0004: el Analista vigila cada marca procesada y deja señales accionables (autónomo).
     try {
         require_once __DIR__ . '/../includes/analista.php';

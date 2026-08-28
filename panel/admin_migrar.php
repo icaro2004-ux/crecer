@@ -74,6 +74,9 @@ $MIGRACIONES = [
     //  La entrega y la decision son dos ejes distintos: `estado` dice si la
     //  imagen se genero; `decision_dueno`, que hizo el dueño con ella.
     '2026-08-26_crecer_generacion_decision.sql', // crecer_generaciones.decision_dueno
+    //  El libro de las semanas: sin el, dos clics preparan dos veces la misma
+    //  semana — y cada preparación cuesta una llamada al modelo.
+    '2026-08-27_crecer_meta_semana.sql',         // crecer_meta_semana
 ];
 $DIR = dirname(__DIR__) . '/migrations/';
 $PRESENTES = array_values(array_filter($MIGRACIONES, fn($m) => is_file($DIR . $m)));
@@ -109,6 +112,7 @@ $CREA = [
     '2026-08-26_crecer_generacion_decision.sql'
                                             => [['crecer_generaciones', 'decision_dueno'],
                                                 ['crecer_generaciones', 'decidida_at']],
+    '2026-08-27_crecer_meta_semana.sql'      => [['crecer_meta_semana', null]],
 ];
 $hay_pieza = function (string $tabla, ?string $col) use ($pdo): bool {
     try {
