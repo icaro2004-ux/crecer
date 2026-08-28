@@ -1076,6 +1076,67 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
      Asi que el rosa y el teal de marca se quedan para lo que NO lleva texto
      -el punto, el icono, la barra- y para texto y botones entran sus versiones
      hondas. Sigue siendo el color de Crecer, y se lee. */
+  /* ══ LA EJECUCIÓN ══════════════════════════════════════════════════════
+     Una fila, no cinco tarjetas. Esto dice DÓNDE estamos y qué viene; la
+     decisión sigue siendo del bloque de abajo, que es quien manda. */
+  .ej{margin:0 0 16px;padding:14px 16px;background:var(--card,#fff);
+    border:1px solid var(--line,#E9E7E4);border-radius:12px}
+
+  /* — La línea: pasado discreto, presente marcado, futuro atenuado. — */
+  .ej-linea{list-style:none;display:flex;align-items:flex-start;gap:0;margin:0 0 12px;padding:0}
+  .ej-linea li{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;
+    gap:5px;position:relative}
+  .ej-linea li i{width:9px;height:9px;border-radius:50%;background:var(--line,#E9E7E4);
+    display:block;flex:none;z-index:1}
+  .ej-linea li::before{content:'';position:absolute;top:4px;left:-50%;width:100%;height:1px;
+    background:var(--line,#E9E7E4)}
+  .ej-linea li:first-child::before{display:none}
+  .ej-linea li span{font-size:14px;line-height:1.15;text-align:center;color:var(--muted,#6E6A67);
+    opacity:.55}
+  .ej-linea li.ya i{background:var(--teal,#00A49F);opacity:.55}
+  .ej-linea li.ya::before{background:color-mix(in srgb,var(--teal,#00A49F) 45%,transparent)}
+  .ej-linea li.ya span{opacity:.6}
+  .ej-linea li.on i{background:var(--teal,#00A49F);width:12px;height:12px;margin-top:-2px;
+    box-shadow:0 0 0 4px color-mix(in srgb,var(--teal,#00A49F) 16%,transparent)}
+  .ej-linea li.on span{opacity:1;font-weight:700;color:var(--tinta,#231F20)}
+  /*  A 360 los cinco rótulos no caben. Se queda el de la etapa actual, que es
+      el único que hace falta leer: los puntos ya cuentan el resto. */
+  @media (max-width:520px){
+    .ej-linea li span{display:none}
+    .ej-linea li.on span{display:block}
+  }
+
+  .ej-ahora{display:flex;flex-direction:column;gap:3px}
+  .ej-turno{font-size:14px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--teal,#00A49F)}
+  .ej-ahora b{font-size:17px;line-height:1.3;color:var(--tinta,#231F20)}
+  .ej-ahora p{font-size:14px;line-height:1.5;color:var(--muted,#6E6A67);margin:0}
+  .ej-ahora.mal .ej-turno{color:#c2410c}
+  .ej-ir{align-self:flex-start;margin-top:8px;min-height:44px;display:inline-flex;
+    align-items:center;padding:0 14px;border-radius:9px;background:#c2410c;color:#fff;
+    font-size:14px;font-weight:700;text-decoration:none}
+
+  /* — La próxima que sale. — */
+  .ej-prox{display:flex;align-items:center;gap:11px;margin-top:12px;padding:9px;
+    border:1px solid var(--line,#E9E7E4);border-radius:10px;text-decoration:none;color:inherit}
+  .ej-prox:hover{background:color-mix(in srgb,var(--teal,#00A49F) 5%,transparent)}
+  .ej-prox .im{width:46px;height:46px;flex:none;border-radius:8px;overflow:hidden;
+    background:var(--crema,#FAF7F4);display:grid;place-items:center;color:var(--muted,#6E6A67)}
+  .ej-prox .im img{width:100%;height:100%;object-fit:cover}
+  .ej-prox .im .ic{width:20px;height:20px}
+  .ej-prox .tx{min-width:0;display:flex;flex-direction:column;gap:1px}
+  .ej-prox .tx b{font-size:14px;color:var(--tinta,#231F20)}
+  .ej-prox .tx i,.ej-prox .tx em{font-style:normal;font-size:14px;color:var(--muted,#6E6A67);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ej-prox .tx em{font-size:14px;opacity:.75}
+
+  /* — Las cifras. Enlaces a los objetos de verdad, no adornos. — */
+  .ej-cifras{list-style:none;display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0;padding:0}
+  .ej-cifras a{display:flex;align-items:baseline;gap:5px;min-height:44px;padding:0 11px;
+    border-radius:9px;background:var(--crema,#FAF7F4);text-decoration:none;color:inherit}
+  .ej-cifras a:hover{background:color-mix(in srgb,var(--teal,#00A49F) 9%,transparent)}
+  .ej-cifras b{font-size:17px;font-weight:800;color:var(--tinta,#231F20)}
+  .ej-cifras span{font-size:14px;color:var(--muted,#6E6A67)}
   .ah{
     --tm-rosa:#EF4375;        /* marca · nunca detras de texto chico */
     --tm-rosa-tx:#C81E52;     /* 5.50:1 sobre crema */
@@ -1995,6 +2056,96 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
 ?>
 
 <div class="ah">
+  <?php
+    /* ══ LA EJECUCIÓN, HECHA VISIBLE ══════════════════════════════════════
+       El hueco de esta fase: escoger la Meta y armar el plan ya funcionaban,
+       pero el dueño no veía lo de después — si el corillo está trabajando,
+       qué terminó, qué espera por él, qué va a salir y cuándo. El producto
+       hacía el trabajo y no lo contaba.
+
+       LA ETAPA SALE DE LA MISMA MÁQUINA DE ESTADOS de siempre: se traduce la
+       letra del compositor, no se decide otra vez. Las cifras salen de las
+       piezas, no de un contador aparte que haya que mantener a mano. */
+    require_once __DIR__ . '/../includes/ejecucion.php';
+    //  `$mid` es de Inicio, no de aquí: en esta pantalla la marca se escribe
+    //  entera en cada enlace. Usarlo sin declararlo pintaba seis avisos de PHP
+    //  encima del título — lo primero que veía el dueño al abrir Tu Meta.
+    $ej_mid = 'marca=' . $marca_id;
+    $ej_ops   = ejec_operacion($pdo, $marca_id, $plan_act ? (int)$plan_act['id'] : null);
+    $ej_etapa = ejec_etapa((string)$E->estado, $ej_ops);
+    $ej_pasos = ejec_pasos();
+
+    /*  LAS CIFRAS QUE SE ENSEÑAN. Solo las que tienen algo — un cero repetido
+        cuatro veces no informa, decora— y como mucho cuatro, cada una llevando
+        a los objetos de verdad. No son tarjetas: son enlaces. */
+    $ej_cifras = [];
+    foreach ([
+        ['revisar',     t('para revisar'),    "{$BASE}/meta.php?{$ej_mid}&vista=semana"],
+        ['acciones',    t('acciones tuyas'),  "{$BASE}/meta.php?{$ej_mid}&vista=semana"],
+        ['material',    t('esperan material'), "{$BASE}/biblioteca.php?{$ej_mid}"],
+        ['fallidas',    t('no salieron'),     "{$BASE}/aprobar2.php?tab=listos&{$ej_mid}"],
+        ['programadas', t('programadas'),     "{$BASE}/calendario.php?{$ej_mid}"],
+        ['publicadas',  t('publicadas'),      "{$BASE}/resultados.php?{$ej_mid}"],
+    ] as [$k, $et, $href]) {
+        if ((int)($ej_ops[$k] ?? 0) > 0) $ej_cifras[] = ['n' => (int)$ej_ops[$k], 'et' => $et, 'href' => $href];
+        if (count($ej_cifras) >= 4) break;
+    }
+  ?>
+  <?php if ($ej_etapa['etapa'] !== '' && $ej_etapa['etapa'] !== 'sin_meta'): ?>
+    <section class="ej" aria-label="<?= $h(t('Cómo va la ejecución')) ?>"
+             data-etapa="<?= $h($ej_etapa['etapa']) ?>">
+
+      <?php /*  LA LÍNEA. Una fila, no cinco tarjetas: es una pista de dónde
+                estamos, no un tablero técnico. El fallo NO entra aquí —no es
+                un paso del camino, es algo que se atravesó— y por eso cuando
+                lo hay, la línea se calla y habla el aviso. */ ?>
+      <?php if ($ej_etapa['idx'] >= 0): ?>
+        <ol class="ej-linea">
+          <?php foreach ($ej_pasos as $i => $paso): ?>
+            <li class="<?= $i < $ej_etapa['idx'] ? 'ya' : ($i === $ej_etapa['idx'] ? 'on' : '') ?>">
+              <i></i><span><?= $h($paso) ?></span>
+            </li>
+          <?php endforeach; ?>
+        </ol>
+      <?php endif; ?>
+
+      <div class="ej-ahora<?= $ej_etapa['etapa'] === 'fallo' ? ' mal' : '' ?>">
+        <?php if ($ej_etapa['turno'] !== ''): ?>
+          <span class="ej-turno"><?= $h($ej_etapa['turno']) ?></span>
+        <?php endif; ?>
+        <b><?= $h($ej_etapa['titulo']) ?></b>
+        <?php if ($ej_etapa['sub'] !== ''): ?><p><?= $h($ej_etapa['sub']) ?></p><?php endif; ?>
+        <?php if ($ej_etapa['etapa'] === 'fallo'): ?>
+          <a class="ej-ir" href="<?= $BASE ?>/aprobar2.php?tab=listos&amp;<?= $h($ej_mid) ?>"><?= $h(t('Revisar el problema')) ?></a>
+        <?php endif; ?>
+      </div>
+
+      <?php /*  LA PRÓXIMA QUE SALE. Con su hora —la misma que usa el
+                publicador para decidir— y de dónde vino. El caption entero no
+                sube aquí: esto es una fila, no la publicación. */ ?>
+      <?php if (!empty($ej_ops['proxima'])): $px = $ej_ops['proxima']; ?>
+        <a class="ej-prox" href="<?= $BASE ?>/calendario.php?<?= $h($ej_mid) ?>">
+          <span class="im">
+            <?php if ($px['imagen'] !== ''): ?><img src="<?= $h($px['imagen']) ?>" alt="">
+            <?php else: ?><?= ico('image') ?><?php endif; ?>
+          </span>
+          <span class="tx">
+            <b><?= $h($px['cuando']) ?> · <?= $h(ucfirst($px['red'])) ?></b>
+            <i><?= $h($px['titulo'] !== '' ? $px['titulo'] : t('Publicación')) ?></i>
+            <em><?= $h($px['origen']) ?></em>
+          </span>
+        </a>
+      <?php endif; ?>
+
+      <?php if ($ej_cifras): ?>
+        <ul class="ej-cifras">
+          <?php foreach ($ej_cifras as $c): ?>
+            <li><a href="<?= $h($c['href']) ?>"><b><?= (int)$c['n'] ?></b><span><?= $h($c['et']) ?></span></a></li>
+          <?php endforeach; ?>
+        </ul>
+      <?php endif; ?>
+    </section>
+  <?php endif; ?>
 
   <?php /* ══ «TU PLAN NUEVO ESTÁ AQUÍ» ══════════════════════════════════
            Lo que faltaba el 2026-08-22. El dueño pidió un plan nuevo, se creó
