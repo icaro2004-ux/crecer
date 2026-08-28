@@ -15,6 +15,10 @@
 // ============================================================
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/auth.php';
+//  Para `equipo_nombres()`: el nombre que el dueño le puso a su equipo. Va
+//  arriba y no dentro del bloque que lo usa — un helper llamado sin su
+//  require es un fatal, y aquí caería en la pantalla de su propio negocio.
+require_once __DIR__ . '/../includes/agentes.php';
 requiere_login();
 require_once __DIR__ . '/../includes/panel_guard.php';
 requiere_suscripcion($pdo, isset($_GET['marca']) ? (int)$_GET['marca'] : null);
@@ -79,8 +83,97 @@ $CAPS = [
     'personalidad'      => ['sparkles', 'Personalidad',             'hasta dónde ser atrevido sin salirse del negocio'],
 ];
 
-$active = 'genoma';
-$page_title = 'El Genoma';
+//  ── LA RADIOGRAFÍA DEL NEGOCIO (Fase 6) ──────────────────────────────
+//  Esta página pasa a llamarse «Mi negocio» y a ser la puerta de la
+//  identidad. Antes era «El Genoma», un nombre que el dueño no tiene por qué
+//  aprenderse, y que además dejaba la identidad repartida en cuatro entradas
+//  del menú que no explicaban cuál tocar.
+//
+//  CAPA 1 (aquí): un resumen corto y honesto de lo que el corillo sabe.
+//  CAPA 2: los formularios que YA existen —marca.php, configuracion.php,
+//  equipo.php, conectar.php—, que se abren desde aquí y vuelven aquí. No se
+//  reescribe ni un editor: los que hay funcionan.
+//
+//  Lo que se enseña sale de la marca. Si un dato falta, se dice que falta —
+//  no se rellena con una frase bonita.
+//  `$BASE` lo define el shell, y el shell se carga DESPUÉS de esto: usarlo
+//  aquí sin declararlo pintaba un aviso de PHP encima de la página — lo
+//  primero que veía el dueño al entrar en su propio negocio.
+$BASE = '/crecer/panel';
+$neg_url = function (string $pagina) use ($BASE, $marca_id): string {
+    //  `volver=negocio` es lo que hace que el editor traiga su vuelta. El
+    //  destino no viaja en la URL: lo decide el shell contra una lista corta,
+    //  para que nadie pueda mandar a alguien fuera de Crecer con un enlace.
+    return "{$BASE}/{$pagina}?marca={$marca_id}&volver=negocio";
+};
+
+$neg_canales = [];
+try {
+    $q = $pdo->prepare("SELECT plataforma FROM crecer_conexiones
+                         WHERE marca_id=? AND estado='activa'");
+    $q->execute([$marca_id]);
+    foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $c) {
+        $neg_canales[] = ucfirst((string)$c);
+    }
+} catch (Throwable $e) { $neg_canales = []; }
+if (trim((string)($marca['whatsapp'] ?? '')) !== '') $neg_canales[] = 'WhatsApp';
+$neg_canales = array_values(array_unique($neg_canales));
+
+//  EL NOMBRE QUE EL DUEÑO LE PUSO A SU EQUIPO. Si no le puso ninguno, no se
+//  inventa: se dice que puede ponérselo.
+$neg_equipo = [];
+if (function_exists('equipo_nombres')) {
+    foreach (equipo_nombres($marca) as $k => $v) {
+        $v = trim((string)$v);
+        if ($v !== '') $neg_equipo[] = $v;
+    }
+}
+
+$neg_prod = trim((string)($marca['productos'] ?? ''));
+if ($neg_prod !== '' && $neg_prod[0] === '[') {
+    //  `productos` puede venir como JSON: se enseña legible, no en crudo.
+    $j = json_decode($neg_prod, true);
+    if (is_array($j)) {
+        $neg_prod = implode(', ', array_map(
+            fn($p) => is_array($p) ? (string)($p['nombre'] ?? '') : (string)$p, $j));
+    }
+}
+
+//  LAS FILAS. Cada una: qué es, qué hay hoy, y dónde se ajusta. Nada de
+//  formularios abiertos en una página interminable.
+$neg_filas = [
+    ['ic' => 'pen',      'titulo' => t('Identidad y voz'),
+     'valor' => trim((string)($marca['voz'] ?? '')) !== ''
+        ? mb_strimwidth(trim((string)$marca['voz']), 0, 120, '…')
+        : t('Todavía sin describir.'),
+     'href' => $neg_url('marca.php')],
+    ['ic' => 'palette',  'titulo' => t('Logo y colores'),
+     'valor' => trim((string)($marca['logo_path'] ?? '')) !== ''
+        ? (trim((string)($marca['estilo_visual'] ?? '')) !== ''
+            ? mb_strimwidth(trim((string)$marca['estilo_visual']), 0, 120, '…')
+            : t('Logo puesto.'))
+        : t('Sin logo todavía.'),
+     'href' => $neg_url('marca.php')],
+    ['ic' => 'users',    'titulo' => t('Público y oferta'),
+     'valor' => trim((string)($marca['publico_objetivo'] ?? '')) !== '' || $neg_prod !== ''
+        ? mb_strimwidth(trim($neg_prod . ($neg_prod !== '' && trim((string)($marca['publico_objetivo'] ?? '')) !== '' ? ' · ' : '')
+            . trim((string)($marca['publico_objetivo'] ?? ''))), 0, 120, '…')
+        : t('Todavía sin describir.'),
+     'href' => $neg_url('marca.php')],
+    ['ic' => 'sparkles', 'titulo' => t('Tu equipo'),
+     'valor' => $neg_equipo
+        ? implode(' · ', array_slice($neg_equipo, 0, 4))
+        : t('Puedes ponerles nombre.'),
+     'href' => $neg_url('equipo.php')],
+    ['ic' => 'bolt',     'titulo' => t('Canales y conexiones'),
+     'valor' => $neg_canales
+        ? implode(' · ', $neg_canales)
+        : t('Sin conectar todavía.'),
+     'href' => $neg_url('conectar.php')],
+];
+
+$active = 'negocio';
+$page_title = t('Mi negocio');
 require __DIR__ . '/_shell.php';
 ?>
 <style>
@@ -112,18 +205,52 @@ require __DIR__ . '/_shell.php';
   .gn-mem .f{font-size:11px;color:var(--teal);font-weight:700;margin-top:3px}
   .gn-mem.opt{border-left-color:var(--magenta)}
   .gn-mem.opt .f{color:var(--magenta)}
+  /* — LA RADIOGRAFÍA: filas, no tarjetas. Una tarjeta por dato convertiría
+     esta pantalla en la lista de secciones que se vino a evitar. — */
+  .ng-radio{display:grid;gap:2px;margin:0 0 18px;background:#fff;
+    border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .ng-fila{display:flex;align-items:center;gap:12px;min-height:60px;padding:11px 14px;
+    text-decoration:none;color:inherit;border-bottom:1px solid var(--line)}
+  .ng-fila:last-child{border-bottom:0}
+  .ng-fila:hover{background:color-mix(in srgb,var(--teal) 5%,transparent)}
+  .ng-ic{width:34px;height:34px;flex:none;border-radius:9px;display:grid;place-items:center;
+    background:color-mix(in srgb,var(--teal) 10%,transparent);color:var(--teal)}
+  .ng-ic svg{width:18px;height:18px}
+  .ng-tx{min-width:0;flex:1}
+  .ng-tx b{display:block;font-size:15px;font-weight:600;color:var(--tinta);line-height:1.3}
+  .ng-tx i{display:block;font-style:normal;font-size:14px;color:var(--muted);line-height:1.4;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ng-go{flex:none;font-size:14px;font-weight:700;color:var(--teal)}
   .gn-foot{text-align:center;color:var(--muted);font-size:12.5px;margin:22px 0 6px}
 </style>
 
 <div class="gn">
   <div class="gn-hero">
     <span class="ic"><?= ico('genoma') ?></span>
-    <h1>El Genoma de <?= $h($marca['nombre_negocio']) ?></h1>
-    <p>El cerebro que <b>solo existe para tu negocio</b>. Todo lo que el corillo sabe de ti vive aquí —
-    y crece con cada conversación, cada corrección tuya y cada resultado medido.
-    <?= $nacio ? "Nació el <b>{$nacio}</b> y no ha parado." : '' ?></p>
-    <div class="n"><b><?= number_format($aportes) ?></b><span>aportes de conocimiento acumulados</span></div>
+    <h1><?= $h($marca['nombre_negocio']) ?></h1>
+    <?php /*  EL COPY, CORTO Y SIN PROMESAS DE MÁS. «Lo tendremos en cuenta en
+              el próximo trabajo» es verdad; «reescribe lo ya publicado» no lo
+              sería, y por eso no se dice.  */ ?>
+    <p><?= $h(t('Así entiende el corillo tu negocio.')) ?>
+       <?= $h(t('Si algo cambia, ajústalo aquí y lo tendremos en cuenta en el próximo trabajo.')) ?></p>
+    <div class="n"><b><?= number_format($aportes) ?></b><span><?= $h(t('cosas que sabe de ti')) ?></span></div>
   </div>
+
+  <?php /*  CAPA 1 · LA RADIOGRAFÍA. Filas compactas: qué es, qué hay hoy y
+            dónde se ajusta. Los formularios viven donde siempre —esto solo
+            los pone al alcance sin que haya que aprenderse sus nombres.  */ ?>
+  <section class="ng-radio">
+    <?php foreach ($neg_filas as $f): ?>
+      <a class="ng-fila" href="<?= $h($f['href']) ?>">
+        <span class="ng-ic"><?= ico($f['ic']) ?></span>
+        <span class="ng-tx">
+          <b><?= $h($f['titulo']) ?></b>
+          <i><?= $h($f['valor']) ?></i>
+        </span>
+        <span class="ng-go"><?= $h(t('Ajustar')) ?></span>
+      </a>
+    <?php endforeach; ?>
+  </section>
 
   <div class="gn-grid">
 

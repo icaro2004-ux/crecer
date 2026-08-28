@@ -18,24 +18,23 @@ $viendo_como_admin = ($es_admin && (int)$marca['usuario_id'] !== (int)($u_actual
 require_once __DIR__ . '/../includes/notif.php';
 $notif_nl = function_exists('notif_no_leidas') ? notif_no_leidas($pdo, $marca_id) : 0;
 // ══════════════════════════════════════════════════════════════════════
-//  EL MENÚ, POR GRUPOS — la misma jerarquía que cuenta Inicio.
+//  EL MENÚ — cinco conceptos, y el resto son herramientas.
 //
-//  QUÉ CAMBIA Y QUÉ NO. No se borra ni una ruta: las mismas páginas, las
-//  mismas URLs, la misma marca activa. Lo que cambia es el ORDEN y que ahora
-//  se agrupan, porque una lista plana de trece destinos no dice cuál importa
-//  y el dueño acaba entrando por donde recuerda, no por donde debe.
+//  El cliente no tiene que entender la arquitectura de Crecer. Tiene que
+//  entender cinco cosas: dónde está el resumen (Inicio), qué persigue (Tu
+//  Meta), qué va a salir (Calendario), qué pasó (Resultados) y quién es su
+//  negocio (Mi negocio). Todo lo demás son herramientas que se usan a ratos,
+//  y por eso van debajo y agrupadas.
 //
-//  Grupo 1 (sin título) = el circuito diario: Inicio, Tu Meta, Calendario,
-//  Resultados. Son los cuatro de la barra del móvil, así que aquí llevan
-//  `bot` — que les pone `.dup` y los esconde SOLO en el teléfono, donde ya
-//  están abajo. Dos entradas visibles a lo mismo es ruido.
+//  NO SE BORRA NADA. Las rutas que salen del menú siguen existiendo, con su
+//  URL y sus permisos: lo que se retira es la invitación a entrar por ahí.
+//  Una lista plana de trece destinos no dice cuál importa, y el dueño acaba
+//  entrando por donde recuerda en vez de por donde debe.
 //
-//  DOS ARREGLOS DE VERDAD, no cosméticos:
-//    · «Tus Posts» llevaba `bot` y NO estaba en la barra: quedaba escondido
-//      en el móvil y ausente de abajo — o sea, inalcanzable desde el
-//      teléfono. Ahora no lleva `bot` y se ve donde tiene que verse.
-//    · «La Sala» salió de la barra en esta fase, así que tampoco puede
-//      seguir marcada como duplicada.
+//  `bot` = este destino YA está en la barra de abajo del móvil. Le pone
+//  `.dup`, que lo esconde SOLO en el teléfono. Marcar `bot` en algo que NO
+//  está en la barra lo deja inalcanzable desde el móvil — le pasó a «Tus
+//  Posts» y por eso esto se comprueba en una prueba, no de memoria.
 // ══════════════════════════════════════════════════════════════════════
 $crear_url_shell = (defined('CRECER_CREAR_UNIFICADO') && CRECER_CREAR_UNIFICADO)
     ? "$BASE/propuestas.php?marca=$marca_id&crear=1"
@@ -50,20 +49,22 @@ $nav_grupos = [
     ['key'=>'calendario','ic'=>'calendar','lb'=>t('Calendario'), 'bot'=>1, 'hr'=>"$BASE/calendario.php?marca=$marca_id"],
     ['key'=>'resultados','ic'=>'chart',   'lb'=>t('Resultados'), 'bot'=>1, 'hr'=>"$BASE/resultados.php?marca=$marca_id"],
   ]],
-  //  LA HERRAMIENTA MANUAL Y LO QUE PRODUCE. Crear vive aquí desde que el
-  //  sitio del pulgar pasó a Tu Meta: se usa a ratos, no todos los días.
+  //  LA HERRAMIENTA MANUAL Y LO QUE PRODUCE. Crear no compite con la Meta:
+  //  es lo que el dueño usa cuando quiere meter mano él.
   ['t' => t('Crear y contenido'), 'items' => [
     ['key'=>'crear',     'ic'=>'pen',     'lb'=>t('Crear'),      'hr'=>$crear_url_shell],
     ['key'=>'contenido', 'ic'=>'list',    'lb'=>t('Tus Posts'),  'hr'=>"$BASE/propuestas.php?marca=$marca_id"],
-    ['key'=>'reels',     'ic'=>'camera',  'lb'=>t('Reels'),      'hr'=>"$BASE/reels.php?marca=$marca_id"],
     ['key'=>'biblioteca','ic'=>'image',   'lb'=>t('Biblioteca'), 'hr'=>"$BASE/biblioteca.php?marca=$marca_id"],
+    ['key'=>'reels',     'ic'=>'camera',  'lb'=>t('Reels'),      'hr'=>"$BASE/reels.php?marca=$marca_id"],
   ]],
-  //  QUIÉN ES EL NEGOCIO. Lo que define cómo suena y cómo se ve todo lo demás.
+  //  QUIÉN ES EL NEGOCIO. «Mi negocio» es la puerta: dentro están la voz, la
+  //  identidad, el logo y lo que el corillo ha aprendido. Los formularios que
+  //  ya existían (marca, configuración) se abren DESDE ahí — no compiten aquí
+  //  con nombres que el dueño tendría que aprenderse.
   ['t' => t('Mi negocio'), 'items' => [
-    ['key'=>'genoma',    'ic'=>'genoma',  'lb'=>t('El Genoma'),  'hr'=>"$BASE/genoma.php?marca=$marca_id"],
-    ['key'=>'marca',     'ic'=>'palette', 'lb'=>t('Mi marca'),   'hr'=>"$BASE/marca.php?marca=$marca_id"],
-    ['key'=>'equipo',    'ic'=>'users',   'lb'=>t('Tu equipo'),  'hr'=>"$BASE/equipo.php?marca=$marca_id"],
-    ['key'=>'conectar',  'ic'=>'bolt',    'lb'=>t('Conectar redes'), 'hr'=>"$BASE/conectar.php?marca=$marca_id"],
+    ['key'=>'negocio',   'ic'=>'genoma',  'lb'=>t('Mi negocio'),         'hr'=>"$BASE/genoma.php?marca=$marca_id"],
+    ['key'=>'equipo',    'ic'=>'users',   'lb'=>t('Mi equipo'),          'hr'=>"$BASE/equipo.php?marca=$marca_id"],
+    ['key'=>'conectar',  'ic'=>'bolt',    'lb'=>t('Canales y conexiones'),'hr'=>"$BASE/conectar.php?marca=$marca_id"],
   ]],
 ];
 
@@ -101,6 +102,12 @@ $nav_perfil = [
   /*  TÍTULOS DE GRUPO: pequeños, callados y sin acordeón. Un menú que hay que
       desplegar para ver qué tiene es un menú que se usa peor — sobre todo en
       escritorio, donde no sobra el sitio y sí sobra la paciencia. */
+  /*  La vuelta: discreta, arriba del todo y de 44px — se toca con el pulgar
+      sin apuntar. */
+  .volver-a{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 4px;
+    margin:8px 0 -4px;color:var(--muted);font-size:14px;font-weight:700;text-decoration:none}
+  .volver-a:hover{color:var(--tinta)}
+  .volver-a svg{width:17px;height:17px;transform:rotate(180deg)}
   .side-gt{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
     color:var(--muted);opacity:.72;margin:16px 14px 6px;user-select:none}
   .side nav > .side-gt:first-child{margin-top:6px}
@@ -134,12 +141,11 @@ $nav_perfil = [
         <?php endforeach; ?>
       <?php endforeach; ?>
 
-      <?php /*  OPERACIÓN. Lo que no es el circuito diario ni contenido: se
-                usa cuando se necesita, y por eso va al final.  */ ?>
-      <div class="side-gt"><?= $h(t('Más')) ?></div>
-      <a href="<?= $BASE ?>/sala.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='sala'?'on':'' ?>">
-        <?= ico('sparkles') ?><?= $h(t('La Sala')) ?>
-      </a>
+      <?php /*  OPERACIÓN. Lo que no es el circuito diario ni contenido: se usa
+                cuando hace falta, y por eso va al final. WhatsApp solo aparece
+                donde de verdad está conectado — ofrecer una puerta que no lleva
+                a ningún sitio es peor que no ofrecerla.  */ ?>
+      <div class="side-gt"><?= $h(t('Operación')) ?></div>
       <a href="<?= $BASE ?>/ordenes.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='ordenes'?'on':'' ?>">
         <?= ico('qr') ?><?= $h(t('Órdenes')) ?>
       </a>
@@ -154,6 +160,14 @@ $nav_perfil = [
       <a href="<?= $BASE ?>/notificaciones_centro.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='notif'?'on':'' ?>" style="position:relative">
         <?= ico('bell-solid') ?><?= $h(t('Notificaciones')) ?>
         <?php if ($notif_nl > 0): ?><span style="position:absolute;top:50%;right:12px;transform:translateY(-50%);background:var(--magenta);color:#fff;font-size:11px;font-weight:800;min-width:19px;height:19px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px"><?= $notif_nl > 9 ? '9+' : $notif_nl ?></span><?php endif; ?>
+      </a>
+
+      <?php /*  MÁS. Solo lo que tiene lector propio y algo que el resto no
+                hace. La Sala es una conversación con el corillo — no es un
+                duplicado de nada.  */ ?>
+      <div class="side-gt"><?= $h(t('Más')) ?></div>
+      <a href="<?= $BASE ?>/sala.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='sala'?'on':'' ?>">
+        <?= ico('sparkles') ?><?= $h(t('La Sala')) ?>
       </a>
     </nav>
     <?php
@@ -210,6 +224,23 @@ $nav_perfil = [
   <div class="backdrop" id="bd"></div>
 
   <div class="main">
+    <?php
+      /*  LA VUELTA. Un editor abierto desde «Mi negocio» tiene que poder
+          volver ahí, o el dueño acaba en una página suelta sin saber cómo
+          salió. El destino NO viaja en la URL: `volver` es una etiqueta
+          corta y el destino se decide aquí contra una lista. Aceptar una URL
+          de vuelta es como se construye un redirect abierto — y con eso se
+          saca a alguien de Crecer creyendo que sigue dentro.  */
+      $vol = (string)($_GET['volver'] ?? '');
+      $VOLVER = [
+          'negocio' => ['/crecer/panel/genoma.php', t('Mi negocio')],
+      ];
+      $v_dest = $VOLVER[$vol] ?? null;
+    ?>
+    <?php if ($v_dest && ($active ?? '') !== 'negocio'): ?>
+      <a class="volver-a" href="<?= $h($v_dest[0]) ?>?marca=<?= $marca_id ?>">
+        <?= ico('chev-der') ?><?= $h(t('Volver a %s', $v_dest[1])) ?></a>
+    <?php endif; ?>
     <div class="ptop">
       <a href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit">
         <img src="/crecer/assets/brand/crecer-icon.png" alt="<?= $h(t('Inicio')) ?>"><b style="display:inline-flex;flex-direction:column;line-height:1;gap:0"><span style="color:var(--teal)">Crecer</span><span style="font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.02em;margin-top:1px">by Encuéntralo</span></b></a>

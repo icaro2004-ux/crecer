@@ -54,4 +54,22 @@ return [
     'Mi negocio'            => 'My business',
     'Más'                   => 'More',
     'Conectar redes'        => 'Connect accounts',
+
+    //  ── FASE 6 · los cinco conceptos y «Mi negocio» ──
+    'Mi equipo'                                                     => 'My crew',
+    'Canales y conexiones'                                          => 'Channels and connections',
+    'Operación'                                                     => 'Operations',
+    'Así entiende el corillo tu negocio.'                           => 'This is how your crew understands your business.',
+    'Si algo cambia, ajústalo aquí y lo tendremos en cuenta en el próximo trabajo.' => 'If something changes, adjust it here and we’ll take it into account in the next batch.',
+    'cosas que sabe de ti'                                          => 'things it knows about you',
+    'Identidad y voz'                                               => 'Identity and voice',
+    'Logo y colores'                                                => 'Logo and colors',
+    'Público y oferta'                                              => 'Audience and offer',
+    'Ajustar'                                                       => 'Adjust',
+    'Todavía sin describir.'                                        => 'Not described yet.',
+    'Sin logo todavía.'                                             => 'No logo yet.',
+    'Logo puesto.'                                                  => 'Logo set.',
+    'Puedes ponerles nombre.'                                       => 'You can give them names.',
+    'Sin conectar todavía.'                                         => 'Not connected yet.',
+    'Volver a %s'                                                   => 'Back to %s',
 ];
