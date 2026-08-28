@@ -357,6 +357,104 @@ function publicar_pieza(PDO $pdo, int $contenido_id, array $override_plataformas
     return finalizar_pieza($pdo, $contenido_id, $tok, $ok, $errores, $resultados);
 }
 
+/**
+ * ¿QUÉ CLASE DE FALLO FUE? De esto depende todo lo que viene después.
+ *
+ * Tratar todos los fallos igual tiene dos formas de salir mal, y las dos se
+ * pagan caro:
+ *   · reintentar lo que no se arregla solo —un token vencido— es insistir cada
+ *     diez minutos contra una puerta cerrada, llenarle la campanita al dueño y
+ *     quemar intentos;
+ *   · NO reintentar lo que sí se arregla solo —un timeout, un 500 de Meta— es
+ *     perder una publicación que solo necesitaba esperar dos minutos.
+ *
+ * Y hay una tercera que es peor que las dos: dar por fallido algo que quizá
+ * salió. Si la red aceptó y se cayó el guardado, reintentar publica DOS VECES
+ * en el muro del cliente. Eso no se reintenta solo nunca.
+ *
+ * @return string temporal|credenciales|contenido|incierto
+ */
+function pub_clase_error(string $err): string
+{
+    $e = mb_strtolower($err);
+
+    //  INCIERTO PRIMERO: es el que más daño hace si se clasifica mal.
+    if (str_contains($e, 'timeout') || str_contains($e, 'timed out')
+        || str_contains($e, 'operation aborted')) {
+        //  Un timeout DESPUÉS de mandar el contenido puede haber publicado.
+        //  Solo se considera temporal si la petición ni siquiera salió.
+        if (str_contains($e, 'connect') || str_contains($e, 'resolver')
+            || str_contains($e, 'could not resolve')) return 'temporal';
+        return 'incierto';
+    }
+
+    //  CREDENCIALES Y PERMISOS: necesita al dueño. No se reintenta.
+    foreach (['oauth', 'access token', 'token', 'expired', 'expirado', 'vencid',
+              'permission', 'permiso', 'not authorized', 'no autorizado',
+              '(#190)', '(#200)', '(#10)', 'sesión', 'session has been invalidated'] as $p) {
+        if (str_contains($e, $p)) return 'credenciales';
+    }
+
+    //  TEMPORAL: la red no estaba, o estaba de rodillas. Vuelve a intentarse.
+    foreach (['curl', 'connection', 'conexión', 'network', 'red no',
+              'http 500', 'http 502', 'http 503', 'http 504',
+              'rate limit', 'límite de peticiones', 'too many', 'try again',
+              'temporarily', 'temporal'] as $p) {
+        if (str_contains($e, $p)) return 'temporal';
+    }
+
+    //  Y si no, es el contenido: la imagen que no cumple, el caption que no
+    //  pasa, el formato que esa red no admite. Reintentar no lo arregla.
+    return 'contenido';
+}
+
+/**
+ * LO QUE SE LE DICE AL DUEÑO CUANDO NO PUDO SALIR.
+ *
+ * En cristiano y sin tripas: ni tokens, ni códigos de Meta, ni la respuesta
+ * cruda del proveedor. Eso vive en `pub_error` y en `crecer_publicaciones`,
+ * que es donde tiene que estar. Lo que él necesita saber es qué pasó, que su
+ * contenido sigue ahí, y qué puede hacer.
+ *
+ * @return array{titulo:string, mensaje:string, accion:string, correo:bool}
+ */
+function pub_aviso_fallo(string $clase): array
+{
+    switch ($clase) {
+        case 'credenciales':
+            return ['titulo'  => t('Se cayó la conexión con tus redes'),
+                    'mensaje' => t('Tu publicación sigue guardada. Vuelve a conectar y la saco.'),
+                    'accion'  => t('Reconectar'),
+                    'correo'  => true];
+        case 'contenido':
+            return ['titulo'  => t('No pude publicar'),
+                    'mensaje' => t('La red no aceptó esta publicación. Tu contenido sigue guardado.'),
+                    'accion'  => t('Revisar y reintentar'),
+                    'correo'  => true];
+        case 'incierto':
+            return ['titulo'  => t('No sé si esta salió'),
+                    'mensaje' => t('Se cortó la conexión al enviarla. Míralo en tu red antes de repetirla.'),
+                    'accion'  => t('Revisar'),
+                    'correo'  => true];
+        default:  // temporal
+            return ['titulo'  => t('Lo intento otra vez'),
+                    'mensaje' => t('La red no respondió. Lo vuelvo a intentar solo, no tienes que hacer nada.'),
+                    'accion'  => t('Ver'),
+                    'correo'  => false];
+    }
+}
+
+/** Cuántos minutos esperar antes del siguiente intento. Se abre la mano. */
+function pub_espera_min(int $intentos): int
+{
+    //  2, 8, 30 minutos. Después ya no es temporal: es que no va a salir.
+    $tabla = [1 => 2, 2 => 8, 3 => 30];
+    return $tabla[max(1, $intentos)] ?? 0;
+}
+
+/** Tope de intentos automáticos de un fallo temporal. */
+const PUB_MAX_INTENTOS = 4;
+
 /** Cierra el ciclo: marca la pieza publicado/fallido, suelta el lock. */
 function finalizar_pieza(PDO $pdo, int $contenido_id, string $tok, bool $ok, array $errores, array $resultados): array {
     if ($ok) {
@@ -398,13 +496,111 @@ function finalizar_pieza(PDO $pdo, int $contenido_id, string $tok, bool $ok, arr
         }
         return ['ok' => true, 'estado' => 'publicado', 'resultados' => $resultados, 'motivo' => ''];
     }
-    $err = implode(' | ', array_map(fn($k, $v) => "$k: $v", array_keys($errores), array_values($errores)));
+    //  ── EL FALLO SE CLASIFICA ANTES DE GUARDARLO ─────────────────────────
+    //  De la clase depende si se reintenta solo, si hay que llamar al dueño, o
+    //  si no se puede volver a intentar sin arriesgar una publicación doble.
+    //  La clase viaja DENTRO de `pub_error`, entre corchetes: el loop la lee de
+    //  ahí y no hace falta una columna nueva.
+    $err   = implode(' | ', array_map(fn($k, $v) => "$k: $v", array_keys($errores), array_values($errores)));
+    $clase = pub_clase_error($err);
+
+    $intentos = 0;
+    try {
+        $q = $pdo->prepare("SELECT pub_intentos, marca_id FROM crecer_contenido WHERE id=?");
+        $q->execute([$contenido_id]);
+        $f = $q->fetch(PDO::FETCH_ASSOC) ?: [];
+        $intentos = (int)($f['pub_intentos'] ?? 0);
+        $mid_f    = (int)($f['marca_id'] ?? 0);
+    } catch (Throwable $e) { $mid_f = 0; }
+
+    //  ¿SE VA A VOLVER A INTENTAR SOLO? Solo lo temporal, y solo mientras
+    //  queden intentos. Lo demás espera a que alguien haga algo.
+    $reintenta = ($clase === 'temporal' && $intentos < PUB_MAX_INTENTOS);
+
     $pdo->prepare(
         "UPDATE crecer_contenido
             SET estado='fallido', pub_error=?, lock_token=NULL, lock_at=NULL
           WHERE id=? AND lock_token=?")
-        ->execute([mb_substr($err, 0, 1000), $contenido_id, $tok]);
-    return ['ok' => false, 'estado' => 'fallido', 'resultados' => $resultados, 'motivo' => $err];
+        ->execute(['[' . $clase . '] ' . mb_substr($err, 0, 980), $contenido_id, $tok]);
+
+    //  ── Y EL DUEÑO SE ENTERA ─────────────────────────────────────────────
+    //  Menos cuando se va a reintentar solo: avisarle de algo que se arregla
+    //  en dos minutos sin que él toque nada es ruido, y el ruido enseña a
+    //  ignorar la campanita — que es justo lo contrario de lo que hace falta
+    //  el día que el aviso importe.
+    if (!$reintenta && $mid_f > 0) {
+        try {
+            require_once __DIR__ . '/notif.php';
+            require_once __DIR__ . '/i18n.php';
+            $av = pub_aviso_fallo($clase);
+            $link = $clase === 'credenciales'
+                ? '/crecer/panel/conectar.php?marca=' . $mid_f
+                : '/crecer/panel/aprobar2.php?ver=' . $contenido_id . '&marca=' . $mid_f;
+            //  `notif_crear` no repite mientras siga sin leer: el mismo fallo no
+            //  llena la campanita aunque el cron pase cada diez minutos.
+            if (function_exists('notif_crear')) {
+                notif_crear($pdo, $mid_f, 'pub_fallo', $av['titulo'], $av['mensaje'], $link, 'bolt');
+            }
+            //  Y CORREO, UNA VEZ. Solo lo que necesita su mano: si no hace nada,
+            //  esa publicación no sale.
+            if (!empty($av['correo'])) pub_correo_fallo($pdo, $mid_f, $contenido_id, $av, $clase);
+        } catch (Throwable $e) { error_log('aviso fallo #' . $contenido_id . ': ' . $e->getMessage()); }
+    }
+
+    return ['ok' => false, 'estado' => 'fallido', 'clase' => $clase, 'reintenta' => $reintenta,
+            'resultados' => $resultados, 'motivo' => $err];
+}
+
+/**
+ * EL CORREO DEL FALLO — uno, y solo cuando hace falta su mano.
+ *
+ * NO ES UN CANAL NUEVO: usa el mismo envío que el resto del producto. Y no se
+ * manda dos veces por lo mismo — el aviso in-app ya existe y guarda el
+ * historial; el correo es para sacarle de la aplicación, no para acompañarle
+ * dentro. Si el dueño apagó los correos, no se le manda.
+ */
+function pub_correo_fallo(PDO $pdo, int $marca_id, int $contenido_id, array $av, string $clase): void
+{
+    //  UNA SOLA VEZ POR PIEZA Y CLASE. La marca es la propia notificación: si
+    //  ya se creó una de este tipo hace poco, el correo ya salió con ella.
+    try {
+        $q = $pdo->prepare(
+            "SELECT COUNT(*) FROM crecer_notificaciones
+              WHERE marca_id=? AND tipo='pub_fallo' AND link LIKE ?
+                AND created_at > (NOW() - INTERVAL 1 DAY)");
+        $q->execute([$marca_id, '%ver=' . $contenido_id . '%']);
+        if ((int)$q->fetchColumn() > 1) return;   // ya hubo una antes de esta
+    } catch (Throwable $e) {}
+
+    $destino = ''; $nombre = '';
+    try {
+        $q = $pdo->prepare("SELECT m.nombre_negocio, m.reporte_email, u.email
+                              FROM crecer_marca m
+                         LEFT JOIN usuarios u ON u.id = m.usuario_id
+                             WHERE m.id=?");
+        $q->execute([$marca_id]);
+        $f = $q->fetch(PDO::FETCH_ASSOC) ?: [];
+        $nombre  = (string)($f['nombre_negocio'] ?? '');
+        //  `reporte_email` es la preferencia del dueño: si la dejó vacía a
+        //  propósito, no se le escribe.
+        $destino = trim((string)($f['reporte_email'] ?? '')) !== ''
+            ? (string)$f['reporte_email'] : (string)($f['email'] ?? '');
+    } catch (Throwable $e) { return; }
+    if (!filter_var($destino, FILTER_VALIDATE_EMAIL)) return;
+
+    try {
+        require_once __DIR__ . '/notificaciones.php';
+        if (!function_exists('crecer_enviar_email')) return;
+        $url = 'https://encuentraloahora.com' . ($clase === 'credenciales'
+            ? '/crecer/panel/conectar.php?marca=' . $marca_id
+            : '/crecer/panel/aprobar2.php?ver=' . $contenido_id . '&marca=' . $marca_id);
+        //  Ni el caption ni el error del proveedor viajan en el correo: se lee
+        //  en sitios donde el dueño no controla quién mira por encima.
+        $esc = fn($x) => htmlspecialchars((string)$x, ENT_QUOTES, 'UTF-8');
+        $cuerpo = '<p>' . $esc($av['mensaje']) . '</p>'
+                . '<p><a href="' . $esc($url) . '">' . $esc($av['accion']) . '</a></p>';
+        crecer_enviar_email($destino, $av['titulo'], $cuerpo);
+    } catch (Throwable $e) { error_log('correo fallo #' . $contenido_id . ': ' . $e->getMessage()); }
 }
 
 /**
@@ -430,6 +626,29 @@ function correr_publicador(PDO $pdo, int $limite = 25): array {
                   OR
                   ( c.estado = 'publicando'
                     AND (c.lock_token IS NULL OR c.lock_at < (NOW() - INTERVAL 10 MINUTE)) )
+                  OR
+                  /*  (c) LO QUE FALLO POR ALGO PASAJERO. Antes esto no existia:
+                      una pieza que se caia por un timeout se quedaba en
+                      `fallido` para siempre, esperando a que el dueño la
+                      reintentara a mano — y el no sabia ni que habia pasado.
+                      Ahora se reintenta sola, con la mano abierta: 2, 8 y 30
+                      minutos.
+
+                      SOLO LO TEMPORAL. La clase la escribio el publicador entre
+                      corchetes al guardar el fallo: un token vencido o un
+                      contenido que la red no acepta no entran aqui, porque
+                      insistir contra eso es ruido y quema intentos. Y lo
+                      INCIERTO tampoco: reintentar algo que quiza salio es
+                      publicar dos veces en el muro del cliente.  */
+                  ( c.estado = 'fallido'
+                    AND c.pub_error LIKE '[temporal]%'
+                    AND c.pub_intentos < 4
+                    AND c.fecha_programada IS NOT NULL
+                    AND c.fecha_programada <= NOW()
+                    AND c.updated_at < (NOW() - INTERVAL CASE c.pub_intentos
+                                                          WHEN 1 THEN 2
+                                                          WHEN 2 THEN 8
+                                                          ELSE 30 END MINUTE) )
                 )
           ORDER BY c.fecha_programada ASC
           LIMIT {$limite}");

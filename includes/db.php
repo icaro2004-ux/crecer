@@ -102,6 +102,27 @@ try {
     // cierra rápido (wait_timeout bajo) → "MySQL server has gone away" al guardar.
     // Subir el timeout de la sesión a 10 min evita que se caiga a mitad.
     try { $pdo->exec("SET SESSION wait_timeout=600, interactive_timeout=600"); } catch (Throwable $e) {}
+
+    // ── LA HORA DE LA BASE ES LA HORA DE PUERTO RICO ─────────────────
+    //  DEFECTO CRITICO QUE ESTO CIERRA. PHP ya trabajaba en AST (arriba), pero
+    //  MySQL en Hostinger corre en UTC. Toda comparacion contra `NOW()` —y la
+    //  del publicador es la que decide CUANDO sale un post— se hacia con dos
+    //  relojes con cuatro horas de diferencia: una publicacion puesta para las
+    //  9:00 AM salia a las 5:00 AM. La hora que ve el cliente tiene que ser la
+    //  hora con la que el publicador decide.
+    //
+    //  SE FIJA EL DESPLAZAMIENTO, NO EL NOMBRE. `America/Puerto_Rico` requiere
+    //  las tablas de zonas horarias cargadas en MySQL y en un hosting compartido
+    //  puede no estarlo; el desplazamiento siempre funciona. Y aqui es exacto
+    //  todo el año: Puerto Rico no cambia la hora en verano — si algun dia el
+    //  producto sale de la isla, esto deja de valer y hay que mirarlo.
+    //
+    //  NO CONVIERTE NADA YA GUARDADO: un DATETIME no lleva zona. Lo unico que
+    //  cambia es que `NOW()`, `CURDATE()` y los `CURRENT_TIMESTAMP` de las
+    //  columnas empiezan a dar la misma hora que PHP.
+    try { $pdo->exec("SET time_zone = '-04:00'"); } catch (Throwable $e) {
+        error_log('db.php: no se pudo fijar la zona horaria de la sesion');
+    }
 } catch (PDOException $e) {
     error_log('db.php — conexión PDO falló: ' . $e->getMessage());
     http_response_code(500);

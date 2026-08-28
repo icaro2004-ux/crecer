@@ -15,6 +15,7 @@
 // ============================================================
 
 require __DIR__ . '/../includes/db.php';
+require __DIR__ . '/../includes/cron_latido.php';
 require __DIR__ . '/../includes/metricas.php';
 require __DIR__ . '/../includes/optimizador.php';
 
@@ -82,3 +83,8 @@ try {
     http_response_code(500);
     echo json_encode(['ok'=>false, 'error'=>$e->getMessage()]);
 }
+
+//  EL LATIDO. Una linea por corrida en `crecer_pipeline_run`: sin esto,
+//  producción no tiene forma de saber si este cron sigue sonando.
+cron_latido($pdo, 'metricas', true,
+            (int)round((microtime(true) - ($_SERVER['REQUEST_TIME_FLOAT'] ?? microtime(true))) * 1000));

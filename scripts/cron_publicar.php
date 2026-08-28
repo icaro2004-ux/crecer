@@ -20,6 +20,10 @@
 
 require __DIR__ . '/../includes/db.php';
 require __DIR__ . '/../includes/publicador.php';
+//  EL LATIDO. Sin esto, producción está ciega: si este cron deja de sonar el
+//  producto no se cae, se queda quieto — y el dueño se entera cuando un
+//  cliente le pregunta por qué no vio su publicación.
+require __DIR__ . '/../includes/cron_latido.php';
 
 $es_cli = (PHP_SAPI === 'cli');
 
@@ -39,6 +43,8 @@ $inicio = microtime(true);
 try {
     $res = correr_publicador($pdo, 25);
     $res['ms'] = (int)round((microtime(true) - $inicio) * 1000);
+    cron_latido($pdo, 'publicar', true, (int)$res['ms'], (int)$res['revisadas'],
+                $res['fallidas'] > 0 ? ((int)$res['fallidas'] . ' fallidas') : '');
     if ($es_cli) {
         echo "[" . date('Y-m-d H:i:s') . "] publicador: "
            . "revisadas={$res['revisadas']} publicadas={$res['publicadas']} fallidas={$res['fallidas']} "
@@ -52,6 +58,11 @@ try {
     }
 } catch (Throwable $e) {
     error_log('cron_publicar: ' . $e->getMessage());
+    //  Y si revienta, también se anota: un cron que falla en silencio es
+    //  indistinguible de un cron que no existe.
+    try { cron_latido($pdo, 'publicar', false,
+                      (int)round((microtime(true) - $inicio) * 1000), 0,
+                      mb_substr($e->getMessage(), 0, 200)); } catch (Throwable $e2) {}
     if ($es_cli) { fwrite(STDERR, "ERROR: " . $e->getMessage() . "\n"); exit(1); }
     http_response_code(500);
     echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

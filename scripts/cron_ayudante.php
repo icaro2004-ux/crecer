@@ -15,6 +15,7 @@
 //   URL:  https://tu-dominio/crecer/scripts/cron_ayudante.php?key=CRON_TOKEN
 // ============================================================
 require __DIR__ . '/../includes/db.php';
+require __DIR__ . '/../includes/cron_latido.php';
 require __DIR__ . '/../includes/ayudante.php';
 
 $es_cli = (PHP_SAPI === 'cli');
@@ -84,3 +85,8 @@ $seg = round(microtime(true) - $t0, 1);
 $resumen = "barrido: {$n_marcas} cuenta(s), {$n_hall} hallazgo(s), {$n_fix} atendido(s), {$n_esc} escalado(s) en {$seg}s";
 echo $resumen . "\n";
 _ay_log($pdo, null, 'Barrido automático', $resumen);
+
+//  EL LATIDO. Una linea por corrida en `crecer_pipeline_run`: sin esto,
+//  producción no tiene forma de saber si este cron sigue sonando.
+cron_latido($pdo, 'ayudante', true,
+            (int)round((microtime(true) - ($_SERVER['REQUEST_TIME_FLOAT'] ?? microtime(true))) * 1000));

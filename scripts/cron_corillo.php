@@ -13,6 +13,7 @@
 // ============================================================
 
 require __DIR__ . '/../includes/db.php';
+require __DIR__ . '/../includes/cron_latido.php';
 require __DIR__ . '/../includes/agentes.php';
 
 $es_cli = (PHP_SAPI === 'cli');
@@ -87,3 +88,8 @@ try {
     if ($es_cli) { fwrite(STDERR, "ERROR: " . $e->getMessage() . "\n"); exit(1); }
     http_response_code(500); echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
 }
+
+//  EL LATIDO. Una linea por corrida en `crecer_pipeline_run`: sin esto,
+//  producción no tiene forma de saber si este cron sigue sonando.
+cron_latido($pdo, 'corillo', true,
+            (int)round((microtime(true) - ($_SERVER['REQUEST_TIME_FLOAT'] ?? microtime(true))) * 1000));
