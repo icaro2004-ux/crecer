@@ -9,7 +9,7 @@
 //  que solo uno diga `aria-current`.
 //
 //    node tests/_dock_probe.mjs <carpeta|-> <sid> <marca> [modo]
-//      modo: recorrido (por defecto) · flash · hover · sinjs
+//      modo: recorrido (por defecto) · flash · vt · hover · sinjs
 // ============================================================
 
 import { abrirChrome, dormir, cerrarRecibimiento } from './_chrome.mjs';
@@ -22,6 +22,11 @@ const di = (k, v) => console.log(k + '=' + String(v).replace(/\r?\n/g, ' '));
 
 const SONDA = `
   window.__errs = [];
+  //  ¿HIZO EL NAVEGADOR LA TRANSICIÓN ENTRE DOCUMENTOS? «pagereveal» llega en
+  //  el documento NUEVO y trae la transición viva cuando la hubo. Es la única
+  //  señal honesta: mirar el CSS solo dice que se pidió, no que ocurriera.
+  window.__vt = null;
+  addEventListener('pagereveal', function (e) { window.__vt = !!(e && e.viewTransition); });
   addEventListener('error', function (e) { window.__errs.push(String(e.message)); });
   (function (o) { console.error = function () {
       window.__errs.push([].slice.call(arguments).join(' ')); o.apply(console, arguments); }; })(console.error);
@@ -141,6 +146,44 @@ const RUTAS = [
 try {
   await cmd('Page.addScriptToEvaluateOnNewDocument', { source: SONDA });
   await cmd('Network.setCookie', { name: 'PHPSESSID', value: sid, domain: 'localhost', path: '/' });
+
+  if (modo === 'vt') {
+    //  LA TRANSICIÓN, TOCANDO DE VERDAD. No se simula el clic asignando
+    //  `location.href`: eso es otra navegación. Se toca el enlace, que es lo
+    //  que hace el dueño, y se mira si el navegador llevó el dock de una
+    //  página a la otra.
+    await tam(360, 800);
+    await ir(`${BASE}/index.php?marca=${marca}`);
+
+    di('SOPORTE', await ev(`JSON.stringify({
+      css: CSS.supports('view-transition-name', 'x'),
+      evento: ('onpagereveal' in window),
+      nombres: [].map.call(document.querySelectorAll('#dock .dk-i'), function (a) {
+        return a.getAttribute('data-k') + ':' + getComputedStyle(a).viewTransitionName;
+      })
+    })`));
+
+    const PASOS = [['calendario', 'calendario.php'], ['meta', 'meta.php'],
+                   ['resultados', 'resultados.php'], ['inicio', 'index.php']];
+    for (const [k] of PASOS) {
+      await ev(`(function(){
+        var a = document.querySelector('#dock .dk-i[data-k=` + '"' + `' + ${JSON.stringify(k)} + '` + '"' + `]');
+        if (a) a.click(); return !!a;
+      })()`);
+      await listo();
+      await cerrarRecibimiento(ev);
+      di('VT_' + k, await ev(`JSON.stringify({
+        vt: window.__vt,
+        url: location.pathname,
+        act: document.querySelector('#dock .dk-i.act')
+             ? document.querySelector('#dock .dk-i.act').getAttribute('data-k') : ''
+      })`));
+    }
+    di('ERRORES', await ev('JSON.stringify(window.__errs || [])'));
+    di('OK', 1);
+    cerrar();
+    process.exit(0);
+  }
 
   if (modo === 'flash') {
     //  LOS PRIMEROS CUADROS, QUE ES DONDE VIVÍA EL DEFECTO.
