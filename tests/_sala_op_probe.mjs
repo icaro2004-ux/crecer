@@ -150,9 +150,9 @@ const esperar = async (expr, ms = 16000) => {
   for (let i = 0; i < ms / 200; i++) { if (await ev(expr)) return true; await dormir(200); }
   return false;
 };
-async function tirar(nombre) {
+async function tirar(nombre, espera) {
   if (!shots) return;
-  await dormir(420);
+  await dormir(espera === undefined ? 420 : espera);
   const png = await cmd('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
   fs.writeFileSync(`${shots}/${nombre}.png`, Buffer.from(png.data, 'base64'));
 }
@@ -176,7 +176,16 @@ try {
   const llego = await esperar(`/reel corto del proceso/.test(document.getElementById('sc-msgs').innerText || '')`);
   di('RESPUESTA', llego ? 1 : 0);
   di('SALA', await ev(LEER_SALA));
-  await tirar('sala_propuesta_360');
+  //  ESTA VA SIN ESPERA, y por eso: la tarjeta de eleccion se pide al servidor
+  //  en cuanto llega la respuesta y aparece a los pocos milisegundos. Con la
+  //  espera de siempre, la foto de «la propuesta» y la de «la eleccion» salian
+  //  identicas byte a byte — dos veces la misma prueba.
+  //  Y se encuadra la RESPUESTA: la tarjeta llega en el mismo aliento y se
+  //  lleva la pantalla. Lo que esta foto tiene que contar es lo que el corillo
+  //  contesto.
+  await ev(`(function(){ var b=document.querySelectorAll('#sc-msgs .sc-row.ia');
+    if(b.length) b[b.length-1].scrollIntoView({block:'center'}); })()`);
+  await tirar('sala_propuesta_360', 0);
 
   //  Y ENTONCES SE LE PREGUNTA COMO QUIERE TRABAJARLA.
   const hayOp = await esperar(`!!document.querySelector('.sc-op .sc-op-b')`);
