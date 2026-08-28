@@ -119,7 +119,9 @@ try {
             ok("{$etq} a {$w} · una sola decisión principal",
                (int)($m['primarias'] ?? 0) <= 1, (string)($m['primarias'] ?? '?'));
             if ((int)($m['primarias'] ?? 0) === 1) {
-                ok("{$etq} a {$w} · y se ve sin buscarla", ($m['primVisible'] ?? null) === true);
+                ok("{$etq} a {$w} · y se ve sin buscarla", ($m['primVisible'] ?? null) === true,
+                   'acaba en ' . ($m['primBottom'] ?? '?') . 'px y el techo está en '
+                   . ($m['primTecho'] ?? '?') . 'px');
                 ok("{$etq} a {$w} · sin nada encima",      ($m['primTapada'] ?? null) === false);
             }
             ok("{$etq} a {$w} · Ayuda no se sienta encima", ($m['ayudaTapa'] ?? false) === false);

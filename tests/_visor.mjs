@@ -210,16 +210,25 @@ try {
         return r.width < 44 || r.height < 44; })
         .map(function (x) { var r = x.getBoundingClientRect();
           return (x.textContent||'').trim() + ' ' + Math.round(r.width) + 'x' + Math.round(r.height); });
-      //  ¿Se solapan entre ellos?
+      //  ¿Se solapan entre ellos? EN ORDEN VISUAL, no en el del DOM. El dock
+      //  centra el activo con «order» de CSS —el DOM se queda quieto para el
+      //  tabulador y el lector de pantalla—, asi que comparar vecinos del DOM
+      //  daba solapes que no existen: los dos que se comparaban estaban en
+      //  extremos opuestos de la barra.
+      var orden = a.slice().sort(function (x, y) {
+        return x.getBoundingClientRect().left - y.getBoundingClientRect().left; });
       var solapa = [];
-      for (var i = 0; i < a.length - 1; i++) {
-        var p = a[i].getBoundingClientRect(), q = a[i+1].getBoundingClientRect();
-        if (p.right > q.left + 1) solapa.push((a[i].textContent||'').trim());
+      for (var i = 0; i < orden.length - 1; i++) {
+        var p = orden[i].getBoundingClientRect(), q = orden[i+1].getBoundingClientRect();
+        if (p.right > q.left + 1) solapa.push((orden[i].textContent||'').trim());
       }
       return {
         hay: true,
         etiquetas: a.map(function (x) { return (x.textContent||'').trim(); }),
-        activa: a.filter(function (x) { return x.classList.contains('on'); })
+        //  EL ACTIVO SE MARCA CON «aria-current», que es lo que tambien oye
+        //  un lector de pantalla. La clase «on» es de la barra vieja.
+        activa: a.filter(function (x) { return x.getAttribute('aria-current') === 'page'
+                                            || x.classList.contains('act'); })
                  .map(function (x) { return (x.textContent||'').trim(); }),
         chicos: chicos, solapa: solapa,
         horiz: Math.max(0, document.documentElement.scrollWidth - innerWidth),
@@ -227,7 +236,13 @@ try {
         meta_en_cajon: [].filter.call(document.querySelectorAll('.side nav a'), function (x) {
           return /Tu Meta/i.test(x.textContent || '') && getComputedStyle(x).display !== 'none';
         }).length,
-        crear_en_cajon: !!document.querySelector('.side .side-crear')
+        //  Y CREAR SIGUE EN EL CAJON. Se busca por lo que hace —el enlace que
+        //  abre el wizard— y no por una clase: la Fase 6 reagrupo el menu en
+        //  cinco conceptos y «.side-crear» dejo de existir, con lo que esta
+        //  vigilancia llevaba desde entonces diciendo que Crear no estaba.
+        crear_en_cajon: [].some.call(document.querySelectorAll('.side a'), function (x) {
+          return /crear=1/.test(x.getAttribute('href') || '')
+              || /^crear$/i.test((x.textContent || '').trim()); })
       };
     })()`)));
   }

@@ -180,11 +180,14 @@ try {
   //  en cuanto llega la respuesta y aparece a los pocos milisegundos. Con la
   //  espera de siempre, la foto de «la propuesta» y la de «la eleccion» salian
   //  identicas byte a byte — dos veces la misma prueba.
-  //  Y se encuadra la RESPUESTA: la tarjeta llega en el mismo aliento y se
-  //  lleva la pantalla. Lo que esta foto tiene que contar es lo que el corillo
-  //  contesto.
-  await ev(`(function(){ var b=document.querySelectorAll('#sc-msgs .sc-row.ia');
-    if(b.length) b[b.length-1].scrollIntoView({block:'center'}); })()`);
+  //  NADA DE MOVER EL SCROLL AQUI. Se probo encuadrar la respuesta con un
+  //  scrollIntoView y salio caro: la tarjeta de eleccion se coloca ella sola
+  //  con un scroll suave —esa es justo la conducta que esta prueba vigila— y
+  //  el encuadre lo cancelaba a media animacion. La sonda medía entonces dos
+  //  salidas debajo del compositor que el dueño no llega a ver nunca, y la
+  //  culpa era de la sonda. Se dispara sin esperar y sin tocar nada: a los 0ms
+  //  la tarjeta todavia no ha llegado del servidor, que es la foto que se
+  //  quiere.
   await tirar('sala_propuesta_360', 0);
 
   //  Y ENTONCES SE LE PREGUNTA COMO QUIERE TRABAJARLA.

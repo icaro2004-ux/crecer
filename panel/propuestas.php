@@ -141,7 +141,26 @@ $creditos = function(array $p) use ($ags) {
     $c = [];
     if ($cap !== '' || array_intersect(['creador','editor','aprendiz'], $ags)) $c[] = 'La Creativa escribió el caption';
     if ($arte || in_array('diseñador', $ags, true)) $c[] = ($video ? 'El Diseñador preparó el video' : 'El Diseñador montó el arte');
-    if (!empty($p['fecha_programada'])) $c[] = 'La Estratega escogió la hora — ' . _fecha_humana($p['fecha_programada']);
+    //  LA HORA SE DICE, PERO NO SE LE ATRIBUYE A NADIE SIN PRUEBA.
+    //
+    //  Esta linea acreditaba a la Estratega con solo que hubiera fecha: valia
+    //  igual si la hora la habia puesto el dueño a mano un minuto antes —el
+    //  producto le quitaba su decision y se la daba a la IA— y valia igual si
+    //  no habia hora ninguna, en cuyo caso enseñaba «escogio la hora: 12:00
+    //  AM», que es una eleccion que nadie hizo y una publicacion a medianoche.
+    //
+    //  Las otras dos lineas de este bloque ya piden evidencia del agente;
+    //  esta era la unica que afirmaba trabajo sin mirar el registro. Con
+    //  prueba se acredita; sin prueba se dice el HECHO, que es cierto lo haya
+    //  puesto quien lo haya puesto.
+    if (!empty($p['fecha_programada'])) {
+        $__cuando  = _fecha_humana($p['fecha_programada']);
+        $__sin_hora = substr((string)$p['fecha_programada'], 11, 5) === '00:00';
+        if ($__sin_hora) $__cuando = trim((string)preg_replace('~,\s*\d{1,2}:\d{2}\s*[AP]M$~u', '', $__cuando));
+        $c[] = (!$__sin_hora && array_intersect(['planificador','intake','estratega'], $ags))
+             ? 'La Estratega escogió la hora — ' . $__cuando
+             : 'Sale ' . $__cuando;
+    }
     elseif (array_intersect(['planificador','intake','estratega'], $ags)) $c[] = 'La Estratega lo cuadró en el plan';
     return array_slice($c, 0, 3);
 };

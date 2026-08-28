@@ -107,13 +107,30 @@ $neg_url = function (string $pagina) use ($BASE, $marca_id): string {
     return "{$BASE}/{$pagina}?marca={$marca_id}&volver=negocio";
 };
 
+//  LOS CANALES CONECTADOS, LEÍDOS DE DONDE VIVEN.
+//
+//  Esto pedía `plataforma`, una columna que `crecer_conexiones` no tiene y no
+//  ha tenido nunca: la tabla guarda `proveedor` y los identificadores de cada
+//  red. La consulta lanzaba, el `catch` se lo tragaba en silencio, y la
+//  pantalla le decía «Sin conectar todavía» a TODO el mundo — también a quien
+//  tenía Instagram y Facebook conectados y publicando. Justo en la línea que
+//  el dueño mira para saber si le falta ese paso.
 $neg_canales = [];
 try {
-    $q = $pdo->prepare("SELECT plataforma FROM crecer_conexiones
-                         WHERE marca_id=? AND estado='activa'");
+    $q = $pdo->prepare("SELECT ig_user_id, ig_username, fb_page_id, fb_page_nombre
+                         FROM crecer_conexiones WHERE marca_id=? AND estado='activa'");
     $q->execute([$marca_id]);
-    foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $c) {
-        $neg_canales[] = ucfirst((string)$c);
+    foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $cx) {
+        //  Se nombra la red, y el handle SOLO si de verdad está guardado: un
+        //  «Instagram @» a medias es peor que decir «Instagram».
+        if (trim((string)($cx['ig_user_id'] ?? '')) !== '') {
+            $u = trim((string)($cx['ig_username'] ?? ''));
+            $neg_canales[] = 'Instagram' . ($u !== '' ? ' @' . ltrim($u, '@') : '');
+        }
+        if (trim((string)($cx['fb_page_id'] ?? '')) !== '') {
+            $pg = trim((string)($cx['fb_page_nombre'] ?? ''));
+            $neg_canales[] = 'Facebook' . ($pg !== '' ? ' · ' . $pg : '');
+        }
     }
 } catch (Throwable $e) { $neg_canales = []; }
 if (trim((string)($marca['whatsapp'] ?? '')) !== '') $neg_canales[] = 'WhatsApp';

@@ -1186,7 +1186,15 @@ function ia_accion_marcada(string $accion): string {
     return ia_es_prueba() ? mb_substr('[prueba] ' . $accion, 0, 80) : $accion;
 }
 function ia_imagen(PDO $pdo, string $agente, string $accion, string $prompt, string $destino_rel, array $opts = []): array {
-    $t0 = microtime(true); $estado = 'ok'; $err = null; $modelo = 'gemini-2.5-flash-image'; $rel = null; $razon = null;
+    //  EL MODELO SE ANOTA CUANDO CONTESTA, NO ANTES. Arrancaba puesto a
+    //  `gemini-2.5-flash-image`, asi que un fallo ANTERIOR a la llamada —sin
+    //  credenciales, o el techo de gasto del dia— dejaba en `crecer_ia_log`
+    //  una fila que nombraba un modelo con el que nadie hablo. El coste salia
+    //  bien (cero), pero esa tabla es la evidencia del concurso: no puede
+    //  atribuir una llamada que no ocurrio, y menos cuando el ruteo elige
+    //  entre Gemini y OpenAI en el momento de llamar. El camino de texto ya
+    //  escribe «-» en ese caso; esto lo iguala.
+    $t0 = microtime(true); $estado = 'ok'; $err = null; $modelo = '-'; $rel = null; $razon = null;
 
     // EL BREAKER, otra vez — y este es el que de verdad importa. Las imágenes no
     //  pasan por ia_ejecutar: tienen su propio camino y su propio log. Son dos

@@ -212,7 +212,20 @@ $usos = [];
 foreach (array_merge(glob($raiz . '/panel/*.php'), glob($raiz . '/includes/*.php'),
                      glob($raiz . '/core/Meta/*.php'), glob($raiz . '/*.php')) as $f) {
     if (in_array(basename($f), $permitido, true)) continue;
-    if (strpos((string)file_get_contents($f), 'MetaPresentador') !== false) {
+    //  SE BUSCA EL USO, NO EL NOMBRE, Y FUERA DE LOS COMENTARIOS.
+    //  `includes/inicio.php` la nombra en su cabecera para explicar de donde
+    //  sale lo que pinta —y hace bien— pero no la llama: quien llama es
+    //  `panel/index.php`. Buscando el texto a secas, esa prosa contaba como
+    //  una tercera pantalla presentando por su cuenta, y la vigilancia acababa
+    //  protestando por un comentario. Se leen los TOKENS del fuente.
+    $codigo = '';
+    foreach (token_get_all((string)file_get_contents($f)) as $tk) {
+        if (is_array($tk)) {
+            if (in_array($tk[0], [T_COMMENT, T_DOC_COMMENT, T_INLINE_HTML], true)) continue;
+            $codigo .= $tk[1];
+        } else { $codigo .= $tk; }
+    }
+    if (preg_match('~MetaPresentador\s*::|new\s+MetaPresentador~', $codigo) === 1) {
         //  Windows devuelve la raiz con «\» y el resto con «/» en el mismo
         //  string. Se normaliza a «/» en los dos lados o la comparacion falla
         //  por el separador y no por lo que se esta midiendo.

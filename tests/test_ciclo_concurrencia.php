@@ -130,6 +130,16 @@ try {
        (int)($j1['ms'] ?? 0) > 0 && (int)($j2['ms'] ?? 0) > 0,
        json_encode([$j1['ms'] ?? null, $j2['ms'] ?? null]));
 
+    //  EL COSTO SE MIDE AQUI, con la marca viva y SOLO la suya. Un cronometro
+    //  global sobre `crecer_ia_log` recoge lo que haga cualquier otra cosa en
+    //  la maquina —otra prueba, un navegador abierto— y ademas cuenta filas
+    //  que no cuestan nada: `reglas` y `-` no llaman a nadie. Se busca un
+    //  nombre de modelo de proveedor, y se busca en esta marca.
+    $reales = $pdo->query("SELECT DISTINCT modelo FROM crecer_ia_log WHERE marca_id={$M}
+                            AND (modelo LIKE 'gemini%' OR modelo LIKE 'gpt%'
+                              OR modelo LIKE 'claude%' OR modelo LIKE 'vertex%')")
+                  ->fetchAll(PDO::FETCH_COLUMN);
+
 } catch (Throwable $e) {
     $fallos++; $n++;
     echo "  FALLA excepción\n         → " . $e->getMessage() . "\n";
@@ -143,8 +153,8 @@ try {
 //  EL COSTO. Se afirma al final, no se supone.
 echo "\n  — el costo —\n";
 ok('cero llamadas reales al modelo',
-   (int)$pdo->query("SELECT COUNT(*) FROM crecer_ia_log WHERE modelo <> 'mock'
-                      AND created_at > DATE_SUB(NOW(), INTERVAL 10 MINUTE)")->fetchColumn() === 0);
+   isset($reales) && $reales === [],
+   isset($reales) ? implode(', ', $reales) : 'no se llegó a medir');
 
 echo "\n" . str_repeat('=', 58) . "\n";
 echo $fallos === 0 ? "  DOS NO PREPARAN LA MISMA SEMANA · {$n} afirmaciones\n\n"
