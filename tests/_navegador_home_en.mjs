@@ -58,6 +58,11 @@ try {
     //  comodin. Lo que caiga dentro NO se mira.
     var CONTENIDO = [
       ['.hz-next',      'el proximo post: es contenido publico de la marca, sigue idioma_contenido'],
+      //  FASE 5 · el adelanto del calendario y los pendientes enseñan titulos
+      //  de piezas y de jugadas: los escribio la IA en el idioma de CONTENIDO
+      //  del negocio, y no cambian porque el dueño mire la interfaz en ingles.
+      ['.in-tit',       'el titulo de la pieza programada: contenido de la marca'],
+      ['.in-pend .tx b','lo que falta, dicho con el titulo de su pieza o jugada'],
       ['.hz-nx-cap',    'el caption de esa pieza'],
       ['.an-msg',       'lo que escribio la Analista: lo produce la IA'],
       ['.hz-reco',      'la recomendacion de la Analista: idem'],
@@ -220,7 +225,10 @@ try {
 
   //  El proximo post TIENE que seguir en español: es contenido de la marca.
   const nextPost = await ev(`(function(){
-    var n = document.querySelector('.hz-next');
+    //  Antes esto era la tarjeta del «proximo post»; en la Fase 5 esa tarjeta
+    //  se convirtio en el adelanto del calendario. La regla es la misma: lo
+    //  que se enseña ahi es contenido de la marca y sigue en su idioma.
+    var n = document.querySelector('.hz-next') || document.querySelector('.in-list .in-tit');
     if (!n) return JSON.stringify({hay:false});
     return JSON.stringify({hay:true, texto: (n.innerText||'').replace(/\\s+/g,' ').trim().slice(0,200)});
   })()`);

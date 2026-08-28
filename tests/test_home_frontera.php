@@ -66,7 +66,11 @@ ok('la frontera está donde se puede señalar', $corte !== false);
 // ══════════════════════════════════════════════════════════════
 echo "\n  — 2 · debajo de la frontera, solo el DTO —\n";
 //  La tarjeta va desde la frontera hasta la primera tarjeta que NO es suya.
-$finTarjeta = strpos($home, '<?php if ($hz_post):');
+//  Ese límite cambió en la Fase 5 —la tarjeta del «próximo post» se convirtió
+//  en el adelanto del calendario—, así que el ancla es ahora el comentario que
+//  abre los bloques del centro de mando. La regla no cambia: de la frontera
+//  hacia abajo, la tarjeta de la Meta solo puede ver su DTO.
+$finTarjeta = strpos($home, 'EL RESTO DEL CENTRO DE MANDO');
 ok('se encuentra dónde acaba la tarjeta', $finTarjeta !== false && $finTarjeta > (int)$corte);
 
 $region = substr($home, (int)$corte, max(0, (int)$finTarjeta - (int)$corte));

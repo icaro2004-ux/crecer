@@ -40,14 +40,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'anali
     echo json_encode(['ok'=>true]); exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'idea') {
-    require_once __DIR__ . '/../includes/agentes.php';
-    header('Content-Type: application/json; charset=utf-8');
-    if (function_exists('csrf_ok') && !csrf_ok()) { echo json_encode(['ok'=>false]); exit; }
-    try { echo json_encode(['ok'=>true, 'idea'=>idea_del_dia($pdo, $marca_id)], JSON_UNESCAPED_UNICODE); }
-    catch (Throwable $e) { echo json_encode(['ok'=>false]); }
-    exit;
-}
+//  LA IDEA DEL DÍA SE FUE (Fase 5). Este endpoint llamaba a Gemini CADA VEZ
+//  que alguien abría la portada: refrescar el dashboard costaba dinero, y el
+//  dueño que entra cinco veces al día pagaba cinco ideas que nadie leyó.
+//  Abrir el panel es mirar, y mirar no puede cobrar.
+//
+//  No se pierde nada que él use: crear una publicación a mano sigue en Crear,
+//  y lo que el corillo propone vive en su semana, que ya está pensada con su
+//  Meta delante en vez de improvisada al vuelo.
 
 // Hechos verificables: contenido por estado.
 $cuenta = ['borrador'=>0,'aprobado'=>0,'programado'=>0,'publicando'=>0,'publicado'=>0,'fallido'=>0,'rechazado'=>0];
@@ -448,55 +448,21 @@ $hz_status = $hz_pend > 0
     ? t($hz_pend == 1 ? 'Tienes %s post esperando tu OK' : 'Tienes %s posts esperando tu OK', $hz_pend)
     : t('Todo listo para hoy');
 
-// Semana actual (Lun→Dom) con lo que hay cada día
-$hz_week = [];
-try {
-    // Lo rechazado NO cuenta en la semana: dijiste que no, no va a salir.
-    $ws = $pdo->prepare("SELECT DAYOFWEEK(fecha_programada) dw, plataforma
-                         FROM crecer_contenido
-                         WHERE marca_id=? AND estado<>'rechazado' AND fecha_programada IS NOT NULL
-                           AND YEARWEEK(fecha_programada,3)=YEARWEEK(CURDATE(),3)");
-    $ws->execute([$marca_id]);
-    foreach ($ws->fetchAll(PDO::FETCH_ASSOC) as $r) { $hz_week[(int)$r['dw']][] = $r; }
-} catch (Throwable $e) {}
-$hz_mon = strtotime('monday this week'); $hz_lbl = array_map('t', ['LUN','MAR','MIÉ','JUE','VIE','SÁB','DOM']); $hz_dias = [];
-for ($i=0;$i<7;$i++){ $ts=$hz_mon + $i*86400; $dw=(int)date('w',$ts)+1;
-    $hz_dias[] = ['lbl'=>$hz_lbl[$i],'num'=>date('j',$ts),'hoy'=>date('Y-m-d',$ts)===date('Y-m-d'),'items'=>$hz_week[$dw] ?? []]; }
-
-// Rendimiento: actividad de publicación (8 semanas) para el sparkline
-$hz_serie = [];
-try {
-    $sq = $pdo->prepare("SELECT YEARWEEK(publicado_at,3) wk, COUNT(*) n FROM crecer_contenido
-                         WHERE marca_id=? AND estado='publicado' AND publicado_at>=(NOW()-INTERVAL 8 WEEK) GROUP BY wk");
-    $sq->execute([$marca_id]); $wm=[];
-    foreach ($sq->fetchAll(PDO::FETCH_ASSOC) as $r) $wm[(int)$r['wk']]=(int)$r['n'];
-    for($i=7;$i>=0;$i--){ $ts=time()-$i*7*86400; $hz_serie[]=($wm[(int)date('oW',$ts)] ?? 0); }
-} catch (Throwable $e) { $hz_serie=[0,0,0,0,0,0,0,0]; }
-$hz_hay_serie = array_sum($hz_serie) > 0;
-$hz_creciendo = $racha >= 2 || ($hz_hay_serie && end($hz_serie) >= reset($hz_serie));
-
+//  LA SEMANA DE SIETE COLUMNAS Y EL SPARKLINE SE FUERON (Fase 5). Eran dos
+//  consultas por carga para pintar dos cosas que no ayudaban a decidir: una
+//  rejilla de puntos y una curva de CUÁNTOS POSTS publicó — que no es el
+//  resultado de su negocio y se leía como si lo fuera. El adelanto del
+//  calendario y la señal de resultado los sustituyen, y esos sí dicen algo.
 require_once __DIR__ . '/../includes/analista.php';  // ADR-0004: señal proactiva para la tarjeta del Analista
-$an_top     = analista_senal_top($pdo, $marca_id);
-$an_nombre  = analista_nombre($marca);
-$an_racha   = $racha ?? 0;
-require_once __DIR__ . '/../includes/agentes.php';   // para crecer_sin_emoji()
-$_noemo = function_exists('crecer_sin_emoji') ? 'crecer_sin_emoji' : function ($x) { return $x; };
-// Tip del Analista (lee el CACHE de Resultados — no llama a Gemini)
-$hz_analista = null;
-try { $j = json_decode((string)$pdo->query("SELECT datos FROM crecer_analisis_kpi WHERE marca_id={$marca_id}")->fetchColumn(), true);
-  if (is_array($j) && !empty($j['resumen']) && is_array($j['resumen'])) $hz_analista = $_noemo($j['resumen']); } catch (Throwable $e) {}
-// Tip financiero (lee el CACHE de Finanzas)
-$hz_fin = null;
-try { $j = json_decode((string)$pdo->query("SELECT datos FROM crecer_finanzas_consejos WHERE marca_id={$marca_id}")->fetchColumn(), true);
-  if (is_array($j) && !empty($j['consejo_mes'])) $hz_fin = $_noemo((string)$j['consejo_mes']); } catch (Throwable $e) {}
-// Notificaciones recientes
-require_once __DIR__ . '/../includes/notif.php';
-$hz_notifs = function_exists('notif_listar') ? array_slice(notif_listar($pdo, $marca_id, 3), 0, 3) : [];
-// Forecast: proyección de posts del mes al ritmo actual
-$hz_mespub  = (int)($prod['publicados_mes'] ?? 0);
-$hz_diames  = (int)date('j'); $hz_totdias = (int)date('t');
-$hz_proj    = ($hz_diames > 0 && $hz_mespub > 0) ? (int)round($hz_mespub / $hz_diames * $hz_totdias) : 0;
-
+//  CUATRO LECTURAS QUE YA NO PINTA NADIE (Fase 5): la señal del Analista, el
+//  tip de Resultados, el consejo financiero y las notificaciones. Eran cuatro
+//  consultas por carga para cuatro tarjetas que competían entre sí — el dueño
+//  no leía un equipo poniéndolo al día, leía un tablero de aeropuerto. Lo que
+//  de verdad hay que decirle vive ahora en «Cómo va» y en «Te toca a ti», y
+//  cada uno abre su sección de verdad.
+//
+//  Ninguna se borra del producto: Resultados, Finanzas y la campanita siguen
+//  donde estaban, con sus datos intactos.
 $active = 'inicio';
 $page_title = 'Inicio';
 $guia = null; // El Home no se explica: se siente. (Overlay-guía eliminado a propósito.)
@@ -692,9 +658,12 @@ $credito  = $has_deck
   .hz{max-width:560px;margin:0 auto;width:100%;font-family:var(--font-body);padding:8px 16px 28px;box-sizing:border-box}
   @media(max-width:860px){ .hz{padding-bottom:calc(120px + env(safe-area-inset-bottom))} }
   .hz-hi{padding:6px 2px 2px}
-  .hz-eyebrow{color:var(--muted);font-weight:700;font-size:13px}
+  /*  14px es el suelo del producto, no una preferencia: por debajo, la
+      repostera de 50 años con el teléfono a un brazo de distancia no lo lee,
+      lo adivina. Estos dos estaban en 13 y 13.5. */
+  .hz-eyebrow{color:var(--muted);font-weight:700;font-size:14px}
   .hz-hello{font-family:var(--font-display);font-weight:800;font-size:clamp(28px,7.5vw,36px);letter-spacing:-.03em;color:var(--tinta);line-height:1.05;margin-top:4px}
-  .hz-status{display:inline-flex;align-items:center;gap:7px;margin-top:11px;color:var(--teal-700,#00827e);font-weight:700;font-size:13.5px;background:color-mix(in srgb,var(--teal) 10%,#fff);border:1px solid color-mix(in srgb,var(--teal) 22%,#fff);border-radius:999px;padding:5px 13px}
+  .hz-status{display:inline-flex;align-items:center;gap:7px;margin-top:11px;color:var(--teal-700,#00827e);font-weight:700;font-size:14px;background:color-mix(in srgb,var(--teal) 10%,#fff);border:1px solid color-mix(in srgb,var(--teal) 22%,#fff);border-radius:999px;padding:5px 13px}
   .hz-status svg{width:15px;height:15px}
   /* ══ EL NORTE ══ la meta manda: es lo primero que se ve al entrar.
      Sin meta, la pregunta ocupa el lugar de honor y nada compite con ella. */
@@ -764,6 +733,73 @@ $credito  = $has_deck
   }
 
   .hz-card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:16px;box-shadow:var(--shadow-sm);margin-top:16px}
+  /* ══ LOS BLOQUES DEL CENTRO DE MANDO ══════════════════════════════════
+     Compactos a propósito: una tarjeta no explica una sección entera, la
+     anuncia y abre la de verdad. Nada de tarjetas dentro de tarjetas, nada
+     de párrafos, y el radio del sistema — no uno nuevo para lucirse. */
+  .in-blk{padding:14px 16px}
+  .in-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px}
+  .in-h b{font-size:14px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  /*  El enlace de cada bloque es un destino real, no un adorno: 44px de alto
+      para que se pueda tocar con el pulgar sin apuntar. */
+  .in-h a{font-size:14px;font-weight:700;color:var(--teal);text-decoration:none;
+    display:inline-flex;align-items:center;gap:4px;min-height:44px;padding:0 2px}
+  .in-h a i{font-style:normal;transition:transform .15s ease}
+  .in-h a:hover i{transform:translateX(3px)}
+  .in-vacio,.in-nota{font-size:14px;line-height:1.55;color:var(--muted);margin:0}
+
+  /* — Hoy y lo próximo — */
+  .in-list{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+  .in-list a{display:grid;grid-template-columns:auto 1fr;grid-template-areas:'w t' 'w m';
+    gap:1px 12px;align-items:center;min-height:56px;padding:8px 4px;border-radius:8px;
+    text-decoration:none;color:inherit}
+  .in-list a:hover{background:color-mix(in srgb,var(--teal) 6%,transparent)}
+  .in-when{grid-area:w;font-size:14px;font-weight:700;color:var(--muted);white-space:nowrap}
+  .in-when.hoy{color:var(--teal)}
+  .in-tit{grid-area:t;font-size:15px;line-height:1.35;color:var(--tinta);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .in-meta{grid-area:m;font-size:14px;color:var(--muted);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* — Lo que hizo el corillo — */
+  .in-act{list-style:none;margin:0;padding:0;display:grid;gap:9px}
+  .in-act li{display:flex;align-items:flex-start;gap:9px;font-size:15px;line-height:1.5;color:var(--tinta)}
+  .in-act li .ic{width:18px;height:18px;flex:none;margin-top:3px;color:var(--teal)}
+  .in-act li i{font-style:normal;font-size:14px;color:var(--muted);margin-left:auto;
+    white-space:nowrap;padding-left:8px}
+
+  /* — Cómo va — */
+  .in-cifra{display:flex;align-items:baseline;gap:9px;margin:0 0 6px}
+  .in-cifra b{font-family:'Oswald',var(--font-display,sans-serif);font-size:34px;
+    line-height:1;color:var(--tinta);letter-spacing:.5px}
+  .in-cifra span{font-size:14px;color:var(--muted)}
+
+  /* — Te toca a ti — */
+  .in-pend{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+  .in-pend li{display:flex;align-items:center;gap:10px}
+  .in-pend .ic{width:34px;height:34px;flex:none;border-radius:8px;display:grid;place-items:center;
+    background:color-mix(in srgb,var(--teal) 10%,transparent);color:var(--teal)}
+  .in-pend .ic .ic{width:18px;height:18px;background:none;border-radius:0}
+  .in-pend li.urge .ic{background:color-mix(in srgb,var(--coral) 14%,transparent);color:#c2410c}
+  .in-pend .tx{min-width:0;flex:1}
+  .in-pend .tx b{display:block;font-size:15px;line-height:1.35;color:var(--tinta);font-weight:600}
+  .in-pend .tx i{display:block;font-style:normal;font-size:14px;line-height:1.4;color:var(--muted)}
+  .in-go{flex:none;min-height:44px;display:inline-flex;align-items:center;padding:0 12px;
+    border-radius:8px;background:var(--tinta);color:#fff;font-size:14px;font-weight:700;
+    text-decoration:none}
+  .in-go:hover{opacity:.9}
+  .in-pend li.urge .in-go{background:#c2410c}
+  /*  «No tienes nada pendiente» NO ocupa media pantalla: es una línea. */
+  .in-nada{display:flex;align-items:center;gap:8px;margin:16px 2px 0;
+    font-size:14px;color:var(--muted)}
+  .in-nada .ic{width:18px;height:18px;color:var(--teal)}
+
+  @media(min-width:900px){
+    /*  ESCRITORIO CUENTA LA MISMA HISTORIA, no una distinta: los mismos
+        bloques en el mismo orden, en dos columnas para que quepan sin bajar. */
+    .in-blk{margin-top:0}
+  }
+
   .hz-ch{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}
   .hz-ch b{font-family:var(--font-display);font-weight:700;font-size:16px;color:var(--ink-soft,#4a444c)}
   .hz-ch a{color:var(--magenta);font-weight:700;font-size:12.5px;text-decoration:none}
@@ -775,9 +811,6 @@ $credito  = $has_deck
   .hz-next .cap{font-size:15px;line-height:1.45;color:var(--tinta);margin:7px 0 13px;font-weight:600;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
   .hz-approve{margin-top:auto;align-self:flex-start;background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:11px 18px;border-radius:12px;display:inline-flex;align-items:center;gap:8px;box-shadow:0 10px 22px -10px rgba(239,67,117,.5)}
   .hz-approve svg{width:16px;height:16px}
-  #hzIdea.go{cursor:pointer;transition:transform .15s ease,box-shadow .2s ease}
-  #hzIdea.go:hover{transform:translateY(-2px);box-shadow:0 16px 34px -18px rgba(0,0,0,.28)}
-  #hzIdea.go:active{transform:translateY(0)}
   .hz-idea-go{margin-top:14px;align-self:flex-start;background:linear-gradient(135deg,var(--teal),#0a7d76);color:#fff;text-decoration:none;font-weight:700;font-size:13.5px;padding:10px 16px;border-radius:12px;display:inline-flex;align-items:center;gap:7px;box-shadow:0 10px 22px -12px rgba(0,164,159,.55);transition:transform .15s ease,box-shadow .15s ease}
   .hz-idea-go svg{width:15px;height:15px}
   .hz-idea-go:hover{transform:translateY(-2px);box-shadow:0 16px 30px -12px rgba(0,164,159,.6)}
@@ -1060,204 +1093,116 @@ $credito  = $has_deck
       <span class="n-ir"><?= $h($__hm['accion']['etiqueta'] !== '' ? $__hm['accion']['etiqueta'] : 'Ver el plan completo') ?> <i>→</i></span>
     </a>
   <?php endif; ?>
-  <?php if ($hz_post):
-    $hz_g = (string)($hz_post['grafica_path'] ?? '');
-    $hz_vid = $hz_g !== '' && preg_match('#\.(mp4|mov|m4v)$#i', $hz_g);
-    $hz_cap = trim((string)($hz_post['caption'] ?? ''));
-  ?>
   <?php
-  // ¿Esta pieza nació de una jugada del plan? Entonces se dice, porque cambia
-  // el sentido de aprobarla: no es "un post más", es un paso hacia SU número.
-  $hz_de_meta = '';
-  if (!empty($hz_post['tactica_id']) && $__meta_activa && $__meta) {
-      try {
-          $qd = $pdo->prepare("SELECT titulo FROM crecer_meta_tactica WHERE id=? AND marca_id=?");
-          $qd->execute([(int)$hz_post['tactica_id'], $marca_id]);
-          $tt = (string)($qd->fetchColumn() ?: '');
-          if ($tt !== '') $hz_de_meta = $tt;
-      } catch (Throwable $e) {}
-  }
+  // ══════════════════════════════════════════════════════════════════════
+  //  EL RESTO DEL CENTRO DE MANDO — por orden de urgencia, no de tamaño.
+  //
+  //  Lo que había aquí eran seis tarjetas grandes contestando preguntas
+  //  distintas con voces distintas: el próximo post, la semana de siete
+  //  columnas, la gráfica de «posts por semana», el tip del Analista, el tip
+  //  financiero y la Idea del día. El dueño no leía un equipo poniéndolo al
+  //  día: leía un tablero de aeropuerto. Y dos de esas tarjetas mentían por
+  //  construcción — la gráfica usaba CUÁNTOS POSTS publicó como si fuera el
+  //  resultado de su negocio, y la Idea del día llamaba a Gemini en CADA
+  //  carga de la portada.
+  //
+  //  Ahora son cuatro bloques compactos, cada uno con su lector pequeño en
+  //  includes/inicio.php, y cada uno abre su sección de verdad. Ninguno
+  //  intenta explicar una sección entera aquí.
+  require_once __DIR__ . '/../includes/inicio.php';
+  $in_cal  = inicio_calendario($pdo, $marca_id, 3);
+  $in_act  = inicio_actividad($pdo, $marca_id, $marca, 3);
+  $in_sen  = inicio_senal($pdo, $marca_id, null);
+  $in_pend = inicio_pendientes($pdo, $marca_id, $BASE, ['sin_redes' => !$meta_ok]);
   ?>
-  <section class="hz-card">
-    <div class="hz-next">
-      <div class="l">
-        <span class="eb">Próximo post<?php if ($hz_de_meta !== ''): ?><i class="eb-meta"> · de tu meta</i><?php endif; ?></span>
-        <?php if ($hz_de_meta !== ''): ?>
-          <span class="hz-dejugada"><?= ico('compass') ?> <?= $h($hz_de_meta) ?></span>
-        <?php endif; ?>
-        <p class="cap"><?= $h($hz_cap !== '' ? $hz_cap : 'Tu próximo post — el corillo lo está afinando.') ?></p>
-        <?php if ($hz_post['modo']==='aprobar'): ?>
-          <a class="hz-approve" href="<?= $BASE ?>/propuestas.php?<?= $mid ?>"><?= ico('check') ?> Aprobar post</a>
-        <?php elseif ($hz_post['modo']==='programado'): ?>
-          <div class="hz-when">Sale <?= $h(_fecha_humana($hz_post['fecha_programada'] ?? '')) ?><a href="<?= $BASE ?>/calendario.php?<?= $mid ?>">Ver →</a></div>
-        <?php else: ?>
-          <div class="hz-when">Listo para publicar<a href="<?= $BASE ?>/aprobar2.php?marca=<?= $marca_id ?>&tab=listos">Ver →</a></div>
-        <?php endif; ?>
-      </div>
-      <div class="im">
-        <?php if ($hz_vid): ?><video src="<?= $h($hz_g) ?>" muted playsinline></video>
-        <?php elseif ($hz_g !== ''): ?><img src="<?= $h($hz_g) ?>" alt="">
-        <?php else: ?><?= ico('image') ?><?php endif; ?>
-      </div>
+
+  <?php /*  1 · HOY Y LO PRÓXIMO. Un adelanto, no el calendario. Cada fila dice
+            cuándo, dónde y DE DÓNDE SALIÓ: que una pieza sea suya o del plan
+            cambia lo que significa verla ahí.  */ ?>
+  <section class="hz-card in-blk">
+    <div class="in-h">
+      <b><?= $h(t('Hoy y lo próximo')) ?></b>
+      <a href="<?= $BASE ?>/calendario.php?<?= $mid ?>"><?= $h(t('Ver Calendario')) ?> <i>→</i></a>
     </div>
+    <?php if ($in_cal['hay']): ?>
+      <ul class="in-list">
+        <?php foreach ($in_cal['filas'] as $f): ?>
+          <li>
+            <a href="<?= $BASE ?>/calendario.php?<?= $mid ?>">
+              <span class="in-when<?= $f['hoy'] ? ' hoy' : '' ?>"><?= $h($f['cuando']) ?></span>
+              <span class="in-tit"><?= $h($f['titulo'] !== '' ? $f['titulo'] : t('Publicación')) ?></span>
+              <span class="in-meta"><?= $h($f['red']) ?> · <?= $h($f['formato']) ?> · <?= $h(t($f['origen'])) ?></span>
+            </a>
+          </li>
+        <?php endforeach; ?>
+      </ul>
+    <?php elseif ($in_cal['estado'] === CTX_NO_DISP): ?>
+      <?php /*  No se pudo leer. No es «no tienes nada»: es que no lo sé, y
+                decir lo otro sería inventarle un calendario vacío.  */ ?>
+      <p class="in-vacio"><?= $h(t('No pude leer tu calendario ahora mismo.')) ?></p>
+    <?php else: ?>
+      <p class="in-vacio"><?= $h(t('Todavía no hay publicaciones programadas.')) ?></p>
+    <?php endif; ?>
   </section>
-  <?php else: ?>
-  <section class="hz-card"><p class="hz-empty">Todo al día. El corillo está preparando lo próximo — te aviso cuando haya algo para tu OK.</p></section>
+
+  <?php /*  2 · EL CORILLO. Cada línea sale de una fila que existe: una semana
+            preparada, unas piezas escritas, una foto suya enlazada. Si no hay
+            filas, no hay bloque — un equipo que dice que trabajó sin haber
+            trabajado se descubre a la primera.  */ ?>
+  <?php if ($in_act['hay']): ?>
+  <section class="hz-card in-blk">
+    <div class="in-h"><b><?= $h(t('%s trabajó en esto', $in_act['nombre'])) ?></b></div>
+    <ul class="in-act">
+      <?php foreach ($in_act['eventos'] as $e): ?>
+        <li><?= ico($e['ico']) ?><span><?= $h($e['txt']) ?></span><?php if ($e['cuando'] !== ''): ?><i><?= $h($e['cuando']) ?></i><?php endif; ?></li>
+      <?php endforeach; ?>
+    </ul>
+  </section>
   <?php endif; ?>
 
-  <?php
-  // ══════════════════════════════════════════════════════════════════════
-  //  CÓMO VAMOS — UNA SOLA VOZ (2026-08-12)
-  //
-  //  Antes esto eran CUATRO tarjetas seguidas contestando la misma pregunta
-  //  con voces distintas: el Analista proactivo, "Cómo vas", "Rendimiento" y
-  //  "Proyección del mes". El dueño no leía un equipo poniéndolo al día:
-  //  leía un tablero de aeropuerto.
-  //
-  //  Ahora el Analista habla UNA vez, y sus números (la gráfica, el ritmo del
-  //  mes) viven dentro de su tarjeta como respaldo de lo que dice — no como
-  //  bloques sueltos compitiendo por atención.
-  // ══════════════════════════════════════════════════════════════════════
-  ?>
-  <section class="hz-card an-card">
-    <div class="an-head">
-      <span class="an-av"><?= ico('chart') ?></span>
-      <span class="an-who"><b><?= $h($an_nombre) ?></b><span class="live"><span class="an-dot"></span> Vigilando tus números</span></span>
-      <?php if ($hz_creciendo): ?><span class="hz-up" style="margin-left:auto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/></svg> En crecimiento</span><?php endif; ?>
+  <?php /*  3 · EL RESULTADO. UNA señal, y solo con cobertura. Sin ella se dice
+            que no hay suficiente y punto: ni flecha, ni «vamos en ritmo», ni
+            la cuenta de posts publicados haciéndose pasar por resultado del
+            negocio.  */ ?>
+  <?php if ($in_sen['hay']): ?>
+  <section class="hz-card in-blk">
+    <div class="in-h">
+      <b><?= $h(t('Cómo va')) ?></b>
+      <a href="<?= $BASE ?>/resultados.php?<?= $mid ?>"><?= $h(t('Ver todos los resultados')) ?> <i>→</i></a>
     </div>
-
-    <?php if ($an_top): /* tiene algo que decir y qué hacer al respecto */ ?>
-      <p class="an-title"><?= $h($an_top['titulo']) ?></p>
-      <p class="an-msg"><?= $h($an_top['mensaje']) ?></p>
-      <div class="an-acts" id="anActs" data-id="<?= (int)$an_top['id'] ?>">
-        <a class="an-go" id="anGo" href="<?= $h($an_top['accion_url']) ?>"><?= $h($an_top['accion_label']) ?> &rarr;</a>
-        <button class="an-skip" id="anSkip" type="button">Ahora no</button>
-      </div>
-    <?php elseif ($hz_analista && (!empty($hz_analista['lectura']) || !empty($hz_analista['reco']))): ?>
-      <?php /* su lectura de la semana (lo que antes era la tarjeta "Cómo vas") */ ?>
-      <p class="an-msg"><?= $h($hz_analista['lectura'] ?? $hz_analista['reco']) ?></p>
-      <?php if (!empty($hz_analista['reco']) && !empty($hz_analista['lectura'])): ?>
-        <div class="hz-reco"><?= ico('bolt') ?><span><?= $h($hz_analista['reco']) ?></span></div>
-      <?php endif; ?>
-    <?php elseif ($__meta_activa && $__prog):
-      /* HABLA CONTRA LA META, NO AL AIRE. Decir "no cambiaría nada, sigue así"
-         mientras arriba se lee "0 de 25 pedidos" es lo que hacía sentir el Home
-         como piezas sueltas. Todo lo de abajo sale de $__prog, que ya está
-         medido — nada inventado. */
-      $__falta = $__prog['falta'] ?? null;
-      $__dias  = $__prog['dias_rest'] ?? null;
-      $__unid  = meta_objetivo_def((string)$__meta['objetivo'])['unidad'];
-      /*  EL MISMO CONTRATO QUE LA TARJETA. Este bloque afirmaba «vamos cortos»
-          y «llevas X» sin preguntar si se puede afirmar. Con la tarjeta ya
-          honesta, dejarlo asi era mover la contradiccion una seccion mas abajo:
-          arriba «25 pedidos» sin barra, y aqui «llevas 0, vamos cortos». La
-          respuesta sale del MISMO booleano que gobierna la tarjeta.  */
-      $__afirmar = $__hm && $__hm['puede'];
-    ?>
-      <?php if (!$__prog['medible']): ?>
-        <div class="an-ok"><?= ico('check-circle') ?> <?= $h(t('Estoy pendiente de tu meta.')) ?></div>
-        <p class="an-msg an-sub">Este objetivo todavía no lo puedo medir solo, así que te aviso por lo que sí veo:
-           cuánta gente alcanzan tus posts y cuántos te escriben.</p>
-      <?php elseif ($__prog['actual'] === null || (float)$__prog['actual'] <= 0): ?>
-        <?php /* `actual` en null = todavía no hay señal (Meta aún no reporta).
-                 Antes caía al último caso y decía "Vamos en ritmo. Llevas 0
-                 personas" debajo de un card que correctamente no enseña número. */ ?>
-        <div class="an-ok"><?= ico('clock') ?> <?= $h(t('Todavía no hay nada que medir de tu meta.')) ?></div>
-        <p class="an-msg an-sub">Cuando salgan los primeros posts del plan y la gente empiece a moverse,
-           aquí te digo qué está funcionando y qué hay que cambiar.</p>
-      <?php elseif ($__afirmar && $__prog['al_dia'] === false): ?>
-        <div class="an-ok" style="color:#b4232b"><?= ico('bolt') ?> Vamos cortos para la meta.</div>
-        <p class="an-msg an-sub">Llevas <?= $h(meta_fmt((float)$__prog['actual'], (string)$__meta['objetivo'])) ?><?php
-          if ($__falta !== null && $__dias !== null && $__dias > 0): ?> y faltan
-          <?= $h(meta_fmt((float)$__falta, (string)$__meta['objetivo'])) ?> en <?= (int)$__dias ?> días<?php endif; ?>.
-          Estoy mirando qué formatos y horarios te rinden más para apretar por ahí.</p>
-      <?php elseif ($__afirmar && $__prog['al_dia'] === true): ?>
-        <div class="an-ok"><?= ico('check-circle') ?> Vamos en ritmo para tu meta.</div>
-        <p class="an-msg an-sub">Llevas <?= $h(meta_fmt((float)$__prog['actual'], (string)$__meta['objetivo'])) ?>
-           <?php if ($__dias !== null && $__dias > 0): ?>con <?= (int)$__dias ?> días por delante<?php endif; ?>.
-           Sigo pendiente de tu alcance y tus horarios por si aparece una oportunidad.</p>
-      <?php elseif ($__afirmar): ?>
-        <?php /* Hay avance pero todavía no se puede juzgar el ritmo (meta recién
-                 puesta, o sin fecha límite): se dice lo que hay y nada más. */ ?>
-        <div class="an-ok"><?= ico('check-circle') ?> Ya se está moviendo.</div>
-        <p class="an-msg an-sub">Llevas <?= $h(meta_fmt((float)$__prog['actual'], (string)$__meta['objetivo'])) ?>.
-           Déjame unos días más de datos y te digo si vamos al ritmo que hace falta.</p>
-      <?php else: ?>
-        <?php /* SIN COBERTURA COMPLETA no se dice cuánto lleva ni si va bien:
-                 Crecer solo cuenta lo que pasa por dentro, y presentarlo como
-                 el total del negocio seria inventarselo. Se dice lo que SI se
-                 sabe.  */ ?>
-        <div class="an-ok"><?= ico('check-circle') ?> <?= $h(t('Estoy pendiente de tu meta.')) ?></div>
-        <p class="an-msg an-sub">Solo cuento lo que pasa por Crecer, así que el número de tu meta
-           lo llevas tú. Lo que sí te puedo decir es a cuánta gente llegan tus posts y cuántos te escriben.</p>
-      <?php endif; ?>
-    <?php else: ?>
-      <div class="an-ok"><?= ico('check-circle') ?> No cambiaría nada esta semana. Sigue así.</div>
-      <p class="an-msg an-sub">Estoy pendiente de tu alcance, tus formatos y tus horarios. Apenas vea una oportunidad, te la traigo aquí.</p>
+    <?php if ($in_sen['cifra'] !== ''): ?>
+      <p class="in-cifra"><b><?= $h($in_sen['cifra']) ?></b><span><?= $h($in_sen['pie']) ?></span></p>
     <?php endif; ?>
-
-    <?php if ($hz_hay_serie):
-      $n=count($hz_serie); $mx=max(1,max($hz_serie)); $pts=[];
-      foreach($hz_serie as $i=>$v){ $x=$n>1?round(($i/($n-1))*300,1):0; $y=round(64-($v/$mx)*54,1); $pts[]="$x,$y"; }
-      $poly=implode(' ',$pts); $lastp=explode(',',end($pts));
-    ?>
-      <?php /* los números que respaldan lo que acaba de decir, no un bloque aparte */ ?>
-      <svg class="hz-spark" viewBox="0 0 300 72" preserveAspectRatio="none" style="margin-top:14px">
-        <defs><linearGradient id="hzg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--teal)" stop-opacity=".28"/><stop offset="1" stop-color="var(--teal)" stop-opacity="0"/></linearGradient></defs>
-        <polygon points="0,72 <?= $poly ?> 300,72" fill="url(#hzg)"/>
-        <polyline points="<?= $poly ?>" fill="none" stroke="var(--teal)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
-        <circle cx="<?= $lastp[0] ?>" cy="<?= $lastp[1] ?>" r="4.5" fill="var(--teal)"/>
-      </svg>
-      <div class="hz-cap">Posts publicados por semana · últimas 8<?= $hay_insights ? '' : ' · conecta tus redes para ver alcance' ?><?php
-        // La proyección deja de ser una tarjeta propia: es una frase más de su lectura.
-        if ($hz_proj > 0) echo ' · a este ritmo cierras el mes con ' . (int)$hz_proj . ' posts';
-      ?></div>
+    <?php if ($in_sen['nota'] !== ''): ?>
+      <p class="in-nota"><?= $h($in_sen['nota']) ?></p>
     <?php endif; ?>
-
-    <a class="an-ver" href="<?= $BASE ?>/resultados.php?<?= $mid ?>"><?= $h(t('Ver todos los resultados →')) ?></a>
   </section>
-  <script>
-  (function(){
-    var acts=document.getElementById('anActs'); if(!acts) return;
-    var id=acts.getAttribute('data-id'), CSRF=<?= json_encode(csrf_token()) ?>;
-    function mark(estado){ var fd=new FormData(); fd.append('accion','analista_marcar'); fd.append('id',id); fd.append('estado',estado); fd.append('csrf',CSRF); return fetch(location.pathname+location.search,{method:'POST',body:fd}).catch(function(){}); }
-    var go=document.getElementById('anGo');
-    if(go) go.addEventListener('click',function(e){ e.preventDefault(); var href=go.getAttribute('href'); mark('aceptada').finally(function(){ location.href=href; }); });
-    var skip=document.getElementById('anSkip');
-    if(skip) skip.addEventListener('click',function(){ mark('descartada'); var card=acts.closest('.an-card'); if(card) card.style.display='none'; });
-  })();
-  </script>
+  <?php endif; ?>
 
-  <section class="hz-card">
-    <div class="hz-ch"><b><?= $h(t('Calendario')) ?></b><a href="<?= $BASE ?>/calendario.php?<?= $mid ?>"><?= $h(t('Ver todo →')) ?></a></div>
-    <div class="hz-week">
-      <?php foreach ($hz_dias as $d): ?>
-      <div class="hz-day<?= $d['hoy']?' on':'' ?>">
-        <span class="d"><?= $d['lbl'] ?></span>
-        <span class="n"><?= $d['num'] ?></span>
-        <span class="dots"><?php foreach (array_slice($d['items'],0,3) as $it){ $pl=$it['plataforma']??''; $col=$pl==='facebook'?'var(--teal)':($pl==='instagram'?'var(--magenta)':'var(--amber,#c78a16)'); echo '<i style="background:'.($d['hoy']?'#fff':$col).'"></i>'; } ?></span>
-      </div>
+  <?php /*  4 · LO QUE LE TOCA A ÉL. Solo si de verdad hay algo suyo. Los
+            pendientes del sistema —un job en cola, una imagen generándose— no
+            entran: eso es trabajo nuestro, y ponerlo en su lista es devolverle
+            el trabajo que nos paga por hacer.  */ ?>
+  <?php if ($in_pend['hay']): ?>
+  <section class="hz-card in-blk">
+    <div class="in-h"><b><?= $h(t('Te toca a ti')) ?></b></div>
+    <ul class="in-pend">
+      <?php foreach ($in_pend['items'] as $x): ?>
+        <li class="<?= !empty($x['urgente']) ? 'urge' : '' ?>">
+          <span class="ic"><?= ico($x['ico']) ?></span>
+          <span class="tx">
+            <b><?= $h($x['que']) ?></b>
+            <i><?= $h($x['porque']) ?><?php if ($x['cuando'] !== ''): ?> · <?= $h($x['cuando']) ?><?php endif; ?></i>
+          </span>
+          <a class="in-go" href="<?= $h($x['href']) ?>"><?= $h($x['accion']) ?></a>
+        </li>
       <?php endforeach; ?>
-    </div>
+    </ul>
   </section>
+  <?php else: ?>
+    <p class="in-nada"><?= ico('check-circle') ?><?= $h(t('No tienes nada pendiente ahora.')) ?></p>
+  <?php endif; ?>
 
-  <?php
-  // ── Lo que se fue de aquí y por qué (2026-08-12) ──
-  //  · "Rendimiento", "Cómo vas" y "Proyección del mes" → ahora viven DENTRO de
-  //    la tarjeta del Analista, arriba. Eran cuatro voces para una sola pregunta.
-  //  · "Lo último" → la campanita del top-bar ya trae las notificaciones con su
-  //    contador. Enseñarlas dos veces no las hace más visibles, hace más ruido.
-  //  · "Tip de finanzas" → vive en Finanzas, que está en el menú. Este es el
-  //    Home de marketing; mezclar dominios es lo que hacía sentir el Home como
-  //    cosas sueltas sin relación.
-  //  Nada se borró del sistema: solo dejaron de competir en esta pantalla.
-  ?>
-
-  <section class="hz-card" id="hzIdea">
-    <div class="hz-ch"><b>Idea del día</b></div>
-    <div class="hz-tip"><span class="ic pur"><?= ico('sparkles') ?></span><p id="hzIdeaTxt" style="color:var(--muted);font-style:italic">El corillo está pensando una idea para hoy…</p></div>
-    <a id="hzIdeaGo" class="hz-idea-go" hidden href="#"><?= ico('plus') ?> Crear este post</a>
-  </section>
 </main>
 
 <script>
@@ -1297,24 +1242,6 @@ window.T = Object.assign(window.T || {}, <?= tj([
       if(PUEBLO){ fetch('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(PUEBLO)+'&count=1&country=PR&language=es').then(function(r){return r.json();}).then(function(d){ var g=d&&d.results&&d.results[0]; if(g)wx(g.latitude,g.longitude); else wx(18.4655,-66.1057); }).catch(function(){ wx(18.4655,-66.1057); }); }
       else wx(18.4655,-66.1057);
     }
-  }
-  // ── Idea del día (async) ──
-  var it=document.getElementById('hzIdeaTxt');
-  if(it){
-    var fdi=new FormData(); fdi.append('accion','idea'); fdi.append('csrf',<?= json_encode(csrf_token()) ?>);
-    fetch(location.pathname+location.search,{method:'POST',body:fdi}).then(function(r){return r.json();}).then(function(d){
-      if(d&&d.ok&&d.idea){
-        it.textContent=d.idea; it.style.color=''; it.style.fontStyle='';
-        // La idea YA está generada: tocar el card (o el botón) va directo a crearla.
-        <?php // CREAR unificado (flag): la Idea del día abre el wizard en El Estudio (una sola superficie) ?>
-        var url=<?= json_encode($BASE.'/'.((defined('CRECER_CREAR_UNIFICADO') && CRECER_CREAR_UNIFICADO) ? 'propuestas.php' : 'aprobar2.php').'?marca='.(int)$marca_id.'&crear=1&idea=') ?>+encodeURIComponent(d.idea);
-        var go=document.getElementById('hzIdeaGo');
-        if(go){ go.href=url; go.hidden=false; }
-        var card=document.getElementById('hzIdea');
-        if(card){ card.classList.add('go'); card.addEventListener('click', function(e){ if(e.target.closest('#hzIdeaGo')) return; location.href=url; }); }
-      }
-      else { var c=document.getElementById('hzIdea'); if(c)c.remove(); }
-    }).catch(function(){ var c=document.getElementById('hzIdea'); if(c)c.remove(); });
   }
 })();
 </script>

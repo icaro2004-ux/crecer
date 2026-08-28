@@ -47,4 +47,10 @@ return [
     // ── Controles del armazón ──
     'Abrir menú'            => 'Abrir menú',
     'Cerrar'                => 'Cerrar',
+
+    //  ── FASE 5 · el centro de mando y el menú por grupos ──
+    'Crear y contenido'                                                           => 'Crear y contenido',
+    'Mi negocio'                                                                  => 'Mi negocio',
+    'Más'                                                                         => 'Más',
+    'Conectar redes'                                                              => 'Conectar redes',
 ];

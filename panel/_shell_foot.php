@@ -30,7 +30,11 @@
   ?>
   <a href="<?= $h($meta_url_bn) ?>" class="bn-crear <?= $meta_on_bn ? 'on' : '' ?>"><span class="ci"><?= ico('compass') ?></span><span class="cl"><?= $h(t('Tu Meta')) ?></span></a>
   <a href="<?= $BASE ?>/resultados.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='resultados'?'on':'' ?>"><?= ico('chart') ?><?= $h(t('Resultados')) ?></a>
-  <a href="<?= $BASE ?>/sala.php?marca=<?= $marca_id ?>" class="<?= ($active ?? '')==='sala'?'on':'' ?>"><?= ico('chat') ?><?= $h(t('Sala')) ?></a>
+  <?php /*  CUATRO DESTINOS, NO CINCO. La Sala salió de aquí en la Fase 5 y
+            baja al menú lateral: la barra del pulgar es para el circuito que el
+            dueño recorre a diario —Inicio, Calendario, Tu Meta, Resultados— y
+            con cinco entradas los rótulos se apretaban hasta no leerse.
+            No desaparece del producto: sigue en el menú, con su URL intacta.  */ ?>
 </nav>
 
 <?php /*  EL VISOR DE IMAGEN · uno solo para todo el producto.

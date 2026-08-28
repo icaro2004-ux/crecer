@@ -17,42 +17,61 @@ $es_admin = (($u_actual['rol'] ?? '') === 'admin');
 $viendo_como_admin = ($es_admin && (int)$marca['usuario_id'] !== (int)($u_actual['id'] ?? 0));
 require_once __DIR__ . '/../includes/notif.php';
 $notif_nl = function_exists('notif_no_leidas') ? notif_no_leidas($pdo, $marca_id) : 0;
-// Navegación PRINCIPAL — solo el loop del producto (contenido para redes).
-// Gráficas, Clientela, Cuentas, Analítica y Evidencia salieron del menú
-// (siguen accesibles por URL / por el perfil; reversible).
-// ÓRDENES VOLVIÓ (2026-08-08, decisión de Manuel): el link público + QR de
-// órdenes es un ASSET del negocio, no exceso — no se esconde.
-// `bot` = este destino YA está en la barra de abajo del móvil. Solo esos se
-// esconden del drawer (para no repetirlos); todo lo demás TIENE que verse ahí,
-// o queda inalcanzable desde el teléfono.
-// (Bug 2026-08-12: el CSS escondía todo el menú menos Biblioteca — se escribió
-//  cuando había 4 destinos y la barra los cubría todos. Con 9 destinos, Reels,
-//  Tu equipo, El Genoma y Calendario dejaron de existir en móvil.)
-$nav = [
-  ['key'=>'inicio',    'ic'=>'home',    'lb'=>t('Inicio'),     'bot'=>1, 'hr'=>"$BASE/index.php?marca=$marca_id"],
-  // LA META: el norte del negocio. Va arriba porque gobierna todo lo demás —
-  // el corillo trabaja PARA esto, no para llenar el calendario.
-  //
-  // AHORA SÍ VA EN LA BARRA DEL MÓVIL, y por eso lleva 'bot'. La decisión de
-  // 2026-08-12 fue la contraria y era razonable entonces: la meta se ponía una
-  // vez y ya. Ya no — con la revisión semanal, el material y la comparación de
-  // imágenes, aquí es donde el dueño decide todos los días.
-  //
-  // 'bot' le pone `.dup`, que esconde esta entrada SOLO en móvil: en el
-  // teléfono se llega por la barra de abajo y en escritorio por el lateral.
-  // Dos entradas visibles a lo mismo en la misma navegación es ruido.
-  ['key'=>'meta',      'ic'=>'compass', 'lb'=>t('Tu Meta'),    'bot'=>1, 'hr'=>"$BASE/meta.php?marca=$marca_id"],
-  ['key'=>'contenido', 'ic'=>'list', 'lb'=>t('Tus Posts'),  'bot'=>1, 'hr'=>"$BASE/propuestas.php?marca=$marca_id"],
-  ['key'=>'sala',      'ic'=>'sparkles','lb'=>t('La Sala'),    'bot'=>1, 'hr'=>"$BASE/sala.php?marca=$marca_id"],
-  ['key'=>'reels',     'ic'=>'camera',  'lb'=>t('Reels'),      'hr'=>"$BASE/reels.php?marca=$marca_id"],
-  ['key'=>'equipo',    'ic'=>'users',   'lb'=>t('Tu equipo'),  'hr'=>"$BASE/equipo.php?marca=$marca_id"],
-  ['key'=>'genoma',    'ic'=>'genoma',  'lb'=>t('El Genoma'),  'hr'=>"$BASE/genoma.php?marca=$marca_id"],
-  ['key'=>'resultados','ic'=>'chart',   'lb'=>t('Resultados'), 'bot'=>1, 'hr'=>"$BASE/resultados.php?marca=$marca_id"],
-  ['key'=>'biblioteca','ic'=>'image',   'lb'=>t('Biblioteca'), 'hr'=>"$BASE/biblioteca.php?marca=$marca_id"],
+// ══════════════════════════════════════════════════════════════════════
+//  EL MENÚ, POR GRUPOS — la misma jerarquía que cuenta Inicio.
+//
+//  QUÉ CAMBIA Y QUÉ NO. No se borra ni una ruta: las mismas páginas, las
+//  mismas URLs, la misma marca activa. Lo que cambia es el ORDEN y que ahora
+//  se agrupan, porque una lista plana de trece destinos no dice cuál importa
+//  y el dueño acaba entrando por donde recuerda, no por donde debe.
+//
+//  Grupo 1 (sin título) = el circuito diario: Inicio, Tu Meta, Calendario,
+//  Resultados. Son los cuatro de la barra del móvil, así que aquí llevan
+//  `bot` — que les pone `.dup` y los esconde SOLO en el teléfono, donde ya
+//  están abajo. Dos entradas visibles a lo mismo es ruido.
+//
+//  DOS ARREGLOS DE VERDAD, no cosméticos:
+//    · «Tus Posts» llevaba `bot` y NO estaba en la barra: quedaba escondido
+//      en el móvil y ausente de abajo — o sea, inalcanzable desde el
+//      teléfono. Ahora no lleva `bot` y se ve donde tiene que verse.
+//    · «La Sala» salió de la barra en esta fase, así que tampoco puede
+//      seguir marcada como duplicada.
+// ══════════════════════════════════════════════════════════════════════
+$crear_url_shell = (defined('CRECER_CREAR_UNIFICADO') && CRECER_CREAR_UNIFICADO)
+    ? "$BASE/propuestas.php?marca=$marca_id&crear=1"
+    : "$BASE/aprobar2.php?marca=$marca_id&crear=1";
+
+$nav_grupos = [
+  //  EL CIRCUITO DIARIO. Tu Meta gobierna: el corillo trabaja PARA ese
+  //  número, no para llenar un calendario.
+  ['t' => '', 'items' => [
+    ['key'=>'inicio',    'ic'=>'home',    'lb'=>t('Inicio'),     'bot'=>1, 'hr'=>"$BASE/index.php?marca=$marca_id"],
+    ['key'=>'meta',      'ic'=>'compass', 'lb'=>t('Tu Meta'),    'bot'=>1, 'hr'=>"$BASE/meta.php?marca=$marca_id"],
+    ['key'=>'calendario','ic'=>'calendar','lb'=>t('Calendario'), 'bot'=>1, 'hr'=>"$BASE/calendario.php?marca=$marca_id"],
+    ['key'=>'resultados','ic'=>'chart',   'lb'=>t('Resultados'), 'bot'=>1, 'hr'=>"$BASE/resultados.php?marca=$marca_id"],
+  ]],
+  //  LA HERRAMIENTA MANUAL Y LO QUE PRODUCE. Crear vive aquí desde que el
+  //  sitio del pulgar pasó a Tu Meta: se usa a ratos, no todos los días.
+  ['t' => t('Crear y contenido'), 'items' => [
+    ['key'=>'crear',     'ic'=>'pen',     'lb'=>t('Crear'),      'hr'=>$crear_url_shell],
+    ['key'=>'contenido', 'ic'=>'list',    'lb'=>t('Tus Posts'),  'hr'=>"$BASE/propuestas.php?marca=$marca_id"],
+    ['key'=>'reels',     'ic'=>'camera',  'lb'=>t('Reels'),      'hr'=>"$BASE/reels.php?marca=$marca_id"],
+    ['key'=>'biblioteca','ic'=>'image',   'lb'=>t('Biblioteca'), 'hr'=>"$BASE/biblioteca.php?marca=$marca_id"],
+  ]],
+  //  QUIÉN ES EL NEGOCIO. Lo que define cómo suena y cómo se ve todo lo demás.
+  ['t' => t('Mi negocio'), 'items' => [
+    ['key'=>'genoma',    'ic'=>'genoma',  'lb'=>t('El Genoma'),  'hr'=>"$BASE/genoma.php?marca=$marca_id"],
+    ['key'=>'marca',     'ic'=>'palette', 'lb'=>t('Mi marca'),   'hr'=>"$BASE/marca.php?marca=$marca_id"],
+    ['key'=>'equipo',    'ic'=>'users',   'lb'=>t('Tu equipo'),  'hr'=>"$BASE/equipo.php?marca=$marca_id"],
+    ['key'=>'conectar',  'ic'=>'bolt',    'lb'=>t('Conectar redes'), 'hr'=>"$BASE/conectar.php?marca=$marca_id"],
+  ]],
 ];
+
 // Perfil / ajustes (secundario, abajo): Mi marca (config de marca/voz), config, facturación, soporte.
 $nav_perfil = [
-  ['key'=>'marca',       'ic'=>'palette', 'lb'=>t('Mi marca'),     'hr'=>"$BASE/marca.php?marca=$marca_id"],
+  //  «Mi marca» subió al grupo «Mi negocio»: es identidad, no ajustes. Aquí
+  //  abajo se quedaba con Facturación y Soporte, y aparecer en los dos sitios
+  //  sería una entrada duplicada a la misma página.
   ['key'=>'config',      'ic'=>'settings','lb'=>t('Configuración'),'hr'=>"$BASE/configuracion.php?marca=$marca_id"],
   ['key'=>'facturacion', 'ic'=>'wallet',  'lb'=>t('Facturación'),  'hr'=>"$BASE/precios.php?marca=$marca_id"],
   ['key'=>'soporte',     'ic'=>'chat',    'lb'=>t('Soporte'),      'hr'=>"$BASE/soporte.php?marca=$marca_id"],
@@ -79,6 +98,12 @@ $nav_perfil = [
   .side{overflow-y:auto;scrollbar-width:thin}
   /* Logo del app 25% más grande para que el ícono resalte (override del CSS compartido) */
   .side .sbrand img{height:38px}
+  /*  TÍTULOS DE GRUPO: pequeños, callados y sin acordeón. Un menú que hay que
+      desplegar para ver qué tiene es un menú que se usa peor — sobre todo en
+      escritorio, donde no sobra el sitio y sí sobra la paciencia. */
+  .side-gt{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--muted);opacity:.72;margin:16px 14px 6px;user-select:none}
+  .side nav > .side-gt:first-child{margin-top:6px}
   .ptop img{height:35px}
   @media(max-width:860px){
     .botnav a.on{color:var(--magenta)}
@@ -97,26 +122,23 @@ $nav_perfil = [
 <div class="layout">
   <aside class="side" id="side">
     <a class="sbrand" href="<?= $BASE ?>/index.php?marca=<?= $marca_id ?>" style="text-decoration:none;color:inherit"><img src="/crecer/assets/brand/crecer-icon.png" alt="<?= $h(t('Inicio')) ?>"><b style="display:inline-flex;flex-direction:column;line-height:1;gap:0"><span style="color:var(--teal)">Crecer</span><span style="font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.02em;margin-top:1px">by Encuéntralo</span></b></a>
-    <?php
-      // CREAR, AHORA COMO HERRAMIENTA DEL MENÚ. El sitio del pulgar en el móvil
-      // pasó a Tu Meta, que es donde se decide todos los días; crear es algo
-      // que se hace a ratos. No se elimina ni cambia: misma URL, mismo flag,
-      // misma marca activa, mismo wizard. Solo deja de gritar.
-      $crear_url_shell = (defined('CRECER_CREAR_UNIFICADO') && CRECER_CREAR_UNIFICADO)
-          ? "$BASE/propuestas.php?marca=$marca_id&crear=1"
-          : "$BASE/aprobar2.php?marca=$marca_id&crear=1";
-    ?>
-    <a href="<?= $crear_url_shell ?>" class="side-crear<?= ($active ?? '')==='crear'?' on':'' ?>" style="display:flex;align-items:center;gap:10px;margin:10px 0 2px;padding:11px 14px;border-radius:12px;text-decoration:none;color:var(--tinta);font-weight:600;font-size:14.5px;border:1px solid var(--line)"><?= ico('pen') ?><?= $h(t('Crear')) ?></a>
     <nav>
-      <?php foreach ($nav as $n): ?>
-        <?php /* .dup = ya está en la barra de abajo → se esconde SOLO en móvil */ ?>
-        <a href="<?= $n['hr'] ?>" class="<?= $n['key']===$active?'on ':'' ?><?= !empty($n['bot'])?'dup':'' ?>">
-          <?= ico($n['ic']) ?><?= $n['lb'] ?>
-        </a>
+      <?php foreach ($nav_grupos as $g): ?>
+        <?php if ($g['t'] !== ''): ?><div class="side-gt"><?= $h($g['t']) ?></div><?php endif; ?>
+        <?php foreach ($g['items'] as $n): ?>
+          <?php /*  .dup = ya está en la barra de abajo → se esconde SOLO en móvil.
+                    En escritorio no hay barra, así que ahí SÍ se ven.  */ ?>
+          <a href="<?= $n['hr'] ?>" class="<?= $n['key']===$active?'on ':'' ?><?= !empty($n['bot'])?'dup':'' ?>">
+            <?= ico($n['ic']) ?><?= $n['lb'] ?>
+          </a>
+        <?php endforeach; ?>
       <?php endforeach; ?>
-      <?php /* .dup — el Calendario vive en la barra de abajo del móvil */ ?>
-      <a href="<?= $BASE ?>/calendario.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='calendario'?'on ':'' ?>dup">
-        <?= ico('calendar') ?><?= $h(t('Calendario')) ?>
+
+      <?php /*  OPERACIÓN. Lo que no es el circuito diario ni contenido: se
+                usa cuando se necesita, y por eso va al final.  */ ?>
+      <div class="side-gt"><?= $h(t('Más')) ?></div>
+      <a href="<?= $BASE ?>/sala.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='sala'?'on':'' ?>">
+        <?= ico('sparkles') ?><?= $h(t('La Sala')) ?>
       </a>
       <a href="<?= $BASE ?>/ordenes.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='ordenes'?'on':'' ?>">
         <?= ico('qr') ?><?= $h(t('Órdenes')) ?>
