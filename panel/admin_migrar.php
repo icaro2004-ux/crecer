@@ -208,6 +208,11 @@ $piezas = [
     ['crecer_carrusel',        'col',    'idioma'],
     ['crecer_meta_plan',       'col',    'solicitud'],
     ['crecer_plan_solicitud',  'tabla',  null],
+    // ── Fase 3 · el ciclo semanal ──
+    //  Estaba en $MIGRACIONES y en $CREA pero no aqui: la pagina la ofrecia y
+    //  no la comprobaba nunca. Una migracion que se corre pero no se verifica
+    //  es una que se da por buena sin mirar.
+    ['crecer_meta_semana',     'tabla',  null],
 ];
 $estado = [];
 foreach ($piezas as [$tabla, $tipo, $col]) {
