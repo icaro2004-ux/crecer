@@ -311,10 +311,20 @@ function muestra_reintentar(PDO $pdo, int $marca_id, int $usuario_id): bool {
 
     //  Se limpia la marca que sella la pieza para que el motor de imagen pueda
     //  volver a encolar. Sin esto, img_resp_encolar_res la saltaria para siempre.
+    //
+    //  ESTE UPDATE NO ESCRIBE MEDIA, Y LA FORMA DEL WHERE IMPORTA.
+    //  Aqui solo se COMPRUEBA que la pieza no tenga arte; quien lo escribe es
+    //  muestra_preparar() o img_resp_completar(), y son ellos los que declaran
+    //  su clase con material_soltar(). Pero el censo de escritores de media
+    //  (tests/test_material_escritores.php) busca «grafica_path =» despues de
+    //  un SET, y un predicado escrito «OR grafica_path=''» cae dentro de esa
+    //  ventana: parecia un escritor sin declarar. COALESCE dice exactamente lo
+    //  mismo y no se confunde con uno. Si mañana hay que tocar este WHERE,
+    //  conviene mantenerlo asi.
     try {
         $pdo->prepare("UPDATE crecer_contenido SET img_estado=NULL, img_job=NULL, img_error_clase=NULL,
                               img_next_poll_at=NULL, img_job_at=NULL, updated_at=NOW()
-                        WHERE id=? AND marca_id=? AND (grafica_path IS NULL OR grafica_path='')")
+                        WHERE id=? AND marca_id=? AND COALESCE(grafica_path, '') = ''")
             ->execute([$st['pieza'], $marca_id]);
     } catch (Throwable $e) { error_log('muestra_reintentar limpiar: ' . $e->getMessage()); }
 
