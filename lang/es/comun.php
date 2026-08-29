@@ -84,8 +84,9 @@ return [
     'Esta idea no empuja directamente tu Meta actual.'                          => 'Esta idea no empuja directamente tu Meta actual.',
     'Este plan ya terminó. Puedo hacerla aparte o la metemos en el próximo.'    => 'Este plan ya terminó. Puedo hacerla aparte o la metemos en el próximo.',
     'Elegiste esta hora.'                                                         => 'Elegiste esta hora.',
-    'Te sugerimos esta hora porque coincide con tu mejor rendimiento.'            => 'Te sugerimos esta hora porque coincide con tu mejor rendimiento.',
-    'Te sugerimos esta hora para comenzar. La ajustaremos con tus resultados.'    => 'Te sugerimos esta hora para comenzar. La ajustaremos con tus resultados.',
     'Vas en ritmo: esta hora es para arrancar, y la ajustamos con tus resultados.' => 'Vas en ritmo: esta hora es para arrancar, y la ajustamos con tus resultados.',
     'Vas en ritmo: esta es la hora que mejor te ha funcionado.'                   => 'Vas en ritmo: esta es la hora que mejor te ha funcionado.',
+    'Se publicará %s.'                                                            => 'Se publicará %s.',
+    'Se publicará %s. Coincide con una de tus mejores horas.'                     => 'Se publicará %s. Coincide con una de tus mejores horas.',
+    'Se publicará %s. Te sugerimos esta hora para comenzar.'                      => 'Se publicará %s. Te sugerimos esta hora para comenzar.',
 ];

@@ -65,48 +65,94 @@ try {
        json_encode($e1));
     ok('y no queda una frase partida',  !str_ends_with(trim($e1['cuando']), 'a las'), json_encode($e1));
 
-    //  A · nació de una casilla del calendario: el hueco lo escogió él.
+    //  «DEL DUEÑO» EXIGE PRUEBA, NO PARECIDO.
+    //
+    //  La primera versión de esto daba por suya toda pieza con `calendario_id`.
+    //  Esa columna dice de dónde SALIO la pieza, no quién puso la hora — y en
+    //  esa misma ruta manual la hora la estampa el servidor con `date()`. El
+    //  dueño escribió un caption; la hora se la pusimos nosotros.
     $a = hora_atribucion($pdo, ['marca_id' => $MH, 'fecha_programada' => $manana . ' 14:00:00',
                                 'calendario_id' => 7]);
-    ok('lo que él programó es suyo',   $a['caso'] === 'dueno', json_encode($a));
-    ok('y se lo dice sin rodeos',      str_contains($a['frase'], 'Elegiste'), $a['frase']);
+    ok('crearla a mano no prueba que escogiera la hora', $a['caso'] !== 'dueno', json_encode($a));
+    ok('y no se le atribuye',          !str_contains($a['frase'], 'Elegiste'), $a['frase']);
+    ok('se dice el hecho y nada más',  $a['caso'] === 'neutral'
+       && str_contains($a['frase'], 'Se publicará'), json_encode($a));
 
-    //  C · la puso el plan y todavía no hay con qué respaldarla.
+    //  Y HOY NO HAY NINGUNA PIEZA QUE PUEDA SERLO: la evidencia no existe. Si
+    //  algún día se persiste, esta afirmación se cae y hay que venir aquí.
+    ok('hoy no consta ninguna hora escogida por él',
+       hora_evidencia_dueno($pdo, ['marca_id' => $MH, 'id' => 1, 'calendario_id' => 7,
+                                   'fecha_programada' => $manana . ' 14:00:00']) === false,
+       'si esto falla es que ya hay rastro: entonces «Elegiste esta hora» SÍ se puede decir');
+
+    //  C · la preparó el plan y todavía no hay con qué respaldar la hora.
     $c = hora_atribucion($pdo, ['marca_id' => $MH, 'fecha_programada' => $manana . ' 10:00:00',
                                 'tactica_id' => 5]);
-    ok('sin evidencia se dice que es para arrancar', $c['caso'] === 'arranque', json_encode($c));
+    ok('sin cobertura se dice que es para arrancar', $c['caso'] === 'arranque', json_encode($c));
     ok('y no se presume rendimiento',
-       !str_contains($c['frase'], 'mejor rendimiento') && !str_contains($c['frase'], 'mejor te ha funcionado'),
+       !str_contains($c['frase'], 'mejores horas') && !str_contains($c['frase'], 'mejor rendimiento'),
        $c['frase']);
 
-    //  B · la puso el plan Y coincide con la mejor franja que el Optimizador
-    //      tiene HOY. Se siembra esa lección para que la evidencia exista.
-    //  La lección vive en `datos_json`: la tabla no tiene columna `clave`, la
-    //  clave viaja dentro del JSON y así la lee `optimizador_mejor_momento()`.
+    //  UNA LECCION PLANTADA A MANO NO ES COBERTURA. `optimizador_mejor_momento()`
+    //  contesta desde `crecer_memoria` sin mirar cuántos posts la sostienen: si
+    //  la clasificación se apoyara en él, bastaría una fila vieja para afirmar
+    //  delante del dueño. Se planta y se comprueba que NO basta.
     $pdo->prepare("INSERT INTO crecer_memoria
             (marca_id, tipo, dominio, fuente, titulo, datos_json, estado, created_at)
-          VALUES (?, 'leccion', 'marketing', 'optimizador', '[prueba] mejor franja', ?, 'activa', NOW())")
+          VALUES (?, 'leccion', 'marketing', 'optimizador', '[prueba] franja plantada', ?, 'activa', NOW())")
         ->execute([$MH, json_encode(['clave' => 'mejor_franja', 'franja' => 'tarde'])]);
-    $mom = optimizador_mejor_momento($pdo, $MH);
-    if (($mom['hora'] ?? null) === null) {
-        nota('no se pudo sembrar evidencia de mejor franja: el caso B quedó sin recorrer');
-    } else {
-        $hh = sprintf('%02d', (int)$mom['hora']);
-        $b = hora_atribucion($pdo, ['marca_id' => $MH, 'fecha_programada' => $manana . " {$hh}:00:00",
-                                    'tactica_id' => 5]);
-        ok('con evidencia sí se puede decir por qué', $b['caso'] === 'evidencia', json_encode($b));
-        ok('y se nombra el rendimiento',   str_contains($b['frase'], 'mejor rendimiento'), $b['frase']);
-        //  Y LA MISMA PIEZA, UNA HORA DISTINTA, YA NO ES EVIDENCIA.
-        $otra = sprintf('%02d', ((int)$mom['hora'] + 3) % 24);
-        $b2 = hora_atribucion($pdo, ['marca_id' => $MH, 'fecha_programada' => $manana . " {$otra}:00:00",
-                                     'tactica_id' => 5]);
-        ok('otra hora no hereda la evidencia', $b2['caso'] === 'arranque', json_encode($b2));
+    ok('una lección plantada no da cobertura',
+       hora_mejor_con_cobertura($pdo, $MH) === null,
+       'sin posts medidos detrás, no hay nada que afirmar');
+    $plantada = hora_atribucion($pdo, ['marca_id' => $MH, 'fecha_programada' => $manana . ' 17:00:00',
+                                       'tactica_id' => 5]);
+    ok('y la pieza a esa hora no lo afirma',
+       $plantada['caso'] === 'arranque', json_encode($plantada));
+
+    //  B · CON COBERTURA DE VERDAD. Se siembran publicaciones medidas: el
+    //  Optimizador exige OPT_MIN_POSTS en total, OPT_MIN_BUCKET en el patrón y
+    //  OPT_MIN_DELTA de diferencia. Menos que eso y no hay lección.
+    $fxb = Fixture::crear($pdo, 'pulidocob', false, 'admin');
+    $limpiar[] = $MB = (int)$fxb['marca_id'];
+    $sembrar_post = function (string $cuando, int $alcance) use ($pdo, $MB) {
+        $pdo->prepare("INSERT INTO crecer_contenido
+                (marca_id, plataforma, tipo, caption, estado, publicado_at, fecha_programada)
+              VALUES (?, 'instagram','post','[prueba] medido','publicado', ?, ?)")
+            ->execute([$MB, $cuando, $cuando]);
+        $cid = (int)$pdo->lastInsertId();
+        $pdo->prepare("INSERT INTO crecer_metricas
+                (contenido_id, marca_id, plataforma, alcance, impresiones, interacciones, actualizado_at)
+              VALUES (?,?, 'instagram', ?, ?, ?, NOW())")
+            ->execute([$cid, $MB, $alcance, $alcance, (int)round($alcance / 10)]);
+    };
+    //  Cuatro por la tarde que vuelan y cuatro por la mañana que no: la
+    //  diferencia es mucho mayor que el mínimo, y hay de sobra en cada cubo.
+    for ($i = 1; $i <= 4; $i++) $sembrar_post(date('Y-m-d 17:00:00', strtotime("-{$i} week")), 900);
+    for ($i = 1; $i <= 4; $i++) $sembrar_post(date('Y-m-d 09:00:00', strtotime("-{$i} week -2 day")), 90);
+
+    $mejor = hora_mejor_con_cobertura($pdo, $MB);
+    ok('con posts medidos sí hay cobertura', $mejor !== null, var_export($mejor, true));
+    if ($mejor !== null) {
+        $b = hora_atribucion($pdo, ['marca_id' => $MB, 'tactica_id' => 5,
+                'fecha_programada' => $manana . ' ' . sprintf('%02d', $mejor) . ':00:00']);
+        ok('y se afirma la coincidencia', $b['caso'] === 'coincide', json_encode($b));
+        //  LO QUE NO SE DICE: por qué. Nadie puede demostrar que se escogiera
+        //  por eso — la coincidencia es un hecho, la razón sería un invento.
+        ok('sin decir que se escogió por eso',
+           str_contains($b['frase'], 'Coincide')
+           && !preg_match('~porque|por eso|la escogimos~ui', $b['frase']), $b['frase']);
+        //  Y OTRA HORA NO HEREDA LA COBERTURA.
+        $otra = sprintf('%02d', ($mejor + 6) % 24);
+        $b2 = hora_atribucion($pdo, ['marca_id' => $MB, 'tactica_id' => 5,
+                'fecha_programada' => $manana . " {$otra}:00:00"]);
+        ok('otra hora no hereda la coincidencia', $b2['caso'] !== 'coincide', json_encode($b2));
     }
 
-    //  D · sin táctica y sin casilla: no se sabe quién la puso.
+    //  D · sin táctica y sin cobertura: no se sabe quién la puso.
     $d = hora_atribucion($pdo, ['marca_id' => $MH, 'fecha_programada' => $manana . ' 16:00:00']);
-    ok('sin origen demostrable, nadie firma', $d['caso'] === 'neutral' && $d['frase'] === '', json_encode($d));
-    ok('pero se dice cuándo sale',     $d['cuando'] !== '', json_encode($d));
+    ok('sin origen demostrable, nadie firma', $d['caso'] === 'neutral', json_encode($d));
+    ok('pero se dice cuándo sale',     str_contains($d['frase'], 'Se publicará'), $d['frase']);
+    ok('y no se sugiere nada',         !str_contains($d['frase'], 'sugerimos'), $d['frase']);
 
     //  Y EL PORQUÉ DEL SUGERIDOR tampoco presume. Esta marca no tiene métricas
     //  todavía, así que la hora es la de arranque y no «la que mejor funciona».
@@ -128,14 +174,20 @@ try {
        array_diff_key($es, $en) === [] && array_diff_key($en, $es) === [],
        json_encode(['solo_es' => array_keys(array_diff_key($es, $en)),
                     'solo_en' => array_keys(array_diff_key($en, $es))], JSON_UNESCAPED_UNICODE));
-    foreach (['Elegiste esta hora.',
-              'Te sugerimos esta hora porque coincide con tu mejor rendimiento.',
-              'Te sugerimos esta hora para comenzar. La ajustaremos con tus resultados.'] as $k) {
+    foreach (['Se publicará %s.',
+              'Se publicará %s. Coincide con una de tus mejores horas.',
+              'Se publicará %s. Te sugerimos esta hora para comenzar.'] as $k) {
         ok('traducida · ' . mb_substr($k, 0, 28),
            isset($en[$k]) && trim((string)$en[$k]) !== '' && $en[$k] !== $k, (string)($en[$k] ?? '(falta)'));
     }
     $nav_es = require __DIR__ . '/../lang/es/navegacion.php';
     $nav_en = require __DIR__ . '/../lang/en/navegacion.php';
+    //  Y EL COPY VIEJO NO PUEDE SOBREVIVIR EN EL DICCIONARIO: una traducción
+    //  huérfana es la frase que alguien revive mañana creyendo que se usa.
+    foreach (['Te sugerimos esta hora porque coincide con tu mejor rendimiento.',
+              'Te sugerimos esta hora para comenzar. La ajustaremos con tus resultados.'] as $k) {
+        ok('retirada · ' . mb_substr($k, 0, 30), !isset($es[$k]) && !isset($en[$k]));
+    }
     ok('«Calendario» tiene su traducción',
        ($nav_en['Calendario'] ?? '') !== '' && ($nav_en['Calendario'] ?? '') !== 'Calendario',
        (string)($nav_en['Calendario'] ?? '(falta)'));

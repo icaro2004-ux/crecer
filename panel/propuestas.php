@@ -156,14 +156,10 @@ $creditos = function(array $p) use ($ags, $pdo) {
     //  propia pieza, y cuando no hay con que demostrarlo dice el hecho y
     //  calla el autor.
     $__at = hora_atribucion($pdo, $p);
-    if ($__at['caso'] === 'sin_hora') {
-        //  Sin hora no se enseña una hora. El dia si, que es cierto.
-        if ($__at['cuando'] !== '') $c[] = 'Sale ' . $__at['cuando'];
-    } else {
-        $c[] = $__at['frase'] !== ''
-             ? $__at['frase'] . ' — ' . $__at['cuando']
-             : 'Sale ' . $__at['cuando'];
-    }
+    //  La frase la redacta el dominio entera. Aqui solo se pinta: componerla
+    //  a mano en cada pantalla es como nacio la contradiccion de la cabecera.
+    if ($__at['frase'] !== '')      $c[] = $__at['frase'];
+    elseif ($__at['cuando'] !== '') $c[] = t('Se publicará %s.', $__at['cuando']);
     //  Y si no hay fecha ninguna, la Estratega si dejo huella de haber
     //  cuadrado el plan: eso lo dice el registro de agentes, no la pieza.
     if ($__at['caso'] === 'sin_hora' && $__at['cuando'] === ''
@@ -387,7 +383,10 @@ require __DIR__ . '/_shell.php';
       //  lo correcto. Una pieza sin hora no tiene hora en ningun sitio.
       $__ctx_at = hora_atribucion($pdo, $p);
       $ctx  = ucfirst((string)($p['plataforma'] ?? ''))
-            . ($__ctx_at['cuando'] !== '' ? ' · sale ' . $__ctx_at['cuando'] : '');
+            //  Solo el CUANDO: la linea de creditos ya dice la frase entera, y
+            //  esta cabecera va en versalitas — «Se Publicará El Lunes A Las» se
+            //  lee a trompicones y repite lo de abajo.
+            . ($__ctx_at['cuando'] !== '' ? ' · ' . $__ctx_at['cuando'] : '');
       $cred = $creditos($p);
     ?>
       <article class="est-prop<?= $i===0?' show':'' ?>" id="prop-<?= (int)$p['id'] ?>" data-id="<?= (int)$p['id'] ?>" <?= $i===0?'':'style="display:none"' ?>>
