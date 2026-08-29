@@ -177,11 +177,16 @@ function meta_fecha_libre(PDO $pdo, int $marca_id, string $fecha, string $limite
 }
 
 function meta_fecha_sugerida(PDO $pdo, int $marca_id, int $orden = 1, int $semana = 1): array {
+    //  10:00 ES EL ARRANQUE, NO «LA HORA QUE MEJOR TE FUNCIONA». Se guarda si
+    //  el Optimizador la respaldo o no, porque el texto de abajo lo afirmaba
+    //  siempre — tambien con un negocio recien nacido que no ha publicado
+    //  nada y del que no hay un solo dato.
     $hora = 10;
+    $respaldada = false;
     try {
         require_once __DIR__ . '/optimizador.php';
         $mom = optimizador_mejor_momento($pdo, $marca_id);
-        if (($mom['hora'] ?? null) !== null) $hora = (int)$mom['hora'];
+        if (($mom['hora'] ?? null) !== null) { $hora = (int)$mom['hora']; $respaldada = true; }
     } catch (Throwable $e) {}
 
     $meta = meta_activa($pdo, $marca_id);
@@ -228,10 +233,12 @@ function meta_fecha_sugerida(PDO $pdo, int $marca_id, int $orden = 1, int $seman
     elseif ($apura && $d === 0 && !$tarde) $porque = 'Vas atrasado para tu meta: esto sale HOY, a la hora que mejor te funciona.';
     elseif ($apura && $tarde)   $porque = 'Vas atrasado, pero hoy ya se hizo tarde: sale mañana a primera hora buena.';
     elseif ($apura)   $porque = 'Vas atrasado para tu meta: las piezas salen un día tras otro.';
-    else              $porque = 'Vas en ritmo: esta es la hora que mejor te ha funcionado.';
+    else              $porque = $respaldada
+                              ? 'Vas en ritmo: esta es la hora que mejor te ha funcionado.'
+                              : 'Vas en ritmo: esta hora es para arrancar, y la ajustamos con tus resultados.';
 
     return ['fecha' => $fecha, 'porque' => $porque, 'apura' => (bool)$apura, 'hora' => $hora,
-            'coordinada' => $coordinada, 'movida' => $movida];
+            'coordinada' => $coordinada, 'movida' => $movida, 'respaldada' => $respaldada];
 }
 
 /** "hoy 10:00 AM" · "mañana 10:00 AM" · "el sábado 10:00 AM" — como lo diría una persona. */
@@ -247,6 +254,119 @@ function fecha_humana_es(string $fecha): string {
     else                                               $cual = 'el ' . date('j/n', $ts);
     return trim($cual . ' a las ' . date('g:i A', $ts));
 }
+
+/**
+ *  LA MEJOR FRANJA, PERO SOLO SI HAY CON QUE SOSTENERLA.
+ *
+ *  `optimizador_mejor_momento()` no sirve para afirmar nada delante del dueño:
+ *  contesta también desde una lección GUARDADA en `crecer_memoria`, que puede
+ *  ser vieja o haber entrado a mano, y no trae cuántos posts la respaldan.
+ *
+ *  El análisis en vivo sí trae su cobertura, y la trae exigida: no devuelve
+ *  ninguna lección con menos de OPT_MIN_POSTS publicaciones medidas, ni un
+ *  patrón con menos de OPT_MIN_BUCKET dentro, ni una diferencia por debajo de
+ *  OPT_MIN_DELTA. Si no hay lección, no hay cobertura, y no se dice nada.
+ *
+ *  Se memoriza por marca: la misma pantalla clasifica varias piezas seguidas y
+ *  esto son cuentas sobre los mismos posts, no un dato que cambie entre una y
+ *  otra.
+ *
+ *  @return ?int la hora (0-23) respaldada, o null si no hay cobertura
+ */
+function hora_mejor_con_cobertura(PDO $pdo, int $marca_id): ?int
+{
+    static $cache = [];
+    if (array_key_exists($marca_id, $cache)) return $cache[$marca_id];
+    $h = null;
+    try {
+        require_once __DIR__ . '/optimizador.php';
+        foreach (optimizador_analizar($pdo, $marca_id) as $l) {
+            if (($l['clave'] ?? '') === 'mejor_franja' && isset($l['hora'])) $h = (int)$l['hora'];
+        }
+    } catch (Throwable $e) { $h = null; }
+    return $cache[$marca_id] = $h;
+}
+
+/**
+ *  DE DONDE SALIO LA HORA DE UNA PIEZA — o mejor dicho, lo poco que de eso se
+ *  puede DEMOSTRAR hoy, que es nada.
+ *
+ *  ESTA FUNCION SE HA CORREGIDO TRES VECES, y las tres por el mismo error de
+ *  fondo: confundir una pista con una prueba.
+ *
+ *    1ª · Acreditaba «La Estratega escogió la hora» mirando `$ags`, la lista de
+ *         agentes que trabajaron para la MARCA en las últimas doce llamadas.
+ *         No dice nada de ESA pieza.
+ *    2ª · Acreditaba al dueño toda pieza con `calendario_id`. Esa columna dice
+ *         por qué puerta entró la pieza —la ruta manual— y en esa misma ruta la
+ *         hora la estampa el servidor con `date()`. El dueño escribió un
+ *         caption; la hora se la pusimos nosotros.
+ *    3ª · Decía «te sugerimos esta hora» a toda pieza con `tactica_id`. Eso
+ *         prueba que la creó el plan, no que la hora que tiene AHORA siga
+ *         siendo la que el plan sugirió: si el dueño la movió, no queda rastro.
+ *
+ *  LO QUE FALTA, EN UNA LINEA: nadie apunta quién tocó `fecha_programada`.
+ *  `accion=fecha` (panel/aprobar2.php) escribe la fecha y `updated_at`, y
+ *  `updated_at` se mueve por el arte, el caption y el estado. `audit_log` solo
+ *  recibe eco de ajustes de meta y sustituciones de jugada. `crecer_meta_cambio`
+ *  es la historia de la META, no de las piezas.
+ *
+ *  Con una columna que diga QUIEN puso la hora y CUANDO volverían las dos
+ *  frases retiradas —«Elegiste esta hora» y «Te sugerimos esta hora para
+ *  comenzar»—, cada una en su caso. Hasta entonces no se dicen. Este tramo no
+ *  toca el esquema.
+ *
+ *  LO QUE SI SE PUEDE DECIR, y es lo único:
+ *
+ *    sin_hora   `fecha_programada` vacía o a las 00:00. Una fecha sin hora se
+ *               guarda a medianoche; enseñar «12:00 AM» es inventar una
+ *               decisión que nadie tomó y prometer una publicación de
+ *               madrugada. Se dice el día, que sí es cierto.
+ *
+ *    coincide   La hora cae en la mejor franja del negocio Y esa franja tiene
+ *               cobertura hoy. Se afirma la COINCIDENCIA —comprobable ahora
+ *               mismo— y NUNCA el motivo: que caiga ahí no demuestra que se
+ *               escogiera por eso.
+ *
+ *    neutral    Todo lo demás, venga del plan o de donde venga. Se dice cuándo
+ *               sale y no se firma: eso es cierto lo haya puesto quien lo haya
+ *               puesto.
+ *
+ *  @return array{caso:string, frase:string, cuando:string, hora:?int}
+ *          `frase` es la línea COMPLETA, ya redactada: quien la pinta no
+ *          vuelve a componerla a su manera.
+ */
+function hora_atribucion(PDO $pdo, array $pieza): array
+{
+    $f  = trim((string)($pieza['fecha_programada'] ?? ''));
+    $ts = ($f !== '' && $f !== '0000-00-00 00:00:00') ? strtotime($f) : false;
+    if ($ts === false) {
+        return ['caso' => 'sin_hora', 'frase' => '', 'cuando' => '', 'hora' => null];
+    }
+    $hora   = (int)date('G', $ts);
+    $cuando = fecha_humana_es($f);
+
+    //  SIN HORA · a medianoche no se programa nada a propósito.
+    if (substr($f, 11, 5) === '00:00') {
+        //  Se corta también el «a las»: sin hora, «el martes a las» es una
+        //  frase partida por la mitad.
+        $dia = trim((string)preg_replace('~\s*(a las)?\s*,?\s*\d{1,2}:\d{2}\s*[AP]M$~u', '', $cuando));
+        return ['caso' => 'sin_hora', 'frase' => '', 'cuando' => $dia, 'hora' => null];
+    }
+
+    //  COINCIDE · el hecho comprobable, sin atribuirle la intención a nadie.
+    $mejor = hora_mejor_con_cobertura($pdo, (int)($pieza['marca_id'] ?? 0));
+    if ($mejor !== null && $mejor === $hora) {
+        return ['caso' => 'coincide',
+                'frase' => t('Se publicará %s. Coincide con una de tus mejores horas.', $cuando),
+                'cuando' => $cuando, 'hora' => $hora];
+    }
+
+    //  NEUTRAL · el hecho, y nadie firma.
+    return ['caso' => 'neutral', 'frase' => t('Se publicará %s.', $cuando),
+            'cuando' => $cuando, 'hora' => $hora];
+}
+
 
 /**
  * LAS PUERTAS DE UNA JUGADA — una cosa a la vez, y cada una abre DONDE se hace.

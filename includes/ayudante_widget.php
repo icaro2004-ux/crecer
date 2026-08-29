@@ -64,6 +64,16 @@ if ($ay_marca_id <= 0 || !function_exists('csrf_token') || empty($_SESSION['usua
      tapaba controles y contenido de la vista previa. Quien abra un modal
      pone body.modal-abierto y lo quita al cerrar. */
   body.modal-abierto .ay-fab{display:none !important}
+  /*  Y CUANDO UN CONTROL ENTRA EN SU FRANJA, Ayuda se aparta.
+   *
+   *  La clase `ah-cola` la pone `panel/_meta_zona.php`, que es geometria pura y
+   *  la comparten varias pantallas. La REGLA que la obedece, en cambio, vivia
+   *  dentro del <style> de `panel/meta.php`: en el Estudio la clase se ponia
+   *  —el observador funcionaba— y no pasaba nada, porque ahi no habia ningun
+   *  CSS que la escuchara. El boton se quedaba sentado encima de «No» y de
+   *  «Ajustalo». Vive aqui, junto al boton, para que valga en todas. */
+  body .ay-fab{transition:transform .2s ease, opacity .2s ease}
+  body.ah-cola .ay-fab{transform:translateY(calc(100% + 96px));opacity:0;pointer-events:none}
   /*  AYUDA POR ENCIMA DEL DOCK. Estaba a 24px del borde: justo dentro de la
       barra de abajo, tapando un destino. Se sube por encima de su zona
       segura —el alto del dock, que vive en `--dock-alto`, más el margen del

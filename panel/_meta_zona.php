@@ -47,7 +47,12 @@
   //  la barra de abajo puede tapar, asi que participa de la misma geometria.
   //  `.pr` es la pantalla de preparacion: tambien tiene su ultimo control
   //  contra la barra de abajo.
-  var caja = function () { return document.querySelector('.ah, .plan, .wz, .sm, .pr'); };
+  //  `.est` es el Estudio —la pantalla donde se decide una propuesta—. Su
+  //  boton «Vamos con este» es la accion mas importante del producto y el
+  //  boton flotante de Ayuda se le sentaba encima: se veia en la captura del
+  //  recorrido y no en ninguna afirmacion. Entra en la MISMA geometria que ya
+  //  protege a Tu Meta; no hace falta una regla nueva para cada pantalla.
+  var caja = function () { return document.querySelector('.ah, .plan, .wz, .sm, .pr, .est'); };
 
   // ══════════════════════════════════════════════════════════════
   //  1 · LA ZONA SEGURA — solo contra .botnav
@@ -125,6 +130,8 @@
   var SEL = [
     //  capa 1 · lo que toca ahora
     '.tm-btn', '.ah-como > summary', '.tm-ac > summary', '.cq-btn', '.tm-mas a',
+    //  capa 0 · el Estudio: el veredicto y las dos salidas de al lado.
+    '.est-go', '.est-minor button', '.est-b',
     //  capa 2 · el plan. Con la lista corta salieron OCHO controles tapados a
     //  360: los de abrir las piezas de una jugada y las opciones del final.
     '.plan-volver', '.jg-sum', '.jg-hacer', '.jg-ok2', '.jg-ver', '.pu',

@@ -1105,7 +1105,9 @@ $handle = $marca['instagram'] ?: ('@' . preg_replace('/[^a-z0-9]/', '', mb_strto
 $avatar = $marca['logo_path'] ?: '/crecer/assets/brand/encuentralo-pin.svg';
 
 $active = 'contenido';
-$page_title = 'Contenido';
+//  El titulo del navegador decia «Contenido» y el encabezado de la misma
+//  pagina «Tus Posts». Es la bandeja: se llama igual en los dos sitios.
+$page_title = 'Tus Posts';
 $guia = ['key'=>'contenido','agente'=>'pen','titulo'=>'Tu fábrica de posts',
   'intro'=>'Aquí La Creativa te prepara los posts. Tú apruebas lo que te guste.',
   'pasos'=>[
@@ -1479,7 +1481,7 @@ $cf = [
 ][$tab] ?? ['La Creativa · Ideando', ''];
 ?>
 <!-- Header COHERENTE con el modo Calendario: mismo h1 limpio (page-h, bold) + mismo viewtoggle. -->
-<h1 class="page-h">Tus Posts</h1>
+<h1 class="page-h"><?= $h(t('Tus Posts')) ?></h1>
 <div class="viewtoggle">
   <a class="vt on" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>&tab=<?= $h($tab) ?>"><?= ico('list') ?> Lista</a>
   <a class="vt" href="/crecer/panel/calendario.php?marca=<?= $marca_id ?>"><?= ico('calendar') ?> Calendario</a>

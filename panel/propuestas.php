@@ -19,6 +19,7 @@ require __DIR__ . '/../includes/suscripcion.php';
 //  haya cargado antes.
 require_once __DIR__ . '/../includes/material.php';
 require __DIR__ . '/../includes/iconos.php';
+require_once __DIR__ . '/../includes/meta_ejecutar.php';  // hora_atribucion(): de dónde salió la hora
 require_once __DIR__ . '/../includes/baraja.php';   // La Baraja: el gesto de decidir (solo móvil, flag CRECER_BARAJA)
 requiere_login();
 require_once __DIR__ . '/../includes/panel_guard.php';
@@ -97,7 +98,12 @@ catch (Throwable $e) { $col_material = false; }
 
 $props = [];
 try {
-    $sql = "SELECT id, caption, plataforma, tipo, fecha_programada, grafica_path"
+    //  `marca_id`, `tactica_id` y `calendario_id` viajan porque los necesita
+    //  `hora_atribucion()`: sin ellos toda pieza parecia de origen desconocido
+    //  y el Estudio caia siempre al texto neutral, tambien cuando el plan si
+    //  habia sugerido la hora y podia explicarlo.
+    $sql = "SELECT id, caption, plataforma, tipo, fecha_programada, grafica_path,
+                   marca_id, tactica_id, calendario_id"
          . ($col_material ? ", necesita_material, guion" : ", NULL AS necesita_material, NULL AS guion")
          . " FROM crecer_contenido
              WHERE marca_id=? AND estado=? AND tipo<>'carrusel'";
@@ -134,34 +140,31 @@ if (!function_exists('_fecha_humana')) {
     }
 }
 // Créditos reales del corillo para una pieza (unidad primero, individuos como prueba).
-$creditos = function(array $p) use ($ags) {
+$creditos = function(array $p) use ($ags, $pdo) {
     $cap = trim((string)$p['caption']);
     $arte = !empty($p['grafica_path']);
     $video = $arte && preg_match('#\.(mp4|mov|m4v)$#i', (string)$p['grafica_path']);
     $c = [];
     if ($cap !== '' || array_intersect(['creador','editor','aprendiz'], $ags)) $c[] = 'La Creativa escribió el caption';
     if ($arte || in_array('diseñador', $ags, true)) $c[] = ($video ? 'El Diseñador preparó el video' : 'El Diseñador montó el arte');
-    //  LA HORA SE DICE, PERO NO SE LE ATRIBUYE A NADIE SIN PRUEBA.
+    //  LA HORA: LO QUE LA BASE PUEDE DEMOSTRAR, PIEZA A PIEZA.
     //
-    //  Esta linea acreditaba a la Estratega con solo que hubiera fecha: valia
-    //  igual si la hora la habia puesto el dueño a mano un minuto antes —el
-    //  producto le quitaba su decision y se la daba a la IA— y valia igual si
-    //  no habia hora ninguna, en cuyo caso enseñaba «escogio la hora: 12:00
-    //  AM», que es una eleccion que nadie hizo y una publicacion a medianoche.
-    //
-    //  Las otras dos lineas de este bloque ya piden evidencia del agente;
-    //  esta era la unica que afirmaba trabajo sin mirar el registro. Con
-    //  prueba se acredita; sin prueba se dice el HECHO, que es cierto lo haya
-    //  puesto quien lo haya puesto.
-    if (!empty($p['fecha_programada'])) {
-        $__cuando  = _fecha_humana($p['fecha_programada']);
-        $__sin_hora = substr((string)$p['fecha_programada'], 11, 5) === '00:00';
-        if ($__sin_hora) $__cuando = trim((string)preg_replace('~,\s*\d{1,2}:\d{2}\s*[AP]M$~u', '', $__cuando));
-        $c[] = (!$__sin_hora && array_intersect(['planificador','intake','estratega'], $ags))
-             ? 'La Estratega escogió la hora — ' . $__cuando
-             : 'Sale ' . $__cuando;
-    }
-    elseif (array_intersect(['planificador','intake','estratega'], $ags)) $c[] = 'La Estratega lo cuadró en el plan';
+    //  Esto miraba `$ags` —los agentes que trabajaron para la MARCA en las
+    //  ultimas doce llamadas— y con eso acreditaba a la Estratega la hora de
+    //  CUALQUIER pieza con fecha, tambien la que el dueño puso a mano. La
+    //  clasificacion vive ahora en el dominio, se decide con datos de la
+    //  propia pieza, y cuando no hay con que demostrarlo dice el hecho y
+    //  calla el autor.
+    $__at = hora_atribucion($pdo, $p);
+    //  La frase la redacta el dominio entera. Aqui solo se pinta: componerla
+    //  a mano en cada pantalla es como nacio la contradiccion de la cabecera.
+    if ($__at['frase'] !== '')      $c[] = $__at['frase'];
+    elseif ($__at['cuando'] !== '') $c[] = t('Se publicará %s.', $__at['cuando']);
+    //  Y si no hay fecha ninguna, la Estratega si dejo huella de haber
+    //  cuadrado el plan: eso lo dice el registro de agentes, no la pieza.
+    if ($__at['caso'] === 'sin_hora' && $__at['cuando'] === ''
+        && array_intersect(['planificador','intake','estratega'], $ags))
+        $c[] = 'La Estratega lo cuadró en el plan';
     return array_slice($c, 0, 3);
 };
 
@@ -374,7 +377,16 @@ require __DIR__ . '/_shell.php';
       $arte = !empty($p['grafica_path']);
       $video = $arte && preg_match('#\.(mp4|mov|m4v)$#i', (string)$p['grafica_path']);
       $img  = $arte && !$video;
-      $ctx  = ucfirst((string)($p['plataforma'] ?? '')) . (!empty($p['fecha_programada']) ? ' · sale ' . _fecha_humana($p['fecha_programada']) : '');
+      //  LA CABECERA USA LA MISMA CLASIFICACION que los creditos de abajo. Si
+      //  no, se contradicen en la misma pantalla: aqui salia «sale el lunes,
+      //  12:00 AM» mientras tres lineas mas abajo decia «sale el lunes», que es
+      //  lo correcto. Una pieza sin hora no tiene hora en ningun sitio.
+      $__ctx_at = hora_atribucion($pdo, $p);
+      $ctx  = ucfirst((string)($p['plataforma'] ?? ''))
+            //  Solo el CUANDO: la linea de creditos ya dice la frase entera, y
+            //  esta cabecera va en versalitas — «Se Publicará El Lunes A Las» se
+            //  lee a trompicones y repite lo de abajo.
+            . ($__ctx_at['cuando'] !== '' ? ' · ' . $__ctx_at['cuando'] : '');
       $cred = $creditos($p);
     ?>
       <article class="est-prop<?= $i===0?' show':'' ?>" id="prop-<?= (int)$p['id'] ?>" data-id="<?= (int)$p['id'] ?>" <?= $i===0?'':'style="display:none"' ?>>
@@ -514,6 +526,10 @@ require __DIR__ . '/_shell.php';
   <script>window.CRECER_SALA_IDEA = <?= json_encode($sala_idea, JSON_UNESCAPED_UNICODE) ?>;</script>
 <?php endif; ?>
 <?php
+//  LA ZONA SEGURA Y LA REGLA DE AYUDA. La misma geometría que protege a Tu
+//  Meta: aparta el botón flotante cuando un control entra en su franja. Aquí
+//  el control es «Vamos con este», que es la decisión del producto.
+require __DIR__ . '/_meta_zona.php';
 require __DIR__ . '/../includes/csrf_js.php';
 include __DIR__ . '/_crear_wizard.php';
 ?>

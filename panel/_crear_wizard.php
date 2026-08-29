@@ -368,6 +368,10 @@ if (!isset($redes_conectadas)) {
     document.getElementById('wiz-next2').style.display='none';
     wizPaso(1);
     document.getElementById('wizov').classList.add('show');
+    //  CON LA HOJA ABIERTA, AYUDA SE QUITA DE EN MEDIO. Es la misma exclusión
+    //  que ya usan los modales de aprobar2: el botón flota sobre el dock y se
+    //  cruzaba con «Crear el post». No hace falta inventarle una regla nueva.
+    document.body.classList.add('modal-abierto');
     if(sinIdeas){
       //  Ni sugerencias ni el hueco donde iban: el tema ya está escrito, y
       //  «Escribe tu idea abajo» sería mentirle.
@@ -375,7 +379,8 @@ if (!isset($redes_conectadas)) {
       var _h=document.getElementById('wiz-hint'); if(_h) _h.style.display='none';
     } else wizCargarIdeas();
   };
-  window.wizCerrar=function(){ document.getElementById('wizov').classList.remove('show'); };
+  window.wizCerrar=function(){ document.getElementById('wizov').classList.remove('show');
+    document.body.classList.remove('modal-abierto'); };
   // ── Entrada directa a CREAR: ?crear=1 abre el wizard; &idea=… lo prellena ──
   // (desde el FAB "Crear", el botón de Propuestas o la "Idea del día" del Inicio)
   (function(){
