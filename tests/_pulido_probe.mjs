@@ -27,7 +27,12 @@ const SINHORA = parseInt(process.argv[6] || '0', 10);
 //  `?jugada=` SI filtra el mazo, y es como se llega a mirar una concreta.
 const JUG_HORA = parseInt(process.argv[7] || '0', 10);
 const JUG_SIN  = parseInt(process.argv[8] || '0', 10);
-const BASE  = 'http://localhost/crecer/panel';
+//  LA SONDA MIRA EL ARBOL QUE LA INVOCO, no el que Apache sirva por
+//  costumbre. Estaba fijo en /crecer/panel, asi que con dos worktrees a la
+//  vez -lo normal cuando dos ramas se preparan en paralelo- la prueba de una
+//  rama validaba en silencio los archivos de la OTRA. El invocador manda su
+//  base por CRECER_BASE; sin ella, todo sigue igual que siempre.
+const BASE  = process.env.CRECER_BASE || 'http://localhost/crecer/panel';
 const di = (k, v) => console.log(k + '=' + String(v).replace(/\r?\n/g, ' '));
 
 const SONDA = `

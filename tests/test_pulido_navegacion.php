@@ -211,11 +211,31 @@ try {
 //  LA PANTALLA
 // ══════════════════════════════════════════════════════════════
 $ctx0 = stream_context_create(['http' => ['timeout' => 8, 'ignore_errors' => true]]);
-$hay_web = @file_get_contents('http://localhost/crecer/login.php', false, $ctx0) !== false;
+$MI_BASE = 'http://localhost/' . rawurlencode(basename(dirname(__DIR__)));
+$hay_web = @file_get_contents($MI_BASE . '/login.php', false, $ctx0) !== false;
 $hay_chrome = is_file('C:/Program Files/Google/Chrome/Application/chrome.exe');
+
+//  ── EL CANDADO QUE FALTABA, Y COSTO DINERO DESCUBRIRLO ──────────────────
+//  El centinela `_SIN_CREDENCIALES` se escribe en el arbol de ESTA prueba, pero
+//  `ia.php` lo lee desde el arbol que Apache esta sirviendo. Mientras ambos son
+//  el mismo (el caso normal, /crecer) todo cuadra. Desde un worktree paralelo
+//  NO cuadra, y ahi la sonda llama al proveedor DE VERDAD.
+//
+//  Y no basta con apuntar la sonda a este arbol: las paginas piden sus AJAX a
+//  rutas ABSOLUTAS `/crecer/...`, asi que el navegador se sale igual al arbol
+//  servido, donde no hay centinela. Medido el 2026-08-29: una corrida desde un
+//  worktree paralelo gasto 0.001393 USD en gemini-2.5-flash.
+//
+//  Asi que la parte de pantalla solo corre cuando este arbol ES el que Apache
+//  sirve en /crecer. En cualquier otro caso se salta y se dice por que: se
+//  prefiere no medir a medir gastando el dinero de alguien.
+$SOY_EL_SERVIDO = @realpath(dirname(__DIR__)) === @realpath('C:/xampp/htdocs/crecer');
 
 if (!$hay_web || !$hay_chrome) {
     echo "\n  (sin servidor o sin Chrome: la parte de pantalla queda sin correr)\n";
+} elseif (!$SOY_EL_SERVIDO) {
+    echo "\n  (este arbol no es el que Apache sirve en /crecer: la parte de pantalla\n"
+       . "   se salta para no llamar al proveedor de verdad — ver el comentario)\n";
 } else {
     $SHOTS = __DIR__ . '/_capturas/pulido';
     if (!is_dir($SHOTS)) @mkdir($SHOTS, 0777, true);
@@ -258,6 +278,13 @@ if (!$hay_web || !$hay_chrome) {
         file_put_contents((session_save_path() ?: sys_get_temp_dir())
                           . DIRECTORY_SEPARATOR . 'sess_' . $sid, 'usuario_id|i:' . (int)$fx['usuario_id'] . ';');
 
+        //  LA SONDA MIRA ESTE ARBOL, NO EL QUE APACHE SIRVA POR COSTUMBRE.
+        //  La base salia fija de /crecer/panel dentro de la sonda. Con dos
+        //  worktrees preparandose a la vez -lo normal cuando dos ramas van en
+        //  paralelo- esta prueba validaba en silencio los archivos de la OTRA
+        //  rama y daba verde sin haber mirado su propio codigo. Ahora la base
+        //  se deriva de donde vive ESTE archivo.
+        putenv('CRECER_BASE=http://localhost/' . rawurlencode(basename(dirname(__DIR__))) . '/panel');
         $cmd = 'node ' . escapeshellarg(__DIR__ . '/_pulido_probe.mjs') . ' '
              . escapeshellarg($SHOTS) . ' ' . escapeshellarg($sid) . ' ' . $M . ' ' . $PIEZA
              . ' ' . $SINHORA . ' ' . (int)($fx['tacticas'][0] ?? 0)
