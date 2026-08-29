@@ -23,6 +23,7 @@ require __DIR__ . '/../includes/gateway.php';
 //  haya cargado antes.
 require_once __DIR__ . '/../includes/material.php';
 require_once __DIR__ . '/../includes/iconos.php';
+require_once __DIR__ . '/../includes/muestra.php';   // estado persistido de la preparacion
 requiere_login();
 
 $usuario = usuario_actual($pdo);
@@ -69,6 +70,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json; charset=utf-8');
     if (!csrf_ok()) { echo json_encode(['ok'=>false,'err'=>'Sesión expiró, recarga.']); exit; }
     $accion = $_POST['accion'] ?? '';
+
+    //  ── EL SONDEO DE LA PREPARACION ─────────────────────────────────────
+    //  Un solo endpoint para toda la espera: empuja el job de imagen que YA
+    //  existe y devuelve el estado leido de las columnas. No crea trabajo ni
+    //  pide imagenes: img_resp_completar solo RECOGE lo que el proveedor ya
+    //  tiene, y muestra_asegurar tiene puestas las guardas para no volver a levantar
+    //  un preparador mientras haya job vivo o el encolado quedara incierto.
+    if ($accion === 'preparacion') {
+        require_once __DIR__ . '/../includes/img_responses.php';
+        try { img_resp_completar($pdo, $marca_id, $post_id); } catch (Throwable $e) { /* que el sondeo siga */ }
+        echo json_encode(muestra_asegurar($pdo, $marca_id, $USUARIO_ID), JSON_UNESCAPED_UNICODE); exit;
+    }
+    //  EL REINTENTO, solo a peticion del dueño y solo desde un desenlace cerrado.
+    if ($accion === 'reintentar_muestra') {
+        $ok = muestra_reintentar($pdo, $marca_id, $USUARIO_ID);
+        echo json_encode(['ok' => $ok] + muestra_estado($pdo, $marca_id), JSON_UNESCAPED_UNICODE); exit;
+    }
+
     if ($accion === 'aprobar') {
         $pdo->prepare("UPDATE crecer_contenido SET estado='aprobado', updated_at=NOW() WHERE id=? AND marca_id=? AND estado='borrador'")
             ->execute([$post_id, $marca_id]);
@@ -190,6 +209,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // levanta ese caso (Gemini de respaldo). Estaba en index/propuestas/aprobar2 —
 // todas DETRÁS del paywall, así que al del post gratis no lo rescataba nadie.
 try { require_once __DIR__ . '/../includes/img_responses.php'; img_sweep_pendientes($pdo, $marca_id); } catch (Throwable $e) {}
+
+//  ── LA PUERTA DEL MOMENTO DE VENTA ──────────────────────────────────────
+//  El primer post completo ES la venta, asi que no se entra a medias. Mientras
+//  falte el copy o falte la imagen, aqui no se pinta el escenario: se pinta la
+//  pantalla de preparacion, que sondea ESTE mismo trabajo y revela las dos
+//  cosas juntas. Como el gate esta ANTES del render, todo lo que viene despues
+//  —aprobar, editar, publicar, SMS, redes, la oferta— queda inalcanzable por
+//  construccion hasta que muestra_estado() diga 'listo'. No hace falta
+//  acordarse de esconder cada boton: no llegan a existir.
+//
+//  En la VENTA (post ya publicado) no aplica: ahi la imagen ya se entrego.
+if ($estado !== GW_VENTA) {
+    $prep = muestra_asegurar($pdo, $marca_id, $USUARIO_ID);
+    //  NO HAY PUERTA TRASERA «SIN ARTE», Y SE QUITO A PROPOSITO.
+    //  Hubo una: en el fallo definitivo dejaba pasar al escenario para que el
+    //  dueño al menos viera su texto. Suena razonable hasta que se mira lo que
+    //  hay del otro lado — «Publicar en mis redes» (Instagram EXIGE media, la
+    //  publicacion falla) y «Bajar la imagen» con el href vacio. Era cambiar una
+    //  espera con salida por dos botones rotos.
+    //  El copy no se pierde: en ese estado la propia pantalla lo enseña
+    //  (copy_a_salvo) y ofrece reintentar. Ver includes/muestra.php.
+    if (!$prep['listo']) {
+        //  Recargar cae aqui otra vez y reconstruye la etapa desde la base: el
+        //  tiempo transcurrido sale de created_at, no de un contador del cliente.
+        require __DIR__ . '/../includes/_preparacion_view.php';
+        exit;
+    }
+}
 
 // ¿Redes conectadas? (para ofrecer "publicar en mis redes")
 $redes_ok = false; $redes_conectadas = [];   // publicar SOLO a lo que de verdad esté conectado

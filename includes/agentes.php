@@ -2029,28 +2029,90 @@ function entrevista_finalizar(PDO $pdo, int $marca_id, array $historial): array 
     }
 }
 
-/** Crea el POST DE MUESTRA de bienvenida (caption + imagen), ya aterrizado en el
- *  perfil/radiografía recién armados por la entrevista. Devuelve el contenido_id. */
-function crear_post_muestra(PDO $pdo, int $marca_id): int {
-    // IDEMPOTENTE: 1 post por marca en el gateway. Si YA hay uno (cualquier estado),
-    // devuélvelo — NUNCA crear otro. Mata el abuso de 'back' en el browser → posts infinitos.
+/**
+ * LA IDEA con la que nace la pieza. Es el brief que lee el Creador, no un copy:
+ * mientras la pieza siga con esto, el post NO esta escrito.
+ */
+const MUESTRA_IDEA = 'Post de bienvenida: preséntale el negocio a la gente, cálido y boricua';
+
+/**
+ * LA FILA DE LA MUESTRA — solo base de datos, sin un solo modelo de por medio.
+ * Se separo de la preparacion porque el dueño ya no espera a que el post este
+ * escrito para ver algo: entra a la pantalla de preparacion en cuanto EXISTE la
+ * pieza, y el corillo la llena por detras.
+ *
+ * IDEMPOTENTE: 1 post por marca en el gateway. Si YA hay uno (cualquier estado),
+ * lo devuelve — NUNCA crea otro. Mata el abuso de 'back' → posts infinitos.
+ */
+function muestra_fila(PDO $pdo, int $marca_id): int {
     $ya = (int)$pdo->query("SELECT id FROM crecer_contenido WHERE marca_id={$marca_id} ORDER BY id DESC LIMIT 1")->fetchColumn();
     if ($ya) return $ya;
     $ca = (int)date('Y'); $cm = (int)date('n');
     $pdo->prepare("INSERT INTO crecer_calendario (marca_id,anio,mes,estado,generado_por_ia) VALUES (?,?,?, 'borrador',1) ON DUPLICATE KEY UPDATE updated_at=NOW()")->execute([$marca_id, $ca, $cm]);
     $calid = (int)$pdo->query("SELECT id FROM crecer_calendario WHERE marca_id={$marca_id} AND anio={$ca} AND mes={$cm}")->fetchColumn();
     $pdo->prepare("INSERT INTO crecer_contenido (calendario_id,marca_id,plataforma,tipo,caption,fecha_programada,estado) VALUES (?,?, 'instagram','post',?,?, 'borrador')")
-        ->execute([$calid, $marca_id, 'Post de bienvenida: preséntale el negocio a la gente, cálido y boricua', date('Y-m-d 10:00:00')]);
-    $cid = (int)$pdo->lastInsertId();
-    $cap = '';
-    try { $r = redactar_pieza($pdo, $cid); $cap = (string)($r['caption'] ?? ''); } catch (Throwable $e) {}
-    // MOTOR RESPONSES (background): encola el anuncio y devuelve YA; la imagen llega por
-    // polling en el gateway (sin colgar la página ~50s). Fallback al motor viejo si falla.
+        ->execute([$calid, $marca_id, MUESTRA_IDEA, date('Y-m-d 10:00:00')]);
+    return (int)$pdo->lastInsertId();
+}
+
+/**
+ * LLENA la muestra: primero el caption COMPLETO, despues el arte. Es lo caro, y
+ * es lo que corre en el worker — nunca en la pantalla del dueño.
+ *
+ * EL ORDEN NO ES NEGOCIABLE, Y COSTO ENTENDERLO.
+ * El arte se encola con el caption FINAL, el que el dueño va a leer. Se probo
+ * arrancarlo antes, con el borrador, para ganarle unos segundos al proveedor
+ * mientras el Director afinaba el texto. Se descarto: la imagen y el copy tienen
+ * que pertenecer a la MISMA propuesta, y «casi la misma» no es la misma. El
+ * precedente esta en onboarding.php, donde el arte se generaba con copy VACIO y
+ * antes de que el dueño escogiera direccion — una imagen que no ilustraba
+ * ninguna de las tres. Ganar cinco segundos no vale reabrir esa puerta.
+ *
+ * IDEMPOTENTE POR TRAMO, y esa es la propiedad que sostiene «recargar no duplica
+ * generacion ni cuota»:
+ *   · el caption ya escrito se reconoce por ia_log_id — no se vuelve a escribir;
+ *   · el arte no se re-encola porque img_resp_encolar_res ve el job vivo, y la
+ *     unidad de cuota lleva llave por (origen_tipo, origen_id), asi que una
+ *     segunda pasada reusa la reserva de la primera en vez de abrir otra.
+ * Dos preparadores simultaneos no producen dos imagenes ni dos cobros; el lock
+ * de muestra.php es la primera puerta, esto es la que de verdad cierra.
+ */
+function muestra_preparar(PDO $pdo, int $marca_id, int $cid): int {
     require_once __DIR__ . '/img_responses.php';
+    $q = $pdo->prepare("SELECT caption, ia_log_id, img_job, img_estado, grafica_path FROM crecer_contenido WHERE id=? AND marca_id=?");
+    $q->execute([$cid, $marca_id]);
+    $fila = $q->fetch(PDO::FETCH_ASSOC);
+    if (!$fila) return $cid;
+
+    $copy_listo = ($fila['ia_log_id'] !== null);
+    $arte_listo = trim((string)($fila['grafica_path'] ?? '')) !== '';
+    $arte_vivo  = trim((string)($fila['img_job'] ?? '')) !== '';
+    if ($copy_listo && ($arte_listo || $arte_vivo)) return $cid;   // nada que hacer
+
+    // 1) EL COPY, COMPLETO. Hasta que no exista, no hay con que briefear el arte.
+    $cap = $copy_listo ? (string)$fila['caption'] : '';
+    if (!$copy_listo) {
+        try { $r = redactar_pieza($pdo, $cid, [], $marca_id); $cap = (string)($r['caption'] ?? ''); }
+        catch (Throwable $e) { error_log('muestra_preparar redactar: ' . $e->getMessage()); }
+    }
+    if ($arte_listo || $arte_vivo) return $cid;
+
+    // 2) EL ARTE, con ESE copy.
     if (img_resp_activo()) {
         $enc = img_resp_encolar_res($pdo, $marca_id, $cid, $cap);
-        // Encolado: la imagen llega por polling, no hay nada más que hacer aquí.
-        if ($enc['res'] === 'encolado') return $cid;
+        //  Y AL WORKER SE LE AVISA.
+        //  Sin esto el unico que empujaba el job era el navegador cuando llegaba
+        //  al escenario y arrancaba su sondeo. Si el dueño tardaba en llegar —o
+        //  cerraba la pestaña— nadie recogia la imagen. arte_worker ya sabe
+        //  hacerlo, y el lease atomico de img_poll_tomar_lease impide que los dos
+        //  sondeos se pisen: gana el que mueva la fila.
+        if ($enc['res'] === 'encolado') {
+            if (function_exists('arte_disparar')) {
+                try { arte_disparar($marca_id, $cid); }
+                catch (Throwable $e) { error_log('muestra arte_disparar: ' . $e->getMessage()); }
+            }
+            return $cid;   // la imagen llega por polling
+        }
         // INCIERTO: la petición se fue sin respuesta, así que OpenAI pudo haber
         // aceptado el trabajo. Caer al motor viejo aquí es pedir —y pagar— la
         // segunda imagen. La pieza ya quedó marcada 'enc:' y se queda esperando;
@@ -2071,6 +2133,14 @@ function crear_post_muestra(PDO $pdo, int $marca_id): int {
         material_soltar($pdo, (int)$marca_id, (int)$cid);
     } catch (Throwable $e) {}
     return $cid;
+}
+
+/** Crea el POST DE MUESTRA de bienvenida (caption + imagen), ya aterrizado en el
+ *  perfil/radiografía recién armados por la entrevista. Devuelve el contenido_id.
+ *  SINCRONO: lo usan los llamadores que SI pueden esperar (pruebas, respaldo).
+ *  El gateway ya no pasa por aqui — usa muestra_fila() + el worker. */
+function crear_post_muestra(PDO $pdo, int $marca_id): int {
+    return muestra_preparar($pdo, $marca_id, muestra_fila($pdo, $marca_id));
 }
 
 /**

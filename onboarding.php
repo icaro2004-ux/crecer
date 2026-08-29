@@ -135,13 +135,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try { $rp = redactar_pieza($pdo, $cid); $caption = $rp['caption'] ?? ''; } catch (Throwable $e2) {}  // respaldo clásico
     }
     if ($caption !== '') { $pdo->prepare("UPDATE crecer_contenido SET caption=? WHERE id=?")->execute([$caption, $cid]); }
-    // SIEMPRE genera la imagen de muestra (cumple la promesa "imagen + caption").
-    // Con foto real la realza; sin foto, la IA genera una acorde al tema/negocio.
-    try {
-        $g = generar_grafica($pdo, $marca_id, $foto_path ?: null, ['copy'=>$caption, 'con_texto'=>false, 'estilo'=>'']);
-        $pdo->prepare("UPDATE crecer_contenido SET grafica_path=?, arte_intentos=arte_intentos+1, updated_at=NOW() WHERE id=?")
-            ->execute([$g['archivo'], $cid]);
-    } catch (Throwable $e) { /* si falla la imagen, el caption igual quedó */ }
+
+    //  AQUI YA NO SE GENERA ARTE, Y ESE ES EL ARREGLO.
+    //
+    //  Lo que habia: generar_grafica(..., ['copy' => $caption]) con $caption
+    //  puesto a '' tres lineas mas arriba, en el camino de EXITO de
+    //  pipeline_preparar(). O sea, la imagen se pedia con copy VACIO — el
+    //  Director de Arte se quedaba sin el mensaje del post y componia con lo
+    //  unico que le llegaba, el tipo de negocio.
+    //
+    //  Y peor que el copy vacio: el MOMENTO. pipeline_preparar() deja TRES
+    //  direcciones para que el dueño escoja una en el Primer Minuto. Generar
+    //  aqui es pintar antes de saber cual va a ser el post: cuando el dueño
+    //  elegia, primer_minuto.php escribia el caption elegido y NO volvia a
+    //  tocar el arte. La imagen no ilustraba ninguna de las tres.
+    //
+    //  El arte ahora nace donde nace la decision: al confirmar la direccion en
+    //  primer_minuto.php, con ESE caption y por la via asincrona. Copy e imagen
+    //  pertenecen a la misma propuesta o no se entregan.
+    //
+    //  ($foto_path se sigue guardando arriba: es material del dueño y la
+    //  propuesta lo usa como su foto real.)
 
     onboarding_lock_done($pdo, $USUARIO_ID, $marca_id, $LOCK_TOKEN);   // marca lock 'listo' + marca_id (idempotente)
     echo json_encode(['ok'=>true, 'marca_id'=>$marca_id]);
