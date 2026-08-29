@@ -36,10 +36,15 @@ echo "\nREVISAR MI SEMANA · NAVEGADOR REAL\n" . str_repeat('=', 58) . "\n";
 
 $CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 if (!is_file($CHROME)) { echo "\n  SALTADO · no hay Chrome en esta máquina\n\n"; exit(0); }
-$ctx = stream_context_create(['http' => ['timeout' => 4, 'ignore_errors' => true]]);
-if (@file_get_contents('http://localhost/crecer/login.php', false, $ctx) === false) {
-    echo "\n  SALTADO · el servidor local no responde\n\n"; exit(0);
-}
+//  AQUI FALTABA EL CENTINELA, Y NO ES UN DETALLE.
+//  Esta prueba abría un navegador contra el panel SIN poner
+//  `includes/_SIN_CREDENCIALES`, así que cada página que llamara a un modelo lo
+//  llamaba DE VERDAD — en cualquier árbol, no solo en un worktree paralelo.
+//  arbol_servido() lo pone donde se lee, lo quita en el shutdown, y además
+//  apunta la sonda a este árbol con su valla contra las rutas /crecer/.
+require_once __DIR__ . '/_arbol_servido.php';
+$SRV = arbol_servido(4);
+if (!$SRV['ok']) { echo "\n  SALTADO ·" . rtrim($SRV['motivo']) . "\n\n"; exit(0); }
 
 $SHOTS = __DIR__ . '/_capturas/semana';
 @mkdir($SHOTS, 0775, true);

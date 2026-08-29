@@ -39,13 +39,12 @@ function ok(string $que, bool $cond, string $detalle = ''): void {
 
 echo "\nLA OPORTUNIDAD, EN PANTALLA\n" . str_repeat('=', 58) . "\n";
 
-$ctx = stream_context_create(['http' => ['timeout' => 6, 'ignore_errors' => true]]);
-if (@file_get_contents('http://localhost/crecer/login.php', false, $ctx) === false) {
-    echo "\n  SALTADO · el servidor local no responde\n\n"; exit(0);
-}
-if (!is_file('C:/Program Files/Google/Chrome/Application/chrome.exe')) {
-    echo "\n  SALTADO · no hay Chrome\n\n"; exit(0);
-}
+//  La sonda mira ESTE arbol y no gasta: el porque, en _arbol_servido.php.
+//  Antes esto comprobaba /crecer a pelo, asi que desde un worktree paralelo
+//  medía los archivos de la OTRA rama y pagaba las llamadas.
+require_once __DIR__ . '/_arbol_servido.php';
+$SRV = arbol_servido(6);
+if (!$SRV['ok']) { echo "\n  SALTADO ·" . rtrim($SRV['motivo']) . "\n\n"; exit(0); }
 if (!sala_op_hay_libro($pdo, true)) {
     echo "\n  SALTADO · falta migrations/2026-08-28_crecer_sala_oportunidad.sql\n\n"; exit(0);
 }

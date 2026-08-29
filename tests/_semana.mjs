@@ -20,7 +20,10 @@ import { abrirChrome, dormir, cerrarRecibimiento } from './_chrome.mjs';
 import fs from 'node:fs';
 
 const [sid, marca, tacComp, shots, piezaShim] = process.argv.slice(2);
-const BASE = 'http://localhost/crecer/panel';
+//  La sonda mira el arbol que la invoco, no el que Apache sirva por
+//  costumbre: con dos worktrees a la vez, la prueba de una rama validaba
+//  en silencio los archivos de la OTRA. Sin CRECER_BASE, todo igual.
+const BASE = process.env.CRECER_BASE || 'http://localhost/crecer/panel';
 const SEM  = `${BASE}/meta.php?marca=${marca}&vista=semana`;
 const di = (k, v) => console.log(k + '=' + String(v).replace(/\r?\n/g, ' '));
 

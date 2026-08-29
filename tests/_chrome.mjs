@@ -219,6 +219,21 @@ function engancharSalida() {
  * pudo ni arrancar — nunca lanza por eso, para que quien llama pueda imprimir
  * el motivo real en su linea de JSON.
  */
+/**
+ * Reescribe una URL absoluta de /crecer/ al arbol de ESTA corrida.
+ * Sin CRECER_PREFIJO devuelve la URL tal cual, que es el comportamiento de
+ * siempre. Lo usan las sondas al navegar: la valla de abajo cubre el JS de la
+ * pagina, y esto cubre lo que la sonda pide por su cuenta.
+ */
+export function conBase(u) {
+  const P = process.env.CRECER_PREFIJO || '';
+  if (!P) return u;
+  try {
+    const s = String(u);
+    return s.replace('http://localhost/crecer/', 'http://localhost' + P + '/');
+  } catch (e) { return u; }
+}
+
 export async function abrirChrome({ sid, url, ancho, alto }) {
   //  La ruta NATIVA es la que se borra; la de barras es la que entiende el
   //  flag de Chrome. Guardar solo la segunda era parte del problema: no
@@ -292,7 +307,46 @@ export async function abrirChrome({ sid, url, ancho, alto }) {
   await cmd('Emulation.setDeviceMetricsOverride',
             { width: ancho, height: alto, deviceScaleFactor: 1, mobile: ancho < 900 });
   await cmd('Network.setCookie', { name: 'PHPSESSID', value: sid, domain: 'localhost', path: '/' });
-  await cmd('Page.navigate', { url });
+
+  //  ── LA VALLA CONTRA EL OTRO ARBOL ──────────────────────────────────
+  //  Las paginas piden sus AJAX a rutas ABSOLUTAS `/crecer/...`. Servida la
+  //  prueba desde un worktree paralelo, esas peticiones se van al arbol que
+  //  Apache tiene en /crecer -o sea, al de OTRA rama-, donde no esta el
+  //  centinela `_SIN_CREDENCIALES`: las llamadas salen al proveedor y se pagan.
+  //  Medido el 2026-08-29: 0.001393 USD en una sola corrida.
+  //
+  //  Con CRECER_PREFIJO puesto (ej. `/crecer-hotfix-post-gratis`), se inyecta
+  //  antes que el JS de la pagina un shim que reescribe fetch, XHR y el action
+  //  de los formularios. Sin la variable no se inyecta nada y todo sigue igual.
+  //  Los assets sí siguen saliendo a /crecer/assets: son los mismos bytes en
+  //  las dos ramas y no llaman a ningun modelo.
+  const PREF = process.env.CRECER_PREFIJO || '';
+  if (PREF) {
+    await cmd('Page.addScriptToEvaluateOnNewDocument', { source: `
+      (function (P) {
+        window.__fuera = [];
+        function fix(u) {
+          try {
+            var s = String(u);
+            if (s.indexOf('/crecer/') === 0) { window.__fuera.push(s); return P + s.slice(7); }
+            return s;
+          } catch (e) { return u; }
+        }
+        var of = window.fetch;
+        if (of) window.fetch = function (a, b) { return of.call(this, (typeof a === 'string' ? fix(a) : a), b); };
+        var oo = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function (m, u) {
+          var args = [].slice.call(arguments); args[1] = fix(u); return oo.apply(this, args);
+        };
+        addEventListener('submit', function (e) {
+          var f = e.target;
+          if (f && f.getAttribute && f.getAttribute('action')) f.setAttribute('action', fix(f.getAttribute('action')));
+        }, true);
+      })(${JSON.stringify(PREF)});
+    ` });
+  }
+
+  await cmd('Page.navigate', { url: conBase(url) });
   for (let i = 0; i < 200; i++) {
     if (await ev('document.readyState === "complete"')) break;
     await dormir(120);

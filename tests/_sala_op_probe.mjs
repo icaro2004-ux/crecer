@@ -29,7 +29,10 @@ import fs from 'node:fs';
 const [shotsArg, sid, marca, jobS, escena] = process.argv.slice(2);
 const shots = (shotsArg && shotsArg !== '-') ? shotsArg : '';
 const JOB   = parseInt(jobS, 10);
-const BASE  = 'http://localhost/crecer/panel';
+//  La sonda mira el arbol que la invoco, no el que Apache sirva por
+//  costumbre: con dos worktrees a la vez, la prueba de una rama validaba
+//  en silencio los archivos de la OTRA. Sin CRECER_BASE, todo igual.
+const BASE  = process.env.CRECER_BASE || 'http://localhost/crecer/panel';
 const di = (k, v) => console.log(k + '=' + String(v).replace(/\r?\n/g, ' '));
 
 //  EL UNICO EMBUSTE, Y LO MAS PEQUENO POSIBLE: el POST que manda el mensaje

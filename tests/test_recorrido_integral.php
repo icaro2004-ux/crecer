@@ -38,6 +38,16 @@
 //  verdad: la primera versión gastó $0.14 en gemini-2.5-flash, -flash-image y
 //  gemini-3-pro-image antes de que la afirmación del final lo cazara. Los dos
 //  candados hacen falta: éste para el proceso, el centinela para Apache.
+//
+//  Y HACE FALTA UN TERCERO, que se descubrió el 2026-08-29 corriendo esto desde
+//  un worktree paralelo: el recorrido dispara workers por auto-HTTP, y
+//  `worker_url()` arma la URL con `/crecer/` FIJO. O sea que el worker no cae en
+//  el árbol de esta prueba sino en el que Apache sirva — el de otra rama, sin
+//  centinela — y allí las llamadas salen y se pagan. Medido: 0.002535 USD por
+//  corrida. Sin llave de workers no se dispara ninguno (`worker_puede_disparar`
+//  falla cerrado), que es exactamente lo que esta prueba quiere: aquí no se
+//  ejercita el worker, se ejercita el recorrido.
+define('CRECER_WORKER_KEY', '');
 require_once __DIR__ . '/_sin_gasto.php';
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/meta_negocio.php';
@@ -64,8 +74,15 @@ function nota(string $que): void { global $notas; $notas[] = $que; }
 
 echo "\nEL RECORRIDO ENTERO\n" . str_repeat('=', 58) . "\n";
 
+//  ── TODAS LAS PETICIONES, A ESTE ÁRBOL ──────────────────────────────────
+//  Este recorrido pide páginas por HTTP, y las pedía a `/crecer/...` fijo. El
+//  centinela, en cambio, se escribe en el árbol de la prueba. Desde un worktree
+//  paralelo eso son DOS árboles distintos: las páginas cargaban sin centinela y
+//  las llamadas al modelo salían de verdad. Medido: 0.0027 USD por corrida.
+//  RAIZ_HTTP fija el prefijo correcto para todo el archivo.
+define('RAIZ_HTTP', 'http://localhost/' . rawurlencode(basename(dirname(__DIR__))));
 $ctx0 = stream_context_create(['http' => ['timeout' => 8, 'ignore_errors' => true]]);
-if (@file_get_contents('http://localhost/crecer/login.php', false, $ctx0) === false) {
+if (@file_get_contents(RAIZ_HTTP . '/login.php', false, $ctx0) === false) {
     echo "\n  SALTADO · el servidor local no responde\n\n"; exit(0);
 }
 if (!ciclo_hay_libro($pdo, true) || !sala_op_hay_libro($pdo, true)) {
@@ -93,7 +110,7 @@ function csrf_de(string $sid): string {
 function ver(string $sid, string $pag, string $q = ''): string {
     $c = stream_context_create(['http' => ['method' => 'GET', 'timeout' => 90,
         'header' => "Cookie: PHPSESSID={$sid}\r\n", 'ignore_errors' => true]]);
-    return (string)@file_get_contents('http://localhost/crecer/panel/' . $pag
+    return (string)@file_get_contents(RAIZ_HTTP . '/panel/' . $pag
                                       . ($q !== '' ? '?' . $q : ''), false, $c);
 }
 /** POST a una pantalla. Devuelve [json, crudo]. */
@@ -101,7 +118,7 @@ function post(string $sid, string $pag, string $q, array $campos): array {
     $c = stream_context_create(['http' => ['method' => 'POST', 'timeout' => 120,
         'header' => "Cookie: PHPSESSID={$sid}\r\nContent-Type: application/x-www-form-urlencoded\r\n",
         'content' => http_build_query($campos), 'ignore_errors' => true]]);
-    $raw = (string)@file_get_contents('http://localhost/crecer/panel/' . $pag
+    $raw = (string)@file_get_contents(RAIZ_HTTP . '/panel/' . $pag
                                       . ($q !== '' ? '?' . $q : ''), false, $c);
     return [json_decode($raw, true) ?: [], $raw];
 }
@@ -445,7 +462,12 @@ try {
     $notif0 = (int)$pdo->query("SELECT COUNT(*) FROM crecer_notificaciones WHERE marca_id={$M}")->fetchColumn();
 
     $correr = function (int $cid, string $guion) : array {
-        $cmd = 'php ' . escapeshellarg(__DIR__ . '/_publicar_runner.php') . ' ' . $cid . ' ' . $guion;
+        //  EL PHP QUE CORRE ESTA PRUEBA, no el que haya en el PATH — que en esta
+        //  maquina no hay ninguno. Con `php` a secas el subproceso moria con
+        //  «'php' is not recognized», el publicador no publicaba, y eso tumbaba
+        //  once afirmaciones en cadena: sin id remoto, sin notificacion, sin
+        //  metricas y con Resultados vacio. Se veia como once defectos y era uno.
+        $cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/_publicar_runner.php') . ' ' . $cid . ' ' . $guion;
         $out = (string)shell_exec($cmd . ' 2>&1');
         $j = json_decode(trim(substr($out, strrpos($out, '{') !== false ? strrpos($out, '{') : 0)), true);
         return is_array($j) ? $j : ['_raw' => $out];
@@ -715,7 +737,7 @@ try {
                   ['ajax' => 1, 'accion' => 'aprobar', 'id' => $P1]);
     ok('sin token no se escribe',       empty($sin['ok']), json_encode($sin));
     //  Y EL CRON POR HTTP ESTÁ CERRADO.
-    $cron = (string)@file_get_contents('http://localhost/crecer/scripts/cron_publicar.php',
+    $cron = (string)@file_get_contents(RAIZ_HTTP . '/scripts/cron_publicar.php',
         false, stream_context_create(['http' => ['timeout' => 20, 'ignore_errors' => true]]));
     ok('el cron por HTTP pide llave',   str_contains($cron, '403') || trim($cron) === '',
        mb_substr($cron, 0, 120));
