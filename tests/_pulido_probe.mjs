@@ -193,7 +193,7 @@ try {
   })()`));
   //  Y SIN HABER BAJADO NI UN DEDO: es como llega el dueño a la pantalla.
   di('AYUDA_ESTUDIO_TOP', await ev(MIRAR));
-  await tirar('5_pieza_hora_sugerida_360');
+  await tirar('5_pieza_del_plan_360');
   if (SINHORA > 0) {
     await ir(`${BASE}/propuestas.php?marca=${marca}&jugada=${JUG_SIN}`);
     di('HORA_SIN', await ev(`(function(){ ${COMUN}

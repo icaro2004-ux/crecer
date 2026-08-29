@@ -65,33 +65,43 @@ try {
        json_encode($e1));
     ok('y no queda una frase partida',  !str_ends_with(trim($e1['cuando']), 'a las'), json_encode($e1));
 
-    //  «DEL DUEÑO» EXIGE PRUEBA, NO PARECIDO.
+    //  NADA DE LO QUE TENEMOS PRUEBA QUIEN PUSO LA HORA.
     //
-    //  La primera versión de esto daba por suya toda pieza con `calendario_id`.
-    //  Esa columna dice de dónde SALIO la pieza, no quién puso la hora — y en
-    //  esa misma ruta manual la hora la estampa el servidor con `date()`. El
-    //  dueño escribió un caption; la hora se la pusimos nosotros.
+    //  Tres pistas se han probado y las tres se cayeron: los agentes de la
+    //  marca, `calendario_id` y `tactica_id`. Aquí se comprueba que ninguna
+    //  vuelve a colarse como si fuera una prueba.
+
+    //  Crearla a mano no es escogerla: en esa ruta la hora la estampa el
+    //  servidor con `date()`. El dueño escribió un caption y nada más.
     $a = hora_atribucion($pdo, ['marca_id' => $MH, 'fecha_programada' => $manana . ' 14:00:00',
                                 'calendario_id' => 7]);
-    ok('crearla a mano no prueba que escogiera la hora', $a['caso'] !== 'dueno', json_encode($a));
+    ok('crearla a mano no prueba que escogiera la hora', $a['caso'] === 'neutral', json_encode($a));
     ok('y no se le atribuye',          !str_contains($a['frase'], 'Elegiste'), $a['frase']);
-    ok('se dice el hecho y nada más',  $a['caso'] === 'neutral'
-       && str_contains($a['frase'], 'Se publicará'), json_encode($a));
 
-    //  Y HOY NO HAY NINGUNA PIEZA QUE PUEDA SERLO: la evidencia no existe. Si
-    //  algún día se persiste, esta afirmación se cae y hay que venir aquí.
-    ok('hoy no consta ninguna hora escogida por él',
-       hora_evidencia_dueno($pdo, ['marca_id' => $MH, 'id' => 1, 'calendario_id' => 7,
-                                   'fecha_programada' => $manana . ' 14:00:00']) === false,
-       'si esto falla es que ya hay rastro: entonces «Elegiste esta hora» SÍ se puede decir');
-
-    //  C · la preparó el plan y todavía no hay con qué respaldar la hora.
+    //  Y HABERLA CREADO EL PLAN no prueba que la hora de AHORA siga siendo la
+    //  que el plan sugirió: si el dueño la movió, no queda rastro de ello.
     $c = hora_atribucion($pdo, ['marca_id' => $MH, 'fecha_programada' => $manana . ' 10:00:00',
                                 'tactica_id' => 5]);
-    ok('sin cobertura se dice que es para arrancar', $c['caso'] === 'arranque', json_encode($c));
-    ok('y no se presume rendimiento',
-       !str_contains($c['frase'], 'mejores horas') && !str_contains($c['frase'], 'mejor rendimiento'),
-       $c['frase']);
+    ok('venir del plan no prueba que la hora siga siendo la suya',
+       $c['caso'] === 'neutral', json_encode($c));
+    ok('así que tampoco se dice «te sugerimos»',
+       !str_contains($c['frase'], 'sugerimos'), $c['frase']);
+    ok('se dice el hecho y nada más',  str_contains($c['frase'], 'Se publicará'), $c['frase']);
+
+    //  LAS DOS FRASES RETIRADAS NO PUEDEN SALIR POR NINGUNA COMBINACION. Se
+    //  barren todas las que hay: con táctica, con casilla, con las dos, sin
+    //  ninguna, y a cualquier hora.
+    $prohibidas = [];
+    foreach ([[], ['tactica_id' => 5], ['calendario_id' => 7],
+              ['tactica_id' => 5, 'calendario_id' => 7]] as $extra) {
+        foreach (['09:00:00', '10:00:00', '14:00:00', '17:00:00', '21:00:00'] as $hh) {
+            $r = hora_atribucion($pdo, $extra + ['marca_id' => $MH,
+                                                 'fecha_programada' => $manana . ' ' . $hh]);
+            if (preg_match('~Elegiste|sugerimos~ui', $r['frase'])) $prohibidas[] = $r['frase'];
+        }
+    }
+    ok('ninguna combinación saca una frase retirada', $prohibidas === [],
+       json_encode(array_slice($prohibidas, 0, 3), JSON_UNESCAPED_UNICODE));
 
     //  UNA LECCION PLANTADA A MANO NO ES COBERTURA. `optimizador_mejor_momento()`
     //  contesta desde `crecer_memoria` sin mirar cuántos posts la sostienen: si
@@ -106,12 +116,12 @@ try {
        'sin posts medidos detrás, no hay nada que afirmar');
     $plantada = hora_atribucion($pdo, ['marca_id' => $MH, 'fecha_programada' => $manana . ' 17:00:00',
                                        'tactica_id' => 5]);
-    ok('y la pieza a esa hora no lo afirma',
-       $plantada['caso'] === 'arranque', json_encode($plantada));
+    ok('y la pieza a esa hora no afirma nada',
+       $plantada['caso'] === 'neutral', json_encode($plantada));
 
-    //  B · CON COBERTURA DE VERDAD. Se siembran publicaciones medidas: el
-    //  Optimizador exige OPT_MIN_POSTS en total, OPT_MIN_BUCKET en el patrón y
-    //  OPT_MIN_DELTA de diferencia. Menos que eso y no hay lección.
+    //  CON COBERTURA DE VERDAD sí se puede decir una cosa: que coincide. Se
+    //  siembran publicaciones medidas — el Optimizador exige OPT_MIN_POSTS en
+    //  total, OPT_MIN_BUCKET en el patrón y OPT_MIN_DELTA de diferencia.
     $fxb = Fixture::crear($pdo, 'pulidocob', false, 'admin');
     $limpiar[] = $MB = (int)$fxb['marca_id'];
     $sembrar_post = function (string $cuando, int $alcance) use ($pdo, $MB) {
@@ -125,8 +135,7 @@ try {
               VALUES (?,?, 'instagram', ?, ?, ?, NOW())")
             ->execute([$cid, $MB, $alcance, $alcance, (int)round($alcance / 10)]);
     };
-    //  Cuatro por la tarde que vuelan y cuatro por la mañana que no: la
-    //  diferencia es mucho mayor que el mínimo, y hay de sobra en cada cubo.
+    //  Cuatro por la tarde que vuelan y cuatro por la mañana que no.
     for ($i = 1; $i <= 4; $i++) $sembrar_post(date('Y-m-d 17:00:00', strtotime("-{$i} week")), 900);
     for ($i = 1; $i <= 4; $i++) $sembrar_post(date('Y-m-d 09:00:00', strtotime("-{$i} week -2 day")), 90);
 
@@ -140,20 +149,19 @@ try {
         //  por eso — la coincidencia es un hecho, la razón sería un invento.
         ok('sin decir que se escogió por eso',
            str_contains($b['frase'], 'Coincide')
-           && !preg_match('~porque|por eso|la escogimos~ui', $b['frase']), $b['frase']);
+           && !preg_match('~porque|por eso|la escogimos|sugerimos~ui', $b['frase']), $b['frase']);
         //  Y OTRA HORA NO HEREDA LA COBERTURA.
         $otra = sprintf('%02d', ($mejor + 6) % 24);
         $b2 = hora_atribucion($pdo, ['marca_id' => $MB, 'tactica_id' => 5,
                 'fecha_programada' => $manana . " {$otra}:00:00"]);
-        ok('otra hora no hereda la coincidencia', $b2['caso'] !== 'coincide', json_encode($b2));
+        ok('otra hora no hereda la coincidencia', $b2['caso'] === 'neutral', json_encode($b2));
     }
 
-    //  D · sin táctica y sin cobertura: no se sabe quién la puso.
+    //  SIN COBERTURA, NADA ADICIONAL: la frase es la escueta y punto.
     $d = hora_atribucion($pdo, ['marca_id' => $MH, 'fecha_programada' => $manana . ' 16:00:00']);
-    ok('sin origen demostrable, nadie firma', $d['caso'] === 'neutral', json_encode($d));
-    ok('pero se dice cuándo sale',     str_contains($d['frase'], 'Se publicará'), $d['frase']);
-    ok('y no se sugiere nada',         !str_contains($d['frase'], 'sugerimos'), $d['frase']);
-
+    ok('sin cobertura no se añade nada', $d['caso'] === 'neutral', json_encode($d));
+    ok('y la frase es solo el hecho',
+       preg_match('~^Se publicará .+\.$~u', $d['frase']) === 1, $d['frase']);
     //  Y EL PORQUÉ DEL SUGERIDOR tampoco presume. Esta marca no tiene métricas
     //  todavía, así que la hora es la de arranque y no «la que mejor funciona».
     $fxs = Fixture::crear($pdo, 'pulidosug', true, 'admin');
@@ -175,8 +183,7 @@ try {
        json_encode(['solo_es' => array_keys(array_diff_key($es, $en)),
                     'solo_en' => array_keys(array_diff_key($en, $es))], JSON_UNESCAPED_UNICODE));
     foreach (['Se publicará %s.',
-              'Se publicará %s. Coincide con una de tus mejores horas.',
-              'Se publicará %s. Te sugerimos esta hora para comenzar.'] as $k) {
+              'Se publicará %s. Coincide con una de tus mejores horas.'] as $k) {
         ok('traducida · ' . mb_substr($k, 0, 28),
            isset($en[$k]) && trim((string)$en[$k]) !== '' && $en[$k] !== $k, (string)($en[$k] ?? '(falta)'));
     }
@@ -185,7 +192,9 @@ try {
     //  Y EL COPY VIEJO NO PUEDE SOBREVIVIR EN EL DICCIONARIO: una traducción
     //  huérfana es la frase que alguien revive mañana creyendo que se usa.
     foreach (['Te sugerimos esta hora porque coincide con tu mejor rendimiento.',
-              'Te sugerimos esta hora para comenzar. La ajustaremos con tus resultados.'] as $k) {
+              'Te sugerimos esta hora para comenzar. La ajustaremos con tus resultados.',
+              'Elegiste esta hora.',
+              'Se publicará %s. Te sugerimos esta hora para comenzar.'] as $k) {
         ok('retirada · ' . mb_substr($k, 0, 30), !isset($es[$k]) && !isset($en[$k]));
     }
     ok('«Calendario» tiene su traducción',
@@ -334,8 +343,14 @@ if (!$hay_web || !$hay_chrome) {
         $t_sug = (string)($hs['texto'] ?? '');
         ok('la pieza del plan no acredita a nadie sin prueba',
            !preg_match('~escogi(ó|o) la hora~ui', $t_sug), mb_substr($t_sug, 0, 200));
-        ok('y dice que es una sugerencia',
-           mb_stripos($t_sug, 'sugerimos') !== false, mb_substr($t_sug, 0, 240));
+        //  Y NO DICE MAS DE LA CUENTA. La pieza la creó el plan, pero eso no
+        //  prueba que la hora que tiene ahora siga siendo la que el plan
+        //  sugirió: en pantalla se ve el hecho y nada más.
+        ok('y no se sugiere ni se acredita nada',
+           !preg_match('~sugerimos|Elegiste|escogi(ó|o) la hora~ui', $t_sug),
+           mb_substr($t_sug, 0, 240));
+        ok('se dice cuándo sale',
+           mb_stripos($t_sug, 'Se publicará') !== false, mb_substr($t_sug, 0, 240));
         $hn = $J('HORA_SIN');
         $t_sin = (string)($hn['texto'] ?? '');
         ok('la pieza sin hora no inventa las 12:00 AM',
@@ -347,7 +362,7 @@ if (!$hay_web || !$hay_chrome) {
         ok('sin errores de JavaScript', ($R['ERRORES'] ?? '[]') === '[]', (string)($R['ERRORES'] ?? ''));
 
         foreach (['1_mi_negocio_360', '2_estudio_vamos_con_este_360',
-                  '3_calendario_360', '3_calendario_414', '3_calendario_1440', '4_sala_360',                  '5_pieza_hora_sugerida_360', '6_pieza_sin_hora_360'] as $img) {
+                  '3_calendario_360', '3_calendario_414', '3_calendario_1440', '4_sala_360',                  '5_pieza_del_plan_360', '6_pieza_sin_hora_360'] as $img) {
             ok('captura ' . $img, is_file($SHOTS . '/' . $img . '.png')
                && filesize($SHOTS . '/' . $img . '.png') > 9000);
         }

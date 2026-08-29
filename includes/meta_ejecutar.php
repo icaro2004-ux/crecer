@@ -256,32 +256,6 @@ function fecha_humana_es(string $fecha): string {
 }
 
 /**
- *  ¿HAY PRUEBA DE QUE EL DUEÑO ESCOGIO ESTA HORA?
- *
- *  HOY NO, PARA NINGUNA PIEZA, Y ESE ES EL PUNTO. Se buscó y no existe:
- *
- *    · `accion=fecha` (panel/aprobar2.php) escribe `fecha_programada` y
- *      `updated_at`, y nada más. `updated_at` se mueve por el arte, el caption
- *      y el estado, así que no distingue una edición de hora de ninguna otra.
- *    · `calendario_id` NO es esa prueba. Es el id del MES en
- *      `crecer_calendario`, la huella de haber nacido por la ruta manual — y
- *      en esa ruta la hora la estampa el servidor con `date('Y-m-d H:i:s')`.
- *      El dueño escribió un caption; la hora se la pusimos nosotros.
- *    · `audit_log` solo recibe eco de ajustes de meta y sustituciones de
- *      jugada (`meta_eco_seguridad`), nunca de la fecha de una pieza.
- *    · `crecer_meta_cambio` es la historia de la META, no de las piezas.
- *
- *  Así que esto devuelve false SIEMPRE, y no es un descuido: es el sitio
- *  exacto donde enchufar la prueba el día que exista. Haría falta una columna
- *  —quién tocó la hora y cuándo— y este tramo no toca el esquema. Mientras
- *  tanto, «Elegiste esta hora» no se dice, porque no consta.
- */
-function hora_evidencia_dueno(PDO $pdo, array $pieza): bool
-{
-    return false;
-}
-
-/**
  *  LA MEJOR FRANJA, PERO SOLO SI HAY CON QUE SOSTENERLA.
  *
  *  `optimizador_mejor_momento()` no sirve para afirmar nada delante del dueño:
@@ -314,40 +288,49 @@ function hora_mejor_con_cobertura(PDO $pdo, int $marca_id): ?int
 }
 
 /**
- *  DE DONDE SALIO LA HORA DE UNA PIEZA — con lo que la base puede DEMOSTRAR.
+ *  DE DONDE SALIO LA HORA DE UNA PIEZA — o mejor dicho, lo poco que de eso se
+ *  puede DEMOSTRAR hoy, que es nada.
  *
- *  EL DEFECTO QUE CIERRA. El Estudio acreditaba «La Estratega escogió la hora»
- *  mirando `$ags`, la lista de agentes que trabajaron para la MARCA en las
- *  últimas doce llamadas. No dice nada de ESA pieza: con que la Estratega
- *  hubiera hecho cualquier cosa para el negocio, cualquier pieza con fecha
- *  quedaba acreditada a ella.
+ *  ESTA FUNCION SE HA CORREGIDO TRES VECES, y las tres por el mismo error de
+ *  fondo: confundir una pista con una prueba.
  *
- *  Y LA PRIMERA CORRECCION SE PASO DE LISTA en sentido contrario: daba por
- *  «la escogió el dueño» toda pieza con `calendario_id`. Eso identifica el
- *  ORIGEN de la pieza, no quién puso la hora — y en esa misma ruta la hora la
- *  estampa el servidor. Inferir no es demostrar.
+ *    1ª · Acreditaba «La Estratega escogió la hora» mirando `$ags`, la lista de
+ *         agentes que trabajaron para la MARCA en las últimas doce llamadas.
+ *         No dice nada de ESA pieza.
+ *    2ª · Acreditaba al dueño toda pieza con `calendario_id`. Esa columna dice
+ *         por qué puerta entró la pieza —la ruta manual— y en esa misma ruta la
+ *         hora la estampa el servidor con `date()`. El dueño escribió un
+ *         caption; la hora se la pusimos nosotros.
+ *    3ª · Decía «te sugerimos esta hora» a toda pieza con `tactica_id`. Eso
+ *         prueba que la creó el plan, no que la hora que tiene AHORA siga
+ *         siendo la que el plan sugirió: si el dueño la movió, no queda rastro.
  *
- *  LOS CINCO CASOS, y qué hace falta para cada uno:
+ *  LO QUE FALTA, EN UNA LINEA: nadie apunta quién tocó `fecha_programada`.
+ *  `accion=fecha` (panel/aprobar2.php) escribe la fecha y `updated_at`, y
+ *  `updated_at` se mueve por el arte, el caption y el estado. `audit_log` solo
+ *  recibe eco de ajustes de meta y sustituciones de jugada. `crecer_meta_cambio`
+ *  es la historia de la META, no de las piezas.
+ *
+ *  Con una columna que diga QUIEN puso la hora y CUANDO volverían las dos
+ *  frases retiradas —«Elegiste esta hora» y «Te sugerimos esta hora para
+ *  comenzar»—, cada una en su caso. Hasta entonces no se dicen. Este tramo no
+ *  toca el esquema.
+ *
+ *  LO QUE SI SE PUEDE DECIR, y es lo único:
  *
  *    sin_hora   `fecha_programada` vacía o a las 00:00. Una fecha sin hora se
  *               guarda a medianoche; enseñar «12:00 AM» es inventar una
  *               decisión que nadie tomó y prometer una publicación de
- *               madrugada. Se dice el día, que sí es cierto, y nada más.
+ *               madrugada. Se dice el día, que sí es cierto.
  *
- *    dueno      SOLO con evidencia persistida de una acción suya sobre la
- *               hora. Hoy no existe ninguna —ver `hora_evidencia_dueno()`—,
- *               así que este caso no sale nunca. No se dice lo que no consta.
+ *    coincide   La hora cae en la mejor franja del negocio Y esa franja tiene
+ *               cobertura hoy. Se afirma la COINCIDENCIA —comprobable ahora
+ *               mismo— y NUNCA el motivo: que caiga ahí no demuestra que se
+ *               escogiera por eso.
  *
- *    coincide   La hora coincide con la mejor franja del negocio Y esa franja
- *               tiene cobertura. Se afirma la COINCIDENCIA, que es comprobable
- *               hoy, y NO el motivo: nadie puede demostrar que se escogiera
- *               por eso.
- *
- *    arranque   La preparó el plan (`tactica_id`) y no hay esa cobertura. Es
- *               una hora de salida, y así se dice.
- *
- *    neutral    Todo lo demás. Se dice cuándo sale y no se firma: es cierto lo
- *               haya puesto quien lo haya puesto.
+ *    neutral    Todo lo demás, venga del plan o de donde venga. Se dice cuándo
+ *               sale y no se firma: eso es cierto lo haya puesto quien lo haya
+ *               puesto.
  *
  *  @return array{caso:string, frase:string, cuando:string, hora:?int}
  *          `frase` es la línea COMPLETA, ya redactada: quien la pinta no
@@ -371,24 +354,11 @@ function hora_atribucion(PDO $pdo, array $pieza): array
         return ['caso' => 'sin_hora', 'frase' => '', 'cuando' => $dia, 'hora' => null];
     }
 
-    //  DEL DUEÑO · solo si consta. Hoy nunca.
-    if (hora_evidencia_dueno($pdo, $pieza)) {
-        return ['caso' => 'dueno', 'frase' => t('Elegiste esta hora.'),
-                'cuando' => $cuando, 'hora' => $hora];
-    }
-
     //  COINCIDE · el hecho comprobable, sin atribuirle la intención a nadie.
     $mejor = hora_mejor_con_cobertura($pdo, (int)($pieza['marca_id'] ?? 0));
     if ($mejor !== null && $mejor === $hora) {
         return ['caso' => 'coincide',
                 'frase' => t('Se publicará %s. Coincide con una de tus mejores horas.', $cuando),
-                'cuando' => $cuando, 'hora' => $hora];
-    }
-
-    //  ARRANQUE · la preparó el plan y todavía no hay con qué respaldarla.
-    if ((int)($pieza['tactica_id'] ?? 0) > 0) {
-        return ['caso' => 'arranque',
-                'frase' => t('Se publicará %s. Te sugerimos esta hora para comenzar.', $cuando),
                 'cuando' => $cuando, 'hora' => $hora];
     }
 
