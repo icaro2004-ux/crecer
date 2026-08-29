@@ -112,6 +112,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    //  EL ARTE NACE AQUI, CON LA DIRECCION YA ELEGIDA.
+    //  Antes se generaba en el onboarding, con copy vacio y ANTES de esta
+    //  pantalla: la imagen no ilustraba ninguna de las tres propuestas, y al
+    //  elegir solo se sobreescribia el caption. Ahora se encola con el caption
+    //  que el dueño acaba de escoger, por la misma via asincrona del resto del
+    //  producto — copy e imagen, la misma propuesta.
+    if ($cid && $caption !== '') {
+        require_once __DIR__ . '/includes/img_responses.php';
+        try {
+            if (img_resp_activo()) {
+                $enc = img_resp_encolar_res($pdo, $marca_id, (int)$cid, $caption);
+                if ($enc['res'] === 'encolado' && function_exists('arte_disparar')) arte_disparar($marca_id, (int)$cid);
+            }
+        } catch (Throwable $e) { error_log('primer_minuto encolar arte: ' . $e->getMessage()); }
+    }
+
     // Guarda la DECISIÓN estratégica (idempotente por UNIQUE(marca_id)).
     $pdo->prepare(
         "INSERT INTO crecer_estrategia_arranque (marca_id,angulo_clave,angulo_nombre,motivo,catalogo_version,fuente,contenido_id,created_at)

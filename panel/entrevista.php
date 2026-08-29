@@ -114,11 +114,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'set_t
     }
     echo json_encode(['ok'=>true]); exit;
 }
+//  EL CIERRE YA NO ESCRIBE EL POST: LO ARRANCA.
+//  Antes aqui corrian las cinco llamadas de texto y el encolado del arte, ~14 s
+//  con el dueño mirando un spinner mudo; y solo DESPUES llegaba a la pantalla
+//  donde empezaba a esperar la imagen. Ahora este request solo crea la fila
+//  (base de datos, sin un modelo de por medio) y despierta al worker: el dueño
+//  entra de inmediato a la pantalla de preparacion y ve el trabajo ocurrir.
+//  Si el disparo no sale, no se pierde nada — la propia pantalla lo reintenta
+//  al cargar con muestra_asegurar().
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'post_muestra') {
     header('Content-Type: application/json; charset=utf-8');
     if (!csrf_ok()) { echo json_encode(['ok'=>false,'err'=>'Sesión expiró.']); exit; }
-    @set_time_limit(0);
-    try { crear_post_muestra($pdo, $marca_id); } catch (Throwable $e) { error_log('post_muestra: ' . $e->getMessage()); }
+    require_once __DIR__ . '/../includes/muestra.php';
+    try {
+        $cid = muestra_fila($pdo, $marca_id);
+        muestra_arrancar($pdo, $marca_id, (int)$usuario['id'], $cid);
+    } catch (Throwable $e) { error_log('post_muestra: ' . $e->getMessage()); }
     echo json_encode(['ok'=>true, 'redirect'=>'/crecer/panel/gateway_post.php?marca=' . $marca_id . $gw], JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -439,8 +450,13 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
       ovFeed.appendChild(row); txEl=row.querySelector('.tx'); txEl.textContent=frases[0]; ovFeed.scrollTop=ovFeed.scrollHeight;
       rot=setInterval(function(){ if(!txEl) return; fi=(fi+1)%frases.length; txEl.classList.remove('pop'); void txEl.offsetWidth; txEl.classList.add('pop'); txEl.textContent=frases[fi]; }, 4500);
     }, 720);
-    function ir(url){ if(rot) clearInterval(rot); if(row.parentNode) row.remove(); cpSay(FACE,'Listo','¡Tu primer post está montado!','det'); setTimeout(function(){ location.href=url; }, 1200); }
-    post({accion:'post_muestra'}, 95000).then(function(d2){ ir((d2&&d2.redirect)||('/crecer/panel/gateway_post.php?marca='+MARCA+GW)); }).catch(function(){ ir('/crecer/panel/gateway_post.php?marca='+MARCA+GW); });
+    //  NO SE ANUNCIA LO QUE NO ESTA. Esto decia «¡Tu primer post está montado!»
+    //  y despues mandaba a una pantalla donde el post todavia se estaba
+    //  escribiendo. Ahora dice lo que de verdad pasa: el corillo arranco, y el
+    //  dueño va a VERLO trabajar. El request ya no escribe nada — solo crea la
+    //  fila y despierta al worker — asi que 20 s sobran de sobra.
+    function ir(url){ if(rot) clearInterval(rot); if(row.parentNode) row.remove(); cpSay(FACE,'Vamos','El corillo se puso a montar tu post — te llevo a verlo.','det'); setTimeout(function(){ location.href=url; }, 900); }
+    post({accion:'post_muestra'}, 20000).then(function(d2){ ir((d2&&d2.redirect)||('/crecer/panel/gateway_post.php?marca='+MARCA+GW)); }).catch(function(){ ir('/crecer/panel/gateway_post.php?marca='+MARCA+GW); });
   }
   form.addEventListener('submit',function(e){ e.preventDefault(); enviar(input.value); });
 
