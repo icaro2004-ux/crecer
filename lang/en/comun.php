@@ -78,4 +78,9 @@ return [
     'No escribo nada todavía.'                                                  => 'I won’t write anything yet.',
     'Esta idea no empuja directamente tu Meta actual.'                          => 'This idea doesn’t directly push your current Goal.',
     'Este plan ya terminó. Puedo hacerla aparte o la metemos en el próximo.'    => 'This plan is done. I can make it separately, or we put it in the next one.',
+    'Elegiste esta hora.'                                                         => 'You chose this time.',
+    'Te sugerimos esta hora porque coincide con tu mejor rendimiento.'            => 'We suggest this time because it matches your best performance.',
+    'Te sugerimos esta hora para comenzar. La ajustaremos con tus resultados.'    => 'We suggest this time to start. We’ll adjust it with your results.',
+    'Vas en ritmo: esta hora es para arrancar, y la ajustamos con tus resultados.' => 'You’re on pace: this time is a starting point, and we adjust it with your results.',
+    'Vas en ritmo: esta es la hora que mejor te ha funcionado.'                   => 'You’re on pace: this is the time that has worked best for you.',
 ];

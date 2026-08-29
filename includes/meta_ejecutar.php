@@ -177,11 +177,16 @@ function meta_fecha_libre(PDO $pdo, int $marca_id, string $fecha, string $limite
 }
 
 function meta_fecha_sugerida(PDO $pdo, int $marca_id, int $orden = 1, int $semana = 1): array {
+    //  10:00 ES EL ARRANQUE, NO «LA HORA QUE MEJOR TE FUNCIONA». Se guarda si
+    //  el Optimizador la respaldo o no, porque el texto de abajo lo afirmaba
+    //  siempre — tambien con un negocio recien nacido que no ha publicado
+    //  nada y del que no hay un solo dato.
     $hora = 10;
+    $respaldada = false;
     try {
         require_once __DIR__ . '/optimizador.php';
         $mom = optimizador_mejor_momento($pdo, $marca_id);
-        if (($mom['hora'] ?? null) !== null) $hora = (int)$mom['hora'];
+        if (($mom['hora'] ?? null) !== null) { $hora = (int)$mom['hora']; $respaldada = true; }
     } catch (Throwable $e) {}
 
     $meta = meta_activa($pdo, $marca_id);
@@ -228,10 +233,12 @@ function meta_fecha_sugerida(PDO $pdo, int $marca_id, int $orden = 1, int $seman
     elseif ($apura && $d === 0 && !$tarde) $porque = 'Vas atrasado para tu meta: esto sale HOY, a la hora que mejor te funciona.';
     elseif ($apura && $tarde)   $porque = 'Vas atrasado, pero hoy ya se hizo tarde: sale mañana a primera hora buena.';
     elseif ($apura)   $porque = 'Vas atrasado para tu meta: las piezas salen un día tras otro.';
-    else              $porque = 'Vas en ritmo: esta es la hora que mejor te ha funcionado.';
+    else              $porque = $respaldada
+                              ? 'Vas en ritmo: esta es la hora que mejor te ha funcionado.'
+                              : 'Vas en ritmo: esta hora es para arrancar, y la ajustamos con tus resultados.';
 
     return ['fecha' => $fecha, 'porque' => $porque, 'apura' => (bool)$apura, 'hora' => $hora,
-            'coordinada' => $coordinada, 'movida' => $movida];
+            'coordinada' => $coordinada, 'movida' => $movida, 'respaldada' => $respaldada];
 }
 
 /** "hoy 10:00 AM" · "mañana 10:00 AM" · "el sábado 10:00 AM" — como lo diría una persona. */
@@ -247,6 +254,90 @@ function fecha_humana_es(string $fecha): string {
     else                                               $cual = 'el ' . date('j/n', $ts);
     return trim($cual . ' a las ' . date('g:i A', $ts));
 }
+
+/**
+ *  DE DONDE SALIO LA HORA DE UNA PIEZA — con lo que la base puede demostrar.
+ *
+ *  EL DEFECTO QUE CIERRA. El Estudio acreditaba «La Estratega escogió la hora»
+ *  mirando `$ags`, que es la lista de agentes que trabajaron para la MARCA en
+ *  las ultimas doce llamadas. No dice nada de ESTA pieza: con que la Estratega
+ *  hubiera hecho cualquier cosa para el negocio, cualquier pieza con fecha
+ *  quedaba acreditada a ella — tambien la que el dueño programo a mano.
+ *
+ *  LO QUE SI SE PUEDE DEMOSTRAR, pieza a pieza, sin tocar el esquema:
+ *
+ *    E · sin_hora   `fecha_programada` vacia, o a las 00:00. Una fecha sin hora
+ *                   se guarda a medianoche; enseñar «12:00 AM» es inventar una
+ *                   decision que nadie tomo y prometer una publicacion de
+ *                   madrugada.
+ *    A · dueno      `calendario_id` con valor. Esa columna es la huella de
+ *                   haber nacido de una casilla del calendario: el dueño
+ *                   escogio el hueco.
+ *    B · evidencia  la pieza la creo el plan (`tactica_id`) Y su hora coincide
+ *                   con la mejor franja que el Optimizador tiene HOY para este
+ *                   negocio. Eso es comprobable ahora mismo, no una promesa.
+ *    C · arranque   la creo el plan y no hay esa evidencia todavia.
+ *    D · neutral    todo lo demas. No se afirma quien decidio: se dice cuando
+ *                   sale, que es cierto lo haya puesto quien lo haya puesto.
+ *
+ *  LO QUE NO SE PUEDE, Y SE DICE: si el dueño EDITA la hora de una pieza del
+ *  plan, no queda rastro —`accion=fecha` escribe `fecha_programada` y
+ *  `updated_at`, y `updated_at` se mueve por el arte, el caption y el estado—.
+ *  Esa pieza sigue leyendose como B o C. Distinguirlo pide una columna, y este
+ *  tramo no toca el esquema.
+ *
+ *  @return array{caso:string, frase:string, cuando:string, hora:?int}
+ */
+function hora_atribucion(PDO $pdo, array $pieza): array
+{
+    $f = trim((string)($pieza['fecha_programada'] ?? ''));
+    if ($f === '' || $f === '0000-00-00 00:00:00') {
+        return ['caso' => 'sin_hora', 'frase' => '', 'cuando' => '', 'hora' => null];
+    }
+    $ts = strtotime($f);
+    if ($ts === false) {
+        return ['caso' => 'sin_hora', 'frase' => '', 'cuando' => '', 'hora' => null];
+    }
+    $hora   = (int)date('G', $ts);
+    $cuando = fecha_humana_es($f);
+
+    //  E · A medianoche no se programa nada a proposito.
+    if (substr($f, 11, 5) === '00:00') {
+        //  Se dice el DIA —eso si es cierto— y no se inventa la hora.
+        //  Se corta tambien el «a las»: sin hora, «el martes a las» es una
+        //  frase partida por la mitad.
+        $dia = trim((string)preg_replace('~\s*(a las)?\s*,?\s*\d{1,2}:\d{2}\s*[AP]M$~u', '', $cuando));
+        return ['caso' => 'sin_hora', 'frase' => '', 'cuando' => $dia, 'hora' => null];
+    }
+
+    //  A · nacio de una casilla que el dueño toco.
+    if ((int)($pieza['calendario_id'] ?? 0) > 0) {
+        return ['caso' => 'dueno', 'frase' => t('Elegiste esta hora.'),
+                'cuando' => $cuando, 'hora' => $hora];
+    }
+
+    //  B / C · la puso el plan. La diferencia es si hay con que respaldarla.
+    if ((int)($pieza['tactica_id'] ?? 0) > 0) {
+        $mejor = null;
+        try {
+            require_once __DIR__ . '/optimizador.php';
+            $m = optimizador_mejor_momento($pdo, (int)($pieza['marca_id'] ?? 0));
+            if (($m['hora'] ?? null) !== null) $mejor = (int)$m['hora'];
+        } catch (Throwable $e) { $mejor = null; }
+        if ($mejor !== null && $mejor === $hora) {
+            return ['caso' => 'evidencia',
+                    'frase' => t('Te sugerimos esta hora porque coincide con tu mejor rendimiento.'),
+                    'cuando' => $cuando, 'hora' => $hora];
+        }
+        return ['caso' => 'arranque',
+                'frase' => t('Te sugerimos esta hora para comenzar. La ajustaremos con tus resultados.'),
+                'cuando' => $cuando, 'hora' => $hora];
+    }
+
+    //  D · sin origen demostrable: el hecho, y nada mas.
+    return ['caso' => 'neutral', 'frase' => '', 'cuando' => $cuando, 'hora' => $hora];
+}
+
 
 /**
  * LAS PUERTAS DE UNA JUGADA — una cosa a la vez, y cada una abre DONDE se hace.

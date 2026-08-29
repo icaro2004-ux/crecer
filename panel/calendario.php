@@ -259,33 +259,46 @@ $icoMes='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="cur
 ?>
 <style>
   .viewtoggle{display:flex;gap:6px;margin:6px 0 12px}
-  .vt{font-weight:700;font-size:13.5px;text-decoration:none;color:var(--muted);padding:8px 16px;border-radius:99px;border:1.5px solid var(--line)}
+  .vt{font-weight:700;font-size:14px;text-decoration:none;color:var(--muted);padding:11px 18px;min-height:44px;
+    display:inline-flex;align-items:center;border-radius:99px;border:1.5px solid var(--line)}
   .vt.on{color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));border-color:transparent}
 
   .subviews{display:flex;gap:6px;margin-bottom:12px}
-  .sv{font-weight:800;font-size:13px;text-decoration:none;color:var(--muted);padding:7px 15px;border-radius:99px;border:1.5px solid var(--line);background:#fff;display:inline-flex;align-items:center;gap:6px}
+  .sv{font-weight:800;font-size:14px;text-decoration:none;color:var(--muted);padding:11px 16px;min-height:44px;border-radius:99px;border:1.5px solid var(--line);background:#fff;display:inline-flex;align-items:center;gap:6px}
   .sv svg{opacity:.75}
   .sv.on{color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));border-color:transparent}
   .sv.on svg{opacity:1}
 
   .calbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
   .calbar .nav{display:flex;align-items:center;gap:6px}
-  .calbar .nav a{width:34px;height:34px;display:grid;place-items:center;border:1.5px solid var(--line);border-radius:10px;text-decoration:none;color:var(--tinta);font-weight:800}
-  .calbar .mtitle{font-family:var(--font-display);font-weight:800;font-size:20px;min-width:170px}
-  .calbar .today{font-size:13px;font-weight:700;color:var(--terracota);text-decoration:none}
+  .calbar .nav a{width:44px;height:44px;display:grid;place-items:center;border:1.5px solid var(--line);border-radius:10px;text-decoration:none;color:var(--tinta);font-weight:800}
+  /*  `min-width` fijo + «Hoy» con sus 44px no caben en 360: «Hoy» se iba a
+      una linea sola y empujaba el calendario media pantalla hacia abajo. El
+      titulo del mes se encoge —cabe de sobra— y la fila se mantiene entera. */
+  .calbar .mtitle{font-family:var(--font-display);font-weight:800;font-size:20px;
+    min-width:0;flex:1 1 auto;white-space:nowrap}
+  .calbar .today{font-size:14px;font-weight:700;color:var(--terracota);text-decoration:none;
+    min-height:44px;min-width:44px;display:inline-flex;align-items:center;justify-content:center;padding:0 10px}
   .filtros{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
   .ft{font-weight:700;font-size:12.5px;cursor:pointer;color:var(--muted);padding:6px 13px;border-radius:99px;border:1.5px solid var(--line);background:#fff}
   .ft.on{color:#fff;background:var(--tinta);border-color:transparent}
-  .ics{font-size:12.5px;font-weight:700;color:var(--teal);text-decoration:none;border:1.5px solid var(--line);padding:6px 13px;border-radius:99px}
+  .ics{font-size:14px;font-weight:700;color:var(--teal);text-decoration:none;border:1.5px solid var(--line);
+    padding:11px 15px;min-height:44px;display:inline-flex;align-items:center;border-radius:99px}
 
   /* Calendario NATIVO: mes compacto (sin scroll lateral) + agenda del día */
+  /*  LEGIBILIDAD DEL CALENDARIO — el criterio, para que no se vuelva a bajar.
+      Lo que comunica FECHA, HORA, RED, ESTADO, ORIGEN o ACCION va a 14px como
+      minimo, y los controles tactiles a 44px. Lo unico que se queda por debajo
+      es `.mcount` (12px): es la cuenta del dia dentro de una celda cuadrada de
+      ~45px, y ya la dicen los puntos de al lado. A 14px la celda revienta, y
+      reventarla seria rediseñar el mes para ganar un numero repetido. */
   .calnative{max-width:560px}
   .mcal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
-  .mcal .dow{font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;text-align:center;padding:2px 0}
+  .mcal .dow{font-size:14px;font-weight:800;color:var(--muted);text-transform:uppercase;text-align:center;padding:2px 0}
   .mcell{position:relative;aspect-ratio:1/1;background:var(--card);border:1px solid var(--line);border-radius:11px;
     display:flex;flex-direction:column;align-items:center;padding:5px 2px 4px;cursor:pointer;transition:background .12s,border-color .12s}
   .mcell.empty{background:transparent;border:0;cursor:default}
-  .mcell .dn{font-size:13px;font-weight:700;color:var(--tinta);line-height:1}
+  .mcell .dn{font-size:14px;font-weight:700;color:var(--tinta);line-height:1}
   .mcell.hoy{border-color:var(--terracota)}
   .mcell.hoy .dn{color:var(--terracota);font-weight:800}
   .mcell.sel{background:linear-gradient(135deg,var(--coral),var(--magenta));border-color:transparent}
@@ -293,7 +306,7 @@ $icoMes='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="cur
   .mdots{display:flex;gap:3px;margin-top:auto;flex-wrap:wrap;justify-content:center;max-width:100%}
   .mdot{width:6px;height:6px;border-radius:50%}
   .mcell.sel .mdot{box-shadow:0 0 0 1px rgba(255,255,255,.7)}
-  .mcount{font-size:8.5px;font-weight:800;color:var(--muted);line-height:1}
+  .mcount{font-size:12px;font-weight:800;color:var(--muted);line-height:1}
   .mcell.sel .mcount{color:#fff}
   /* Semana: tira de 7 días */
   .wstrip{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
@@ -314,7 +327,7 @@ $icoMes='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="cur
   .dayrow .ev{margin-top:0;flex:1;white-space:normal;font-size:14px;padding:11px 14px;border-radius:12px}
   .dp-empty{color:var(--muted);font-size:14px;padding:24px 0;text-align:center}
   .dp-empty .addbtn{margin-top:12px}
-  .ev{margin-top:4px;border-radius:8px;padding:4px 6px;font-size:11px;font-weight:600;cursor:pointer;color:#fff;
+  .ev{margin-top:4px;border-radius:8px;padding:5px 7px;font-size:14px;font-weight:600;cursor:pointer;color:#fff;
     display:flex;gap:4px;align-items:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
   .ev .evh{font-weight:800;opacity:.9}
   .ev[draggable=true]:active{cursor:grabbing}
@@ -324,7 +337,7 @@ $icoMes='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="cur
   .dayagenda{max-width:640px}
   .dayagenda .row{display:flex;gap:14px;align-items:flex-start;padding:12px 2px;border-bottom:1px solid var(--line)}
   .dayagenda .row:last-child{border-bottom:0}
-  .dayagenda .tcol{width:58px;flex:0 0 58px;font-weight:800;color:var(--muted);font-size:13px;padding-top:9px;text-align:right}
+  .dayagenda .tcol{width:64px;flex:0 0 64px;font-weight:800;color:var(--muted);font-size:14px;padding-top:9px;text-align:right}
   .dayagenda .ev{margin-top:0;flex:1;white-space:normal;font-size:14.5px;padding:11px 15px;border-radius:12px}
   .dayagenda .empty-day{color:var(--muted);font-size:15px;padding:40px 0;text-align:center}
   .dayagenda .empty-day .addbtn{margin-top:14px}
@@ -339,20 +352,27 @@ $icoMes='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="cur
   .ev-box .cap{font-size:14px;line-height:1.5;white-space:pre-wrap;color:#3a2f26}
   .ev-box .kv{font-size:14px;margin:4px 0}.ev-box .kv b{color:var(--muted)}
   .ev-box .go{display:inline-block;margin-top:14px;font-weight:800;color:var(--terracota);text-decoration:none}
-  .ev-box .del{margin-top:14px;border:1.5px solid var(--noo-bg);background:#fff;color:var(--noo-ink);font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;border-radius:99px;padding:8px 16px}
-  .addbtn{border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:12.5px;color:#fff;background:linear-gradient(135deg,var(--coral),var(--magenta));padding:7px 14px;border-radius:99px}
+  .ev-box .del{margin-top:14px;border:1.5px solid var(--noo-bg);background:#fff;color:var(--noo-ink);font-family:inherit;font-weight:700;font-size:14px;cursor:pointer;border-radius:99px;padding:11px 18px;min-height:44px}
+  .addbtn{border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:14px;color:#fff;
+    background:linear-gradient(135deg,var(--coral),var(--magenta));padding:11px 18px;min-height:44px;border-radius:99px}
   .add-ov{display:none;position:fixed;inset:0;background:rgba(20,12,8,.7);z-index:95;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
   .add-ov.show{display:flex}
   .add-box{background:var(--card);border-radius:var(--r-xl);max-width:400px;width:100%;padding:24px;position:relative}
   .add-box h3{font-family:var(--font-display);font-weight:800;font-size:20px;margin-bottom:4px}
-  .add-box label{display:block;font-weight:700;font-size:13px;margin:13px 0 6px}
+  .add-box label{display:block;font-weight:700;font-size:14px;margin:13px 0 6px}
   .add-box input,.add-box textarea{width:100%;font-family:inherit;font-size:15px;border:1.5px solid var(--line);border-radius:12px;padding:11px 13px}
   .add-box .r2{display:flex;gap:12px}.add-box .r2>div{flex:1}
   .add-box .save{margin-top:18px;width:100%;border:0;cursor:pointer;background:linear-gradient(135deg,var(--coral),var(--magenta));color:#fff;font-weight:800;font-size:15px;padding:13px;border-radius:99px}
   .add-box .x{position:absolute;top:12px;right:14px;border:0;background:none;font-size:20px;cursor:pointer;color:var(--muted)}
 </style>
 
-<h1 class="page-h">Tus Posts</h1>
+<?php /*  EL NOMBRE DE LA PANTALLA ES EL QUE DICE LA NAVEGACION.
+          El menu y la barra de abajo llevan aqui bajo el nombre
+          «Calendario» y el titulo del navegador dice «Calendario», pero el
+          encabezado decia «Tus Posts»: el dueño pulsaba una cosa y
+          aterrizaba en otra. «Tus Posts» sigue siendo la bandeja de
+          contenido, en su propia ruta; esto es el calendario.  */ ?>
+<h1 class="page-h"><?= $h(t('Calendario')) ?></h1>
 <div class="viewtoggle">
   <a class="vt" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>"><?= ico('list') ?> Lista</a>
   <a class="vt on" href="/crecer/panel/calendario.php?marca=<?= $marca_id ?>"><?= ico('calendar') ?> Calendario</a>
@@ -544,7 +564,7 @@ $diaLabel = function($fk) use ($diasSem,$meses){ $t=strtotime($fk); return $dias
       var html='<button class="x" onclick="document.getElementById(\'evov\').classList.remove(\'show\')">✕</button>';
       if(c.dataset.tipo==='contenido'){
         if(c.dataset.img) html+='<img src="'+c.dataset.img+'">';
-        html+='<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">'+c.dataset.meta+'</div>';
+        html+='<div style="font-size:14px;font-weight:700;color:var(--muted);text-transform:uppercase">'+c.dataset.meta+'</div>';
         html+='<div class="cap">'+ (c.dataset.cap||'(sin caption)') +'</div>';
         html+='<a class="go" href="/crecer/panel/aprobar2.php?marca=<?= $marca_id ?>">Abrir en Lista →</a>';
       } else if(c.dataset.tipo==='orden'){

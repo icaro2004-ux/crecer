@@ -1160,8 +1160,9 @@ $mt_como_voy = function ($E, array $snap, array $uni, string $obj) use (&$mt_fue
       justo donde cae la ultima fila de enlaces cuando la pagina termina. A
       360x800 los tapaba y ya no quedaba scroll para moverlos: no habia forma
       de pulsarlos. Se aparta quien esta de mas, y vuelve solo al subir. */
-  body .ay-fab{transition:transform .2s ease, opacity .2s ease}
-  body.ah-cola .ay-fab{transform:translateY(calc(100% + 96px));opacity:0;pointer-events:none}
+  /*  La regla que aparta a Ayuda se mudo a `includes/ayudante_widget.php`,
+      junto al boton: aqui solo valia para Tu Meta y las demas pantallas
+      ponian la clase sin que nadie la escuchara. */
   /*  Aqui vivia `.mt-volver`, la salida de la capa 1 antes del rediseño. La
       sustituyeron `.plan-volver` y `.wz-salir`, que ademas DICEN si lo escrito
       se guarda. Se quita para que nadie la reviva creyendo que sigue viva. */

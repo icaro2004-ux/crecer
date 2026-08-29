@@ -77,6 +77,20 @@ $nav_perfil = [
   ['key'=>'facturacion', 'ic'=>'wallet',  'lb'=>t('Facturación'),  'hr'=>"$BASE/precios.php?marca=$marca_id"],
   ['key'=>'soporte',     'ic'=>'chat',    'lb'=>t('Soporte'),      'hr'=>"$BASE/soporte.php?marca=$marca_id"],
 ];
+
+/*  «AQUÍ ESTÁS», TAMBIÉN PARA QUIEN NO VE LA PANTALLA.
+ *
+ *  El menú marcaba la entrada de turno con la clase `on` —color y nada más—,
+ *  así que un lector de pantalla no tenía forma de saber en qué sección está.
+ *  Y en escritorio era peor: la barra de abajo, que sí lleva `aria-current`,
+ *  está en `display:none` a partir de 861px, con lo que la única marca
+ *  semántica de la página vivía en algo que nadie ve.
+ *
+ *  No hay riesgo de marcar dos veces: los cuatro destinos que el menú repite
+ *  llevan `.dup` y se esconden en móvil, y la barra de abajo se esconde en
+ *  escritorio. A cualquier ancho hay exactamente una entrada visible marcada.
+ */
+$aq = fn(string $k): string => (($active ?? '') === $k) ? ' aria-current="page"' : '';
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -135,7 +149,7 @@ $nav_perfil = [
         <?php foreach ($g['items'] as $n): ?>
           <?php /*  .dup = ya está en la barra de abajo → se esconde SOLO en móvil.
                     En escritorio no hay barra, así que ahí SÍ se ven.  */ ?>
-          <a href="<?= $n['hr'] ?>" class="<?= $n['key']===$active?'on ':'' ?><?= !empty($n['bot'])?'dup':'' ?>">
+          <a href="<?= $n['hr'] ?>" class="<?= $n['key']===$active?'on ':'' ?><?= !empty($n['bot'])?'dup':'' ?>"<?= $aq($n['key']) ?>>
             <?= ico($n['ic']) ?><?= $n['lb'] ?>
           </a>
         <?php endforeach; ?>
@@ -146,18 +160,18 @@ $nav_perfil = [
                 donde de verdad está conectado — ofrecer una puerta que no lleva
                 a ningún sitio es peor que no ofrecerla.  */ ?>
       <div class="side-gt"><?= $h(t('Operación')) ?></div>
-      <a href="<?= $BASE ?>/ordenes.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='ordenes'?'on':'' ?>">
+      <a href="<?= $BASE ?>/ordenes.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='ordenes'?'on':'' ?>"<?= $aq('ordenes') ?>>
         <?= ico('qr') ?><?= $h(t('Órdenes')) ?>
       </a>
       <?php if (defined('WHATSAPP_MARCA_ID') && (int)WHATSAPP_MARCA_ID === $marca_id): ?>
-      <a href="<?= $BASE ?>/whatsapp.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='whatsapp'?'on':'' ?>">
+      <a href="<?= $BASE ?>/whatsapp.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='whatsapp'?'on':'' ?>"<?= $aq('whatsapp') ?>>
         <?= ico('phone') ?>WhatsApp
       </a>
       <?php endif; ?>
-      <a href="<?= $BASE ?>/finanzas.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='finanzas'?'on':'' ?>">
+      <a href="<?= $BASE ?>/finanzas.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='finanzas'?'on':'' ?>"<?= $aq('finanzas') ?>>
         <?= ico('dollar') ?><?= $h(t('Finanzas')) ?>
       </a>
-      <a href="<?= $BASE ?>/notificaciones_centro.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='notif'?'on':'' ?>" style="position:relative">
+      <a href="<?= $BASE ?>/notificaciones_centro.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='notif'?'on':'' ?>"<?= $aq('notif') ?> style="position:relative">
         <?= ico('bell-solid') ?><?= $h(t('Notificaciones')) ?>
         <?php if ($notif_nl > 0): ?><span style="position:absolute;top:50%;right:12px;transform:translateY(-50%);background:var(--magenta);color:#fff;font-size:11px;font-weight:800;min-width:19px;height:19px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px"><?= $notif_nl > 9 ? '9+' : $notif_nl ?></span><?php endif; ?>
       </a>
@@ -166,7 +180,7 @@ $nav_perfil = [
                 hace. La Sala es una conversación con el corillo — no es un
                 duplicado de nada.  */ ?>
       <div class="side-gt"><?= $h(t('Más')) ?></div>
-      <a href="<?= $BASE ?>/sala.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='sala'?'on':'' ?>">
+      <a href="<?= $BASE ?>/sala.php?marca=<?= $marca_id ?>" class="<?= ($active??'')==='sala'?'on':'' ?>"<?= $aq('sala') ?>>
         <?= ico('sparkles') ?><?= $h(t('La Sala')) ?>
       </a>
     </nav>
@@ -196,7 +210,7 @@ $nav_perfil = [
     </div>
     <nav class="nav-perfil" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
       <?php foreach ($nav_perfil as $n): ?>
-        <a href="<?= $n['hr'] ?>" class="<?= $n['key']===$active?'on':'' ?>">
+        <a href="<?= $n['hr'] ?>" class="<?= $n['key']===$active?'on':'' ?>"<?= $aq($n['key']) ?>>
           <?= ico($n['ic']) ?><?= $n['lb'] ?>
         </a>
       <?php endforeach; ?>

@@ -351,6 +351,11 @@ $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
   //  Aquí no se llama a ningún modelo. La propuesta ya vino en el turno que la
   //  produjo; esto pregunta al servidor qué pasaría y después escribe.
   function elegir(job){
+    //  UNA TARJETA POR IDEA. El sondeo corre cada 2s y con una respuesta lenta
+    //  puede haber dos peticiones en vuelo: las dos vuelven con «done» y las dos
+    //  llamaban aqui, asi que el dueño veia la misma pregunta dos veces — y al
+    //  confirmar en una, la otra se quedaba ofreciendo lo que ya estaba hecho.
+    if(document.querySelector('.sc-op[data-job="'+job+'"]')) return;
     var fd=new FormData(); fd.append('csrf',CSRF); fd.append('oportunidad','ver'); fd.append('job',job);
     fetch(URL,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
       if(!d || !d.ok || !d.opciones || !d.opciones.length) return;
