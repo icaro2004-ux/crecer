@@ -222,15 +222,15 @@ try { require_once __DIR__ . '/../includes/img_responses.php'; img_sweep_pendien
 //  En la VENTA (post ya publicado) no aplica: ahi la imagen ya se entrego.
 if ($estado !== GW_VENTA) {
     $prep = muestra_asegurar($pdo, $marca_id, $USUARIO_ID);
-    //  LA UNICA SALIDA SIN IMAGEN, Y LA PIDE EL DUEÑO.
-    //  Cuando el arte falla DEFINITIVAMENTE, dejarlo encerrado en la pantalla
-    //  seria peor que enseñarle lo que si tiene: su post escrito. Es una
-    //  decision suya y explicita (boton), se guarda en la sesion para que no se
-    //  la vuelva a pedir cada carga, y NO aplica a ningun otro desenlace: con
-    //  un job vivo o incierto este parametro no hace nada.
-    if (($_GET['sin_arte'] ?? '') === '1' && $prep['degradado'] === 'definitivo') $_SESSION['sin_arte_' . $marca_id] = 1;
-    $sin_arte = !empty($_SESSION['sin_arte_' . $marca_id]) && $prep['degradado'] === 'definitivo';
-    if (!$prep['listo'] && !$sin_arte) {
+    //  NO HAY PUERTA TRASERA «SIN ARTE», Y SE QUITO A PROPOSITO.
+    //  Hubo una: en el fallo definitivo dejaba pasar al escenario para que el
+    //  dueño al menos viera su texto. Suena razonable hasta que se mira lo que
+    //  hay del otro lado — «Publicar en mis redes» (Instagram EXIGE media, la
+    //  publicacion falla) y «Bajar la imagen» con el href vacio. Era cambiar una
+    //  espera con salida por dos botones rotos.
+    //  El copy no se pierde: en ese estado la propia pantalla lo enseña
+    //  (copy_a_salvo) y ofrece reintentar. Ver includes/muestra.php.
+    if (!$prep['listo']) {
         //  Recargar cae aqui otra vez y reconstruye la etapa desde la base: el
         //  tiempo transcurrido sale de created_at, no de un contador del cliente.
         require __DIR__ . '/../includes/_preparacion_view.php';

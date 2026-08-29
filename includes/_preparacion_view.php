@@ -90,6 +90,12 @@ $nom = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
   .acc button.gho{background:#fff;color:var(--tinta,#231F20);border:1px solid var(--line,#E9E7E4)}
   .acc button[disabled]{opacity:.5;cursor:default}
   .pie{margin-top:20px;text-align:center;font-size:12.5px;color:var(--muted,#6b6560);line-height:1.6}
+
+  .salvado{margin-top:16px;padding:15px 16px;border-radius:12px;background:#fff;border:1px solid var(--line,#E9E7E4)}
+  .salvado .tt{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted,#6b6560);margin-bottom:8px}
+  .salvado p{margin:0 0 11px;font-size:14.5px;line-height:1.6;white-space:pre-wrap}
+  .salvado .cop{padding:9px 14px;border-radius:9px;border:1px solid var(--line,#E9E7E4);background:#fff;
+    font:inherit;font-size:13.5px;font-weight:600;cursor:pointer}
 </style>
 </head>
 <body>
@@ -131,6 +137,14 @@ $nom = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
   </div>
 
   <div class="aviso" id="aviso" style="display:none"></div>
+
+  <!-- El copy a salvo: solo se puebla en el fallo definitivo (ver mensajes()). -->
+  <div class="salvado" id="salvado" style="display:none">
+    <div class="tt">Tu post, guardado</div>
+    <p id="salvadoTx"></p>
+    <button type="button" class="cop" id="btnCopiar">Copiar el texto</button>
+  </div>
+
   <div class="acc" id="acc"></div>
 
   <div class="pie">
@@ -151,12 +165,14 @@ $nom = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
       'titulo' => $prep['titulo'], 'degradado' => $prep['degradado'],
       'segundos' => (int)$prep['segundos'], 'tarde' => (bool)$prep['tarde'],
       'listo' => (bool)$prep['listo'], 'etapas' => $prep['etapas'],
+      'copy_a_salvo' => $prep['copy_a_salvo'] ?? null,
   ], JSON_UNESCAPED_UNICODE) ?>;
 
   var fill=document.getElementById('fill'), pcRing=document.getElementById('pcRing'),
       track=document.getElementById('track'), titulo=document.getElementById('titulo'),
       etiqueta=document.getElementById('etiqueta'), reloj=document.getElementById('reloj'),
       aviso=document.getElementById('aviso'), acc=document.getElementById('acc'),
+      salvado=document.getElementById('salvado'), salvadoTx=document.getElementById('salvadoTx'),
       pasos=document.getElementById('pasos'), equipo=document.getElementById('equipo'),
       equipoLista=document.getElementById('equipoLista'), sub=document.getElementById('sub');
 
@@ -212,21 +228,28 @@ $nom = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
       txt = 'No pudimos crear la imagen esta vez. Tu texto está a salvo — podemos intentarlo de nuevo.';
       botones = '<button id="btnRe">Intentar la imagen otra vez</button>';
     } else if (st.degradado === 'definitivo'){
-      txt = 'No logramos terminar la imagen. Tu post escrito está guardado y no se pierde; sigue con él y te montamos el arte enseguida.';
-      botones = '<button id="btnRe">Intentar la imagen otra vez</button>'
-              + '<button class="gho" id="btnSeguir">Seguir con el texto por ahora</button>';
+      //  «Conserva el copy» se cumple ENSEÑANDOLO, no prometiendolo: aqui abajo
+      //  aparece el texto tal cual quedo guardado, y se puede copiar.
+      txt = 'No logramos terminar la imagen. Tu post escrito está guardado — aquí lo tienes.';
+      botones = '<button id="btnRe">Intentar la imagen otra vez</button>';
     } else if (st.tarde){
       //  El umbral cambia el MENSAJE, no el estado. Y nunca se le pide al dueño
       //  que recargue ni que vuelva a pedir la imagen: el trabajo es el mismo.
       txt = 'Está tomando más de lo normal, pero tu imagen sigue en proceso.';
     }
     if (txt){ aviso.textContent = txt; aviso.style.display=''; } else { aviso.style.display='none'; }
+
+    //  EL TEXTO QUE SI SE ESCRIBIO. Solo aparece en el fallo definitivo: no es
+    //  revelar el post a medias, es no perder lo unico que quedo en pie.
+    if (st.copy_a_salvo){
+      salvado.style.display='';
+      salvadoTx.textContent = st.copy_a_salvo;
+    } else { salvado.style.display='none'; }
+
     if (acc.innerHTML !== botones){
       acc.innerHTML = botones;
       var re=document.getElementById('btnRe');
       if(re) re.addEventListener('click', function(){ re.disabled=true; re.textContent='Arrancando…'; reintentar(); });
-      var sg=document.getElementById('btnSeguir');
-      if(sg) sg.addEventListener('click', function(){ location.href = URL_ + '&sin_arte=1'; });
     }
   }
 
@@ -278,6 +301,20 @@ $nom = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
       setTimeout(sondear, 1500);
     }).catch(function(){ setTimeout(sondear, 3000); });
   }
+
+  //  Copiar el texto salvado. El boton se pinta una vez y vive fuera de acc,
+  //  asi que se engancha aqui y no en cada repintado.
+  var btnCopiar=document.getElementById('btnCopiar');
+  if(btnCopiar) btnCopiar.addEventListener('click', function(){
+    var t = salvadoTx.textContent || '';
+    var listo = function(){ btnCopiar.textContent='Copiado'; setTimeout(function(){ btnCopiar.textContent='Copiar el texto'; }, 1800); };
+    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t).then(listo, function(){}); return; }
+    //  Sin Clipboard API (http, navegadores viejos): seleccion manual, que
+    //  siempre funciona. Peor fracaso posible: el texto queda seleccionado.
+    var r=document.createRange(); r.selectNodeContents(salvadoTx);
+    var s=window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    try { document.execCommand('copy'); listo(); } catch(_){ }
+  });
 
   pintaReloj();
   pinta(S);

@@ -180,6 +180,15 @@ function muestra_estado(PDO $pdo, int $marca_id, ?int $cid = null): array {
         // Copy e imagen se entregan SOLO juntos. Media verdad seria revelar a medias.
         'copy'         => $ev['listo'] ? (string)$p['caption'] : null,
         'img'          => $ev['listo'] ? (string)$p['grafica_path'] : null,
+        //  LA UNICA EXCEPCION, Y NO CONTRADICE LA REGLA DE ARRIBA.
+        //  Cuando el arte falla DEFINITIVAMENTE ya no hay un post que revelar a
+        //  medias: hay un post que no va a existir. Enseñarle entonces el texto
+        //  que SI se escribio es cumplir «conserva el copy» — se ve, se puede
+        //  copiar, y se entiende que no se perdio. Lo que NO se hace es dejarlo
+        //  pasar al escenario de venta sin imagen: alli el boton de publicar en
+        //  redes no puede funcionar (Instagram exige media) y la descarga
+        //  apuntaria a un archivo que no existe.
+        'copy_a_salvo' => ($degradado === 'definitivo' && $ev['copy']) ? (string)$p['caption'] : null,
         'pieza'        => (int)$p['id'],
         'agentes'      => muestra_agentes($pdo, $marca_id, (string)$p['created_at']),
     ];

@@ -276,6 +276,27 @@ try {
     Fixture::limpiar($pdo, $m4);
 }
 
+//  FALLO DEFINITIVO -> el copy no se promete: se ENSEÑA. Y no se deja pasar al
+//  escenario, donde los botones de publicar no podrian funcionar sin imagen.
+$f5 = Fixture::crear($pdo, 'preparacion-definitivo', false);
+$m5 = (int)$f5['marca_id']; $u5 = (int)$f5['usuario_id'];
+try {
+    $c5 = muestra_fila($pdo, $m5);
+    //  'fbx:' es la marca que deja img_gemini_fallback cuando el respaldo ya se
+    //  gasto: no queda motor por probar. Ese es el desenlace definitivo.
+    $pdo->prepare("UPDATE crecer_contenido
+                      SET ia_log_id=1, corillo_json='{\"x\":1}', caption='EL TEXTO QUE SI SE ESCRIBIO',
+                          img_estado='error', img_job=NULL, img_error_clase='fbx:sin_motor'
+                    WHERE id=?")->execute([$c5]);
+    $s5 = muestra_estado($pdo, $m5, $c5);
+    ok('el fallo definitivo se nombra',     $s5['degradado'] === 'definitivo', 'degradado=' . $s5['degradado']);
+    ok('el copy salvado se ENSEÑA',         $s5['copy_a_salvo'] === 'EL TEXTO QUE SI SE ESCRIBIO');
+    ok('pero el post NO se da por listo',   $s5['listo'] === false && $s5['copy'] === null && $s5['img'] === null);
+} finally {
+    onboarding_lock_reset($pdo, $u5);
+    Fixture::limpiar($pdo, $m5);
+}
+
 //  INCIERTO -> jamas se crea otro, ni sondeando ni con el boton.
 $f3 = Fixture::crear($pdo, 'preparacion-incierto', false);
 $m3 = (int)$f3['marca_id']; $u3 = (int)$f3['usuario_id'];
