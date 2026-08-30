@@ -62,18 +62,41 @@ try {
     echo "\n  -- lo que el contrato exige que se vea --\n";
     ok('renderiza sin morirse',            strlen($html) > 2000, 'bytes=' . strlen($html));
     ok('barra de progreso',                strpos($html, 'role="progressbar"') !== false);
-    ok('porcentaje etiquetado ESTIMADO',   strpos($html, 'Progreso estimado') !== false);
-    ok('etapa actual visible',             strpos($html, $prep['titulo']) !== false, $prep['titulo']);
-    ok('el texto explicito del contrato',  strpos($html, 'Sí, sigo creando tu imagen.') !== false);
-    ok('tiempo transcurrido',              strpos($html, 'id="reloj"') !== false);
-    ok('animacion tranquila declarada',    strpos($html, 'class="ring"') !== false);
-    ok('sondeo persistente del mismo job', strpos($html, "accion':'preparacion'") !== false
-                                        || strpos($html, 'preparacion') !== false);
-    //  Se cuentan los <li> pintados, no las apariciones del atributo: el JS
-    //  tambien lo nombra al buscar la fila, y eso no es una etapa.
-    ok('las 7 etapas, con su porcentaje',  preg_match_all('/<li class="[^"]*" data-clave=/', $html) === 7,
-       'encontradas: ' . preg_match_all('/<li class="[^"]*" data-clave=/', $html));
-    ok('el techo de 89 vive en el cliente', strpos($html, 'TECHO_ESTIMADO = 89') !== false);
+    //  ── EL CONTRATO CAMBIO, Y ESTAS AFIRMACIONES CON EL ───────────────────
+    //  Antes esta prueba EXIGIA las siete etapas con su porcentaje y el
+    //  porcentaje grande rotulado. Eran ciertas y estaban bien medidas; lo que
+    //  estaba mal era la pantalla. Un panel de diagnostico le dice al dueño
+    //  «esto es complicado» justo en el momento en que le vendemos que alguien
+    //  se lo hace. Asi que lo que antes se exigia ahora se PROHIBE, y lo que
+    //  antes no se miraba —que no se filtre nada interno— se vigila.
+    //  Esto no es ablandar una prueba para ponerla verde: es la misma prueba
+    //  midiendo el contrato nuevo, y con MAS guardas que antes.
+    ok('un solo titulo, claro',            strpos($html, 'Estamos creando tu primer post') !== false);
+    ok('tiempo transcurrido, secundario',  strpos($html, 'id="reloj"') !== false);
+    ok('animacion declarada como adorno',  strpos($html, 'class="crea"') !== false
+                                        && strpos($html, 'aria-hidden="true"') !== false);
+    ok('sondeo persistente del mismo job', strpos($html, 'preparacion=1') !== false);
+    ok('el techo de 89 vive en el cliente', strpos($html, 'TECHO = 89') !== false);
+    ok('la frase humana esta',             strpos($html, 'No tienes que empezar de nuevo') !== false);
+
+    echo "
+  -- y lo que YA NO puede parecer un diagnostico --
+";
+    //  El porcentaje puede existir, pero pequeño y rotulado. Nunca como titular:
+    //  si apareciera dentro de un <h1> o de un bloque de 40px, volveriamos al
+    //  tablero. Se comprueba que va etiquetado y que no manda.
+    ok('el porcentaje va rotulado «estimado»', strpos($html, "'% estimado'") !== false);
+    ok('y no es el elemento principal',    preg_match('~<h1[^>]*>[^<]*%~', $html) !== 1);
+    ok('sin lista de siete etapas',        preg_match_all('/<li class="[^"]*" data-clave=/', $html) === 0);
+    ok('sin nombres de agentes',           stripos($html, 'equipoLista') === false
+                                        && stripos($html, 'El Provocador') === false
+                                        && stripos($html, 'La Estratega') === false);
+    //  Ni el modelo, ni el id de la pieza, ni el id del job. Nada de eso le
+    //  dice al dueño si su post va a estar bueno.
+    ok('sin modelo ni identificadores',    stripos($html, 'gpt-') === false
+                                        && stripos($html, 'img_job') === false
+                                        && stripos($html, 'resp_') === false);
+    ok('sin numero de pieza',              strpos($html, (string)$cid) === false, 'pieza #' . $cid);
 
     echo "\n  -- y lo que NO puede aparecer todavia --\n";
     ok('sin boton de aprobar',             stripos($html, 'Aprobar este post') === false);
@@ -91,7 +114,16 @@ try {
 
     echo "\n  -- el umbral cambia el mensaje, no el estado --\n";
     ok('a los 100 s ya avisa que tarda',   $prep['tarde'] === true);
-    ok('el aviso esta en el cliente',      strpos($html, 'Está tomando más de lo normal') !== false);
+    //  Y la tardanza cambia UNA frase, no convierte la pantalla en una alerta:
+    //  ni bloque rojo, ni boton nuevo, ni parrafo largo.
+    ok('el aviso esta en el cliente',      strpos($html, 'está tardando un poco más') !== false);
+    //  OJO CON COMO SE MIDE ESTO. La primera version contaba apariciones de
+    //  «Reintentar imagen» y fallaba siempre: el literal vive en el JS pase lo
+    //  que pase. Lo que importa no es que la palabra no este en el fuente, sino
+    //  que en este estado el servidor no mande NINGUNA accion — el contenedor
+    //  llega vacio y el boton solo lo pinta el fallo.
+    ok('y no vuelve la pantalla una alerta', stripos($html, 'class="aviso"') === false
+                                          && preg_match('~<div class="acc" id="acc"></div>~', $html) === 1);
 
     //  ── LA PUERTA, EN LA PAGINA DE VERDAD ───────────────────────────────
     //  Renderizar la vista prueba que la vista funciona; esto prueba que el

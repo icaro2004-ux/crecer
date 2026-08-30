@@ -331,8 +331,29 @@ function img_resp_brief(array $m, string $copy, ?bool $con_texto = null, bool $t
     else                           $regla_texto = "Tú decides si la pieza lleva algo de texto de anuncio o si va limpia sin texto — elige lo que MEJOR detenga el scroll; no metas texto por meterlo.";
 
     // Regla de LOGO/MARCA (que no invente).
-    if ($tiene_logo) $regla_logo = "Se adjunta el LOGO REAL del negocio: úsalo EXACTAMENTE ese (intégralo con buen gusto, en una esquina o como marca discreta). NO inventes ni dibujes otro logo.";
-    else             $regla_logo = "NO inventes un logotipo ni una marca gráfica falsa. Si muestras el nombre del negocio, escríbelo como texto limpio y correcto: \"{$nombre}\" — nunca un logo ficticio.";
+    //
+    //  DE AQUI SALIAN LOS LETREROS INVENTADOS, Y ERA UNA CONTRADICCION NUESTRA.
+    //  Sin logo, esta regla decia: «si muestras el nombre del negocio, escribelo
+    //  como texto limpio». Nacio para evitar un logo falso, pero en la practica
+    //  AUTORIZA un rotulo con el nombre — y el modelo lo tomaba como permiso.
+    //  Peor: contradecia de frente a la regla de texto de arriba, que con
+    //  `con_texto=false` dice «NO pongas texto ni letras dentro de la imagen».
+    //  Dos frases del mismo brief mandando lo contrario; ganaba la permisiva.
+    //  Asi salio la cafeteria con su letrero inventado.
+    //
+    //  Ahora las dos reglas dicen lo mismo. Cuando el brief pide imagen sin
+    //  texto, tampoco se escribe el nombre; cuando el texto esta permitido, se
+    //  conserva la regla de siempre (el nombre bien escrito es mejor que un
+    //  logotipo inventado).
+    if ($tiene_logo) {
+        $regla_logo = "Se adjunta el LOGO REAL del negocio: úsalo EXACTAMENTE ese (intégralo con buen gusto, en una esquina o como marca discreta). NO inventes ni dibujes otro logo.";
+    } elseif ($con_texto === false) {
+        $regla_logo = "Este negocio NO te ha dado logo. No inventes un logotipo, un rótulo, "
+                    . "un letrero, un toldo con nombre ni una marca gráfica de ningún tipo. "
+                    . "Tampoco escribas el nombre del negocio dentro de la escena: esta pieza va sin letras.";
+    } else {
+        $regla_logo = "NO inventes un logotipo ni una marca gráfica falsa. Si muestras el nombre del negocio, escríbelo como texto limpio y correcto: \"{$nombre}\" — nunca un logo ficticio.";
+    }
 
     // PROPIEDAD AJENA (2026-08-14): en repostería infantil el modelo mete Superman,
     // princesas o dibujos animados sin pestañear — pasó en prod con el primer post

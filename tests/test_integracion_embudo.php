@@ -138,19 +138,37 @@ try {
     muestra_arrancar($pdo, $M, $U, $cid);
     $fila = $pdo->query("SELECT caption, ia_log_id, corillo_json, img_job FROM crecer_contenido WHERE id={$cid}")->fetch(PDO::FETCH_ASSOC);
     $cap  = (string)$fila['caption'];
+    $corillo = json_decode((string)$fila['corillo_json'], true) ?: [];
+    $visual = trim((string)($corillo['visual'] ?? ''));
     ok('2 · la direccion quedo decidida y guardada', trim((string)$fila['corillo_json']) !== '');
+    ok('2 · la direccion visual es concreta',       $visual !== '', json_encode($corillo, JSON_UNESCAPED_UNICODE));
     ok('3 · el copy final quedo persistido',    $fila['ia_log_id'] !== null && strpos($cap, 'CAPTION-EMBUDO') === 0, $cap);
     ok('5 · nunca con copy vacio',              trim($cap) !== '');
     ok('4 · se encolo exactamente UNA imagen',  $GLOBALS['RED']['crear'] === 1, 'crear=' . $GLOBALS['RED']['crear']);
     ok('4 · y el brief lleva ESE copy',         strpos((string)($GLOBALS['RED']['briefs'][0] ?? ''), $cap) !== false);
+    ok('4 · y lleva la direccion visual del corillo',
+       $visual !== '' && strpos((string)($GLOBALS['RED']['briefs'][0] ?? ''), $visual) !== false,
+       (string)($GLOBALS['RED']['briefs'][0] ?? ''));
 
     // ── 5-7 · la pantalla de preparacion, viva ──────────────────────────
     echo "\n  -- el dueño llega a una pantalla viva --\n";
     envejecer($pdo, $cid, 40);
     $html = pagina($U, $M, 'gateway_post.php');
     ok('7 · llega a la preparacion',            strpos($html, 'role="progressbar"') !== false);
-    ok('7 · con la etapa y el texto del contrato', strpos($html, 'Sí, sigo creando tu imagen.') !== false);
-    ok('9 · las 7 etapas persistidas',          preg_match_all('/<li class="[^"]*" data-clave=/', $html) === 7);
+    //  LA PANTALLA DEJO DE SER UN TABLERO, Y ESTAS DOS AFIRMACIONES CON ELLA.
+    //  Exigian la frase de etapa y las siete etapas con su porcentaje. Eso era
+    //  el panel de diagnostico: correcto de medir, malo de enseñar. Ahora se
+    //  exige lo que sostiene la espera —un estado real, salido de columnas— y
+    //  se PROHIBE lo interno. El detalle vive en test_preparacion_render.php.
+    ok('7 · dice en que va, en cristiano',      strpos($html, 'Tu texto está listo. Ahora estamos creando la imagen.') !== false
+                                             || strpos($html, 'El corillo está preparando tu idea.') !== false, mb_substr($html, 0, 200));
+    //  `$st` todavia no existe en este punto del recorrido: se lee mas abajo.
+    //  Se comprueba contra la fuente, que es lo que importa — el estado que la
+    //  pantalla recibe sale de muestra_estado(), no de un temporizador.
+    $et_ahora = muestra_estado($pdo, $M, $cid)['etapa'];
+    ok('9 · el estado sale de columnas',        strpos($html, '"etapa":"' . $et_ahora . '"') !== false, (string)$et_ahora);
+    ok('9 · y no se enseña el tablero interno', preg_match_all('/<li class="[^"]*" data-clave=/', $html) === 0
+                                             && stripos($html, 'equipoLista') === false);
     ok('8 · NO avanza a publicar',              stripos($html, 'Publicar en mis redes') === false
                                              && stripos($html, 'Aprobar este post') === false);
 

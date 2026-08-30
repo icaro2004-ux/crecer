@@ -2032,8 +2032,33 @@ function entrevista_finalizar(PDO $pdo, int $marca_id, array $historial): array 
 /**
  * LA IDEA con la que nace la pieza. Es el brief que lee el Creador, no un copy:
  * mientras la pieza siga con esto, el post NO esta escrito.
+ *
+ * ESTA SEMILLA ERA LA MITAD DEL PROBLEMA, Y NO SE VEIA.
+ * Decia: «Post de bienvenida: preséntale el negocio a la gente, cálido y
+ * boricua». El motor detras es el bueno —`debate_creativo()` le pasa al
+ * Provocador el cerebro del negocio y dos capitulos del Genome— pero la semilla
+ * le fijaba el GENERO: un post de presentacion. Y un post de presentacion sale
+ * igual para cualquiera: el local, la gente sonriendo, el producto en primer
+ * plano. Es la primera respuesta obvia, la que cualquiera daria sin conocer el
+ * negocio. Contra eso no hay contexto que valga: se le estaba pidiendo lo
+ * generico y lo entregaba bien.
+ *
+ * Las piezas que paga un cliente no nacen asi: nacen de una tactica concreta
+ * atada a una Meta. La muestra todavia no tiene Meta, pero SI tiene entrevista,
+ * productos, publico, diferenciador y voz. Asi que la semilla deja de nombrar un
+ * genero y pasa a EXIGIR una eleccion: una razon concreta, sacada de lo que el
+ * dueño conto, para que alguien pare el scroll.
+ *
+ * No es un motor nuevo ni una llamada de mas: el que elige sigue siendo el
+ * corillo, con las mismas capacidades y el mismo costo. Lo unico que cambia es
+ * que ya no se le pide de entrada la respuesta obvia.
  */
-const MUESTRA_IDEA = 'Post de bienvenida: preséntale el negocio a la gente, cálido y boricua';
+const MUESTRA_IDEA = 'Primer post de este negocio. Escoge UNA razón concreta y verificable, '
+    . 'sacada de lo que el dueño contó en la entrevista, para que alguien pare el scroll: '
+    . 'un producto distintivo, un proceso o una manera de trabajar propia, un detalle real de '
+    . 'su historia, un problema concreto que le resuelve a su gente, o una oferta que ya existe. '
+    . 'NO es un post de bienvenida ni de presentación: nada de «te presentamos», «ya estamos aquí» '
+    . 'ni recorridos por el local. No inventes nada que el dueño no haya dicho.';
 
 /**
  * LA FILA DE LA MUESTRA — solo base de datos, sin un solo modelo de por medio.
@@ -2091,15 +2116,34 @@ function muestra_preparar(PDO $pdo, int $marca_id, int $cid): int {
 
     // 1) EL COPY, COMPLETO. Hasta que no exista, no hay con que briefear el arte.
     $cap = $copy_listo ? (string)$fila['caption'] : '';
+    $visual = '';
     if (!$copy_listo) {
-        try { $r = redactar_pieza($pdo, $cid, [], $marca_id); $cap = (string)($r['caption'] ?? ''); }
+        try {
+            $r = redactar_pieza($pdo, $cid, [], $marca_id);
+            $cap = (string)($r['caption'] ?? '');
+            $visual = trim((string)($r['debate']['visual'] ?? ''));
+        }
         catch (Throwable $e) { error_log('muestra_preparar redactar: ' . $e->getMessage()); }
     }
     if ($arte_listo || $arte_vivo) return $cid;
 
+    // El post gratuito vende la calidad de Crecer: usa la MISMA direccion
+    // visual que el corillo decidio al escribir el copy. Si el worker se
+    // reinicio entre ambos tramos, la recupera de la conversacion persistida
+    // en vez de degradar a una escena generica basada solo en el caption.
+    if ($visual === '') {
+        try {
+            $qv = $pdo->prepare("SELECT corillo_json FROM crecer_contenido WHERE id=? AND marca_id=?");
+            $qv->execute([$cid, $marca_id]);
+            $cj = json_decode((string)($qv->fetchColumn() ?: ''), true);
+            if (is_array($cj)) $visual = trim((string)($cj['visual'] ?? ''));
+        } catch (Throwable $e) { /* esquema anterior: conserva el fallback por caption */ }
+    }
+
     // 2) EL ARTE, con ESE copy.
     if (img_resp_activo()) {
-        $enc = img_resp_encolar_res($pdo, $marca_id, $cid, $cap);
+        $enc = img_resp_encolar_res($pdo, $marca_id, $cid, $cap, false,
+                                    $visual !== '' ? $visual : null);
         //  Y AL WORKER SE LE AVISA.
         //  Sin esto el unico que empujaba el job era el navegador cuando llegaba
         //  al escenario y arrancaba su sondeo. Si el dueño tardaba en llegar —o
