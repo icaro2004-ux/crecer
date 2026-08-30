@@ -2165,7 +2165,21 @@ function muestra_preparar(PDO $pdo, int $marca_id, int $cid): int {
         //  sondeos se pisen: gana el que mueva la fila.
         if ($enc['res'] === 'encolado') {
             if (function_exists('arte_disparar')) {
-                try { arte_disparar($marca_id, $cid); }
+                //  SE DISPARA Y SE VERIFICA. El disparo devuelve su codigo HTTP
+                //  y queda escrito en la cronologia: sin ese dato, un worker que
+                //  nunca arranco (403 por la llave, 404 por la ruta) se veia
+                //  igual que uno sano, y toda la espera se le achacaba al
+                //  proveedor. Verificar no retrasa nada — el curl ya se hacia.
+                try {
+                    $w = arte_disparar($marca_id, $cid);
+                    if (function_exists('img_cron_marcar')) {
+                        img_cron_marcar($pdo, $marca_id, $cid, [
+                            'worker_disparado_at' => date('Y-m-d H:i:s'),
+                            'worker_http'         => (int)$w['http'],
+                            'worker_arranco'      => $w['disparado'] ? 1 : 0,
+                        ]);
+                    }
+                }
                 catch (Throwable $e) { error_log('muestra arte_disparar: ' . $e->getMessage()); }
             }
             return $cid;   // la imagen llega por polling

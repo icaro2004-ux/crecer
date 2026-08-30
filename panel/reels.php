@@ -270,6 +270,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->prepare("UPDATE crecer_reels SET error_msg=NULL WHERE id=?")->execute([$rid]);
         // host VALIDADO (ver worker_host): la cabecera Host la controla quien llama.
         require_once __DIR__ . '/../includes/worker_key.php';
+        //  La puerta, que aqui tampoco estaba. Sin ella este handler armaba la
+        //  URL del worker aunque no hubiera llave — y publicar un reel no es
+        //  algo que deba intentarse a ciegas contra un 503.
+        if (!worker_puede_disparar('reel_publicar')) {
+            echo json_encode(['ok'=>false, 'err'=>'El servidor no esta configurado para publicar ahora.'],
+                             JSON_UNESCAPED_UNICODE); exit;
+        }
         $host = worker_host();
         $wurl = worker_esquema($host) . '://' . $host . '/crecer/panel/reel_publicar_worker.php?id=' . $rid . '&cid=' . $cid
               . '&redes=' . rawurlencode(implode(',', $destinos)) . '&key=' . REELS_WORKER_KEY;

@@ -20,6 +20,9 @@ require_once __DIR__ . '/../includes/notif.php';
 if (!defined('ARTE_WORKER_TEST')) define('ARTE_WORKER_TEST', false);
 if (!defined('ARTE_POLL_MAX'))    define('ARTE_POLL_MAX', 80);   // ~4 min de ventana
 if (!defined('ARTE_POLL_ESPERA')) define('ARTE_POLL_ESPERA', 3); // segundos entre sondeos
+//  Relevos: cuantas veces puede el worker pasarse el testigo a si mismo sobre
+//  el MISMO job. Tres ventanas en total (~12 min de sondeo continuo).
+if (!defined('ARTE_RELEVO_MAX'))  define('ARTE_RELEVO_MAX', 2);
 
 $mid = (int)($_GET['marca'] ?? 0);
 $pid = (int)($_GET['id'] ?? 0);
@@ -140,6 +143,55 @@ for ($i = 0; $i < ARTE_POLL_MAX; $i++) {
 //    él no hay forma de reconciliar—, img_estado sigue en 'queued', y el
 //    barrido la retoma en cuanto venza el lease (img_next_poll_at), que el
 //    último sondeo dejó a segundos vista.
+//
+//    LO QUE SI SE HACE: PASARLE EL TESTIGO A OTRA EJECUCION.
+//    Conservar el job estaba bien y no bastaba. Quien lo retomaba era el
+//    barrido, y el barrido solo corre cuando alguien CARGA una pantalla o
+//    cuando pasa el cron: con la pestaña cerrada, un trabajo perfectamente
+//    vivo se quedaba parado hasta la siguiente visita. Eso es espera de
+//    Crecer, no del proveedor.
+//
+//    Asi que el worker se releva a si mismo — el MISMO job, sin encolar nada
+//    ni gastar una unidad— y sigue sondeando desde cero su ventana.
+//
+//    ACOTADO A PROPOSITO. Dos relevos, o sea tres ventanas de ~4 minutos:
+//    doce minutos de sondeo continuo y se acabo. No es polling ilimitado y no
+//    puede encadenarse solo: el contador viaja en la URL y el worker no lo
+//    inventa. Pasado el tope, el barrido sigue siendo la red de seguridad.
+$relevo = (int)($_GET['relevo'] ?? 0);
+$vivo = $pdo->prepare("SELECT img_job, img_estado, img_error_clase FROM crecer_contenido
+                        WHERE id=? AND marca_id=?");
+$vivo->execute([$pid, $mid]);
+$f = $vivo->fetch(PDO::FETCH_ASSOC) ?: null;
+
+if (arte_debe_relevar($f, $relevo, ARTE_RELEVO_MAX) && !ARTE_WORKER_TEST && worker_puede_disparar('arte')) {
+    error_log("arte_worker #{$pid}: ventana agotada con el job VIVO; relevo " . ($relevo + 1)
+            . '/' . ARTE_RELEVO_MAX);
+    $host = worker_host();
+    $url  = worker_esquema($host) . '://' . $host . '/crecer/panel/arte_worker.php?marca=' . $mid
+          . '&id=' . $pid . '&key=' . ARTE_WORKER_KEY . '&relevo=' . ($relevo + 1);
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER    => true,
+        CURLOPT_CONNECTTIMEOUT_MS => 1500,
+        CURLOPT_TIMEOUT_MS        => 3000,
+        CURLOPT_NOSIGNAL          => 1,
+        CURLOPT_SSL_VERIFYPEER    => false,
+    ]);
+    curl_exec($ch);
+    $hrel = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $erel = curl_errno($ch);
+    curl_close($ch);
+    if (function_exists('img_cron_marcar')) {
+        img_cron_marcar($pdo, $mid, $pid, ['relevos' => $relevo + 1, 'relevo_http' => $hrel]);
+    }
+    //  SIN AVISO. El dueño no tiene por que enterarse de que cambiamos de
+    //  proceso: para el no ha pasado nada, la imagen sigue viniendo. El aviso
+    //  de «se esta tardando» se reserva para cuando de verdad nos rendimos.
+    if (($hrel >= 200 && $hrel < 300) || $erel === CURLE_OPERATION_TIMEDOUT) exit;
+    error_log("arte_worker #{$pid}: el relevo NO arranco (HTTP {$hrel}); queda el barrido");
+}
+
 error_log("arte_worker #{$pid}: se agotó la ventana de sondeo; job conservado, sin respaldo");
 notif_crear($pdo, $mid, 'arte', 'Tu arte va en camino',
     'Se está tardando un poco más de lo normal. Seguimos en eso y te avisamos apenas esté.',

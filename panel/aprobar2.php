@@ -275,7 +275,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once __DIR__ . '/../includes/img_responses.php';
         header('Content-Type: application/json');
         $pid = (int)($_POST['id'] ?? 0);
-        $res = img_resp_completar($pdo, $marca_id, $pid);
+        //  DEDICADO: el dueño esta delante esperando ESTA imagen. Con el perfil
+        //  de barrido, este sondeo se anotaba a si mismo un backoff de 1-2-4-8
+        //  minutos y ademas cerraba img_next_poll_at, que es la puerta COMUN —
+        //  con lo que dejaba fuera al worker dedicado y su bucle de 3s. Es el
+        //  mismo defecto que se midio en la pieza #667 del gateway.
+        $res = img_resp_completar($pdo, $marca_id, $pid, true);
         // AUTO-RESCATE: en Hostinger el worker de fondo a veces no arranca → el post
         // se queda en 'queued' sin job para siempre. Si ya pasaron >15s así, lo genero
         // por Gemini AQUÍ mismo (lock atómico para que solo un poll lo dispare).

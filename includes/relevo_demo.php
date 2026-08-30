@@ -38,6 +38,12 @@ function relevo_marcar(PDO $pdo, int $marca_id, string $accion, string $resp = '
 function relevo_disparar(int $marca_id): void {
     // host VALIDADO (ver worker_host): la cabecera Host la controla quien llama.
     require_once __DIR__ . '/worker_key.php';
+    //  LA PUERTA, QUE AQUI FALTABA. Era uno de los dos disparadores que armaban
+    //  la URL sin preguntar: sin llave se iba igual contra el servidor, y en
+    //  pruebas habria salido a la red. worker_host() lanza de todos modos —ese
+    //  es el cierre duro— pero preguntar aqui lo deja como los demas: se calla
+    //  y no arranca, en vez de reventar en medio de otra cosa.
+    if (!worker_puede_disparar('relevo')) return;
     $host = worker_host();
     $url  = worker_esquema($host) . '://' . $host . '/crecer/panel/relevo_worker.php?marca=' . $marca_id . '&key=' . RELEVO_WORKER_KEY;
     $ch = curl_init($url);

@@ -309,18 +309,25 @@ function muestra_arrancar(PDO $pdo, int $marca_id, int $usuario_id, int $cid): b
         }
     }
     if (empty($lock['acquired'])) return false;
+    //  GANCHO DE PRUEBA: el arnes corre el worker en el mismo proceso en vez de
+    //  por HTTP. No existe en produccion (la constante no esta definida), asi
+    //  que alli el unico camino sigue siendo el curl de abajo.
+    //
+    //  VA ANTES DE LA PUERTA DE RED, Y ESE ORDEN IMPORTA. Estaba despues, y en
+    //  cuanto la puerta empezo a cerrarse en modo prueba —que es lo correcto:
+    //  una prueba no puede despertar workers por HTTP— este gancho dejo de
+    //  alcanzarse y con el se cayeron diecisiete comprobaciones. No tiene
+    //  sentido que una puerta de RED tape un camino que no usa la red: correr
+    //  el worker aqui mismo no manda nada a ninguna parte.
+    if (defined('MUESTRA_WORKER_LOCAL') && MUESTRA_WORKER_LOCAL && function_exists('muestra_worker_local')) {
+        muestra_worker_local($pdo, $marca_id, $cid, $usuario_id, (string)$lock['token']);
+        return true;
+    }
     if (!worker_puede_disparar('muestra')) {
         //  Sin llave no hay worker. Se suelta el lock para que el proximo intento
         //  pueda entrar en vez de quedarse esperando 180 s a un muerto.
         onboarding_lock_fail($pdo, $usuario_id, (string)$lock['token']);
         return false;
-    }
-    //  GANCHO DE PRUEBA: el arnes corre el worker en el mismo proceso en vez de
-    //  por HTTP. No existe en produccion (la constante no esta definida), asi
-    //  que alli el unico camino sigue siendo el curl de abajo.
-    if (defined('MUESTRA_WORKER_LOCAL') && MUESTRA_WORKER_LOCAL && function_exists('muestra_worker_local')) {
-        muestra_worker_local($pdo, $marca_id, $cid, $usuario_id, (string)$lock['token']);
-        return true;
     }
     $url = worker_url('muestra_worker.php', ['marca' => $marca_id, 'id' => $cid, 'tk' => (string)$lock['token']]);
     $ch = curl_init($url);
