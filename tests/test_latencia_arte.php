@@ -239,17 +239,27 @@ ok('encolar abre la cronologia con su reloj',
    ($e['CRON_INICIO'] ?? '') !== '' && ($e['CRON_ACEPTADO'] ?? '') !== '');
 ok('y nace con cero sondeos', (int)($e['CRON_POLLS'] ?? -1) === 0);
 
-//  LA PANTALLA DE ESPERA NO SE TOCO, y no se afirma: se comprueba contra git.
-$vista = __DIR__ . '/../includes/_preparacion_view.php';
-$base  = @shell_exec('git show 391cbc6:includes/_preparacion_view.php 2>&1');
-if (is_string($base) && strpos($base, '<script') !== false) {
-    $ahora = str_replace("\r\n", "\n", (string)file_get_contents($vista));
-    ok('la pantalla de espera es byte a byte la de 391cbc6',
-       str_replace("\r\n", "\n", $base) === $ahora,
-       'este encargo era de reloj, no de pantalla');
-} else {
-    echo "  (saltada: no se pudo leer 391cbc6 desde git)\n";
+//  LA PANTALLA DE ESPERA: EL CONTRATO, NO LOS BYTES.
+//
+//  Aqui habia una comparacion byte a byte contra 391cbc6. Servia para lo que
+//  servia —demostrar que el arreglo de LATENCIA no habia tocado la vista— y
+//  dejo de valer en cuanto la vista se rediseño a proposito. Mantenerla habria
+//  sido pedirle a una prueba que impidiera un cambio aprobado.
+//
+//  Lo que de verdad hay que blindar sobrevive al rediseño: que la pantalla siga
+//  hablando el MISMO idioma que el motor. Si alguien renombra una accion o una
+//  clave, el sondeo se rompe EN SILENCIO — ya paso: un GET por un POST dejo la
+//  barra quieta 3:52 con el post terminado.
+$vista = (string)file_get_contents(__DIR__ . '/../includes/_preparacion_view.php');
+foreach (["'preparacion'", "'reintentar_muestra'"] as $accion) {
+    ok("la vista sigue llamando a {$accion}", strpos($vista, $accion) !== false);
 }
+foreach (['pct_estimado', 'degradado', 'segundos', 'tarde', 'listo', 'copy_a_salvo',
+          'pieza_copy', 'pieza_visual', 'pieza_img'] as $clave) {
+    ok("la vista sigue leyendo «{$clave}»", strpos($vista, $clave) !== false);
+}
+ok('y el sondeo sigue yendo por POST', strpos($vista, "method:'POST'") !== false,
+   'un GET aqui devuelve la pagina entera y r.json() revienta en silencio');
 
 // ── 9 · UN SOLO CONSULTANTE A LA VEZ ────────────────────────────────────────
 echo "\n  — sondear mas rapido no duplica trabajo —\n";
