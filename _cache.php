@@ -2165,14 +2165,94 @@ try {
             printf("  ultimo error     %s\n", $r['img_error_clase'] ?: '-');
             printf("  lock             %s (hace %ss)\n", $r['lock_estado'] ?: '-', $r['lock_edad'] ?? '-');
 
+            //  ── LA CRONOLOGIA. Por que hacia falta y que responde. ──────────
+            //  La pieza #667 salio bien y tardo 8m12s, y con lo de arriba no se
+            //  podia decir de quien eran esos minutos: img_job_at daba el
+            //  nacimiento del trabajo y grafica_path el final, y en medio no
+            //  habia nada. «El proveedor tardo ocho minutos» y «Crecer estuvo
+            //  siete minutos sin preguntar» se veian identicos.
+            //
+            //  Ademas el identificador del proveedor desaparecia justo al
+            //  terminar: la rama que guarda pone img_job=NULL —correcto, el
+            //  ciclo cerro— y el diagnostico se quedaba sin el dato con el que
+            //  se investiga. Aqui se recupera de dos sitios que SI lo conservan.
+            $cr = function_exists('img_cron_leer')
+                ? img_cron_leer($pdo, (int)$r['marca_id'], (int)$r['id']) : [];
+            echo "  --- cronologia del arte ---\n";
+            if (!$cr) {
+                echo "  (sin cronologia: el trabajo es anterior a la instrumentacion)\n";
+            } else {
+                $g = function ($k) use ($cr) { return $cr[$k] ?? null; };
+                $seg = function ($a, $b) use ($cr) {
+                    if (empty($cr[$a]) || empty($cr[$b])) return null;
+                    return strtotime((string)$cr[$b]) - strtotime((string)$cr[$a]);
+                };
+                $lin = function (string $et, $val, $extra = '') {
+                    printf("  %-22s %s%s\n", $et, $val === null ? '-' : $val, $extra);
+                };
+                //  UNA CRONOLOGIA TARDIA NO PUEDE RESPONDERLO TODO, y decirlo
+                //  vale mas que enseñar guiones sin explicacion: se abrio en el
+                //  primer sondeo porque el trabajo ya venia en vuelo, asi que
+                //  del tramo anterior (brief, modelo, cuanto tardo Crecer en
+                //  pedirla) no consta nada y no se va a inventar.
+                if (!empty($cr['tardia'])) {
+                    echo "  (TARDIA: el trabajo ya estaba en vuelo cuando empezo a medirse;\n"
+                       . "   lo anterior al primer sondeo no consta)\n";
+                }
+                $lin('provider_job_id',       $g('provider_job_id'));
+                $lin('modelo / calidad',      ($g('modelo') ?: '-') . ' / ' . ($g('quality') ?: '-'));
+                $lin('request_started_at',    $g('request_started_at'));
+                $lin('provider_accepted_at',  $g('provider_accepted_at'),
+                     $g('crear_ms') !== null ? "   (Crecer tardo {$cr['crear_ms']} ms en pedirla)" : '');
+                $lin('worker_disparado_at',   $g('worker_disparado_at'),
+                     $g('worker_http') !== null
+                        ? '   HTTP ' . $cr['worker_http'] . ' · ' . (!empty($cr['worker_arranco']) ? 'ARRANCO' : 'NO ARRANCO')
+                        : '');
+                $lin('first_poll_at',         $g('first_poll_at'),
+                     ($s = $seg('provider_accepted_at', 'first_poll_at')) !== null ? "   (+{$s}s tras aceptar)" : '');
+                $lin('last_poll_at',          $g('last_poll_at'));
+                $lin('poll_count',            $g('poll_count'));
+                $lin('relevos del worker',    $g('relevos') ?? 0);
+                $lin('provider_completed_at', $g('provider_completed_at'));
+                $lin('download_started_at',   $g('download_started_at'));
+                $lin('saved_at',              $g('saved_at'),
+                     $g('guardar_ms') !== null ? "   (escribir el archivo: {$cr['guardar_ms']} ms)" : '');
+                $lin('ultimo estado',         $g('estado'));
+                $lin('ultima decision',       $g('ultima_decision'));
+                $lin('ultimo error',          $g('error'));
+                $lin('ultimo HTTP',           $g('ultimo_http'));
+                if ($g('total_ms') !== null) {
+                    $t = (int)$cr['total_ms'] / 1000;
+                    printf("  %-22s %.1fs  (%dm %02ds)\n", 'TOTAL', $t, (int)($t / 60), (int)$t % 60);
+                }
+                //  EL REPARTO, que es la pregunta de verdad. Todo lo que va
+                //  entre que aceptaron el encargo y que lo vimos completado es
+                //  del proveedor SI se estuvo preguntando; si no, es nuestro.
+                $espera = $seg('provider_accepted_at', 'provider_completed_at');
+                if ($espera !== null) {
+                    $n = max(1, (int)$g('poll_count'));
+                    printf("  %-22s %ds de espera / %d sondeos = 1 cada %.1fs\n",
+                           'cadencia real', $espera, $n, $espera / $n);
+                    printf("  %-22s %s\n", 'reparto',
+                        $espera / $n > 20
+                          ? 'SOSPECHOSO: se pregunto poco para lo que se espero -> mirar el backoff'
+                          : 'sano: se pregunto seguido, la espera es del proveedor');
+                }
+            }
+
             try {
-                $a = $pdo->prepare("SELECT id, estado, operacion, created_at FROM crecer_img_cuota_asiento
+                $a = $pdo->prepare("SELECT id, estado, operacion, created_at, provider_job_id
+                                      FROM crecer_img_cuota_asiento
                                      WHERE marca_id=? AND origen_tipo='contenido' AND origen_id=? ORDER BY id");
                 $a->execute([(int)$r['marca_id'], (int)$r['id']]);
                 $f = $a->fetchAll(PDO::FETCH_ASSOC);
                 printf("  asientos cuota   %s\n", $f ? count($f) : 'ninguno');
                 foreach ($f as $x) {
-                    printf("                   #%s %s (%s) %s\n", $x['id'], $x['estado'], $x['operacion'], $x['created_at']);
+                    //  El asiento tambien guarda el identificador del proveedor
+                    //  y NO lo borra nunca: es la segunda copia que permite
+                    //  explicar un trabajo despues de cerrado.
+                    printf("                   #%s %s (%s) %s  job=%s\n", $x['id'], $x['estado'],
+                           $x['operacion'], $x['created_at'], $x['provider_job_id'] ?: '-');
                 }
             } catch (Throwable $e) { echo "  asientos cuota   (no se pudo leer)\n"; }
 

@@ -79,7 +79,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     //  un preparador mientras haya job vivo o el encolado quedara incierto.
     if ($accion === 'preparacion') {
         require_once __DIR__ . '/../includes/img_responses.php';
-        try { img_resp_completar($pdo, $marca_id, $post_id); } catch (Throwable $e) { /* que el sondeo siga */ }
+        //  DEDICADO, PORQUE EL DUEÑO ESTA MIRANDO. Y aqui estaban los ocho
+        //  minutos de la pieza #667.
+        //
+        //  Este sondeo pasaba dedicado=false, o sea el perfil del barrido de
+        //  fondo. Con eso hacia dos cosas, las dos malas: se anotaba a si mismo
+        //  un backoff de 1, 2, 4, 8 minutos —1+2+4 = SIETE MINUTOS de silencio
+        //  sobre una imagen que el proveedor ya estaba entregando— y, como
+        //  img_next_poll_at es la MISMA puerta para todos, dejaba fuera al
+        //  worker dedicado: su bucle de 3 segundos giraba en vacio recibiendo
+        //  'diferido' hasta agotar su ventana de 4 minutos sin llegar a
+        //  preguntar. La pantalla de espera se pasaba minutos enteros sin que
+        //  nadie le preguntara nada a OpenAI.
+        //
+        //  El flag existe exactamente para este caso -«el dueño esta esperando
+        //  delante»- y este es el sitio mas dedicado que hay en el producto.
+        //  No sube el gasto: consultar el estado de un trabajo no cuesta, y el
+        //  lease sigue garantizando UN solo consultante a la vez.
+        try { img_resp_completar($pdo, $marca_id, $post_id, true); } catch (Throwable $e) { /* que el sondeo siga */ }
         echo json_encode(muestra_asegurar($pdo, $marca_id, $USUARIO_ID), JSON_UNESCAPED_UNICODE); exit;
     }
     //  EL REINTENTO, solo a peticion del dueño y solo desde un desenlace cerrado.
@@ -173,7 +190,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // 🔁 Polling de la imagen en background (Responses): guarda al completar y devuelve el estado.
     if ($accion === 'poll_imagen') {
         require_once __DIR__ . '/../includes/img_responses.php';
-        $r = img_resp_completar($pdo, $marca_id, $post_id);
+        //  Dedicado por el mismo motivo que 'preparacion': quien llama es la
+        //  pantalla del dueño esperando SU imagen, no un barrido de fondo.
+        $r = img_resp_completar($pdo, $marca_id, $post_id, true);
         // RESCATE EN CALIENTE, POR TIEMPO. Hay dos formas de quedarse esperando
         // para siempre, y ninguna se distingue desde fuera:
         //   · el worker murió antes de crear el job → 'queued' sin img_job;

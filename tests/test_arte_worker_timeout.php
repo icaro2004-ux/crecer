@@ -87,6 +87,12 @@ $logRespaldo = function () use ($pdo, $mid): int {
 };
 // Limpieza previa por si una corrida anterior murió a medias.
 $pdo->prepare("DELETE FROM crecer_contenido WHERE marca_id=? AND caption=?")->execute([$mid, $MARCA]);
+//  Y la cronologia de esas piezas. Esta prueba siembra fuera de transaccion
+//  (el worker corre en OTRO proceso, con su propia conexion), asi que lo que
+//  escribe el sondeo no se deshace solo: sin esta linea cada corrida dejaba una
+//  fila viva por cada trabajo simulado.
+$pdo->prepare("DELETE FROM crecer_ia_log WHERE marca_id=? AND agente='cronologia_img'")
+    ->execute([$mid]);
 $pdo->prepare("DELETE FROM crecer_notificaciones WHERE marca_id=? AND tipo='arte'
                  AND titulo IN ('Tu arte va en camino','No se pudo crear el arte','Tu arte ya está listo')
                  AND created_at > (NOW() - INTERVAL 30 MINUTE)")->execute([$mid]);

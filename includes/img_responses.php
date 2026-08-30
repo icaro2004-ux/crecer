@@ -58,6 +58,156 @@ if (!defined('IMG_POLL_INTENTOS_MAX'))   define('IMG_POLL_INTENTOS_MAX', 24);
 /** Tope duro para un job que el proveedor sigue reportando VIVO. */
 if (!defined('IMG_POLL_VIVO_DIAS'))     define('IMG_POLL_VIVO_DIAS', 7);
 
+
+// ────────────────────────────────────────────────────────────────────────────
+//  LA CRONOLOGIA DEL ARTE — por que existe y donde vive.
+//
+//  La pieza #667 salio bien y tardo 8m12s, y no habia con que repartir esos
+//  minutos: la fila solo conserva img_job_at (cuando nacio el trabajo) y el
+//  momento en que se guardo. Todo lo de en medio —cuando se pregunto por
+//  primera vez, cuantas veces, cuando contesto el proveedor, cuanto tardo la
+//  descarga— se perdia, asi que «el proveedor tardo» y «Crecer no pregunto»
+//  se veian exactamente igual desde fuera. Un sistema que no puede distinguir
+//  esas dos cosas no puede arreglar ninguna.
+//
+//  SIN DDL, Y A PROPOSITO. Se reusa crecer_ia_log, que ya es el libro de
+//  evidencia del criterio #2: UNA fila por trabajo de imagen, ACTUALIZADA en
+//  sitio. No se inserta una fila por sondeo — ese fue justo el defecto que
+//  produjo 852 registros en agosto, y no se va a repetir para medirlo.
+//
+//    agente       'cronologia_img'
+//    accion       'arte #<pieza>'          <- por donde se busca
+//    modelo       el id del proveedor      <- SOBREVIVE a img_job=NULL
+//    respuesta    la cronologia en JSON
+//    tokens_in    sondeos contados
+//    latencia_ms  total de punta a punta
+//
+//  Y SOBREVIVE AL FINAL. img_resp_completar pone img_job=NULL al guardar —
+//  correcto, el ciclo cerro— pero con eso el diagnostico se quedaba sin el
+//  identificador justo cuando hacia falta para explicar lo ocurrido. Aqui se
+//  conserva. (Tambien esta en crecer_img_cuota_asiento.provider_job_id, que es
+//  donde se fue a buscar la primera vez.)
+// ────────────────────────────────────────────────────────────────────────────
+
+/** El sello por el que se encuentra la cronologia de una pieza. */
+function img_cron_accion(int $post_id): string { return 'arte #' . $post_id; }
+
+/** La cronologia viva de una pieza: ['id'=>fila,'d'=>datos,'sondeos'=>n] o null. */
+function img_cron_fila(PDO $pdo, int $marca_id, int $post_id): ?array {
+    try {
+        $q = $pdo->prepare("SELECT id, respuesta, tokens_in FROM crecer_ia_log
+                             WHERE marca_id=? AND agente='cronologia_img' AND accion=?
+                             ORDER BY id DESC LIMIT 1");
+        $q->execute([$marca_id, img_cron_accion($post_id)]);
+        $r = $q->fetch(PDO::FETCH_ASSOC);
+        if (!$r) return null;
+        $d = json_decode((string)$r['respuesta'], true);
+        return ['id' => (int)$r['id'], 'd' => is_array($d) ? $d : [],
+                'sondeos' => (int)$r['tokens_in']];
+    } catch (Throwable $e) { return null; }
+}
+
+/**
+ * Abre la cronologia de un trabajo. Se llama al encolar, que es el unico
+ * momento en que se conoce cuanto tardo Crecer ANTES de pedir la imagen.
+ * Una cronologia por trabajo: si el dueño encola otra vez nace otra fila y la
+ * anterior se conserva — es historia, no estado.
+ */
+function img_cron_abrir(PDO $pdo, int $marca_id, int $post_id, string $job,
+                        float $t_inicio, float $t_aceptado, array $extra = []): void {
+    try {
+        $d = [
+            'pieza'                 => $post_id,
+            'provider_job_id'       => $job,
+            'request_started_at'    => date('Y-m-d H:i:s', (int)$t_inicio),
+            'provider_accepted_at'  => date('Y-m-d H:i:s', (int)$t_aceptado),
+            'crear_ms'              => (int)round(($t_aceptado - $t_inicio) * 1000),
+            'worker_disparado_at'   => null,
+            'worker_http'           => null,
+            'first_poll_at'         => null,
+            'last_poll_at'          => null,
+            'poll_count'            => 0,
+            'provider_completed_at' => null,
+            'download_started_at'   => null,
+            'saved_at'              => null,
+            'total_ms'              => null,
+            'estado'                => 'encolado',
+            'error'                 => null,
+        ] + $extra;
+        $pdo->prepare("INSERT INTO crecer_ia_log
+                         (marca_id,agente,accion,modelo,respuesta,tokens_in,estado,created_at)
+                       VALUES (?,'cronologia_img',?,?,?,0,'ok',?)")
+            ->execute([$marca_id, img_cron_accion($post_id), mb_substr($job, 0, 60),
+                       json_encode($d, JSON_UNESCAPED_UNICODE),
+                       date('Y-m-d H:i:s', (int)$t_inicio)]);
+    } catch (Throwable $e) { error_log('img_cron_abrir: ' . $e->getMessage()); }
+}
+
+/**
+ * Anota en la cronologia. $sondeo=true cuenta una consulta al proveedor.
+ *
+ * Lee-modifica-escribe sobre UNA fila, y puede hacerlo sin candado porque el
+ * lease de img_poll_tomar_lease ya garantiza un solo sondeador a la vez: quien
+ * escribe aqui es siempre el que gano la fila.
+ *
+ * Best-effort de cabo a rabo: medir no puede tumbar la entrega. Si esto falla,
+ * la imagen sigue su camino y lo unico que se pierde es la explicacion.
+ */
+function img_cron_marcar(PDO $pdo, int $marca_id, int $post_id, array $campos,
+                         bool $sondeo = false, string $job = ''): void {
+    try {
+        $f = img_cron_fila($pdo, $marca_id, $post_id);
+        if (!$f) {
+            //  CRONOLOGIA TARDIA. Sin esto, medir solo servia para los trabajos
+            //  nacidos DESPUES del despliegue: los que ya estaban en vuelo —y
+            //  los que entran por otras rutas— seguirian siendo justo lo que
+            //  hay que explicar y justo lo que no se puede. Se abre con lo que
+            //  consta (img_job_at, el nacimiento del trabajo) y se marca
+            //  'tardia' para no fingir una precision que no tenemos: de esa no
+            //  se puede afirmar cuanto tardo Crecer ANTES de pedir la imagen.
+            if ($job === '') return;
+            $ini = null;
+            try {
+                $q = $pdo->prepare("SELECT img_job_at FROM crecer_contenido WHERE id=? AND marca_id=?");
+                $q->execute([$post_id, $marca_id]);
+                $ini = $q->fetchColumn() ?: null;
+            } catch (Throwable $e) { /* se cae al reloj de ahora */ }
+            $t = $ini ? (float)strtotime((string)$ini) : microtime(true);
+            img_cron_abrir($pdo, $marca_id, $post_id, $job, $t, $t, ['tardia' => 1]);
+            $f = img_cron_fila($pdo, $marca_id, $post_id);
+            if (!$f) return;
+        }
+        $d = $f['d'];
+        $ahora = date('Y-m-d H:i:s');
+        if ($sondeo) {
+            if (empty($d['first_poll_at'])) $d['first_poll_at'] = $ahora;
+            $d['last_poll_at'] = $ahora;
+            $d['poll_count']   = (int)($d['poll_count'] ?? 0) + 1;
+        }
+        foreach ($campos as $k => $v) $d[$k] = $v;
+        //  EL TOTAL SE CIERRA CON EL RELOJ DE LA FILA, no con el de quien mide:
+        //  el que guarda la imagen casi nunca es el mismo proceso que encolo.
+        if (!empty($d['saved_at']) && empty($d['total_ms']) && !empty($d['request_started_at'])) {
+            $d['total_ms'] = max(0, (strtotime($d['saved_at']) - strtotime($d['request_started_at'])) * 1000);
+        }
+        $pdo->prepare("UPDATE crecer_ia_log
+                          SET respuesta=?, tokens_in=?, latencia_ms=?, estado=?, error_msg=?
+                        WHERE id=?")
+            ->execute([json_encode($d, JSON_UNESCAPED_UNICODE),
+                       (int)($d['poll_count'] ?? 0),
+                       isset($d['total_ms']) && $d['total_ms'] !== null ? (int)$d['total_ms'] : null,
+                       ($d['estado'] ?? '') === 'error' ? 'error' : 'ok',
+                       isset($d['error']) && $d['error'] !== null ? mb_substr((string)$d['error'], 0, 250) : null,
+                       $f['id']]);
+    } catch (Throwable $e) { error_log('img_cron_marcar: ' . $e->getMessage()); }
+}
+
+/** La cronologia para el diagnostico. Devuelve [] si no hay ninguna. */
+function img_cron_leer(PDO $pdo, int $marca_id, int $post_id): array {
+    $f = img_cron_fila($pdo, $marca_id, $post_id);
+    return $f ? $f['d'] : [];
+}
+
 /**
  * Clasifica un fallo de sondeo en una etiqueta corta y estable. El texto crudo
  * del error NO se guarda en la pieza: puede traer cuerpos de respuesta del
@@ -155,10 +305,30 @@ function img_poll_decidir(array $j, ?string $status, ?string $err, string $ahora
                 'incidente'=>true, 'clase'=>'job_no_existe'];
     }
 
-    $intentos++;
+    //  EL CONTADOR CUENTA CONSULTAS QUE FALLARON, NO SONDEOS. Y aqui estaba el
+    //  defecto que costo los ocho minutos de la pieza #667.
+    //
+    //  La constante de arriba ya lo dice —«Cuenta SOLO los sondeos en que no se
+    //  pudo consultar»— pero el codigo subia el contador ANTES de mirar el
+    //  status, asi que tambien contaba los sondeos SANOS. Con eso, un trabajo
+    //  que el proveedor sostiene perfectamente veia su backoff escalar
+    //  1-2-4-8-16 minutos por el solo delito de seguir vivo: tres sondeos
+    //  bastaban para acumular 1+2+4 = SIETE MINUTOS de silencio impuesto por
+    //  Crecer sobre una imagen que el proveedor ya tenia o estaba a punto de
+    //  tener.
+    //
+    //  Peor todavia, el contador es COMPARTIDO: el worker dedicado lo subia
+    //  cada 3 segundos, de modo que a los dos minutos cualquier sondeo no
+    //  dedicado calculaba min(60, 2^39) = 60 MINUTOS de espera.
+    //
+    //  Un trabajo vivo no gasta presupuesto. Solo lo gasta el que no se pudo
+    //  consultar, que es lo unico que el backoff vino a proteger.
+    $fallo = ($status === null);
+    if ($fallo) $intentos++;
 
     // El backoff depende de QUIEN sondea. El worker dedicado mantiene su cadencia
-    // de 3s (el dueno esta mirando); el barrido de pantalla sube 1-2-4...60 min.
+    // de 3s (el dueno esta mirando); el barrido de pantalla sube 1-2-4...60 min
+    // SOBRE CONSULTAS FALLIDAS, y se queda en 60s mientras el trabajo este vivo.
     // Sin esta distincion el backoff mataria el camino rapido: un dano mayor que
     // la amplificacion que vino a arreglar.
     //
@@ -169,7 +339,18 @@ function img_poll_decidir(array $j, ?string $status, ?string $err, string $ahora
     // HORAS en el pasado: la puerta del backoff lo daba por vencido siempre y la
     // pieza se volvia a sondear en cada recarga. Con segundos, la fecha la pone
     // MySQL y las dos relojes son el mismo.
-    $espera = $dedicado ? 3 : min(60, (int)pow(2, max(0, $intentos - 1))) * 60;
+    //  LA ESCALERA ES SOLO PARA CONSULTAS FALLIDAS. Un trabajo que el proveedor
+    //  sostiene se sondea a cadencia FIJA — 3s si el dueño esta mirando, 60s en
+    //  el barrido de fondo— y no hereda el castigo de fallos anteriores: si
+    //  vuelve a contestar, la razon del backoff ya no existe.
+    //
+    //  Y EL EXPONENTE VA ACOTADO. En produccion hay filas con img_intentos por
+    //  encima de 80 (las dejo el worker dedicado subiendolo cada 3s), y ahi
+    //  pow(2, 79) desborda el entero: min(60, <basura>) daba CERO segundos, o
+    //  sea un sondeo en bucle. El tope de 20 lo hace imposible sin cambiar la
+    //  escalera, que satura en 60 minutos mucho antes.
+    $espera = $dedicado ? 3
+            : ($fallo ? min(60, (int)pow(2, min(20, max(0, $intentos - 1)))) * 60 : 60);
 
     if ($status === null) {
         // NO SE PUDO CONSULTAR. Nunca terminal, nunca respaldo.
@@ -260,14 +441,54 @@ function img_poll_reiniciar(PDO $pdo, int $marca_id, int $post_id): void {
 }
 
 /**
+ * ¿Arranco el worker? Vive aparte de arte_disparar porque es la unica parte
+ * que se puede comprobar sin un socket, y porque el caso raro necesita
+ * explicacion: el worker contesta 'ok' y cierra con fastcgi_finish_request,
+ * pero donde eso no existe la conexion se queda abierta hasta el tope y el
+ * curl corta por TIEMPO — con el worker ya corriendo. Un timeout, por tanto,
+ * es un arranque; lo que no lo es son los rechazos (403 llave, 404 ruta, 5xx)
+ * y los fallos de conexion.
+ */
+function arte_disparo_ok(int $http, int $errno = 0): bool {
+    if ($errno === CURLE_OPERATION_TIMEDOUT) return true;
+    return $http >= 200 && $http < 300;
+}
+
+/**
+ * ¿Debe el worker pasarle el testigo a otra ejecucion al agotar su ventana?
+ *
+ * Solo si el trabajo SIGUE VIVO: con identificador, en cola y sin el sello
+ * 'ap:' (que significa que ya nos rendimos de preguntar). Relevar un ciclo
+ * cerrado seria empezar otro y cobrarlo; por eso la condicion mira la fila y
+ * no el reloj. El tope viaja por la URL: el worker no puede inventarselo, asi
+ * que la cadena no puede crecer sola.
+ */
+function arte_debe_relevar(?array $fila, int $relevo, int $max): bool {
+    if ($relevo >= $max || !$fila) return false;
+    if ((string)($fila['img_estado'] ?? '') !== 'queued') return false;
+    if (trim((string)($fila['img_job'] ?? '')) === '') return false;
+    return !str_starts_with((string)($fila['img_error_clase'] ?? ''), 'ap:');
+}
+
+/**
  * Dispara el worker de arte por auto-HTTP (fire-and-forget): sondea el job en
  * background hasta que la imagen esté y AVISA por notificación (campanita). Así el
  * dueño encola y sigue editando / se va; la notificación lo lleva al post listo.
+ *
+ *  Y DEVUELVE LO QUE PASO, que antes se tiraba a la basura. El resultado de
+ *  curl_exec y el codigo HTTP se descartaban sin mirarlos, asi que un worker
+ *  que respondia 403 (llave mala) o 404 (ruta movida) se veia EXACTAMENTE
+ *  igual que uno que arranco bien: en los dos casos la pieza se quedaba en
+ *  cola y el unico que la empujaba era el navegador. Sin este dato no se
+ *  puede afirmar «el worker arranco», y esa afirmacion es justo la que hacia
+ *  falta para repartir los ocho minutos de la pieza #667.
+ *
+ *  @return array{http:int, err:string, disparado:bool}
  */
-function arte_disparar(int $marca_id, int $post_id, ?bool $con_texto = null, ?string $extra = null, bool $fb = false, string $estilo = 'realista'): void {
+function arte_disparar(int $marca_id, int $post_id, ?bool $con_texto = null, ?string $extra = null, bool $fb = false, string $estilo = 'realista'): array {
     // CR-F01b: sin llave no se dispara. El job se queda en cola y lo rescata el
     // sweep cuando el config vuelva — mejor eso que quemar el intento contra un 503.
-    if (!worker_puede_disparar('arte')) return;
+    if (!worker_puede_disparar('arte')) return ['http' => 0, 'err' => 'sin_llave', 'disparado' => false];
     // host VALIDADO (ver worker_host): la cabecera Host la controla quien llama.
     $host = worker_host();
     $q = '&ct=' . ($con_texto === null ? 'x' : ($con_texto ? '1' : '0'));
@@ -283,7 +504,23 @@ function arte_disparar(int $marca_id, int $post_id, ?bool $con_texto = null, ?st
         CURLOPT_NOSIGNAL          => 1,
         CURLOPT_SSL_VERIFYPEER    => false,
     ]);
-    curl_exec($ch); curl_close($ch);
+    curl_exec($ch);
+    //  EL TIMEOUT DE 3s NO ES UN FALLO, Y HAY QUE SABER LEERLO. El worker
+    //  contesta 'ok' y cierra la conexion con fastcgi_finish_request, pero si
+    //  el servidor no lo soporta la conexion queda abierta hasta el tope: el
+    //  curl corta por tiempo (error 28) con el worker YA corriendo. Por eso
+    //  «timeout» se reporta como disparado y solo un codigo HTTP de rechazo
+    //  —o un fallo de conexion— cuentan como no disparado.
+    $http = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $eno  = curl_errno($ch);
+    $err  = $eno ? curl_error($ch) : '';
+    curl_close($ch);
+    $disparado = arte_disparo_ok($http, $eno);
+    if (!$disparado) {
+        error_log("arte_disparar #{$post_id}: el worker NO arranco (HTTP {$http}"
+                . ($err !== '' ? ", {$err}" : '') . ')');
+    }
+    return ['http' => $http, 'err' => $err, 'disparado' => $disparado];
 }
 
 /**
@@ -478,10 +715,16 @@ function img_resp_encolar_res(PDO $pdo, int $marca_id, int $post_id, string $cop
         $brief = img_resp_brief($m, $copy, $con_texto, $logo !== null, $extra, $estilo, $lente, $evitar);
         //  RUTA 5 — el encolado central del arte de post.
         require_once __DIR__ . '/cuota_imagenes.php';
+        //  EL RELOJ ARRANCA AQUI, no cuando la fila cambia de estado. Lo de
+        //  antes (el brief, la marca, el logo, la variedad) es trabajo de
+        //  Crecer y tiene que poder separarse del tiempo del proveedor: sin
+        //  esta marca, «tardo ocho minutos» no se puede repartir entre los dos.
+        $t_ini = microtime(true);
         $bg = openai_responses_crear_bg($brief, ['aspect' => '1:1']
             + ['cuota' => CuotaCtx::de($pdo, $marca_id, 'arte_post', 'img_resp_encolar_res',
                           ['origen_tipo' => 'contenido', 'origen_id' => $post_id, 'costo' => 0.17])]
             + ($logo ? ['logo' => $logo] : []));
+        $t_ok = microtime(true);
         // img_job_at fecha el nacimiento del job y los contadores arrancan limpios:
         // un job nuevo no hereda el backoff del que se aparco.
         $nuevo = img_poll_columnas($pdo)
@@ -490,6 +733,12 @@ function img_resp_encolar_res(PDO $pdo, int $marca_id, int $post_id, string $cop
                           SET img_job=?, img_estado='queued'" . $nuevo . "
                         WHERE id=? AND marca_id=?")
             ->execute([$bg['id'], $post_id, $marca_id]);
+        //  Y SE ABRE LA CRONOLOGIA. Va aqui, pegada al UPDATE que crea el job,
+        //  porque este es el unico punto donde constan a la vez el instante en
+        //  que empezamos y el identificador con el que el proveedor lo acepto.
+        img_cron_abrir($pdo, $marca_id, $post_id, (string)$bg['id'], $t_ini, $t_ok,
+                       ['modelo' => (string)($bg['modelo'] ?? ''), 'quality' => 'high',
+                        'estilo' => $estilo]);
         // La huella se registra AL ENCOLAR (no al terminar): así dos piezas
         // encoladas seguidas no reciben el mismo lente.
         if ($lente) {
@@ -950,6 +1199,7 @@ function img_resp_completar(PDO $pdo, int $marca_id, int $post_id, bool $dedicad
 
     $ahora  = (string)($row['ahora_sql'] ?? date('Y-m-d H:i:s'));
     $status = null; $err = null; $st = []; $http = null;
+    $t_poll = microtime(true);
     try {
         $st = openai_responses_estado($rid);
         $status = (string)($st['status'] ?? '');
@@ -969,6 +1219,20 @@ function img_resp_completar(PDO $pdo, int $marca_id, int $post_id, bool $dedicad
         $status, $err, $ahora, $dedicado, $http, (string)($st['error_code'] ?? '')
     );
 
+    //  CADA CONSULTA DEJA HUELLA. Es UNA actualizacion sobre la fila de
+    //  cronologia — no una insercion— asi que sondear rapido no vuelve a
+    //  inflar crecer_ia_log como en agosto. Con esto, «se pregunto 140 veces
+    //  en 8 minutos» y «se pregunto 3 veces» dejan de verse igual.
+    img_cron_marcar($pdo, $marca_id, $post_id, [
+        'estado'          => $status !== null && $status !== '' ? $status : 'sin_respuesta',
+        'ultimo_http'     => $http,
+        'error'           => $err !== null ? img_poll_clase_error($err) : null,
+        'ultima_decision' => (string)$d['accion'],
+        'ultimo_poll_ms'  => (int)round((microtime(true) - $t_poll) * 1000),
+        'dedicado'        => $dedicado ? 1 : 0,
+    ] + ($status === 'completed' ? ['provider_completed_at' => date('Y-m-d H:i:s')] : []),
+    true, $rid);
+
     //  El asiento de cuota de ESTA imagen. Se busca por su origen porque la
     //  reserva se abrio en otra peticion, horas antes. Sin esto, ninguna unidad
     //  del camino asincrono podia cerrarse jamas.
@@ -982,6 +1246,14 @@ function img_resp_completar(PDO $pdo, int $marca_id, int $post_id, bool $dedicad
         // nombre salia de microtime() y cada uno dejaba su copia.
         $rel = "marca_{$marca_id}/graficas/resp_{$post_id}_" . substr(md5($rid), 0, 8) . '.png';
         $abs = rtrim(UPLOADS_PATH, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+        //  LA DESCARGA SE MIDE APARTE. Los bytes vienen DENTRO de la respuesta
+        //  que ya se leyo, asi que aqui no hay red: solo decodificar y escribir
+        //  en disco. Se cronometra igual porque «se tardo el proveedor» y «se
+        //  tardo el disco de Hostinger» tenian que poder distinguirse, y sin
+        //  medirlo no se podia afirmar ni descartar.
+        $t_desc = microtime(true);
+        img_cron_marcar($pdo, $marca_id, $post_id, ['download_started_at' => date('Y-m-d H:i:s')],
+                        false, $rid);
         @mkdir(dirname($abs), 0775, true);
         @file_put_contents($abs, base64_decode((string)($st['b64'] ?? '')));
         $url = rtrim(UPLOADS_URL, '/') . '/' . $rel;
@@ -1006,6 +1278,16 @@ function img_resp_completar(PDO $pdo, int $marca_id, int $post_id, bool $dedicad
             //  carrera — el que no escribio nada no tiene nada que soltar.
             material_soltar($pdo, $marca_id, (int)$post_id);
         }
+        //  Y SE CIERRA LA CRONOLOGIA. Se anota aunque la carrera la ganara
+        //  otro proceso: lo que interesa del caso es cuando quedo la imagen
+        //  disponible para el dueño, no quien escribio la fila.
+        img_cron_marcar($pdo, $marca_id, $post_id, [
+            'saved_at'    => date('Y-m-d H:i:s'),
+            'guardar_ms'  => (int)round((microtime(true) - $t_desc) * 1000),
+            'bytes'       => strlen((string)($st['b64'] ?? '')),
+            'estado'      => 'guardado',
+            'grafica_path'=> $url,
+        ], false, $rid);
         return ['estado' => 'ok', 'img' => $url];
     }
 

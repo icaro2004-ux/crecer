@@ -97,16 +97,44 @@ $d = img_poll_decidir($anciano, 'in_progress', null, $AHORA);
 ok('solo el tope duro (7 días) lo aparca', $d['accion'] === 'aparcar' && $d['clase'] === 'vivo_tope_duro');
 ok('y aparcar tampoco autoriza respaldo', $d['accion'] !== 'fallback');
 
-echo "\n  — el backoff distingue quién sondea —\n";
+echo "\n  — el backoff distingue quién sondea Y QUÉ pasó —\n";
+//  LA ESCALERA ES DE LAS CONSULTAS FALLIDAS, y esta prueba lo decia al reves.
+//  Pedia la escalera 1-2-4-8 con status 'queued', es decir sobre un trabajo que
+//  el proveedor estaba SOSTENIENDO. Eso es exactamente el defecto que costo los
+//  ocho minutos de la pieza #667: tres sondeos sanos y ya habia 1+2+4 = siete
+//  minutos de silencio impuesto sobre una imagen que venia en camino. La
+//  escalera se conserva intacta donde siempre debio estar —cuando no se puede
+//  preguntar— y se comprueba aparte que un trabajo vivo no la sufre.
 $esperado = [1, 2, 4, 8, 16, 32, 60, 60];
 foreach ($esperado as $i => $min) {
-    $d = img_poll_decidir(['intentos' => $i, 'job_at' => $AHORA], 'queued', null, $AHORA, false);
+    $d = img_poll_decidir(['intentos' => $i, 'job_at' => $AHORA], null, 'boom', $AHORA, false);
     $mins = $d['espera_seg'] / 60;
-    ok("barrido, intento " . ($i + 1) . ": {$min} min", (int)$mins === $min, "dio {$mins}");
+    ok("barrido, consulta fallida " . ($i + 1) . ": {$min} min", (int)$mins === $min, "dio {$mins}");
 }
 $d = img_poll_decidir(['intentos' => 9, 'job_at' => $AHORA], 'queued', null, $AHORA, true);
 $seg = $d['espera_seg'];
 ok('worker dedicado conserva su cadencia de 3s', $seg === 3, "dio {$seg}s");
+
+//  UN TRABAJO VIVO NO PAGA LA ESCALERA. Ni el primero ni el numero ochenta.
+foreach ([0, 1, 3, 20, 80, 999] as $i) {
+    $d = img_poll_decidir(['intentos' => $i, 'job_at' => $AHORA], 'in_progress', null, $AHORA, false);
+    ok("vivo con {$i} intentos: 60s fijos, no escalera", $d['espera_seg'] === 60,
+       "dio {$d['espera_seg']}s · un job que el proveedor sostiene no se castiga");
+}
+//  Y NO GASTA PRESUPUESTO DE FALLOS. El contador es compartido con el worker
+//  dedicado, que sondea cada 3s: si cada sondeo sano lo subiera, a los dos
+//  minutos cualquier sondeo de fondo calcularia una hora de espera.
+$d = img_poll_decidir(['intentos' => 7, 'job_at' => $AHORA], 'in_progress', null, $AHORA, true);
+ok('un sondeo sano NO sube el contador de fallos', $d['intentos'] === 7,
+   "subio a {$d['intentos']} · el tope es para consultas que fallaron");
+$d = img_poll_decidir(['intentos' => 7, 'job_at' => $AHORA], null, 'boom', $AHORA, true);
+ok('una consulta fallida SI lo sube', $d['intentos'] === 8, "dio {$d['intentos']}");
+
+//  EL EXPONENTE NO DESBORDA. En produccion quedaron filas con img_intentos por
+//  encima de 80 (las dejo el worker subiendolo cada 3s). pow(2, 79) desborda el
+//  entero y min(60, <basura>) daba CERO segundos: un sondeo en bucle.
+$d = img_poll_decidir(['intentos' => 5, 'job_at' => $AHORA], null, 'boom', $AHORA, false);
+ok('el backoff de fallos nunca es cero', (int)$d['espera_seg'] > 0, "dio {$d['espera_seg']}s");
 
 echo "\n  — el error se guarda como CLASE, no como texto crudo —\n";
 ok('429 → rate_limit_429',      img_poll_clase_error('HTTP 429 Too Many Requests') === 'rate_limit_429');
