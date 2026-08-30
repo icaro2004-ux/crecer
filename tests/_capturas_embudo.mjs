@@ -73,8 +73,11 @@ try {
 
   await cmd('Page.addScriptToEvaluateOnNewDocument', { source: SONDA });
   await cmd('Network.setCookie', { name: 'PHPSESSID', value: sid, domain: 'localhost', path: '/' });
+  //  El tamaño entra por CRECER_TAM ("360x800"). Sin el, movil por defecto,
+  //  que es como nacio esta sonda.
+  const [TW, TH] = (process.env.CRECER_TAM || '360x800').split('x').map(n => parseInt(n, 10));
   await cmd('Emulation.setDeviceMetricsOverride',
-            { width: 360, height: 800, deviceScaleFactor: 1, mobile: true });
+            { width: TW, height: TH, deviceScaleFactor: 1, mobile: TW < 900 });
 
   let n = 0;
   for (const [nombre, url] of PASOS) {

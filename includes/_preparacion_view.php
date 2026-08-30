@@ -7,19 +7,30 @@
 //  Espera en el ambito: $prep (muestra_estado), $marca, $marca_id, $nombre?,
 //  $gwq, y csrf_token().
 //
-//  LO QUE ESTA PANTALLA PROMETE Y CUMPLE:
-//   · barra + porcentaje ESTIMADO (etiquetado como tal, nunca presentado como
-//     medida del trabajo del proveedor);
-//   · la etapa actual, sacada de columnas;
-//   · el tiempo transcurrido, que sale del servidor (created_at) y por eso
-//     sobrevive a la recarga y coincide en dos pestañas;
-//   · los agentes que YA corrieron, leidos de crecer_ia_log;
-//   · sondeo persistente del MISMO job, sin crear otro;
-//   · una salida con nombre para cada desenlace: nunca un spinner eterno.
+//  ESTO ERA UN PANEL DE DIAGNOSTICO Y AHORA ES UNA ESPERA.
+//  La version anterior enseñaba un 82% gigante, las siete etapas con su
+//  porcentaje cada una, y los agentes que habian corrido con su tarea. Todo
+//  cierto y todo verificable — y aun asi, mal: al dueño de una reposteria no le
+//  vendemos una tuberia de agentes, le vendemos que alguien le esta haciendo el
+//  trabajo. Un tablero de progreso interno dice «esto es complicado»; lo que
+//  tiene que decir es «tranquilo, esto va».
 //
-//  NO hay aqui ningun array de frases rotando: cada texto que cambia lo cambia
-//  un dato. Lo unico que se mueve solo es la respiracion del anillo, y eso es
-//  decoracion declarada — no dice nada sobre el progreso.
+//  QUE SE FUE, A PROPOSITO:
+//   · el porcentaje como protagonista (queda uno diminuto, rotulado «estimado»);
+//   · la lista de siete etapas con sus porcentajes;
+//   · los nombres de los agentes y sus tareas;
+//   · el modelo, el id de la pieza y cualquier identificador;
+//   · el parrafo alarmista de la tardanza.
+//
+//  QUE SE QUEDA, PORQUE ES LO QUE SOSTIENE LA CONFIANZA:
+//   · el estado sale de las COLUMNAS, no de un temporizador. La pantalla no
+//     inventa avance: si nada cambio en la base, nada cambia aqui.
+//   · el reloj lo da el servidor (created_at), asi que sobrevive a la recarga y
+//     coincide en dos pestañas;
+//   · el sondeo sigue al MISMO job y no crea otro;
+//   · cada desenlace tiene una salida con nombre; ninguno deja esto colgado.
+//
+//  El mensaje cambia SOLO cuando cambia un hecho. No hay frases rotando.
 // ============================================================
 $h = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 $nom = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
@@ -27,158 +38,147 @@ $nom = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
 <html lang="es"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Montando tu primer post — <?= $h($nom) ?></title>
+<title>Estamos creando tu primer post — <?= $h($nom) ?></title>
 <link rel="icon" type="image/png" href="/crecer/assets/brand/crecer-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link href="/crecer/assets/encuentralo-ui.css?v=<?= ASSET_VER ?>" rel="stylesheet">
 <style>
   *{box-sizing:border-box}
-  body{background:#fbfaf9;color:var(--tinta,#231F20);min-height:100dvh;margin:0}
+  body{background:#fbfaf9;color:var(--tinta,#231F20);margin:0;
+       min-height:100dvh;display:flex;flex-direction:column}
+  /* El fondo de Crecer, el mismo de siempre. No se diseña una interfaz paralela. */
   body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
-    background:radial-gradient(58% 40% at 90% -4%, color-mix(in srgb,var(--magenta,#EF4375) 13%,transparent), transparent 70%),
-      radial-gradient(52% 40% at -6% 104%, color-mix(in srgb,var(--teal,#00A49F) 12%,transparent), transparent 72%)}
-  .bar-top{display:flex;align-items:center;gap:9px;padding:14px 18px}
-  .bar-top img{height:24px}
-  .bar-top b{font-weight:800;font-size:16px;letter-spacing:-.01em}
-  .bar-top .t{color:var(--teal,#00A49F)}
-  .wrap{max-width:560px;margin:0 auto;padding:8px 20px 64px}
+    background:radial-gradient(58% 40% at 90% -4%, color-mix(in srgb,var(--magenta,#EF4375) 11%,transparent), transparent 70%),
+      radial-gradient(52% 40% at -6% 104%, color-mix(in srgb,var(--teal,#00A49F) 10%,transparent), transparent 72%)}
 
-  /* El anillo respira. Es decoracion y esta declarado como tal: no representa avance. */
-  .ring{width:96px;height:96px;margin:14px auto 4px;position:relative}
-  .ring i{position:absolute;inset:0;border-radius:50%;border:3px solid color-mix(in srgb,var(--teal,#00A49F) 22%,transparent)}
-  .ring i:nth-child(1){animation:resp 3.2s ease-in-out infinite}
-  .ring i:nth-child(2){animation:resp 3.2s ease-in-out infinite .8s}
-  .ring i:nth-child(3){animation:resp 3.2s ease-in-out infinite 1.6s}
-  @keyframes resp{0%{transform:scale(.72);opacity:.15}50%{transform:scale(1);opacity:.55}100%{transform:scale(.72);opacity:.15}}
-  .ring b{position:absolute;inset:0;display:grid;place-items:center;font-size:23px;font-weight:800;color:var(--teal,#00A49F)}
-  @media (prefers-reduced-motion:reduce){.ring i{animation:none;opacity:.3}}
+  .marca{display:flex;align-items:center;gap:8px;padding:18px 20px calc(env(safe-area-inset-top,0px) + 0px)}
+  .marca img{height:20px;width:auto}
+  .marca b{font-weight:800;font-size:14.5px;letter-spacing:-.01em}
+  .marca .t{color:var(--teal,#00A49F)}
 
-  h1{font-weight:700;font-size:clamp(21px,5vw,27px);letter-spacing:-.02em;text-align:center;margin:6px 0 4px;line-height:1.25}
-  .sub{text-align:center;color:var(--muted,#6b6560);font-size:14px;margin-bottom:18px}
-  .sub b{color:var(--tinta,#231F20);font-weight:600}
+  /* UNA SOLA IDEA VISIBLE, centrada en lo que queda de pantalla. */
+  .centro{flex:1;display:flex;flex-direction:column;justify-content:center;
+          max-width:460px;width:100%;margin:0 auto;
+          padding:0 24px calc(env(safe-area-inset-bottom,0px) + 28px)}
 
-  .track{height:9px;border-radius:99px;background:color-mix(in srgb,var(--tinta,#231F20) 8%,transparent);overflow:hidden}
-  .track i{display:block;height:100%;border-radius:99px;width:0;
+  /* La animacion de creacion: tres trazos que respiran. Es decoracion declarada
+     — no representa avance, y con reduccion de movimiento se queda quieta. */
+  .crea{width:78px;height:78px;margin:0 auto 26px;position:relative}
+  .crea i{position:absolute;inset:0;border-radius:50%;
+    border:2px solid color-mix(in srgb,var(--teal,#00A49F) 30%,transparent)}
+  .crea i:nth-child(1){animation:resp 3.4s ease-in-out infinite}
+  .crea i:nth-child(2){animation:resp 3.4s ease-in-out infinite .9s}
+  .crea i:nth-child(3){animation:resp 3.4s ease-in-out infinite 1.8s}
+  .crea u{position:absolute;inset:34%;border-radius:50%;background:var(--teal,#00A49F);opacity:.85;
+    animation:pulso 3.4s ease-in-out infinite}
+  @keyframes resp{0%{transform:scale(.62);opacity:.1}50%{transform:scale(1);opacity:.5}100%{transform:scale(.62);opacity:.1}}
+  @keyframes pulso{0%,100%{transform:scale(.82)}50%{transform:scale(1.06)}}
+  @media (prefers-reduced-motion:reduce){
+    .crea i,.crea u{animation:none}
+    .crea i:nth-child(1){opacity:.32}.crea i:nth-child(2),.crea i:nth-child(3){opacity:0}
+  }
+
+  h1{font-weight:700;font-size:clamp(23px,6vw,29px);letter-spacing:-.025em;
+     text-align:center;margin:0 0 14px;line-height:1.2}
+
+  /* EL MENSAJE. Cambia solo cuando cambia un hecho. */
+  .dice{text-align:center;font-size:16px;line-height:1.55;color:var(--tinta,#231F20);
+        margin:0 auto 26px;max-width:24em;min-height:2.9em}
+
+  /* La barra, discreta. Sin numero encima. */
+  .barra{height:5px;border-radius:99px;background:rgba(0,0,0,.07);overflow:hidden}
+  .barra i{display:block;height:100%;width:0;border-radius:99px;
     background:linear-gradient(90deg,var(--teal,#00A49F),var(--magenta,#EF4375));
     transition:width .9s cubic-bezier(.4,0,.2,1)}
-  .meta{display:flex;justify-content:space-between;align-items:center;margin-top:9px;font-size:12.5px;color:var(--muted,#6b6560)}
-  .meta .est{font-variant-numeric:tabular-nums}
+  .bajo{display:flex;justify-content:space-between;align-items:baseline;
+        margin-top:9px;font-size:11.5px;color:var(--muted,#6b6560);letter-spacing:.01em}
+  .bajo .pc{font-variant-numeric:tabular-nums;opacity:.75}
 
-  .pasos{list-style:none;margin:22px 0 0;padding:0;display:grid;gap:2px}
-  .pasos li{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:11px;font-size:14px;color:var(--muted,#6b6560)}
-  .pasos li .dot{width:19px;height:19px;border-radius:50%;flex:0 0 19px;display:grid;place-items:center;
-    border:2px solid color-mix(in srgb,var(--tinta,#231F20) 14%,transparent);font-size:11px;font-weight:800}
-  .pasos li .pc{margin-left:auto;font-size:11.5px;opacity:.6;font-variant-numeric:tabular-nums}
-  .pasos li.hecho{color:var(--tinta,#231F20)}
-  .pasos li.hecho .dot{background:var(--teal,#00A49F);border-color:var(--teal,#00A49F);color:#fff}
-  .pasos li.ahora{color:var(--tinta,#231F20);font-weight:600;background:color-mix(in srgb,var(--teal,#00A49F) 7%,transparent)}
-  .pasos li.ahora .dot{border-color:var(--teal,#00A49F);animation:lat 1.6s ease-in-out infinite}
-  @keyframes lat{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--teal,#00A49F) 45%,transparent)}60%{box-shadow:0 0 0 7px transparent}}
+  .humana{text-align:center;font-size:13px;line-height:1.6;color:var(--muted,#6b6560);
+          margin-top:30px}
 
-  .equipo{margin-top:20px;border-top:1px solid var(--line,#E9E7E4);padding-top:14px}
-  .equipo .tt{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted,#6b6560);margin-bottom:9px}
-  .equipo ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
-  .equipo li{font-size:13.2px;color:var(--muted,#6b6560);display:flex;gap:8px;align-items:baseline}
-  .equipo li b{color:var(--tinta,#231F20);font-weight:600;flex:0 0 auto}
+  /* El texto salvado, solo cuando el arte no va a existir. */
+  .salvado{margin-top:24px;padding:16px 17px;border-radius:14px;background:#fff;
+           border:1px solid var(--line,#E9E7E4)}
+  .salvado .tt{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+               color:var(--muted,#6b6560);margin-bottom:9px}
+  .salvado p{margin:0 0 12px;font-size:14.5px;line-height:1.6;white-space:pre-wrap}
 
-  .aviso{margin-top:18px;padding:13px 15px;border-radius:12px;font-size:13.5px;line-height:1.5;
-    background:color-mix(in srgb,var(--magenta,#EF4375) 7%,#fff);border:1px solid color-mix(in srgb,var(--magenta,#EF4375) 18%,transparent)}
-  .acc{margin-top:16px;display:grid;gap:9px}
-  .acc button{width:100%;padding:14px;border-radius:12px;border:0;font:inherit;font-weight:700;font-size:15px;cursor:pointer;
-    background:var(--teal,#00A49F);color:#fff}
-  .acc button.gho{background:#fff;color:var(--tinta,#231F20);border:1px solid var(--line,#E9E7E4)}
-  .acc button[disabled]{opacity:.5;cursor:default}
-  .pie{margin-top:20px;text-align:center;font-size:12.5px;color:var(--muted,#6b6560);line-height:1.6}
+  .acc{display:flex;flex-direction:column;gap:10px;margin-top:22px}
+  .acc button{width:100%;min-height:48px;padding:13px 18px;border-radius:12px;border:0;
+    font:inherit;font-size:15px;font-weight:700;cursor:pointer;
+    background:var(--tinta,#231F20);color:#fff}
+  .acc button.gho{background:#fff;color:var(--tinta,#231F20);border:1px solid var(--line,#E9E7E4);font-weight:600}
+  .acc button[disabled]{opacity:.55;cursor:default}
 
-  .salvado{margin-top:16px;padding:15px 16px;border-radius:12px;background:#fff;border:1px solid var(--line,#E9E7E4)}
-  .salvado .tt{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted,#6b6560);margin-bottom:8px}
-  .salvado p{margin:0 0 11px;font-size:14.5px;line-height:1.6;white-space:pre-wrap}
-  .salvado .cop{padding:9px 14px;border-radius:9px;border:1px solid var(--line,#E9E7E4);background:#fff;
-    font:inherit;font-size:13.5px;font-weight:600;cursor:pointer}
+  /* 360x800: lo esencial entra sin scroll. */
+  @media (max-height:720px){
+    .crea{width:62px;height:62px;margin-bottom:20px}
+    h1{font-size:22px;margin-bottom:11px}
+    .dice{font-size:15px;margin-bottom:20px}
+    .humana{margin-top:22px}
+  }
 </style>
 </head>
 <body>
-<div class="bar-top">
+
+<div class="marca">
   <img src="/crecer/assets/brand/crecer-icon.png" alt="">
-  <b><span class="t">Crecer</span></b>
+  <b>Crecer<span class="t">.</span></b>
 </div>
 
-<div class="wrap">
-  <div class="ring" aria-hidden="true"><i></i><i></i><i></i><b id="pcRing">0%</b></div>
+<main class="centro">
+  <div class="crea" aria-hidden="true"><i></i><i></i><i></i><u></u></div>
 
-  <h1 id="titulo"><?= $h($prep['titulo']) ?></h1>
-  <div class="sub" id="sub">Tu primer post para <b><?= $h($nom) ?></b></div>
+  <h1 id="titulo">Estamos creando tu primer post</h1>
 
-  <div class="track" role="progressbar" aria-valuemin="0" aria-valuemax="100"
-       aria-valuenow="<?= (int)$prep['pct_estimado'] ?>" id="track"><i id="fill"></i></div>
-  <div class="meta">
-    <span id="etiqueta"><?= $prep['estimando'] ? 'Progreso estimado' : 'Progreso' ?></span>
-    <span class="est"><span id="reloj">0:00</span></span>
+  <!-- aria-live: quien use lector de pantalla se entera del cambio de estado,
+       que es justo lo unico que cambia aqui. -->
+  <p class="dice" id="dice" aria-live="polite"></p>
+
+  <div class="barra" id="track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Preparando tu primer post">
+    <i id="fill"></i>
+  </div>
+  <div class="bajo">
+    <span id="reloj">0:00</span>
+    <span class="pc" id="pc"></span>
   </div>
 
-  <ul class="pasos" id="pasos">
-    <?php foreach ($prep['etapas'] as $e): ?>
-      <li class="<?= $h($e['estado']) ?>" data-clave="<?= $h($e['clave']) ?>">
-        <span class="dot"><?= $e['estado'] === 'hecho' ? '&#10003;' : '' ?></span>
-        <span class="tx"><?= $h($e['texto']) ?></span>
-        <span class="pc"><?= (int)$e['pct'] ?>%</span>
-      </li>
-    <?php endforeach; ?>
-  </ul>
-
-  <div class="equipo" id="equipo" style="<?= empty($prep['agentes']) ? 'display:none' : '' ?>">
-    <div class="tt">Tu corillo, trabajando</div>
-    <ul id="equipoLista">
-      <?php foreach ($prep['agentes'] as $a): ?>
-        <li><b><?= $h($a['quien']) ?></b><span><?= $h($a['que']) ?></span></li>
-      <?php endforeach; ?>
-    </ul>
-  </div>
-
-  <div class="aviso" id="aviso" style="display:none"></div>
-
-  <!-- El copy a salvo: solo se puebla en el fallo definitivo (ver mensajes()). -->
   <div class="salvado" id="salvado" style="display:none">
     <div class="tt">Tu post, guardado</div>
     <p id="salvadoTx"></p>
-    <button type="button" class="cop" id="btnCopiar">Copiar el texto</button>
+    <button type="button" class="gho" id="btnCopiar" style="min-height:44px;padding:10px 15px;border-radius:10px;border:1px solid var(--line,#E9E7E4);background:#fff;font:inherit;font-size:13.5px;font-weight:600;cursor:pointer">Copiar el texto</button>
   </div>
 
   <div class="acc" id="acc"></div>
 
-  <div class="pie">
-    Puedes cerrar esto y volver cuando quieras — el trabajo sigue y lo retomamos donde iba.
-  </div>
-</div>
+  <p class="humana">Puedes dejar esta pantalla abierta.<br>No tienes que empezar de nuevo.</p>
+</main>
 
 <script>
 (function(){
-  var URL_    = '/crecer/panel/gateway_post.php?marca=<?= (int)$marca_id ?><?= $gwq ?>';
-  var CSRF    = '<?= $h(csrf_token()) ?>';
+  var URL_ = '/crecer/panel/gateway_post.php?marca=<?= (int)$marca_id ?><?= $gwq ?>';
+  var CSRF = '<?= $h(csrf_token()) ?>';
   //  EL ESTADO INICIAL VIENE DEL SERVIDOR, YA RECONSTRUIDO DESDE LA BASE. Por
-  //  eso una recarga no arranca en cero: el porcentaje y el reloj entran
-  //  pintados con lo que dicen las columnas.
+  //  eso una recarga no arranca en cero ni parpadea: entra pintada.
   var S = <?= json_encode([
       'pct' => (int)$prep['pct'], 'pct_estimado' => (int)$prep['pct_estimado'],
       'estimando' => (bool)$prep['estimando'], 'etapa' => $prep['etapa'],
-      'titulo' => $prep['titulo'], 'degradado' => $prep['degradado'],
-      'segundos' => (int)$prep['segundos'], 'tarde' => (bool)$prep['tarde'],
-      'listo' => (bool)$prep['listo'], 'etapas' => $prep['etapas'],
+      'degradado' => $prep['degradado'], 'segundos' => (int)$prep['segundos'],
+      'tarde' => (bool)$prep['tarde'], 'listo' => (bool)$prep['listo'],
       'copy_a_salvo' => $prep['copy_a_salvo'] ?? null,
   ], JSON_UNESCAPED_UNICODE) ?>;
 
-  var fill=document.getElementById('fill'), pcRing=document.getElementById('pcRing'),
-      track=document.getElementById('track'), titulo=document.getElementById('titulo'),
-      etiqueta=document.getElementById('etiqueta'), reloj=document.getElementById('reloj'),
-      aviso=document.getElementById('aviso'), acc=document.getElementById('acc'),
+  var fill=document.getElementById('fill'), track=document.getElementById('track'),
+      dice=document.getElementById('dice'), reloj=document.getElementById('reloj'),
+      pc=document.getElementById('pc'), acc=document.getElementById('acc'),
       salvado=document.getElementById('salvado'), salvadoTx=document.getElementById('salvadoTx'),
-      pasos=document.getElementById('pasos'), equipo=document.getElementById('equipo'),
-      equipoLista=document.getElementById('equipoLista'), sub=document.getElementById('sub');
+      titulo=document.getElementById('titulo');
 
   //  EL RELOJ ES DEL SERVIDOR. El cliente solo lo hace correr entre sondeos; en
-  //  cada respuesta se vuelve a cuadrar con `segundos`, que sale de created_at.
-  //  Asi dos pestañas marcan lo mismo y una recarga no reinicia la cuenta.
+  //  cada respuesta se recuadra con `segundos`, que sale de created_at. Asi dos
+  //  pestañas marcan lo mismo y recargar no reinicia la cuenta.
   var seg = S.segundos;
   function pintaReloj(){
     var m=Math.floor(seg/60), s=seg%60;
@@ -186,131 +186,97 @@ $nom = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
   }
   setInterval(function(){ seg++; pintaReloj(); }, 1000);
 
-  //  EL TECHO DE 89 VIVE TAMBIEN AQUI, no solo en el servidor. Es el numero que
-  //  el dueño ve, y no puede pasar de ahi sin evidencia de que la imagen llego.
-  var TECHO_ESTIMADO = 89;
-  var visto = S.pct_estimado;
-  function pinta(st){
-    var pc = st.pct_estimado;
-    if (st.estimando && pc > TECHO_ESTIMADO) pc = TECHO_ESTIMADO;
-    //  Nunca retrocede: un sondeo que llega tarde no debe hacer bajar la barra.
-    if (pc < visto) pc = visto; else visto = pc;
-    fill.style.width = pc + '%';
-    pcRing.textContent = pc + '%';
-    track.setAttribute('aria-valuenow', pc);
-    titulo.textContent = st.titulo;
-    etiqueta.textContent = st.estimando ? 'Progreso estimado' : 'Progreso';
+  //  EL TECHO DE 89 VIVE TAMBIEN AQUI. Es el numero que el dueño ve, y no puede
+  //  pasar de ahi sin evidencia de que la imagen llego.
+  var TECHO = 89, visto = S.pct_estimado;
 
-    for (var i=0;i<st.etapas.length;i++){
-      var e=st.etapas[i], li=pasos.querySelector('[data-clave="'+e.clave+'"]');
-      if(!li) continue;
-      li.className = e.estado;
-      li.querySelector('.dot').innerHTML = (e.estado==='hecho') ? '&#10003;' : '';
-    }
-    if (st.agentes && st.agentes.length){
-      equipo.style.display='';
-      equipoLista.innerHTML = st.agentes.map(function(a){
-        return '<li><b>'+esc(a.quien)+'</b><span>'+esc(a.que)+'</span></li>'; }).join('');
-    }
-    mensajes(st);
+  //  LOS CUATRO ESTADOS, Y NADA MAS. Cada uno responde a un HECHO de la base:
+  //  no hay quinto mensaje ni frases alternandose para simular vida.
+  function queDice(st){
+    if (st.degradado === 'definitivo') return 'No logramos terminar la imagen. Tu texto está guardado — aquí lo tienes.';
+    if (st.degradado === 'rechazo')    return 'No pudimos crear la imagen esta vez. Tu texto está a salvo.';
+    if (st.tarde)                      return 'La imagen está tardando un poco más, pero seguimos trabajando.';
+    //  «enviada» es la etapa en que el arte ya salio: el texto, por tanto, existe.
+    if (st.etapa === 'enviada' || st.etapa === 'recibida') return 'Tu texto está listo. Ahora estamos creando la imagen.';
+    return 'El corillo está preparando tu idea.';
   }
-  function esc(s){ var d=document.createElement('div'); d.textContent=s==null?'':s; return d.innerHTML; }
 
-  //  CADA DESENLACE TIENE NOMBRE Y SALIDA. Ninguno deja la pantalla esperando
-  //  sin decir que pasa ni que se puede hacer.
-  function mensajes(st){
-    var txt='', botones='';
-    if (st.degradado === 'incierto'){
-      txt = 'Estamos verificando tu imagen con el proveedor. No vamos a pedir otra — si aquella salió, es la que te toca.';
-    } else if (st.degradado === 'recuperable'){
-      txt = 'El primer intento no cuajó. Ya hay un respaldo trabajando en tu imagen.';
-    } else if (st.degradado === 'rechazo'){
-      txt = 'No pudimos crear la imagen esta vez. Tu texto está a salvo — podemos intentarlo de nuevo.';
-      botones = '<button id="btnRe">Intentar la imagen otra vez</button>';
-    } else if (st.degradado === 'definitivo'){
-      //  «Conserva el copy» se cumple ENSEÑANDOLO, no prometiendolo: aqui abajo
-      //  aparece el texto tal cual quedo guardado, y se puede copiar.
-      txt = 'No logramos terminar la imagen. Tu post escrito está guardado — aquí lo tienes.';
-      botones = '<button id="btnRe">Intentar la imagen otra vez</button>';
-    } else if (st.tarde){
-      //  El umbral cambia el MENSAJE, no el estado. Y nunca se le pide al dueño
-      //  que recargue ni que vuelva a pedir la imagen: el trabajo es el mismo.
-      txt = 'Está tomando más de lo normal, pero tu imagen sigue en proceso.';
+  function pinta(st){
+    var p = st.pct_estimado;
+    if (st.estimando && p > TECHO) p = TECHO;
+    if (p < visto) p = visto; else visto = p;    // un sondeo tardio no hace bajar la barra
+    fill.style.width = p + '%';
+    track.setAttribute('aria-valuenow', p);
+    //  El porcentaje existe, pero es secundario y va rotulado. Nunca es el
+    //  elemento principal, y desaparece en cuanto deja de ser una estimacion.
+    pc.textContent = st.estimando ? (p + '% estimado') : '';
+
+    var t = queDice(st);
+    if (dice.textContent !== t) dice.textContent = t;    // solo se toca si cambio de verdad
+
+    if (st.degradado === 'definitivo' || st.degradado === 'rechazo') {
+      titulo.textContent = 'Tu texto está listo';
     }
-    if (txt){ aviso.textContent = txt; aviso.style.display=''; } else { aviso.style.display='none'; }
 
-    //  EL TEXTO QUE SI SE ESCRIBIO. Solo aparece en el fallo definitivo: no es
-    //  revelar el post a medias, es no perder lo unico que quedo en pie.
-    if (st.copy_a_salvo){
-      salvado.style.display='';
-      salvadoTx.textContent = st.copy_a_salvo;
-    } else { salvado.style.display='none'; }
+    if (st.copy_a_salvo){ salvado.style.display=''; salvadoTx.textContent = st.copy_a_salvo; }
+    else { salvado.style.display='none'; }
 
+    //  UNA SOLA ACCION, Y SOLO CUANDO HACE FALTA. Mientras el trabajo avanza no
+    //  hay boton ninguno: no hay nada que el dueño tenga que decidir.
+    var botones = '';
+    if (st.degradado === 'rechazo' || st.degradado === 'definitivo') {
+      botones = '<button id="btnRe">Reintentar imagen</button>';
+    }
     if (acc.innerHTML !== botones){
       acc.innerHTML = botones;
       var re=document.getElementById('btnRe');
-      if(re) re.addEventListener('click', function(){ re.disabled=true; re.textContent='Arrancando…'; reintentar(); });
+      if(re) re.addEventListener('click', function(){
+        re.disabled=true; re.textContent='Arrancando…'; reintentar();
+      });
     }
   }
 
-  function post(datos){
-    var fd=new FormData(); fd.append('csrf', CSRF);
-    for (var k in datos) fd.append(k, datos[k]);
-    return fetch(URL_, {method:'POST', body:fd, credentials:'same-origin'})
-      .then(function(r){ return r.json(); });
+  function aplica(st){
+    seg = st.segundos;                 // recuadre con el servidor
+    pinta(st);
+    if (st.listo) { location.href = URL_; return true; }
+    return false;
   }
 
-  //  EL REVELADO. 100% -> el titulo lo dice -> y solo entonces se pasa al post
-  //  completo, donde copy e imagen aparecen juntos y se habilita publicar.
-  function revelar(){
-    visto = 100;
-    fill.style.width='100%'; pcRing.textContent='100%';
-    track.setAttribute('aria-valuenow',100);
-    titulo.textContent='Tu primer post está listo';
-    etiqueta.textContent='Progreso';
-    sub.textContent='Te lo enseño completo…';
-    aviso.style.display='none'; acc.innerHTML='';
-    var ps=pasos.querySelectorAll('li');
-    for(var i=0;i<ps.length;i++){ ps[i].className='hecho'; ps[i].querySelector('.dot').innerHTML='&#10003;'; }
-    setTimeout(function(){ location.href = URL_; }, 1100);
-  }
-
-  var fallos=0;
+  //  EL SONDEO NO CREA TRABAJO: pregunta. Quien encola es el worker.
   function sondear(){
-    post({accion:'preparacion'}).then(function(st){
-      fallos=0;
-      if(!st) return;
-      if (typeof st.segundos === 'number') seg = st.segundos;   // el reloj se cuadra con el servidor
-      if (st.listo){ pinta(st); revelar(); return; }
-      pinta(st);
-      setTimeout(sondear, 3000);
-    }).catch(function(){
-      //  Un tropiezo de red no es un fallo del trabajo: se sigue sondeando. Solo
-      //  tras varios seguidos se dice, y aun asi sin mandar a recargar.
-      if (++fallos >= 6){
-        aviso.textContent='Perdimos la conexión un momento. Seguimos intentando — tu trabajo no se detuvo.';
-        aviso.style.display='';
-      }
-      setTimeout(sondear, 5000);
-    });
+    fetch(URL_ + '&preparacion=1', {headers:{'X-Requested-With':'fetch'}})
+      .then(function(r){ return r.json(); })
+      .then(function(st){
+        if (!st || typeof st.pct === 'undefined') { setTimeout(sondear, 3000); return; }
+        if (aplica(st)) return;
+        //  Cadencia por estado: apretado cuando la imagen esta al caer, suelto
+        //  cuando aun se esta escribiendo o cuando ya sabemos que tarda.
+        var espera = 3000;
+        if (st.etapa === 'enviada' && !st.tarde) espera = 1500;
+        else if (st.tarde) espera = 5000;
+        setTimeout(sondear, espera);
+      })
+      .catch(function(){ setTimeout(sondear, 3000); });
   }
 
   function reintentar(){
-    post({accion:'reintentar_muestra'}).then(function(st){
-      if (st) { if (typeof st.segundos === 'number') seg = st.segundos; pinta(st); }
-      setTimeout(sondear, 1500);
-    }).catch(function(){ setTimeout(sondear, 3000); });
+    var fd = new FormData();
+    fd.append('accion', 'preparacion_reintentar');
+    fd.append('csrf', CSRF);
+    fetch(URL_, {method:'POST', body:fd})
+      .then(function(r){ return r.json(); })
+      .then(function(st){ if (st && typeof st.pct !== 'undefined') aplica(st); setTimeout(sondear, 1200); })
+      .catch(function(){ setTimeout(sondear, 2000); });
   }
 
-  //  Copiar el texto salvado. El boton se pinta una vez y vive fuera de acc,
-  //  asi que se engancha aqui y no en cada repintado.
+  //  Copiar el texto salvado. Vive fuera de `acc`, asi que se engancha una vez.
   var btnCopiar=document.getElementById('btnCopiar');
   if(btnCopiar) btnCopiar.addEventListener('click', function(){
     var t = salvadoTx.textContent || '';
-    var listo = function(){ btnCopiar.textContent='Copiado'; setTimeout(function(){ btnCopiar.textContent='Copiar el texto'; }, 1800); };
+    var listo = function(){ btnCopiar.textContent='Copiado';
+      setTimeout(function(){ btnCopiar.textContent='Copiar el texto'; }, 1800); };
     if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t).then(listo, function(){}); return; }
-    //  Sin Clipboard API (http, navegadores viejos): seleccion manual, que
-    //  siempre funciona. Peor fracaso posible: el texto queda seleccionado.
     var r=document.createRange(); r.selectNodeContents(salvadoTx);
     var s=window.getSelection(); s.removeAllRanges(); s.addRange(r);
     try { document.execCommand('copy'); listo(); } catch(_){ }
