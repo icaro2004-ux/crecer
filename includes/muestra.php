@@ -129,7 +129,17 @@ function muestra_estado(PDO $pdo, int $marca_id, ?int $cid = null): array {
 
     // ── ESTADOS DEGRADADOS, por la marca que dejo el motor de imagen ─────
     $clase = (string)($p['img_error_clase'] ?? '');
-    $vivo_job = $ev['enviada'] && !$ev['recibida'];
+    //  ── «ENVIADA» NO ES LO MISMO QUE «HAY ALGO CORRIENDO» ────────────────
+    //  `enviada` se da por buena con img_job O con img_estado='queued'. Una
+    //  pieza que quedo en 'queued' SIN id de proveedor cumple lo segundo y no
+    //  lo primero: se lee como enviada, se declara 'vivo', y no hay NADA que
+    //  sondear ni nadie que la rescate — muestra_asegurar devolvia temprano
+    //  justo por ese 'vivo'. Es el estado en que se quedo la pieza #667:
+    //  etapa=enviada, degradado=vivo, img=null, 300 s y 91 sondeos iguales.
+    //
+    //  La vida hay que demostrarla. Job de verdad = hay a quien preguntar.
+    $job_real = trim((string)($p['img_job'] ?? '')) !== '';
+    $vivo_job = $job_real && !$ev['recibida'];
     $degradado = 'vivo';
     if (!$ev['recibida']) {
         //  EL WORKER NO ARRANCA, Y DESPUES DE N INTENTOS ESO ES UN DESENLACE.
@@ -145,6 +155,11 @@ function muestra_estado(PDO $pdo, int $marca_id, ?int $cid = null): array {
         elseif (strpos($clase, 'fbx:') === 0) $degradado = 'definitivo';    // el respaldo ya se gasto
         elseif (strpos($clase, 'fb:')  === 0) $degradado = 'recuperable';   // el respaldo existente puede entrar
         elseif (($p['img_estado'] ?? '') === 'error') $degradado = 'rechazo';
+        //  CON COPY, SIN JOB Y SIN ARTE: hay de donde continuar. El copy y la
+        //  direccion visual ya estan escritos, asi que reanudar cuesta UNA
+        //  llamada de imagen y ninguna de texto. Es 'recuperable' y no un
+        //  rechazo: no fallo nada, se quedo a medias.
+        elseif (!$job_real && $ev['copy']) $degradado = 'recuperable';
         elseif (!$vivo_job && $ev['copy'] && muestra_lock_estado($pdo, $marca_id) !== 'procesando') $degradado = 'rechazo';
     }
 
@@ -168,10 +183,25 @@ function muestra_estado(PDO $pdo, int $marca_id, ?int $cid = null): array {
         'listo'      => 'Tu primer post está listo',
     ];
 
+    //  ── LA ETAPA EN CURSO ES LA QUE TIENE EVIDENCIA, NO LA SIGUIENTE ─────
+    //  Esto marcaba 'ahora' en $tope + 1: con la pieza en 'enviada' anunciaba
+    //  «Tu imagen llegó — guardándola» sin que hubiera llegado nada. Era una
+    //  afirmacion sobre el proveedor que nosotros no podiamos sostener, y se vio
+    //  en produccion: etapa=enviada, img=null, y la lista diciendo que la imagen
+    //  ya se estaba guardando.
+    //
+    //  La evidencia de 'enviada' significa «se mando y estamos esperando»: eso
+    //  es trabajo EN CURSO, no trabajo hecho. Asi que la ultima etapa con
+    //  evidencia es la actual, las anteriores estan hechas, y de ahi en adelante
+    //  no se afirma nada. Solo cuando la pieza esta lista se dan todas por
+    //  hechas, porque entonces si lo estan.
     $etapas = [];
     foreach (MUESTRA_ETAPAS as $i => $e) {
-        $etapas[] = ['pct' => $e['pct'], 'clave' => $e['clave'], 'texto' => $e['texto'],
-                     'estado' => !empty($ev[$e['clave']]) ? 'hecho' : ($i === $tope + 1 ? 'ahora' : 'pendiente')];
+        if ($ev['listo'])      $est = 'hecho';
+        elseif ($i <  $tope)   $est = 'hecho';
+        elseif ($i === $tope)  $est = 'ahora';
+        else                   $est = 'pendiente';
+        $etapas[] = ['pct' => $e['pct'], 'clave' => $e['clave'], 'texto' => $e['texto'], 'estado' => $est];
     }
 
     $seg_total = max(0, (int)($p['seg_total'] ?? 0));
@@ -411,7 +441,19 @@ function muestra_reintentar(PDO $pdo, int $marca_id, int $usuario_id): bool {
     require_once __DIR__ . '/agentes.php';
     $st = muestra_estado($pdo, $marca_id);
     if ($st['listo']) return false;
-    if (!in_array($st['degradado'], ['rechazo', 'definitivo'], true)) return false;
+    //  'recuperable' ENTRA, Y HAY QUE DECIR POR QUE.
+    //  Al reclasificar «con copy y sin job» de 'rechazo' a 'recuperable' —que es
+    //  lo que de verdad es: no fallo nada, se quedo a medias— este boton dejo de
+    //  funcionar: el dueño lo apretaba y no pasaba nada, porque la lista solo
+    //  admitia rechazo y definitivo. Lo cazo test_preparacion_primer_post.
+    //
+    //  La guarda que de verdad protege no es el nombre del desenlace sino la
+    //  ausencia de trabajo vivo: con un job corriendo, reintentar es pagar la
+    //  segunda imagen. Por eso se exige ademas que no haya job.
+    if (!in_array($st['degradado'], ['rechazo', 'definitivo', 'recuperable'], true)) return false;
+    if (trim((string)$pdo->query("SELECT COALESCE(img_job,'') FROM crecer_contenido WHERE id=" . (int)$st['pieza'])->fetchColumn()) !== '') {
+        return false;   // hay job vivo: se sondea, no se reintenta
+    }
 
     //  Se limpia la marca que sella la pieza para que el motor de imagen pueda
     //  volver a encolar. Sin esto, img_resp_encolar_res la saltaria para siempre.

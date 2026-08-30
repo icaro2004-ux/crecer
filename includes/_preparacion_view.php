@@ -199,6 +199,10 @@ $nom = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
     //  existía y dejaba la barra quieta sin decir nada.
     if (st.degradado === 'arranque')   return 'No pudimos empezar tu post. No es culpa tuya — inténtalo otra vez.';
     if (st.tarde)                      return 'La imagen está tardando un poco más, pero seguimos trabajando.';
+    //  'recuperable' aqui significa «hay copy y hay que reanudar la imagen».
+    //  Decia «ya hay un respaldo trabajando en tu imagen» — una promesa que
+    //  nadie estaba cumpliendo. Se dice lo que de verdad pasa.
+    if (st.degradado === 'recuperable') return 'Seguimos creando tu imagen.';
     //  «enviada» es la etapa en que el arte ya salio: el texto, por tanto, existe.
     if (st.etapa === 'enviada' || st.etapa === 'recibida') return 'Tu texto está listo. Ahora estamos creando la imagen.';
     return 'El corillo está preparando tu idea.';

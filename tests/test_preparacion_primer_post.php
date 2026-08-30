@@ -236,7 +236,14 @@ try {
     $c2 = muestra_fila($pdo, $m2);
     muestra_arrancar($pdo, $m2, $u2, $c2);
     $s2 = muestra_estado($pdo, $m2, $c2);
-    ok('rechazo confirmado se nombra',      $s2['degradado'] === 'rechazo', 'degradado=' . $s2['degradado']);
+    //  EL CONTRATO CAMBIO AQUI, Y A MEJOR.
+    //  Antes esto era 'rechazo': copy escrito, sin job, nadie trabajando. Pero
+    //  «rechazo» dice que algo fallo y hay que empezar de cero, y no es verdad —
+    //  el copy y la direccion visual estan escritos, asi que reanudar cuesta UNA
+    //  llamada de imagen y CERO de texto. Se llama 'recuperable', que es lo que
+    //  es, y el sondeo la reanuda solo. Lo que NO cambia es lo que importa: no
+    //  se declara lista, no se revela nada a medias y el copy sobrevive.
+    ok('sin job y con copy: recuperable',   $s2['degradado'] === 'recuperable', 'degradado=' . $s2['degradado']);
     ok('el copy sobrevive al fallo',        $s2['etapas'][2]['estado'] === 'hecho');
     ok('no se revela nada a medias',        $s2['listo'] === false && $s2['copy'] === null && $s2['img'] === null);
 
