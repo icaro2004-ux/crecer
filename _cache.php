@@ -2112,6 +2112,83 @@ try {
     //  a arreglarlo — la incidencia, la fila que reventó, los errores de IA de
     //  esa marca alrededor de la hora, y si el problema es un patrón o un caso
     //  suelto. Solo lectura.
+    if ($__test === 'muestra') {   // SOLO LECTURA · ya estás dentro como admin
+        //  POR QUE EXISTE. Un dueño llegó a 3:52 con la barra quieta y no había
+        //  forma de saber desde fuera en qué tramo se había parado. Esto lo dice
+        //  sin tocar nada: el estado que ve el motor, el lock, el job y el
+        //  último error. NO escribe, NO borra y NO dispara nada — la evidencia
+        //  se mira antes de moverla.
+        //  Sin datos personales: ni email, ni teléfono, ni el caption completo.
+        require_once __DIR__ . '/includes/muestra.php';
+        $lim = max(1, min(20, (int)($_GET['n'] ?? 8)));
+        echo "
+--- MUESTRAS RECIENTES (la del primer post) ---
+";
+        echo "estancada = sin arte, sin job y con más de " . MUESTRA_STALE_SEG . " s encima
+
+";
+        try {
+            $q = $pdo->query("SELECT c.id, c.marca_id, c.created_at, c.updated_at,
+                                     c.ia_log_id, c.corillo_json, c.caption,
+                                     c.img_estado, c.img_job, c.img_error_clase, c.grafica_path,
+                                     TIMESTAMPDIFF(SECOND, c.created_at, NOW()) AS edad,
+                                     m.usuario_id, l.estado AS lock_estado,
+                                     TIMESTAMPDIFF(SECOND, l.updated_at, NOW()) AS lock_edad
+                                FROM crecer_contenido c
+                                JOIN crecer_marca m ON m.id = c.marca_id
+                           LEFT JOIN crecer_onboarding_lock l ON l.usuario_id = m.usuario_id
+                               WHERE c.tipo = 'post' AND c.calendario_id IS NULL
+                            ORDER BY c.id DESC LIMIT {$lim}");
+            foreach ($q as $r) {
+                $cj    = json_decode((string)$r['corillo_json'], true) ?: [];
+                $vis   = trim((string)($cj['visual'] ?? ''));
+                $hayC  = $r['ia_log_id'] !== null;
+                $arte  = trim((string)$r['grafica_path']) !== '';
+                $job   = trim((string)$r['img_job']) !== '';
+                $st    = muestra_estado($pdo, (int)$r['marca_id'], (int)$r['id']);
+                $atasc = (!$arte && !$job && (int)$r['edad'] > MUESTRA_STALE_SEG && !$st['listo']);
+                printf("%s #%-7s marca=%-8s  %s
+", $atasc ? 'ATASCADA' : '        ', $r['id'], $r['marca_id'], $r['created_at']);
+                printf("           edad=%ss  etapa=%-10s degradado=%-11s listo=%s
+",
+                       $r['edad'], $st['etapa'], $st['degradado'], $st['listo'] ? 'si' : 'NO');
+                printf("           copy=%-3s  visual=%-3s  job=%-3s  arte=%-3s  img_estado=%s
+",
+                       $hayC ? 'si' : 'NO', $vis !== '' ? 'si' : 'NO',
+                       $job ? 'si' : 'NO', $arte ? 'si' : 'NO', $r['img_estado'] ?: '—');
+                printf("           lock=%-11s (hace %ss)   ultimo_error=%s
+",
+                       $r['lock_estado'] ?: '—', $r['lock_edad'] ?? '—', $r['img_error_clase'] ?: '—');
+                //  Asiento de cuota de ESTA pieza (que no se pague dos veces).
+                try {
+                    $a = $pdo->prepare("SELECT estado, COUNT(*) c FROM crecer_img_cuota_asiento
+                                         WHERE marca_id=? AND origen_tipo='contenido' AND origen_id=?
+                                      GROUP BY estado");
+                    $a->execute([(int)$r['marca_id'], (int)$r['id']]);
+                    $as = [];
+                    foreach ($a as $x) $as[] = $x['estado'] . '=' . $x['c'];
+                    printf("           asientos: %s
+", $as ? implode(' ', $as) : 'ninguno');
+                } catch (Throwable $e) {}
+                //  Qué haría el motor AHORA mismo, sin hacerlo.
+                $diag = 'seguiria esperando';
+                if ($st['listo'])                            $diag = 'esta LISTO (la pantalla deberia revelar)';
+                elseif ($st['degradado'] === 'arranque')      $diag = 'el worker no arranca: fallo accionable';
+                elseif ($st['degradado'] === 'incierto')      $diag = 'encolado incierto: NO se crea otro (correcto)';
+                elseif (!$hayC && ($r['lock_estado'] ?? '') === 'completed')
+                                                             $diag = 'LOCK COMPLETADO SOBRE PIEZA VACIA — carcel, se suelta al reintentar';
+                elseif (!$hayC && (int)$r['edad'] > MUESTRA_STALE_SEG)
+                                                             $diag = 'sin copy y lock vencido: el proximo sondeo deberia rearrancar';
+                printf("           -> %s
+
+", $diag);
+            }
+        } catch (Throwable $e) { echo "  (no se pudo leer: " . $e->getMessage() . ")
+"; }
+        echo "--- fin ---
+";
+    }
+
     if ($__test === 'caso') {      // solo lectura · ya estás dentro como admin
         $cid = (int)($_GET['id'] ?? 0);
         $cortar = fn($s, $n = 600) => $s === null || $s === '' ? '—' : mb_substr(preg_replace('/\s+/', ' ', (string)$s), 0, $n);

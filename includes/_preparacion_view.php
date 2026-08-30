@@ -195,6 +195,9 @@ $nom = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
   function queDice(st){
     if (st.degradado === 'definitivo') return 'No logramos terminar la imagen. Tu texto está guardado — aquí lo tienes.';
     if (st.degradado === 'rechazo')    return 'No pudimos crear la imagen esta vez. Tu texto está a salvo.';
+    //  'arranque': el trabajo no llegó a empezar. Es el estado que antes no
+    //  existía y dejaba la barra quieta sin decir nada.
+    if (st.degradado === 'arranque')   return 'No pudimos empezar tu post. No es culpa tuya — inténtalo otra vez.';
     if (st.tarde)                      return 'La imagen está tardando un poco más, pero seguimos trabajando.';
     //  «enviada» es la etapa en que el arte ya salio: el texto, por tanto, existe.
     if (st.etapa === 'enviada' || st.etapa === 'recibida') return 'Tu texto está listo. Ahora estamos creando la imagen.';
@@ -216,6 +219,8 @@ $nom = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
 
     if (st.degradado === 'definitivo' || st.degradado === 'rechazo') {
       titulo.textContent = 'Tu texto está listo';
+    } else if (st.degradado === 'arranque') {
+      titulo.textContent = 'No pudimos empezar';
     }
 
     if (st.copy_a_salvo){ salvado.style.display=''; salvadoTx.textContent = st.copy_a_salvo; }
@@ -226,6 +231,9 @@ $nom = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
     var botones = '';
     if (st.degradado === 'rechazo' || st.degradado === 'definitivo') {
       botones = '<button id="btnRe">Reintentar imagen</button>';
+    } else if (st.degradado === 'arranque') {
+      //  Aquí no hay imagen que reintentar: no llegó a haber post.
+      botones = '<button id="btnRe">Intentarlo otra vez</button>';
     }
     if (acc.innerHTML !== botones){
       acc.innerHTML = botones;
@@ -244,9 +252,27 @@ $nom = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
   }
 
   //  EL SONDEO NO CREA TRABAJO: pregunta. Quien encola es el worker.
+  //
+  //  VA POR POST Y CON ESTE NOMBRE EXACTO, Y NO ES UN DETALLE DE ESTILO.
+  //  gateway_post.php lee `$accion = $_POST['accion']` — solo POST. Al rehacer
+  //  esta pantalla lo cambie a un GET `&preparacion=1`: el endpoint no lo
+  //  reconocia, caia al final del archivo y devolvia la PAGINA HTML entera.
+  //  `r.json()` reventaba, el .catch() reintentaba a los 3 s, y asi para
+  //  siempre. La pantalla se quedaba con el estado inicial del servidor —
+  //  barra quieta y «preparando tu idea»— aunque el worker hubiera terminado
+  //  el post perfectamente. En produccion se vio 3:52 asi.
+  //  Los nombres los fija el endpoint: 'preparacion' y 'reintentar_muestra'.
+  //  tests/test_preparacion_contrato.php los compara con los del servidor.
+  function pedir(accion){
+    var fd = new FormData();
+    fd.append('accion', accion);
+    fd.append('csrf', CSRF);
+    return fetch(URL_, {method:'POST', body:fd, credentials:'same-origin'})
+      .then(function(r){ return r.json(); });
+  }
+
   function sondear(){
-    fetch(URL_ + '&preparacion=1', {headers:{'X-Requested-With':'fetch'}})
-      .then(function(r){ return r.json(); })
+    pedir('preparacion')
       .then(function(st){
         if (!st || typeof st.pct === 'undefined') { setTimeout(sondear, 3000); return; }
         if (aplica(st)) return;
@@ -260,12 +286,11 @@ $nom = trim((string)($marca['nombre_negocio'] ?? 'tu negocio'));
       .catch(function(){ setTimeout(sondear, 3000); });
   }
 
+  //  El nombre lo fija el endpoint: 'reintentar_muestra'. Tambien lo habia
+  //  cambiado ('preparacion_reintentar'), asi que el boton de Reintentar imagen
+  //  no hacia nada — el dueño lo apretaba y la pantalla seguia igual.
   function reintentar(){
-    var fd = new FormData();
-    fd.append('accion', 'preparacion_reintentar');
-    fd.append('csrf', CSRF);
-    fetch(URL_, {method:'POST', body:fd})
-      .then(function(r){ return r.json(); })
+    pedir('reintentar_muestra')
       .then(function(st){ if (st && typeof st.pct !== 'undefined') aplica(st); setTimeout(sondear, 1200); })
       .catch(function(){ setTimeout(sondear, 2000); });
   }

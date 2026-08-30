@@ -132,7 +132,16 @@ function muestra_estado(PDO $pdo, int $marca_id, ?int $cid = null): array {
     $vivo_job = $ev['enviada'] && !$ev['recibida'];
     $degradado = 'vivo';
     if (!$ev['recibida']) {
-        if     (strpos($clase, 'enc:') === 0) $degradado = 'incierto';      // se fue sin id: NO crear otro
+        //  EL WORKER NO ARRANCA, Y DESPUES DE N INTENTOS ESO ES UN DESENLACE.
+        //  Mientras van uno o dos, se sigue reintentando en silencio: puede ser
+        //  un tropiezo. A partir del tercero ya no es mala suerte, y dejar la
+        //  barra quieta sin decir nada es lo que produjo el «lleva 3:52».
+        //  Se nombra 'arranque' y no 'rechazo' porque aqui no fallo la imagen:
+        //  no llego a empezar el trabajo, y al dueño hay que decirle eso.
+        if (preg_match('~^arr(\d+):~', $clase, $__m) && (int)$__m[1] >= MUESTRA_ARRANQUES_MAX) {
+            $degradado = 'arranque';
+        }
+        elseif (strpos($clase, 'enc:') === 0) $degradado = 'incierto';      // se fue sin id: NO crear otro
         elseif (strpos($clase, 'fbx:') === 0) $degradado = 'definitivo';    // el respaldo ya se gasto
         elseif (strpos($clase, 'fb:')  === 0) $degradado = 'recuperable';   // el respaldo existente puede entrar
         elseif (($p['img_estado'] ?? '') === 'error') $degradado = 'rechazo';
@@ -244,6 +253,31 @@ function muestra_lock_estado(PDO $pdo, int $marca_id): string {
  */
 function muestra_arrancar(PDO $pdo, int $marca_id, int $usuario_id, int $cid): bool {
     $lock = onboarding_lock_acquire($pdo, $usuario_id, MUESTRA_STALE_SEG);
+
+    //  ── UN LOCK «COMPLETADO» SOBRE UNA PIEZA VACIA ES UNA CARCEL ─────────
+    //  El worker puede terminar SIN EXCEPCION y sin haber hecho nada: dentro de
+    //  muestra_preparar, si redactar_pieza revienta, el error se captura, se
+    //  loguea y la funcion sigue. El worker entonces marca el lock 'completed'
+    //  — y un lock completado NO se re-adquiere nunca. A partir de ahi ningun
+    //  sondeo puede reintentar: la pieza se queda sin copy, sin job y sin nadie
+    //  que la levante. Por fuera es una barra quieta para siempre; es la otra
+    //  mitad del «lleva 3:52 preparando».
+    //
+    //  El desempate no es el tiempo, es la EVIDENCIA: si el lock dice terminado
+    //  pero la pieza no tiene copy ni arte ni job, no termino nada. Se suelta y
+    //  se vuelve a pedir UNA vez. Si de verdad estuviera terminada, la guarda de
+    //  arriba de muestra_asegurar ya habria devuelto antes de llegar aqui.
+    if (empty($lock['acquired']) && ($lock['estado'] ?? '') === 'completed') {
+        $q = $pdo->prepare("SELECT 1 FROM crecer_contenido
+                             WHERE id=? AND marca_id=? AND ia_log_id IS NULL
+                               AND COALESCE(grafica_path,'')='' AND COALESCE(img_job,'')=''");
+        $q->execute([$cid, $marca_id]);
+        if ($q->fetchColumn()) {
+            error_log("[muestra] lock 'completed' sobre pieza vacia #{$cid}: se suelta para poder reintentar");
+            onboarding_lock_reset($pdo, $usuario_id);
+            $lock = onboarding_lock_acquire($pdo, $usuario_id, MUESTRA_STALE_SEG);
+        }
+    }
     if (empty($lock['acquired'])) return false;
     if (!worker_puede_disparar('muestra')) {
         //  Sin llave no hay worker. Se suelta el lock para que el proximo intento
@@ -267,16 +301,77 @@ function muestra_arrancar(PDO $pdo, int $marca_id, int $usuario_id, int $cid): b
         CURLOPT_NOSIGNAL          => 1,
         CURLOPT_SSL_VERIFYPEER    => false,
     ]);
-    curl_exec($ch);
-    $err = curl_errno($ch);
+    $cuerpo = (string)curl_exec($ch);
+    $err    = curl_errno($ch);
+    $http   = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     curl_close($ch);
-    //  OJO: el timeout de 3 s es EXITO esperado, no fallo - el worker ya se fue
-    //  por su cuenta. Solo un fallo de conexion real deja el lock inservible.
-    if ($err === CURLE_COULDNT_CONNECT || $err === CURLE_COULDNT_RESOLVE_HOST) {
+
+    //  ── SABER SI DE VERDAD ARRANCO, QUE ANTES NO SE SABIA ────────────────
+    //  Esto solo miraba errores de CONEXION. Un 403 (llave mala), un 404 (ruta
+    //  equivocada) o un 503 (worker sin configurar) devuelven errno 0: la
+    //  funcion contestaba `true`, el lock se quedaba tomado 180 s y la pantalla
+    //  esperaba a alguien que nunca habia salido. Al vencer el lock se volvia a
+    //  disparar contra el mismo 403 — un bucle silencioso, sin avance y sin
+    //  error, que por fuera es exactamente «lleva 4 minutos preparando».
+    //
+    //  El worker contesta 'ok' ANTES de ponerse a trabajar, asi que:
+    //    · timeout (errno 28) = EXITO esperado: ya se fue por su cuenta;
+    //    · 200 con 'ok' en el cuerpo = arranco;
+    //    · cualquier otro codigo = NO arranco, y hay que decirlo.
+    $timeout  = ($err === CURLE_OPERATION_TIMEDOUT);
+    $arranco  = $timeout || ($err === 0 && $http === 200 && stripos($cuerpo, 'ok') !== false);
+
+    if (!$arranco) {
+        $clase = $err !== 0 ? 'red_' . $err : 'http_' . $http;
         onboarding_lock_fail($pdo, $usuario_id, (string)$lock['token']);
+        muestra_arranque_fallido($pdo, $marca_id, $cid, $clase);
+        error_log("[muestra] el worker NO arranco ({$clase}) — pieza #{$cid}");
         return false;
     }
+    //  Arranco: se borra el rastro de intentos anteriores para que un tropiezo
+    //  pasado no cuente contra un camino que ya va bien.
+    muestra_arranque_ok($pdo, $marca_id, $cid);
     return true;
+}
+
+/**
+ * Cuantos arranques seguidos han fallado antes de que se declare cerrado.
+ * Tres es suficiente para descartar un tropiezo y poco para no tener al dueño
+ * media hora mirando una barra quieta.
+ */
+const MUESTRA_ARRANQUES_MAX = 3;
+
+/**
+ * ANOTA UN ARRANQUE FALLIDO — sin tabla nueva y sin migracion.
+ *
+ * Se reusa `img_error_clase`, que ya es el sitio donde esta ruta deja sus
+ * marcas con prefijo ('enc:', 'fb:', 'fbx:'). Aqui el prefijo es 'arr<N>:' y
+ * lleva la cuenta dentro. Solo se escribe cuando la pieza NO tiene arte ni job
+ * vivo: si lo tuviera, esta columna es del motor de imagen y no se le pisa.
+ */
+function muestra_arranque_fallido(PDO $pdo, int $marca_id, int $cid, string $clase): void {
+    try {
+        $q = $pdo->prepare("SELECT img_error_clase FROM crecer_contenido
+                             WHERE id=? AND marca_id=? AND COALESCE(grafica_path,'')=''
+                               AND COALESCE(img_job,'')=''");
+        $q->execute([$cid, $marca_id]);
+        $fila = $q->fetch(PDO::FETCH_NUM);
+        if (!$fila) return;                        // hay arte o job: no es asunto nuestro
+        $n = 1;
+        if (preg_match('~^arr(\d+):~', (string)$fila[0], $m)) $n = ((int)$m[1]) + 1;
+        $pdo->prepare("UPDATE crecer_contenido SET img_error_clase=?, updated_at=NOW()
+                        WHERE id=? AND marca_id=?")
+            ->execute(['arr' . $n . ':' . $clase, $cid, $marca_id]);
+    } catch (Throwable $e) { error_log('muestra_arranque_fallido: ' . $e->getMessage()); }
+}
+
+/** Borra el rastro de arranques fallidos cuando por fin uno sale. */
+function muestra_arranque_ok(PDO $pdo, int $marca_id, int $cid): void {
+    try {
+        $pdo->prepare("UPDATE crecer_contenido SET img_error_clase=NULL
+                        WHERE id=? AND marca_id=? AND img_error_clase LIKE 'arr%'")
+            ->execute([$cid, $marca_id]);
+    } catch (Throwable $e) { /* best-effort */ }
 }
 
 /**
