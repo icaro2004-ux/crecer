@@ -2112,81 +2112,126 @@ try {
     //  a arreglarlo — la incidencia, la fila que reventó, los errores de IA de
     //  esa marca alrededor de la hora, y si el problema es un patrón o un caso
     //  suelto. Solo lectura.
-    if ($__test === 'muestra') {   // SOLO LECTURA · ya estás dentro como admin
-        //  POR QUE EXISTE. Un dueño llegó a 3:52 con la barra quieta y no había
-        //  forma de saber desde fuera en qué tramo se había parado. Esto lo dice
-        //  sin tocar nada: el estado que ve el motor, el lock, el job y el
-        //  último error. NO escribe, NO borra y NO dispara nada — la evidencia
-        //  se mira antes de moverla.
-        //  Sin datos personales: ni email, ni teléfono, ni el caption completo.
+    if ($__test === 'muestra') {   // SOLO LECTURA - ya estas dentro como admin
+        //  POR QUE EXISTE, Y POR QUE HUBO QUE REHACERLO.
+        //  La primera version listaba "muestras recientes" filtrando por
+        //  `calendario_id IS NULL`. Pero muestra_fila() SIEMPRE crea un
+        //  calendario y engancha la pieza a el, asi que ese filtro excluia a
+        //  TODAS las muestras por definicion. Con la pieza #667 atascada, el
+        //  diagnostico enseñaba dos piezas del 17 de agosto y ninguna del caso
+        //  -- y peor: las enseñaba en silencio, como si fueran la respuesta. Un
+        //  diagnostico que sustituye la fila que le piden por otras "parecidas"
+        //  es peor que no tener diagnostico.
+        //
+        //  Ahora `&pieza=N` busca ESA fila y, si no esta, dice exactamente que
+        //  condicion fallo. NO escribe, NO borra y NO dispara nada.
         require_once __DIR__ . '/includes/muestra.php';
-        $lim = max(1, min(20, (int)($_GET['n'] ?? 8)));
-        echo "
---- MUESTRAS RECIENTES (la del primer post) ---
-";
-        echo "estancada = sin arte, sin job y con más de " . MUESTRA_STALE_SEG . " s encima
+        $pieza = (int)($_GET['pieza'] ?? 0);
 
-";
-        try {
-            $q = $pdo->query("SELECT c.id, c.marca_id, c.created_at, c.updated_at,
-                                     c.ia_log_id, c.corillo_json, c.caption,
-                                     c.img_estado, c.img_job, c.img_error_clase, c.grafica_path,
-                                     TIMESTAMPDIFF(SECOND, c.created_at, NOW()) AS edad,
-                                     m.usuario_id, l.estado AS lock_estado,
-                                     TIMESTAMPDIFF(SECOND, l.updated_at, NOW()) AS lock_edad
-                                FROM crecer_contenido c
-                                JOIN crecer_marca m ON m.id = c.marca_id
-                           LEFT JOIN crecer_onboarding_lock l ON l.usuario_id = m.usuario_id
-                               WHERE c.tipo = 'post' AND c.calendario_id IS NULL
-                            ORDER BY c.id DESC LIMIT {$lim}");
-            foreach ($q as $r) {
-                $cj    = json_decode((string)$r['corillo_json'], true) ?: [];
-                $vis   = trim((string)($cj['visual'] ?? ''));
-                $hayC  = $r['ia_log_id'] !== null;
-                $arte  = trim((string)$r['grafica_path']) !== '';
-                $job   = trim((string)$r['img_job']) !== '';
-                $st    = muestra_estado($pdo, (int)$r['marca_id'], (int)$r['id']);
-                $atasc = (!$arte && !$job && (int)$r['edad'] > MUESTRA_STALE_SEG && !$st['listo']);
-                printf("%s #%-7s marca=%-8s  %s
-", $atasc ? 'ATASCADA' : '        ', $r['id'], $r['marca_id'], $r['created_at']);
-                printf("           edad=%ss  etapa=%-10s degradado=%-11s listo=%s
-",
-                       $r['edad'], $st['etapa'], $st['degradado'], $st['listo'] ? 'si' : 'NO');
-                printf("           copy=%-3s  visual=%-3s  job=%-3s  arte=%-3s  img_estado=%s
-",
-                       $hayC ? 'si' : 'NO', $vis !== '' ? 'si' : 'NO',
-                       $job ? 'si' : 'NO', $arte ? 'si' : 'NO', $r['img_estado'] ?: '—');
-                printf("           lock=%-11s (hace %ss)   ultimo_error=%s
-",
-                       $r['lock_estado'] ?: '—', $r['lock_edad'] ?? '—', $r['img_error_clase'] ?: '—');
-                //  Asiento de cuota de ESTA pieza (que no se pague dos veces).
-                try {
-                    $a = $pdo->prepare("SELECT estado, COUNT(*) c FROM crecer_img_cuota_asiento
-                                         WHERE marca_id=? AND origen_tipo='contenido' AND origen_id=?
-                                      GROUP BY estado");
-                    $a->execute([(int)$r['marca_id'], (int)$r['id']]);
-                    $as = [];
-                    foreach ($a as $x) $as[] = $x['estado'] . '=' . $x['c'];
-                    printf("           asientos: %s
-", $as ? implode(' ', $as) : 'ninguno');
-                } catch (Throwable $e) {}
-                //  Qué haría el motor AHORA mismo, sin hacerlo.
-                $diag = 'seguiria esperando';
-                if ($st['listo'])                            $diag = 'esta LISTO (la pantalla deberia revelar)';
-                elseif ($st['degradado'] === 'arranque')      $diag = 'el worker no arranca: fallo accionable';
-                elseif ($st['degradado'] === 'incierto')      $diag = 'encolado incierto: NO se crea otro (correcto)';
-                elseif (!$hayC && ($r['lock_estado'] ?? '') === 'completed')
-                                                             $diag = 'LOCK COMPLETADO SOBRE PIEZA VACIA — carcel, se suelta al reintentar';
-                elseif (!$hayC && (int)$r['edad'] > MUESTRA_STALE_SEG)
-                                                             $diag = 'sin copy y lock vencido: el proximo sondeo deberia rearrancar';
-                printf("           -> %s
+        //  Sin datos personales: ni email ni telefono, y del caption solo si
+        //  existe y cuanto mide.
+        $mostrar = function (array $r) use ($pdo) {
+            $cj   = json_decode((string)$r['corillo_json'], true) ?: [];
+            $vis  = trim((string)($cj['visual'] ?? ''));
+            $cap  = trim((string)$r['caption']);
+            $hayC = $r['ia_log_id'] !== null;
+            $job  = trim((string)$r['img_job']);
+            $arte = trim((string)$r['grafica_path']);
+            $st   = muestra_estado($pdo, (int)$r['marca_id'], (int)$r['id']);
 
-", $diag);
+            printf("\n=== PIEZA #%s ===\n", $r['id']);
+            printf("  marca            %s (%s)\n", $r['marca_id'], mb_substr((string)$r['nombre_negocio'], 0, 40));
+            printf("  creada           %s   (hace %ss)\n", $r['created_at'], $r['edad']);
+            printf("  actualizada      %s\n", $r['updated_at']);
+            printf("  calendario_id    %s\n", $r['calendario_id'] ?? 'NULL');
+            printf("  tipo/plataforma  %s / %s   estado=%s\n", $r['tipo'], $r['plataforma'], $r['estado']);
+            echo   "  --- lo que el motor ve ---\n";
+            printf("  etapa            %s\n", $st['etapa']);
+            printf("  degradado        %s        listo=%s\n", $st['degradado'], $st['listo'] ? 'si' : 'NO');
+            printf("  pct / estimado   %s / %s\n", $st['pct'], $st['pct_estimado']);
+            foreach ($st['etapas'] as $e) {
+                if ($e['estado'] === 'ahora') printf("  etapa en curso   %s\n", $e['texto']);
             }
-        } catch (Throwable $e) { echo "  (no se pudo leer: " . $e->getMessage() . ")
-"; }
-        echo "--- fin ---
-";
+            echo   "  --- evidencia ---\n";
+            printf("  caption          %s%s\n", $hayC ? 'SI' : 'NO',
+                   $cap !== '' ? ' (' . mb_strlen($cap) . ' car.)' : ' (vacio)');
+            printf("  ia_log_id        %s\n", $r['ia_log_id'] ?? 'NULL');
+            printf("  corillo.visual   %s%s\n", $vis !== '' ? 'SI' : 'NO',
+                   $vis !== '' ? ' - ' . mb_substr($vis, 0, 60) : '');
+            printf("  img_estado       %s\n", $r['img_estado'] ?: 'NULL');
+            printf("  img_job (prov.)  %s\n", $job !== '' ? $job : 'NINGUNO');
+            printf("  img_job_at       %s\n", $r['img_job_at'] ?? 'NULL');
+            printf("  grafica_path     %s\n", $arte !== '' ? $arte : 'NINGUNA');
+            printf("  ultimo error     %s\n", $r['img_error_clase'] ?: '-');
+            printf("  lock             %s (hace %ss)\n", $r['lock_estado'] ?: '-', $r['lock_edad'] ?? '-');
+
+            try {
+                $a = $pdo->prepare("SELECT id, estado, operacion, created_at FROM crecer_img_cuota_asiento
+                                     WHERE marca_id=? AND origen_tipo='contenido' AND origen_id=? ORDER BY id");
+                $a->execute([(int)$r['marca_id'], (int)$r['id']]);
+                $f = $a->fetchAll(PDO::FETCH_ASSOC);
+                printf("  asientos cuota   %s\n", $f ? count($f) : 'ninguno');
+                foreach ($f as $x) {
+                    printf("                   #%s %s (%s) %s\n", $x['id'], $x['estado'], $x['operacion'], $x['created_at']);
+                }
+            } catch (Throwable $e) { echo "  asientos cuota   (no se pudo leer)\n"; }
+
+            //  QUE HARIA EL MOTOR AHORA MISMO. Sin hacerlo.
+            $acc = 'seguiria esperando al proveedor';
+            if ($st['listo'])                        $acc = 'esta LISTO - la pantalla deberia revelar copy e imagen';
+            elseif ($st['degradado'] === 'arranque') $acc = 'el worker no arranca: fallo accionable, con boton';
+            elseif ($st['degradado'] === 'incierto') $acc = 'encolado incierto: NO se crea otro (correcto, evita pagar dos veces)';
+            elseif ($st['degradado'] === 'recuperable' && $hayC && $job === '' && $arte === '')
+                                                     $acc = 'HAY COPY Y NO HAY JOB -> el proximo sondeo encola UNA imagen reusando caption y direccion (cero llamadas de texto)';
+            elseif ($st['degradado'] === 'rechazo')  $acc = 'rechazo confirmado: el dueño puede reintentar';
+            elseif (!$hayC && ($r['lock_estado'] ?? '') === 'completed')
+                                                     $acc = 'LOCK COMPLETADO SOBRE PIEZA VACIA - se suelta al reintentar';
+            elseif ($job !== '')                     $acc = 'job vivo: se sigue sondeando ESE, no se crea otro';
+            printf("  -> %s\n", $acc);
+        };
+
+        $SEL = "SELECT c.*, TIMESTAMPDIFF(SECOND, c.created_at, NOW()) AS edad,
+                       m.nombre_negocio, m.usuario_id, l.estado AS lock_estado,
+                       TIMESTAMPDIFF(SECOND, l.updated_at, NOW()) AS lock_edad
+                  FROM crecer_contenido c
+                  JOIN crecer_marca m ON m.id = c.marca_id
+             LEFT JOIN crecer_onboarding_lock l ON l.usuario_id = m.usuario_id ";
+
+        if ($pieza > 0) {
+            try {
+                $q = $pdo->prepare($SEL . " WHERE c.id = ?");
+                $q->execute([$pieza]);
+                $r = $q->fetch(PDO::FETCH_ASSOC);
+                if ($r) { $mostrar($r); }
+                else {
+                    //  NUNCA se sustituye por "otras recientes": se explica.
+                    echo "\n=== PIEZA #{$pieza}: NO APARECE ===\n";
+                    $en_cont = (int)$pdo->query("SELECT COUNT(*) FROM crecer_contenido WHERE id=" . $pieza)->fetchColumn();
+                    echo "  existe en crecer_contenido?      " . ($en_cont ? "SI" : "NO") . "\n";
+                    if ($en_cont) {
+                        $mid = (int)$pdo->query("SELECT marca_id FROM crecer_contenido WHERE id=" . $pieza)->fetchColumn();
+                        $en_marca = (int)$pdo->query("SELECT COUNT(*) FROM crecer_marca WHERE id=" . $mid)->fetchColumn();
+                        echo "  su marca_id                     {$mid}\n";
+                        echo "  esa marca existe?               " . ($en_marca ? "SI" : "NO - el JOIN con crecer_marca la deja fuera") . "\n";
+                        if (!$en_marca) echo "  -> la fila esta huerfana: apunta a una marca borrada.\n";
+                    } else {
+                        echo "  -> no hay ninguna fila con ese id. Comprueba que el numero salga\n";
+                        echo "     del campo 'pieza' del JSON del gateway (es crecer_contenido.id).\n";
+                    }
+                    echo "  base de datos: " . (defined('DB_NAME') ? DB_NAME : '?') . "\n";
+                }
+            } catch (Throwable $e) { echo "  (no se pudo leer: " . $e->getMessage() . ")\n"; }
+            echo "\n--- fin ---\n";
+        } else {
+            //  LISTADO, sin el filtro que las excluia a todas.
+            $lim = max(1, min(20, (int)($_GET['n'] ?? 6)));
+            echo "\n--- ULTIMAS PIEZAS (usa &pieza=N para una en concreto) ---\n";
+            try {
+                $q = $pdo->query($SEL . " ORDER BY c.id DESC LIMIT {$lim}");
+                foreach ($q as $r) $mostrar($r);
+            } catch (Throwable $e) { echo "  (no se pudo leer: " . $e->getMessage() . ")\n"; }
+            echo "\n--- fin ---\n";
+        }
     }
 
     if ($__test === 'caso') {      // solo lectura · ya estás dentro como admin
