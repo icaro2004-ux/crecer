@@ -241,7 +241,11 @@ try {
     $solo_a = array_values(array_filter(array_diff($la, $lb), fn($l) => trim($l) !== ''));
     $solo_b = array_values(array_filter(array_diff($lb, $la), fn($l) => trim($l) !== ''));
     ok('7 · cada brief trae líneas propias',    count($solo_a) >= 3 && count($solo_b) >= 3,
-       'propias A=' . count($solo_a) . ' B=' . count($solo_b));
+       'propias A=' . count($solo_a) . ' B=' . count($solo_b)
+       . "
+          A: " . implode(' | ', array_map(fn($l)=>mb_substr(trim($l),0,70), $solo_a))
+       . "
+          B: " . implode(' | ', array_map(fn($l)=>mb_substr(trim($l),0,70), $solo_b)));
     similar_text(implode("
 ", $solo_a), implode("
 ", $solo_b), $pct_var);
