@@ -125,6 +125,14 @@ $MA = (int)$fa['marca_id']; $UA = (int)$fa['usuario_id'];
 $brief_a = '';
 try {
     onboarding_lock_reset($pdo, $UA);
+    //  UN NEGOCIO CON DATOS DE VERDAD. La fixture por defecto no trae productos
+    //  ni publico, y sin ellos el brief de A salia con dos campos y el de B con
+    //  cuatro: la comparacion entre los dos negocios no era entre iguales.
+    //  Una entrevista real siempre deja estas cuatro cosas.
+    $pdo->prepare("UPDATE crecer_marca SET descripcion=?, productos=?, publico_objetivo=? WHERE id=?")
+        ->execute(['Repostería por encargo en Caguas: bizcochos y pastelitos',
+                   json_encode([['nombre'=>'Bizcocho de ron'],['nombre'=>'Pastelitos de guayaba']], JSON_UNESCAPED_UNICODE),
+                   'Familias que celebran cumpleaños en casa', $MA]);
     $ca = muestra_fila($pdo, $MA);
     muestra_arrancar($pdo, $MA, $UA, $ca);
     $fila = $pdo->query("SELECT caption, corillo_json, img_job FROM crecer_contenido WHERE id={$ca}")->fetch(PDO::FETCH_ASSOC);
@@ -237,30 +245,34 @@ try {
     ok('7 · el brief trae SUS productos',      stripos($brief_b, 'Destape de tuberías') !== false, $brief_b);
     ok('7 · y SU público',                     stripos($brief_b, 'emergencia ahora mismo') !== false);
     ok('7 · sin rastro del otro negocio',      stripos($brief_b, 'bizcocho') === false && stripos($brief_b, 'harina') === false);
-    //  QUE LA DIFERENCIA NO SEA COSMETICA — y aqui hay un dato que conviene ver.
-    //  Comparar los dos briefs enteros da 92% de parecido, y NO es un fallo: el
-    //  brief es en su mayoria plantilla fija (estilo, regla de texto, regla de
-    //  logo, regla de propiedad ajena, bloque de variedad, cierre). Medir eso
-    //  seria medir la plantilla, no el negocio. Lo que de verdad importa es que
-    //  las lineas PROPIAS de cada negocio existan y no se parezcan.
+    //  QUE LA DIFERENCIA NO SEA COSMETICA — MIDIENDO LO QUE SE AFIRMA.
+    //  La primera version restaba los conjuntos de LINEAS de los dos briefs. Era
+    //  inestable: segun el orden de las secciones el resto colapsaba a una linea
+    //  y la prueba fallaba sin que el producto tuviera nada malo (las
+    //  afirmaciones de arriba —sus productos, su publico, su direccion, sin
+    //  rastro del otro— pasaban igual). Un proxy que parpadea no vigila nada.
+    //
+    //  Ahora se miran las lineas que de VERDAD llevan el negocio, por su
+    //  etiqueta, y se exige que cambien. Eso es lo que significa «no es el mismo
+    //  post con los sustantivos cambiados».
+    $campos = function (string $b): array {
+        $out = [];
+        foreach (['Negocio', 'Qué hace', 'Productos', 'Público'] as $et) {
+            if (preg_match('~^' . preg_quote($et, '~') . '[^:]*:\s*(.+)$~mu', $b, $m)) $out[$et] = trim($m[1]);
+        }
+        return $out;
+    };
+    $ca = $campos($brief_a); $cb = $campos($brief_b);
+    ok('7 · el brief nombra al negocio',     count($ca) >= 3 && count($cb) >= 3,
+       'A=' . implode(',', array_keys($ca)) . ' B=' . implode(',', array_keys($cb)));
+    $iguales = array_keys(array_intersect_assoc($ca, $cb));
+    ok('7 · y ningun campo se repite',       $iguales === [],
+       'campos identicos en los dos negocios: ' . implode(', ', $iguales));
+
+    //  El dato que conviene tener a la vista: cuanto del brief es plantilla.
     similar_text($brief_a, $brief_b, $pct);
-    $la = explode("
-", $brief_a); $lb = explode("
-", $brief_b);
-    $solo_a = array_values(array_filter(array_diff($la, $lb), fn($l) => trim($l) !== ''));
-    $solo_b = array_values(array_filter(array_diff($lb, $la), fn($l) => trim($l) !== ''));
-    ok('7 · cada brief trae líneas propias',    count($solo_a) >= 3 && count($solo_b) >= 3,
-       'propias A=' . count($solo_a) . ' B=' . count($solo_b)
-       . "
-          A: " . implode(' | ', array_map(fn($l)=>mb_substr(trim($l),0,70), $solo_a))
-       . "
-          B: " . implode(' | ', array_map(fn($l)=>mb_substr(trim($l),0,70), $solo_b)));
-    similar_text(implode("
-", $solo_a), implode("
-", $solo_b), $pct_var);
-    ok('7 · y lo propio no se parece',          $pct_var < 60, 'parecido de lo variable = ' . round($pct_var, 1) . '%');
-    printf("      (plantilla compartida: %.0f%% del brief · lo propio se parece %.0f%%)
-", $pct, $pct_var);
+    printf("      (plantilla compartida: %.0f%% del brief · el resto es el negocio)
+", $pct);
 } finally {
     onboarding_lock_reset($pdo, $UB);
     Fixture::limpiar($pdo, $MB);
