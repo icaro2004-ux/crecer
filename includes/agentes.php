@@ -2127,6 +2127,19 @@ function muestra_preparar(PDO $pdo, int $marca_id, int $cid): int {
     }
     if ($arte_listo || $arte_vivo) return $cid;
 
+    //  SIN COPY NO HAY ARTE. NUNCA.
+    //  El try/catch de arriba deja seguir cuando redactar_pieza revienta —y hace
+    //  bien, porque el worker no debe morirse— pero entonces $cap se queda vacio
+    //  y aqui abajo se encolaba igual: una imagen briefeada con NADA, pagada con
+    //  una unidad de la cuota del dueño. Es exactamente el defecto que este
+    //  camino existia para cerrar (el precedente esta en onboarding.php, donde
+    //  el arte salia con copy vacio). Se corta aqui: la pieza se queda como
+    //  esta, sin gastar, y el siguiente intento vuelve a escribir el copy.
+    if (trim($cap) === '') {
+        error_log("[muestra] sin caption: NO se encola arte para la pieza #{$cid}");
+        return $cid;
+    }
+
     // El post gratuito vende la calidad de Crecer: usa la MISMA direccion
     // visual que el corillo decidio al escribir el copy. Si el worker se
     // reinicio entre ambos tramos, la recupera de la conversacion persistida

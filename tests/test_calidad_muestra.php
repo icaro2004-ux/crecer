@@ -221,7 +221,16 @@ try {
                    json_encode([['nombre'=>'Destape de tuberías'],['nombre'=>'Instalación de calentador']], JSON_UNESCAPED_UNICODE),
                    'Dueños de casa con una emergencia ahora mismo', $MB]);
     $cb = muestra_fila($pdo, $MB);
+    //  QUE B GENERE SU PROPIO BRIEF, Y QUE SE SEPA SI NO.
+    //  Sin esta guarda, un arranque que no llega a encolar deja `ultimo_brief()`
+    //  devolviendo el de la seccion ANTERIOR: los dos briefs comparados eran
+    //  entonces dos fixtures por defecto que solo se diferencian en el sufijo
+    //  del nombre. La prueba fallaba por «se parecen un 92%» y la culpa parecia
+    //  del brief, cuando el problema era que B no habia briefeado nada.
+    $n_antes = count($GLOBALS['RED']['briefs']);
     muestra_arrancar($pdo, $MB, $UB, $cb);
+    ok('7 · el segundo negocio SI briefea',  count($GLOBALS['RED']['briefs']) > $n_antes,
+       'no se encolo nada para la marca B; el brief comparado seria el de otra seccion');
     $brief_b = ultimo_brief();
 
     ok('7 · otra marca, otra dirección',       strpos($brief_b, VIS_B) !== false && strpos($brief_b, VIS_A) === false);
