@@ -73,8 +73,22 @@ try {
     //  midiendo el contrato nuevo, y con MAS guardas que antes.
     ok('un solo titulo, claro',            strpos($html, 'Estamos creando tu primer post') !== false);
     ok('tiempo transcurrido, secundario',  strpos($html, 'id="reloj"') !== false);
-    ok('animacion declarada como adorno',  strpos($html, 'class="crea"') !== false
-                                        && strpos($html, 'aria-hidden="true"') !== false);
+    //  EL ADORNO CAMBIO DE FORMA, LA GARANTIA NO. Antes era un anillo; ahora es
+    //  el revelado de color y, cuando llega, la imagen. Lo que se mide no es el
+    //  dibujo sino que lo decorativo NO se cuele en la narracion accesible...
+    ok('lo decorativo va declarado como adorno',
+       strpos($html, 'class="foto"') !== false && strpos($html, 'aria-hidden="true"') !== false
+       && preg_match('~<img class="foto"[^>]*alt=""~', $html) === 1);
+    //  ...y, al reves, que lo que SI hay que leer no quede escondido: el texto
+    //  del post y la descripcion de la imagen son contenido, no decoracion.
+    ok('el texto del post NO va oculto a lectores',
+       preg_match('~<p class="cap"[^>]*aria-hidden~', $html) !== 1);
+    ok('la descripcion de la imagen tampoco',
+       preg_match('~<div class="pincel"[^>]*aria-hidden~', $html) !== 1);
+    //  La fase inicial la calcula el SERVIDOR con las mismas columnas que el
+    //  resto del estado: la pantalla entra pintada y no parpadea al cargar.
+    ok('la escena nace con la fase del servidor',
+       preg_match('~data-fase="(pensando|copy|tarde)"~', $html) === 1);
     ok('sondeo persistente del mismo job', strpos($html, 'preparacion=1') !== false);
     ok('el techo de 89 vive en el cliente', strpos($html, 'TECHO = 89') !== false);
     ok('la frase humana esta',             strpos($html, 'No tienes que empezar de nuevo') !== false);
@@ -82,11 +96,18 @@ try {
     echo "
   -- y lo que YA NO puede parecer un diagnostico --
 ";
-    //  El porcentaje puede existir, pero pequeño y rotulado. Nunca como titular:
-    //  si apareciera dentro de un <h1> o de un bloque de 40px, volveriamos al
-    //  tablero. Se comprueba que va etiquetado y que no manda.
-    ok('el porcentaje va rotulado «estimado»', strpos($html, "'% estimado'") !== false);
-    ok('y no es el elemento principal',    preg_match('~<h1[^>]*>[^<]*%~', $html) !== 1);
+    //  EL PORCENTAJE YA NO EXISTE, y esto es MAS estricto que lo de antes. La
+    //  regla vieja era «puede estar, pero pequeño y rotulado»; se probo en
+    //  pantalla y el numero seguia siendo lo que el ojo buscaba: en una espera
+    //  de dos minutos y medio se atasca en 89 y ahi se queda, que es la
+    //  sensacion contraria a la que hace falta. La barra sigue moviendose con el
+    //  mismo pct_estimado; lo que se retiro es la cifra.
+    ok('no se enseña ningun porcentaje',   strpos($html, '% estimado') === false
+                                        && preg_match('~>\s*\d{1,3}\s*%~', $html) !== 1);
+    ok('y menos aun como titular',         preg_match('~<h1[^>]*>[^<]*%~', $html) !== 1);
+    //  Pero el techo se queda: una barra LLENA con la pantalla todavia puesta es
+    //  la misma mentira que un 100%.
+    ok('el techo sigue acotando la barra',  strpos($html, 'TECHO = 89') !== false);
     ok('sin lista de siete etapas',        preg_match_all('/<li class="[^"]*" data-clave=/', $html) === 0);
     ok('sin nombres de agentes',           stripos($html, 'equipoLista') === false
                                         && stripos($html, 'El Provocador') === false
@@ -105,7 +126,13 @@ try {
     //  Se mira el COPY que el dueño puede leer, no los comentarios del fuente:
     //  la regla del contrato es sobre lo que se le dice, no sobre como esta
     //  escrito el archivo. Se quitan las lineas de comentario y se busca ahi.
-    $visible = preg_replace('~^\s*//.*$~m', '', $html);
+    //  Se quitan LAS DOS formas de comentario, no solo una. Antes solo se
+    //  descartaban las lineas `//`, asi que un comentario de CSS o de bloque
+    //  —`/* ... */`— seguia contando como «texto visible» y hacia fallar la
+    //  afirmacion por una palabra que el dueño no puede leer. Lo que se vigila
+    //  es el copy, no como esta escrito el archivo.
+    $visible = preg_replace('~/\*[\s\S]*?\*/~', '', $html);
+    $visible = preg_replace('~^\s*//.*$~m', '', $visible);
     ok('no le pide recargar ni repetir',   stripos($visible, 'recarga') === false
                                         && stripos($visible, 'refresca') === false
                                         && stripos($visible, 'vuelve a pedir') === false,

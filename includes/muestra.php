@@ -51,6 +51,15 @@ const MUESTRA_STALE_SEG = 180;
 /** A partir de aqui la espera deja de ser «normal» y el mensaje lo dice. */
 const MUESTRA_TARDE_SEG = 75;
 
+//  ── TOPES DE LO QUE SE ENSEÑA MIENTRAS SE ESPERA ────────────────────────
+//  El caption y la direccion visual los escribe un modelo y los lee el dueño en
+//  una tarjeta. Los topes van AQUI, en el servidor, y no solo en el CSS: un
+//  recorte de estilo esconde el exceso pero igual lo manda por el cable, y lo
+//  que no puede pasar es que un texto largo domine la pantalla o se cuele
+//  entero en el JSON. Tres lineas de tarjeta son ~180 caracteres.
+const MUESTRA_VISUAL_MAX = 180;
+const MUESTRA_COPY_MAX   = 320;
+
 /** Techo DURO del tramo estimado. Solo la evidencia lo pasa. */
 const MUESTRA_PCT_TECHO = 89;
 
@@ -89,10 +98,14 @@ function muestra_estado(PDO $pdo, int $marca_id, ?int $cid = null): array {
     $q->execute([$marca_id]);
     $p = $q->fetch(PDO::FETCH_ASSOC);
 
+    //  Las claves nuevas van TAMBIEN aqui. Sin fila no hay nada que enseñar,
+    //  pero quien lee este array no tiene por que saberlo: si faltaran, el
+    //  llamador reventaria con un indice indefinido justo en el caso raro.
     $vacio = ['listo' => false, 'etapa' => 'entrevista', 'pct' => 10, 'pct_estimado' => 10,
               'estimando' => false, 'titulo' => 'Preparando tu negocio...', 'etapas' => [],
               'degradado' => 'vivo', 'segundos' => 0, 'tarde' => false, 'copy' => null,
-              'img' => null, 'pieza' => 0, 'agentes' => []];
+              'img' => null, 'pieza' => 0, 'agentes' => [],
+              'pieza_copy' => null, 'pieza_visual' => '', 'pieza_img' => null];
     if (!$p) return $vacio;
 
     // ── LA EVIDENCIA, columna por columna ────────────────────────────────
@@ -205,6 +218,16 @@ function muestra_estado(PDO $pdo, int $marca_id, ?int $cid = null): array {
     }
 
     $seg_total = max(0, (int)($p['seg_total'] ?? 0));
+
+    //  La direccion visual vive dentro de corillo_json, que ya se trajo arriba.
+    //  Si la columna no existe todavia, o el JSON esta roto, no hay direccion —
+    //  y no pasa nada: la pantalla no enseña esa parte y no se inventa ninguna.
+    $visual_crudo = '';
+    try {
+        $cj = json_decode((string)($p['corillo_json'] ?? ''), true);
+        if (is_array($cj)) $visual_crudo = (string)($cj['visual'] ?? '');
+    } catch (Throwable $e) { /* sin direccion visual; la pantalla lo aguanta */ }
+
     return [
         'listo'        => $ev['listo'],
         'etapa'        => $etapa,
@@ -216,9 +239,38 @@ function muestra_estado(PDO $pdo, int $marca_id, ?int $cid = null): array {
         'degradado'    => $ev['listo'] ? 'listo' : $degradado,
         'segundos'     => $seg_total,
         'tarde'        => (!$ev['listo'] && $seg_total >= MUESTRA_TARDE_SEG),
-        // Copy e imagen se entregan SOLO juntos. Media verdad seria revelar a medias.
+        //  EL REVELADO SIGUE SIENDO TODO JUNTO. 'copy' e 'img' son lo que pasa
+        //  al escenario de venta, y ahi media verdad seguiria siendo revelar a
+        //  medias: un post sin imagen no se puede publicar en Instagram y el
+        //  boton de descarga apuntaria a un archivo que no existe. Esa regla no
+        //  se toca — y por eso los campos de abajo son OTROS, con otro nombre.
         'copy'         => $ev['listo'] ? (string)$p['caption'] : null,
         'img'          => $ev['listo'] ? (string)$p['grafica_path'] : null,
+
+        //  ── LO QUE LA PANTALLA DE ESPERA PUEDE ENSEÑAR YA ──────────────────
+        //
+        //  Y NO CONTRADICE LA REGLA DE ARRIBA, aunque lo parezca. Aquella dice
+        //  «no reveles un post a medias»; esta dice «no le escondas al dueño lo
+        //  que ya es suyo mientras espera». Son momentos distintos: uno es la
+        //  entrega, el otro son dos minutos y medio mirando una pantalla.
+        //
+        //  Se midio: sin esto, la espera es una barra que sube. Con esto, a los
+        //  ~50 segundos el dueño deja de esperar y LEE SU POST — el texto ya
+        //  esta escrito y guardado, enseñarselo no promete nada que no haya
+        //  pasado. Es la diferencia entre una pantalla de carga y ver como te
+        //  hacen el trabajo.
+        //
+        //  Los tres salen de la MISMA fila, que ya viene acotada por marca_id en
+        //  el SELECT de arriba: no hay forma de que aqui aparezca la pieza de
+        //  otro negocio. Y los tres van saneados y con tope de largo, porque los
+        //  dos primeros son salida de modelo.
+        'pieza_copy'   => $ev['copy']     ? muestra_copy_fragmento((string)$p['caption']) : null,
+        'pieza_visual' => muestra_visual_limpia($visual_crudo),
+        //  La imagen, en cuanto esta guardada. Llega antes de que 'listo' sea
+        //  cierto (falta que se cierre el job), y ese hueco es justo el momento
+        //  en que la tarjeta puede completarse delante del dueño en vez de
+        //  saltar a otra pantalla.
+        'pieza_img'    => $ev['recibida'] ? (string)$p['grafica_path'] : null,
         //  LA UNICA EXCEPCION, Y NO CONTRADICE LA REGLA DE ARRIBA.
         //  Cuando el arte falla DEFINITIVAMENTE ya no hay un post que revelar a
         //  medias: hay un post que no va a existir. Enseñarle entonces el texto
@@ -233,6 +285,97 @@ function muestra_estado(PDO $pdo, int $marca_id, ?int $cid = null): array {
     ];
 }
 
+
+/**
+ * ── LA DIRECCION VISUAL, SANEADA ANTES DE SALIR ─────────────────────────
+ *
+ * `corillo_json.visual` es SALIDA DE MODELO: el campo `visual` del angulo que
+ * gano el debate, o sea «que se ve en la imagen» en una frase. Por diseño es
+ * una escena, no un prompt — el prompt de verdad lo arma img_resp_brief() y NO
+ * se guarda en ninguna parte de la pieza.
+ *
+ * Pero «por diseño» no es una garantia, y esto va a ojos del cliente. Un modelo
+ * puede devolver lo que le de la gana: repetir la instruccion que le dimos,
+ * colar el nombre interno de un agente, soltar un bloque JSON o dejar caer
+ * vocabulario nuestro. Nada de eso puede aparecer en la pantalla de un dueño de
+ * reposteria: no lo entiende, y ademas le enseña como esta hecho el producto.
+ *
+ * La regla es DESCARTAR, no limpiar a medias. Si el texto trae cualquier señal
+ * de ser algo distinto a una escena, se devuelve cadena vacia — y la pantalla
+ * simplemente no enseña direccion visual, que es justo lo que se pidio: si no
+ * existe, no se inventa nada.
+ *
+ * @return string la escena en una frase, o '' si no es de fiar
+ */
+function muestra_visual_limpia(?string $s): string
+{
+    $s = trim((string)$s);
+    if ($s === '') return '';
+
+    //  Nada de saltos de linea ni caracteres de control: una frase, una linea.
+    $s = preg_replace('~[\x00-\x1F\x7F]+~u', ' ', $s) ?? '';
+    $s = trim(preg_replace('~\s+~u', ' ', $s) ?? '');
+    if ($s === '') return '';
+
+    //  SEÑALES DE QUE ESTO NO ES UNA ESCENA. Cada una salio de mirar los
+    //  prompts que produjeron este campo (debate_creativo) y preguntarse que
+    //  pasaria si el modelo los devolviera en vez de obedecerlos.
+    static $sospechas = [
+        '~\bJSON\b~i',                       // "Responde SOLO JSON"
+        '~```~',                             // bloque de codigo
+        '~[{}\[\]]~',                        // estructura, no prosa
+        '~"\s*:\s*"~',                       // pares clave/valor
+        '~\b(prompt|system|assistant|user|role|tokens?|temperatura|modelo)\s*[:=]~i',
+        '~\bREGLA DE ORO\b~iu',
+        '~\bResponde\s+(SOLO|unicamente|únicamente)\b~iu',
+        '~\bEres\s+(EL|LA)\s+[A-ZÁÉÍÓÚÑ]~u',  // "Eres EL PROVOCADOR"
+        '~\bEL\s+PROVOCADOR\b|\bLA\s+ESTRATEGA\b|\bEL\s+DIRECTOR\b~u',
+        '~\b(gpt|gemini|openai|vertex|claude)\b~i',
+        '~\b(tactica|táctica|gancho|porque_pega|angulo|ángulo|brief)\s*[:=]~iu',
+        '~\bDevuelve\b.*\bEXACTO\b~iu',
+    ];
+    foreach ($sospechas as $re) {
+        if (preg_match($re, $s)) {
+            error_log('muestra_visual_limpia: descartada por parecer instruccion interna.');
+            return '';
+        }
+    }
+
+    //  Y UN TOPE DURO. Tres lineas en la tarjeta son ~180 caracteres; mas que
+    //  eso no cabe y, sobre todo, no puede dominar la pantalla. Se corta por
+    //  palabra para no dejar una silaba a medias.
+    if (mb_strlen($s) > MUESTRA_VISUAL_MAX) {
+        $s = mb_substr($s, 0, MUESTRA_VISUAL_MAX);
+        $sp = mb_strrpos($s, ' ');
+        if ($sp !== false && $sp > MUESTRA_VISUAL_MAX * 0.6) $s = mb_substr($s, 0, $sp);
+        $s = rtrim($s, " ,;:.-") . '…';
+    }
+    return $s;
+}
+
+/**
+ * El FRAGMENTO del caption que se enseña mientras se espera. No es el post
+ * entero: es lo suficiente para reconocerlo como suyo y leerlo con gusto. El
+ * texto completo llega cuando la pieza esta lista, que es cuando de verdad es
+ * suyo para publicar.
+ */
+function muestra_copy_fragmento(?string $s): string
+{
+    $s = trim((string)$s);
+    if ($s === '') return '';
+    //  Se conservan los saltos de parrafo (el caption los usa y se leen bien),
+    //  pero no los caracteres de control ni tres saltos seguidos.
+    $s = preg_replace('~[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]+~u', '', $s) ?? '';
+    $s = preg_replace('~\n{3,}~u', "\n\n", $s) ?? '';
+    $s = trim($s);
+    if (mb_strlen($s) > MUESTRA_COPY_MAX) {
+        $s = mb_substr($s, 0, MUESTRA_COPY_MAX);
+        $sp = mb_strrpos($s, ' ');
+        if ($sp !== false && $sp > MUESTRA_COPY_MAX * 0.6) $s = mb_substr($s, 0, $sp);
+        $s = rtrim($s, " ,;:.-\n") . '…';
+    }
+    return $s;
+}
 /**
  * LOS AGENTES QUE YA TRABAJARON - filas de crecer_ia_log, no una animacion.
  * Es la misma evidencia que se le enseña al jurado, mostrada al dueño.
