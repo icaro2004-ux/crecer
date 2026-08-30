@@ -180,6 +180,47 @@ ok('un ciclo ya cerrado NO se releva', arte_debe_relevar($cerr, 0, 2) === false,
    'relevar un ciclo cerrado seria empezar otro y cobrarlo');
 ok('un encolado incierto NO se releva', arte_debe_relevar($sinjob, 0, 2) === false);
 ok('sin fila, no se releva', arte_debe_relevar(null, 0, 2) === false);
+//  IDEMPOTENTE: el relevo no es un ciclo nuevo. Se pida una vez o cinco, la
+//  decision sobre el MISMO estado da lo mismo y no consume nada.
+$mismos = array_map(fn() => arte_debe_relevar($vivo, 1, 2), range(1, 5));
+ok('preguntar cinco veces da la misma respuesta', array_unique($mismos) === [true]);
+ok('y el tope no se puede rebasar contando mal',
+   arte_debe_relevar($vivo, 3, 2) === false && arte_debe_relevar($vivo, 99, 2) === false);
+
+//  EL RELEVO NO ENCOLA NADA. Es la propiedad que impide pagar dos veces: el
+//  worker que entra de relevo encuentra img_job puesto, y esa es justo la
+//  condicion con la que arte_worker.php decide NO llamar a img_resp_encolar_res.
+$p9 = $pieza('resp_lat_9');
+$as_antes = (int)$pdo->query("SELECT COUNT(*) FROM crecer_img_cuota_asiento WHERE marca_id={$MID}")->fetchColumn();
+$job_antes = (string)$pdo->query("SELECT img_job FROM crecer_contenido WHERE id={$p9}")->fetchColumn();
+for ($i = 0; $i < 3; $i++) {
+    $pdo->prepare("UPDATE crecer_contenido SET img_next_poll_at=NULL WHERE id=?")->execute([$p9]);
+    $correr($MID, $p9, 'vivo', true);
+}
+$as_desp = (int)$pdo->query("SELECT COUNT(*) FROM crecer_img_cuota_asiento WHERE marca_id={$MID}")->fetchColumn();
+$job_desp = (string)$pdo->query("SELECT img_job FROM crecer_contenido WHERE id={$p9}")->fetchColumn();
+ok('tres pasadas sobre un job vivo no abren otro asiento', $as_desp === $as_antes,
+   "antes={$as_antes} despues={$as_desp}");
+ok('y el job sigue siendo EL MISMO', $job_desp === $job_antes && $job_desp === 'resp_lat_9',
+   "antes={$job_antes} despues={$job_desp} · un job nuevo seria una imagen nueva, pagada");
+
+// ── 7b · SIN RED BAJO TRANSACCION ───────────────────────────────────────────
+echo "\n  — no se despierta a nadie con una transaccion abierta —\n";
+//  Con la puerta cerrada por modo prueba no se distinguiria una causa de otra,
+//  asi que esto se comprueba donde SI se puede: en un proceso sin modo prueba,
+//  que es como corre produccion.
+$tx = (function () {
+    $sal = []; exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/_worker_tx_runner.php') . ' 2>&1', $sal);
+    $o = [];
+    foreach ($sal as $l) { if (strpos($l, '=') !== false) { [$k, $v] = explode('=', trim($l), 2); $o[$k] = $v; } }
+    return $o;
+})();
+ok('el runner corre SIN modo prueba', ($tx['MODO_PRUEBA'] ?? '') === '0');
+ok('fuera de transaccion, la puerta deja pasar', ($tx['SIN_TX'] ?? '') === '1',
+   'si esto fuera 0, el guardia estaria cerrando de mas');
+ok('con transaccion abierta, la puerta NO deja pasar', ($tx['CON_TX'] ?? '') === '0',
+   'el worker abre otra conexion: no puede ver lo que no se ha confirmado');
+ok('y al confirmar vuelve a dejar pasar', ($tx['TRAS_COMMIT'] ?? '') === '1');
 
 // ── 8 · NADA DE ESTO TOCO LO QUE NO SE PODIA TOCAR ──────────────────────────
 echo "\n  — el brief, el modelo y la calidad siguen intactos —\n";

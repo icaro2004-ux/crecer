@@ -488,7 +488,13 @@ function arte_debe_relevar(?array $fila, int $relevo, int $max): bool {
 function arte_disparar(int $marca_id, int $post_id, ?bool $con_texto = null, ?string $extra = null, bool $fb = false, string $estilo = 'realista'): array {
     // CR-F01b: sin llave no se dispara. El job se queda en cola y lo rescata el
     // sweep cuando el config vuelva — mejor eso que quemar el intento contra un 503.
-    if (!worker_puede_disparar('arte')) return ['http' => 0, 'err' => 'sin_llave', 'disparado' => false];
+    if (!worker_puede_disparar('arte')) {
+        //  El motivo, no una etiqueta comoda. «sin_llave» era mentira cuando el
+        //  que cerraba era el modo prueba, y un diagnostico que miente sobre por
+        //  que no arranco el worker cuesta la tarde de alguien.
+        return ['http' => 0, 'disparado' => false,
+                'err' => worker_red_cerrada() ? 'red_cerrada' : 'sin_llave'];
+    }
     // host VALIDADO (ver worker_host): la cabecera Host la controla quien llama.
     $host = worker_host();
     $q = '&ct=' . ($con_texto === null ? 'x' : ($con_texto ? '1' : '0'));
